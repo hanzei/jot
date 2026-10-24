@@ -172,7 +172,7 @@ export class SettingsPage {
     return this.page.getByTestId('diagnostics-section');
   }
 
-  diagnosticsField(field: 'webapp' | 'server' | 'sse-status' | 'sse-attempts' | 'sse-last-event') {
+  diagnosticsField(field: 'sse-status' | 'sse-attempts' | 'sse-last-event') {
     return this.diagnosticsSection().getByTestId(`diagnostics-${field}`);
   }
 
@@ -183,6 +183,11 @@ export class SettingsPage {
   async copyDiagnosticsReport() {
     await this.diagnosticsSection().getByRole('button', { name: 'Copy report' }).click();
     await expect(this.diagnosticsSection().getByRole('button', { name: 'Report copied' })).toBeVisible();
+  }
+
+  async openAbout() {
+    await this.page.getByRole('button', { name: 'About Jot' }).click();
+    return this.page.getByRole('dialog', { name: 'About Jot' });
   }
 
   async clipboardText(): Promise<string> {

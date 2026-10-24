@@ -6,10 +6,10 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath, URL } from 'url';
 import { execSync } from 'child_process';
 
-// The bundle's own build, for Settings > Diagnostics. It can differ from the
-// server's: the service worker keeps serving a cached bundle until the user
-// accepts the update prompt. The Docker build passes both values; elsewhere
-// the commit comes from git when there is a checkout.
+// The bundle's own build, for Settings > About and the diagnostics report. It
+// can differ from the server's: the service worker keeps serving a cached
+// bundle until the user accepts the update prompt. The Docker build passes
+// both values; elsewhere the commit comes from git when there is a checkout.
 function gitCommit(): string | null {
   try {
     return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() || null;

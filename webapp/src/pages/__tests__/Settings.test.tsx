@@ -493,11 +493,10 @@ describe('Settings', () => {
       resetDiagnosticsForTest();
     });
 
-    it('shows the server build and updates live while open', async () => {
+    it('updates live while open', async () => {
       renderSettings();
       const section = within(screen.getByTestId('diagnostics-section'));
-      expect(await section.findByText('1.2.3 (abc1234)')).toBeInTheDocument();
-      expect(section.getByText('No failed requests since this page was loaded.')).toBeInTheDocument();
+      expect(await section.findByText('No failed requests since this page was loaded.')).toBeInTheDocument();
       expect(section.getByTestId('diagnostics-sse-status')).toHaveTextContent('Connecting');
 
       act(() => {

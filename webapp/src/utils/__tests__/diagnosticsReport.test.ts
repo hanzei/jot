@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildDiagnosticsReport, formatDiagnosticsReport, WEBAPP_BUILD } from '../diagnosticsReport';
+import { buildDiagnosticsReport, formatDiagnosticsReport } from '../diagnosticsReport';
+import { WEBAPP_BUILD } from '../buildInfo';
 import type { DiagnosticsState } from '../diagnostics';
 
 const diagnostics: DiagnosticsState = {

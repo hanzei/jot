@@ -709,7 +709,7 @@ The Docker image uses multi-stage build:
 1. **Node.js stage**: Builds the React frontend, stamped with the `VERSION` and
    `COMMIT_SHA` build args (outside Docker, `JOT_BUILD_VERSION` and
    `JOT_BUILD_COMMIT`, defaulting to `dev` and the git commit), which
-   Settings > Diagnostics shows next to the server's
+   Settings > About shows next to the server's
 2. **Go stage**: Builds the backend binary
 3. **Alpine stage**: Combines everything in minimal production image
 

@@ -21,7 +21,7 @@ COPY shared/ ../shared/
 COPY webapp/ ./
 
 # Build the frontend, stamped with the same version and commit as the server
-# so Settings > Diagnostics can spot a stale cached bundle. Declared after
+# so Settings > About can show a stale cached bundle. Declared after
 # `npm ci` so a new commit does not invalidate the install layer.
 ARG COMMIT_SHA=unknown
 ARG VERSION=dev

@@ -4,7 +4,7 @@ import type { AboutInfo } from '@jot/shared';
 import SettingsSectionCard from '@/pages/settings/SettingsSectionCard';
 import { about } from '@/utils/api';
 import { getDiagnostics, subscribeToDiagnostics } from '@/utils/diagnostics';
-import { WEBAPP_BUILD, formatDiagnosticsReport } from '@/utils/diagnosticsReport';
+import { formatDiagnosticsReport } from '@/utils/diagnosticsReport';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import type { SSEStatus } from '@/hooks/useSSE';
 
@@ -17,11 +17,6 @@ const SSE_STATUS_KEYS: Record<SSEStatus, string> = {
 
 const SUBHEADING_CLASSES = 'text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2';
 
-function buildLabel(version: string | undefined, commit: string | null | undefined, unknown: string): string {
-  if (!version) return unknown;
-  return commit ? `${version} (${commit})` : version;
-}
-
 const Row = ({ label, value, testId }: { label: string; value: string; testId: string }) => (
   <div className="flex justify-between text-sm min-w-0 gap-2">
     <dt className="shrink-0 text-gray-500 dark:text-gray-400">{label}</dt>
@@ -30,9 +25,10 @@ const Row = ({ label, value, testId }: { label: string; value: string; testId: s
 );
 
 /**
- * Build info, live-update state and recent failed requests, for a user to
- * paste into a bug report. Self-contained like `MobileAppPreference`: its
- * state lives in the diagnostics store, not in `Settings`.
+ * Live-update state and recent failed requests, for a user to paste into a
+ * bug report. Self-contained like `MobileAppPreference`: its state lives in
+ * the diagnostics store, not in `Settings`. Build versions are shown in About;
+ * the copied report carries them too, since it is read without that screen.
  */
 const DiagnosticsSection = () => {
   const { t, i18n } = useTranslation();
@@ -40,16 +36,16 @@ const DiagnosticsSection = () => {
   const [serverInfo, setServerInfo] = useState<AboutInfo | null>(null);
   const { copied, copy } = useCopyToClipboard();
 
+  // Not shown here (About has it), only put in the copied report.
   useEffect(() => {
     let cancelled = false;
     about.get()
       .then((info) => { if (!cancelled) setServerInfo(info); })
-      .catch(() => { /* shown as unknown; the failure itself lands in the list below */ });
+      .catch(() => { /* the report says null; the failure itself lands in the list below */ });
     return () => { cancelled = true; };
   }, []);
 
   const formatTime = (iso: string) => new Date(iso).toLocaleTimeString(i18n.resolvedLanguage);
-  const unknown = t('settings.diagnosticsUnknown');
   const { sse, failedRequests } = diagnostics;
 
   const handleCopy = () => {
@@ -66,14 +62,6 @@ const DiagnosticsSection = () => {
     <SettingsSectionCard title={t('settings.diagnosticsSection')}>
       <div data-testid="diagnostics-section" className="space-y-5">
         <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.diagnosticsDescription')}</p>
-
-        <div>
-          <h3 className={SUBHEADING_CLASSES}>{t('settings.diagnosticsBuild')}</h3>
-          <dl className="space-y-1">
-            <Row label={t('settings.diagnosticsWebapp')} value={buildLabel(WEBAPP_BUILD.version, WEBAPP_BUILD.commit, unknown)} testId="diagnostics-webapp" />
-            <Row label={t('settings.diagnosticsServer')} value={buildLabel(serverInfo?.version, serverInfo?.commit, unknown)} testId="diagnostics-server" />
-          </dl>
-        </div>
 
         <div>
           <h3 className={SUBHEADING_CLASSES}>{t('settings.diagnosticsLiveUpdates')}</h3>

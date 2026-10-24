@@ -1,11 +1,6 @@
 import type { AboutInfo } from '@jot/shared';
 import type { DiagnosticsState } from '@/utils/diagnostics';
-
-/** The webapp bundle's own build, stamped by vite.config.ts. */
-export const WEBAPP_BUILD = {
-  version: __JOT_WEBAPP_VERSION__,
-  commit: __JOT_WEBAPP_COMMIT__,
-};
+import { WEBAPP_BUILD } from '@/utils/buildInfo';
 
 /** A render error caught by an error boundary. Name, message and stacks only — never props or state. */
 export interface DiagnosticsCrash {

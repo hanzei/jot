@@ -1,7 +1,8 @@
 import { test, expect } from '../fixtures';
 
-// Settings > Diagnostics: build info, live-update state and recent failed
-// requests, plus a JSON report to paste into a bug report.
+// Settings > Diagnostics: live-update state and recent failed requests, plus a
+// JSON report (with both builds) to paste into a bug report. The builds
+// themselves are shown in About.
 
 const REQUEST_ID = 'e2ediag0123456789';
 
@@ -10,11 +11,9 @@ test.describe('Settings diagnostics', () => {
     void authenticatedUser;
   });
 
-  test('shows the builds and a connected live-update stream', async ({ settingsPage }) => {
+  test('shows a connected live-update stream', async ({ settingsPage }) => {
     await settingsPage.goto();
 
-    await expect(settingsPage.diagnosticsField('webapp')).not.toHaveText('Unknown');
-    await expect(settingsPage.diagnosticsField('server')).not.toHaveText('Unknown');
     await expect(settingsPage.diagnosticsField('sse-status')).toHaveText('Connected');
     await expect(settingsPage.diagnosticsField('sse-attempts')).toHaveText('0');
     await expect(settingsPage.diagnosticsSection().getByText('No failed requests since this page was loaded.')).toBeVisible();
@@ -70,5 +69,15 @@ test.describe('Settings diagnostics', () => {
       code: 'internal',
       requestId: REQUEST_ID,
     })]);
+  });
+
+  test('About shows the webapp build next to the server build', async ({ settingsPage }) => {
+    await settingsPage.goto();
+    const dialog = await settingsPage.openAbout();
+
+    await expect(dialog.getByTestId('about-webapp-version')).not.toBeEmpty();
+    await expect(dialog.getByTestId('about-webapp-commit')).not.toBeEmpty();
+    await expect(dialog.getByRole('heading', { name: 'Server' })).toBeVisible();
+    await expect(dialog.getByText('Go Version')).toBeVisible();
   });
 });
