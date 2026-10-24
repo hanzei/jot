@@ -40,7 +40,7 @@ func TestTimestampCutoffsIgnoreDatabaseTimeZone(t *testing.T) {
 		t.Run("a note trashed just now survives a purge with an older cutoff", func(t *testing.T) {
 			store := newNoteStore(db, d)
 
-			note, err := store.CreateWithItems(ctx, "user000000000000000utc", "", "Fresh", "", NoteTypeText, DefaultNoteColor, nil)
+			note, err := store.CreateWithItems(ctx, "user000000000000000utc", NewNote{Title: "Fresh", Type: NoteTypeText, Color: DefaultNoteColor}, nil)
 			require.NoError(t, err)
 			// deleted_at is generated in Go, like every other timestamp the
 			// store layer writes.
@@ -56,7 +56,7 @@ func TestTimestampCutoffsIgnoreDatabaseTimeZone(t *testing.T) {
 		t.Run("a note trashed long enough ago is purged", func(t *testing.T) {
 			store := newNoteStore(db, d)
 
-			note, err := store.CreateWithItems(ctx, "user000000000000000utc", "", "Stale", "", NoteTypeText, DefaultNoteColor, nil)
+			note, err := store.CreateWithItems(ctx, "user000000000000000utc", NewNote{Title: "Stale", Type: NoteTypeText, Color: DefaultNoteColor}, nil)
 			require.NoError(t, err)
 			require.NoError(t, store.MoveToTrash(ctx, note.ID, "user000000000000000utc"))
 
@@ -150,12 +150,12 @@ func TestStoreTimestampsHaveSubSecondPrecision(t *testing.T) {
 		store := newNoteStore(db, d)
 		userID := seedTimestampTestUser(t, db, d)
 
-		note, err := store.CreateWithItems(ctx, userID, "", "Sortable", "", NoteTypeText, DefaultNoteColor, nil)
+		note, err := store.CreateWithItems(ctx, userID, NewNote{Title: "Sortable", Type: NoteTypeText, Color: DefaultNoteColor}, nil)
 		require.NoError(t, err)
 
 		first := updatedAtOf(t, db, d, note.ID)
 		title := "Edited"
-		require.NoError(t, store.Update(ctx, note.ID, userID, &title, nil, nil, nil, nil, nil, nil))
+		require.NoError(t, store.Update(ctx, note.ID, userID, NoteUpdate{Title: &title}))
 		second := updatedAtOf(t, db, d, note.ID)
 
 		assert.True(t, second.After(first),
@@ -178,7 +178,7 @@ func TestStoreTimestampsAreConstantWithinOneOperation(t *testing.T) {
 		store := newNoteStore(db, d)
 		userID := seedTimestampTestUser(t, db, d)
 
-		note, err := store.CreateWithItems(ctx, userID, "", "", "", NoteTypeList, DefaultNoteColor,
+		note, err := store.CreateWithItems(ctx, userID, NewNote{Type: NoteTypeList, Color: DefaultNoteColor},
 			[]NewNoteItem{{Text: "first", Position: 0}, {Text: "second", Position: 1}})
 		require.NoError(t, err)
 

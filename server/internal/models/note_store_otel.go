@@ -25,16 +25,16 @@ func NewNoteStore(db *sql.DB, d *dialect.Dialect) *NoteStore {
 	}
 }
 
-func (s *NoteStore) Create(ctx context.Context, userID, noteID, title, content string, noteType NoteType, color string) (_ *Note, err error) {
+func (s *NoteStore) Create(ctx context.Context, userID string, n NewNote) (_ *Note, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.Create", &err)
 	defer end()
-	return s.inner.Create(ctx, userID, noteID, title, content, noteType, color)
+	return s.inner.Create(ctx, userID, n)
 }
 
-func (s *NoteStore) CreateWithItems(ctx context.Context, userID, noteID, title, content string, noteType NoteType, color string, items []NewNoteItem) (_ *Note, err error) {
+func (s *NoteStore) CreateWithItems(ctx context.Context, userID string, n NewNote, items []NewNoteItem) (_ *Note, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.CreateWithItems", &err)
 	defer end()
-	return s.inner.CreateWithItems(ctx, userID, noteID, title, content, noteType, color, items)
+	return s.inner.CreateWithItems(ctx, userID, n, items)
 }
 
 func (s *NoteStore) Duplicate(ctx context.Context, source *Note, userID, clientID string, itemIDs map[string]string) (_ *Note, err error) {
@@ -43,10 +43,10 @@ func (s *NoteStore) Duplicate(ctx context.Context, source *Note, userID, clientI
 	return s.inner.Duplicate(ctx, source, userID, clientID, itemIDs)
 }
 
-func (s *NoteStore) GetByUserID(ctx context.Context, userID string, archived bool, trashed bool, search string, labelID string, myTasks bool) (_ []*Note, err error) {
+func (s *NoteStore) GetByUserID(ctx context.Context, userID string, f NoteFilter) (_ []*Note, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetByUserID", &err)
 	defer end()
-	return s.inner.GetByUserID(ctx, userID, archived, trashed, search, labelID, myTasks)
+	return s.inner.GetByUserID(ctx, userID, f)
 }
 
 func (s *NoteStore) GetByID(ctx context.Context, id string, userID string) (_ *Note, err error) {
@@ -65,12 +65,12 @@ func (s *NoteStore) GetByIDAnyState(ctx context.Context, id string, userID strin
 	return s.inner.GetByIDAnyState(ctx, id, userID)
 }
 
-func (s *NoteStore) Update(ctx context.Context, id string, userID string, title, content, color *string, pinned, archived, checkedItemsCollapsed *bool, baseVersion *int) (err error) {
+func (s *NoteStore) Update(ctx context.Context, id string, userID string, u NoteUpdate) (err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.Update", &err,
 		attribute.String("note.id", id),
 	)
 	defer end()
-	return s.inner.Update(ctx, id, userID, title, content, color, pinned, archived, checkedItemsCollapsed, baseVersion)
+	return s.inner.Update(ctx, id, userID, u)
 }
 
 func (s *NoteStore) ConvertType(ctx context.Context, id, userID string, targetType NoteType, title, content string, targetItems []NewNoteItem, baseVersion *int) (_ *Note, err error) {

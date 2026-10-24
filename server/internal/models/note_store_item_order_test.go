@@ -88,7 +88,7 @@ func TestItemOrderNormalization(t *testing.T) {
 				ids[text] = id
 				items = append(items, NewNoteItem{ID: id, Text: text, Position: i})
 			}
-			note, err := store.CreateWithItems(t.Context(), userID, "", "List", "", NoteTypeList, DefaultNoteColor, items)
+			note, err := store.CreateWithItems(t.Context(), userID, NewNote{Title: "List", Type: NoteTypeList, Color: DefaultNoteColor}, items)
 			require.NoError(t, err)
 			return note.ID, ids
 		}
@@ -148,7 +148,7 @@ func TestItemOrderNormalization(t *testing.T) {
 				{Text: "a1", Position: 0, ParentID: parentID},
 				{Text: "b", Position: 2},
 			}
-			note, err := store.CreateWithItems(t.Context(), userID, "", "List", "", NoteTypeList, DefaultNoteColor, items)
+			note, err := store.CreateWithItems(t.Context(), userID, NewNote{Title: "List", Type: NoteTypeList, Color: DefaultNoteColor}, items)
 			require.NoError(t, err)
 
 			texts, positions := storedItemOrder(t, store, note.ID)
@@ -158,7 +158,7 @@ func TestItemOrderNormalization(t *testing.T) {
 
 		t.Run("converting to a list with a child ahead of its parent places it under the parent", func(t *testing.T) {
 			store, userID := newTestBulkStore(t, driver)
-			note, err := store.CreateWithItems(t.Context(), userID, "", "", "a\na1", NoteTypeText, DefaultNoteColor, nil)
+			note, err := store.CreateWithItems(t.Context(), userID, NewNote{Content: "a\na1", Type: NoteTypeText, Color: DefaultNoteColor}, nil)
 			require.NoError(t, err)
 			parentID, err := generateID()
 			require.NoError(t, err)
@@ -176,7 +176,7 @@ func TestItemOrderNormalization(t *testing.T) {
 
 		t.Run("replaying a conversion with a child ahead of its parent is idempotent", func(t *testing.T) {
 			store, userID := newTestBulkStore(t, driver)
-			note, err := store.CreateWithItems(t.Context(), userID, "", "", "a\na1", NoteTypeText, DefaultNoteColor, nil)
+			note, err := store.CreateWithItems(t.Context(), userID, NewNote{Content: "a\na1", Type: NoteTypeText, Color: DefaultNoteColor}, nil)
 			require.NoError(t, err)
 			parentID, err := generateID()
 			require.NoError(t, err)
@@ -203,7 +203,7 @@ func TestItemOrderNormalization(t *testing.T) {
 
 		t.Run("replaying a conversion with shared positions is idempotent", func(t *testing.T) {
 			store, userID := newTestBulkStore(t, driver)
-			note, err := store.CreateWithItems(t.Context(), userID, "", "", "x\ny", NoteTypeText, DefaultNoteColor, nil)
+			note, err := store.CreateWithItems(t.Context(), userID, NewNote{Content: "x\ny", Type: NoteTypeText, Color: DefaultNoteColor}, nil)
 			require.NoError(t, err)
 			// Items sharing a position are stored in ID order (same created_at),
 			// so list them against that order to make the tiebreak matter.
