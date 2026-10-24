@@ -16,57 +16,60 @@ import (
 
 type contextKey string
 
-const UserContextKey contextKey = "user"
+const userContextKey contextKey = "user"
 
-// SessionTokenHashContextKey carries the SHA-256 hash of the current
+// sessionTokenHashContextKey carries the SHA-256 hash of the current
 // session's token (the form sessions are stored in). The raw token never
 // enters the request context.
-const SessionTokenHashContextKey contextKey = "session_token_hash"
+const sessionTokenHashContextKey contextKey = "session_token_hash"
 
 func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Try cookie-based session first.
+		rawToken, hasBearer := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+
+		// Try cookie-based session first. A rejected cookie (typically a
+		// stale one left over from an expired or revoked session) falls
+		// through to a bearer token when the request also carries one.
 		if cookie, err := r.Cookie(SessionCookieName); err == nil {
 			session, user, err := s.GetSessionAndUser(r)
-			if err != nil {
-				logSessionRejection(r.Context(), err)
+			if err == nil {
+				if renewErr := s.RenewSessionIfExpiringSoon(r.Context(), w, session, cookie.Value); renewErr != nil {
+					logutil.FromContext(r.Context()).WithError(renewErr).Warn("Failed to renew session")
+				}
+				ctx := context.WithValue(withUser(r.Context(), user), sessionTokenHashContextKey, session.TokenHash)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+			logSessionRejection(r.Context(), err)
+			if !hasBearer {
 				apierr.Write(w, r, http.StatusUnauthorized, apierr.CodeUnauthorized, "unauthorized")
 				return
 			}
-			if err := s.RenewSessionIfExpiringSoon(r.Context(), w, session, cookie.Value); err != nil {
-				logutil.FromContext(r.Context()).WithError(err).Warn("Failed to renew session")
-			}
-
-			logutil.FromContext(r.Context()).AddField("user_id", user.ID)
-			trace.SpanFromContext(r.Context()).SetAttributes(attribute.String("user.id", user.ID))
-
-			ctx := context.WithValue(r.Context(), UserContextKey, user)
-			ctx = context.WithValue(ctx, SessionTokenHashContextKey, session.TokenHash)
-			next.ServeHTTP(w, r.WithContext(ctx))
-			return
 		}
 
 		// Fall back to Bearer token (personal access token).
-		if authHeader := r.Header.Get("Authorization"); strings.HasPrefix(authHeader, "Bearer ") {
-			rawToken := strings.TrimPrefix(authHeader, "Bearer ")
+		if hasBearer {
 			user, err := s.authenticateWithPAT(r.Context(), rawToken)
 			if err != nil {
 				logPATRejection(r.Context(), err)
 				apierr.Write(w, r, http.StatusUnauthorized, apierr.CodeUnauthorized, "unauthorized")
 				return
 			}
-
-			logutil.FromContext(r.Context()).AddField("user_id", user.ID)
-			trace.SpanFromContext(r.Context()).SetAttributes(attribute.String("user.id", user.ID))
-
-			ctx := context.WithValue(r.Context(), UserContextKey, user)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			next.ServeHTTP(w, r.WithContext(withUser(r.Context(), user)))
 			return
 		}
 
 		logutil.FromContext(r.Context()).Debug("Auth rejected: no session cookie or bearer token")
 		apierr.Write(w, r, http.StatusUnauthorized, apierr.CodeUnauthorized, "unauthorized")
 	})
+}
+
+// withUser records the authenticated user on the request log fields and span
+// and returns ctx carrying it.
+func withUser(ctx context.Context, user *models.User) context.Context {
+	logutil.FromContext(ctx).AddField("user_id", user.ID)
+	trace.SpanFromContext(ctx).SetAttributes(attribute.String("user.id", user.ID))
+	return context.WithValue(ctx, userContextKey, user)
 }
 
 // logSessionRejection records why a session cookie was rejected. An unknown
@@ -105,14 +108,14 @@ func (s *SessionService) authenticateWithPAT(ctx context.Context, rawToken strin
 }
 
 func GetUserFromContext(ctx context.Context) (*models.User, bool) {
-	user, ok := ctx.Value(UserContextKey).(*models.User)
+	user, ok := ctx.Value(userContextKey).(*models.User)
 	return user, ok
 }
 
 // GetSessionTokenHashFromContext returns the stored hash of the current
 // session's token, present only for cookie-authenticated requests.
 func GetSessionTokenHashFromContext(ctx context.Context) (string, bool) {
-	tokenHash, ok := ctx.Value(SessionTokenHashContextKey).(string)
+	tokenHash, ok := ctx.Value(sessionTokenHashContextKey).(string)
 	return tokenHash, ok
 }
 

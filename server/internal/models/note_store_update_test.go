@@ -106,6 +106,134 @@ func TestUpdateUnpinning(t *testing.T) {
 	})
 }
 
+// updateErr drops the note Update returns, for cases that only check whether
+// the update succeeded.
+func updateErr(_ *Note, err error) error { return err }
+
+// TestUpdatePartialWrites covers updates whose fields were changed by another
+// update after the caller last read the note: every write and every no-op or
+// pin-flip decision must go by the row as stored, never by an earlier read.
+func TestUpdatePartialWrites(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, driver string) {
+		// setup returns a fresh store and a list note as first read, which the
+		// cases treat as a client's (soon stale) copy. A list note allows a
+		// title and checked_items_collapsed, so every field can be exercised.
+		setup := func(t *testing.T) (*noteStore, string, *Note) {
+			t.Helper()
+			store, userID := newTestBulkStore(t, driver)
+			note, err := store.Create(t.Context(), userID, NewNote{Title: "title", Type: NoteTypeList, Color: DefaultNoteColor})
+			require.NoError(t, err)
+			read, err := store.GetByID(t.Context(), note.ID, userID)
+			require.NoError(t, err)
+			return store, userID, read
+		}
+
+		t.Run("a title write keeps per-user fields changed since the read", func(t *testing.T) {
+			store, userID, read := setup(t)
+			ctx := t.Context()
+			require.NoError(t, updateErr(store.Update(ctx, read.ID, userID, NoteUpdate{Archived: new(true), Color: new("#fbbc04")})))
+
+			require.NoError(t, updateErr(store.Update(ctx, read.ID, userID, NoteUpdate{Title: new("new title")})))
+
+			got, err := store.GetByID(ctx, read.ID, userID)
+			require.NoError(t, err)
+			assert.Equal(t, "new title", got.Title)
+			assert.True(t, got.Archived)
+			assert.Equal(t, "#fbbc04", got.Color)
+		})
+
+		t.Run("a per-user write keeps the other per-user fields changed since the read", func(t *testing.T) {
+			store, userID, read := setup(t)
+			ctx := t.Context()
+			require.NoError(t, updateErr(store.Update(ctx, read.ID, userID, NoteUpdate{Archived: new(true), CheckedItemsCollapsed: new(true)})))
+
+			require.NoError(t, updateErr(store.Update(ctx, read.ID, userID, NoteUpdate{Color: new("#fbbc04")})))
+
+			got, err := store.GetByID(ctx, read.ID, userID)
+			require.NoError(t, err)
+			assert.Equal(t, "#fbbc04", got.Color)
+			assert.True(t, got.Archived)
+			assert.True(t, got.CheckedItemsCollapsed)
+		})
+
+		t.Run("a write matching the read but not the stored value is applied", func(t *testing.T) {
+			store, userID, read := setup(t)
+			ctx := t.Context()
+			require.NoError(t, updateErr(store.Update(ctx, read.ID, userID, NoteUpdate{Title: new("other title")})))
+
+			require.NoError(t, updateErr(store.Update(ctx, read.ID, userID, NoteUpdate{Title: new(read.Title)})))
+
+			got, err := store.GetByID(ctx, read.ID, userID)
+			require.NoError(t, err)
+			assert.Equal(t, read.Title, got.Title)
+		})
+
+		t.Run("a write that changes nothing does not bump the version", func(t *testing.T) {
+			store, userID, read := setup(t)
+			ctx := t.Context()
+
+			require.NoError(t, updateErr(store.Update(ctx, read.ID, userID, NoteUpdate{Title: new(read.Title)})))
+
+			got, err := store.GetByID(ctx, read.ID, userID)
+			require.NoError(t, err)
+			assert.Equal(t, read.Version, got.Version)
+		})
+
+		t.Run("an unpin restores the position saved by the pin", func(t *testing.T) {
+			store, userID, read := setup(t)
+			ctx := t.Context()
+			require.NoError(t, updateErr(store.Update(ctx, read.ID, userID, NoteUpdate{Pinned: new(true)})))
+
+			require.NoError(t, updateErr(store.Update(ctx, read.ID, userID, NoteUpdate{Pinned: new(false)})))
+
+			got, err := store.GetByID(ctx, read.ID, userID)
+			require.NoError(t, err)
+			assert.False(t, got.Pinned)
+			assert.Equal(t, read.Position, got.Position)
+			assert.Nil(t, got.UnpinnedPosition, "unpinned_position is cleared once consumed")
+		})
+
+		t.Run("a repeated unpin does not shift the other notes again", func(t *testing.T) {
+			store, userID, other := setup(t)
+			ctx := t.Context()
+			note, err := store.Create(ctx, userID, NewNote{Title: "pinned", Type: NoteTypeList, Color: DefaultNoteColor})
+			require.NoError(t, err)
+			require.NoError(t, updateErr(store.Update(ctx, note.ID, userID, NoteUpdate{Pinned: new(true)})))
+			require.NoError(t, updateErr(store.Update(ctx, note.ID, userID, NoteUpdate{Pinned: new(false)})))
+			before, err := store.GetByID(ctx, other.ID, userID)
+			require.NoError(t, err)
+
+			require.NoError(t, updateErr(store.Update(ctx, note.ID, userID, NoteUpdate{Pinned: new(false)})))
+
+			after, err := store.GetByID(ctx, other.ID, userID)
+			require.NoError(t, err)
+			assert.Equal(t, before.Position, after.Position)
+		})
+
+		t.Run("a guarded title write conflicts when the title changed since base_version", func(t *testing.T) {
+			store, userID, read := setup(t)
+			ctx := t.Context()
+			require.NoError(t, updateErr(store.Update(ctx, read.ID, userID, NoteUpdate{Title: new("other title")})))
+
+			_, err := store.Update(ctx, read.ID, userID, NoteUpdate{Title: new("new title"), BaseVersion: new(read.Version)})
+			require.ErrorIs(t, err, ErrNoteVersionConflict)
+		})
+
+		t.Run("a guarded title write replayed after the same title was stored is an idempotent no-op", func(t *testing.T) {
+			store, userID, read := setup(t)
+			ctx := t.Context()
+			require.NoError(t, updateErr(store.Update(ctx, read.ID, userID, NoteUpdate{Title: new("new title")})))
+
+			require.NoError(t, updateErr(store.Update(ctx, read.ID, userID, NoteUpdate{Title: new("new title"), BaseVersion: new(read.Version)})))
+
+			got, err := store.GetByID(ctx, read.ID, userID)
+			require.NoError(t, err)
+			assert.Equal(t, "new title", got.Title)
+			assert.Equal(t, read.Version+1, got.Version, "the replay does not bump the version again")
+		})
+	})
+}
+
 func TestUpdate(t *testing.T) {
 	dbtest.ForEachDriver(t, func(t *testing.T, driver string) {
 		t.Run("returns the updated note", func(t *testing.T) {
