@@ -13,7 +13,7 @@ import (
 // rather than just the unpinned note itself.
 func unpinnedOrder(t *testing.T, store *noteStore, userID string) []string {
 	t.Helper()
-	notes, err := store.GetByUserID(t.Context(), userID, false, false, "", "", false)
+	notes, err := store.GetByUserID(t.Context(), userID, NoteFilter{})
 	require.NoError(t, err)
 	titles := make([]string, 0, len(notes))
 	for _, n := range notes {
@@ -34,7 +34,7 @@ func TestUpdateUnpinning(t *testing.T) {
 			// as: D, C, B, A (most recently created first).
 			noteIDs := make([]string, 0, 4)
 			for _, title := range []string{"A", "B", "C", "D"} {
-				n, err := store.Create(ctx, userID, "", title, "", NoteTypeText, DefaultNoteColor)
+				n, err := store.Create(ctx, userID, NewNote{Title: title, Type: NoteTypeText, Color: DefaultNoteColor})
 				require.NoError(t, err)
 				noteIDs = append(noteIDs, n.ID)
 			}
@@ -42,13 +42,13 @@ func TestUpdateUnpinning(t *testing.T) {
 			require.Equal(t, []string{"D", "C", "B", "A"}, unpinnedOrder(t, store, userID))
 
 			pinned := true
-			_, err := store.Update(ctx, noteB, userID, nil, nil, nil, &pinned, nil, nil, nil)
+			_, err := store.Update(ctx, noteB, userID, NoteUpdate{Pinned: &pinned})
 			require.NoError(t, err)
 			// Pinning removes B from the unpinned list without touching the others.
 			require.Equal(t, []string{"D", "C", "A"}, unpinnedOrder(t, store, userID))
 
 			unpinned := false
-			_, err = store.Update(ctx, noteB, userID, nil, nil, nil, &unpinned, nil, nil, nil)
+			_, err = store.Update(ctx, noteB, userID, NoteUpdate{Pinned: &unpinned})
 			require.NoError(t, err)
 
 			// B returns to the slot it held before being pinned, and A (which sat at
@@ -77,7 +77,7 @@ func TestUpdateUnpinning(t *testing.T) {
 
 			noteIDs := make([]string, 0, 3)
 			for _, title := range []string{"A", "B", "C"} {
-				n, err := store.Create(ctx, userID, "", title, "", NoteTypeText, DefaultNoteColor)
+				n, err := store.Create(ctx, userID, NewNote{Title: title, Type: NoteTypeText, Color: DefaultNoteColor})
 				require.NoError(t, err)
 				noteIDs = append(noteIDs, n.ID)
 			}
@@ -91,7 +91,7 @@ func TestUpdateUnpinning(t *testing.T) {
 			require.NoError(t, err)
 
 			unpinned := false
-			_, err = store.Update(ctx, noteToPin, userID, nil, nil, nil, &unpinned, nil, nil, nil)
+			_, err = store.Update(ctx, noteToPin, userID, NoteUpdate{Pinned: &unpinned})
 			require.NoError(t, err)
 
 			// With no saved slot to restore, B lands at the end of the unpinned
@@ -112,11 +112,11 @@ func TestUpdate(t *testing.T) {
 			store, userID := newTestBulkStore(t, driver)
 			ctx := t.Context()
 
-			n, err := store.Create(ctx, userID, "", "", "before", NoteTypeText, DefaultNoteColor)
+			n, err := store.Create(ctx, userID, NewNote{Content: "before", Type: NoteTypeText, Color: DefaultNoteColor})
 			require.NoError(t, err)
 
 			content, color, pinned := "after", "#ff0000", true
-			updated, err := store.Update(ctx, n.ID, userID, nil, &content, &color, &pinned, nil, nil, nil)
+			updated, err := store.Update(ctx, n.ID, userID, NoteUpdate{Content: &content, Color: &color, Pinned: &pinned})
 			require.NoError(t, err)
 
 			reread, err := store.GetByID(ctx, n.ID, userID)
@@ -132,9 +132,9 @@ func TestUpdate(t *testing.T) {
 			store, userID := newTestBulkStore(t, driver)
 			ctx := t.Context()
 
-			text, err := store.Create(ctx, userID, "", "", "body", NoteTypeText, DefaultNoteColor)
+			text, err := store.Create(ctx, userID, NewNote{Content: "body", Type: NoteTypeText, Color: DefaultNoteColor})
 			require.NoError(t, err)
-			list, err := store.Create(ctx, userID, "", "List", "", NoteTypeList, DefaultNoteColor)
+			list, err := store.Create(ctx, userID, NewNote{Title: "List", Type: NoteTypeList, Color: DefaultNoteColor})
 			require.NoError(t, err)
 
 			title, content, color, collapsed := "Title", "content", "#ff0000", true
@@ -154,7 +154,7 @@ func TestUpdate(t *testing.T) {
 					before, err := store.GetByID(ctx, tc.id, userID)
 					require.NoError(t, err)
 
-					_, err = store.Update(ctx, tc.id, userID, tc.title, tc.content, &color, nil, nil, tc.checkedItemsCollapsed, nil)
+					_, err = store.Update(ctx, tc.id, userID, NoteUpdate{Title: tc.title, Content: tc.content, Color: &color, CheckedItemsCollapsed: tc.checkedItemsCollapsed})
 					require.ErrorIs(t, err, ErrNoteFieldNotAllowed)
 					require.EqualError(t, err, tc.wantMsg)
 
@@ -169,13 +169,13 @@ func TestUpdate(t *testing.T) {
 			store, userID := newTestBulkStore(t, driver)
 			ctx := t.Context()
 
-			n, err := store.Create(ctx, userID, "", "", "body", NoteTypeText, DefaultNoteColor)
+			n, err := store.Create(ctx, userID, NewNote{Content: "body", Type: NoteTypeText, Color: DefaultNoteColor})
 			require.NoError(t, err)
 			_, err = store.ConvertType(ctx, n.ID, userID, NoteTypeList, "", "", nil, nil)
 			require.NoError(t, err)
 
 			content := "text again"
-			_, err = store.Update(ctx, n.ID, userID, nil, &content, nil, nil, nil, nil, nil)
+			_, err = store.Update(ctx, n.ID, userID, NoteUpdate{Content: &content})
 			require.ErrorIs(t, err, ErrNoteFieldNotAllowed)
 		})
 
@@ -189,15 +189,15 @@ func TestUpdate(t *testing.T) {
 				strangerID, "stranger", "x")
 			require.NoError(t, err)
 
-			n, err := store.Create(ctx, userID, "", "", "body", NoteTypeText, DefaultNoteColor)
+			n, err := store.Create(ctx, userID, NewNote{Content: "body", Type: NoteTypeText, Color: DefaultNoteColor})
 			require.NoError(t, err)
 
 			content := "intrusion"
-			_, err = store.Update(ctx, n.ID, strangerID, nil, &content, nil, nil, nil, nil, nil)
+			_, err = store.Update(ctx, n.ID, strangerID, NoteUpdate{Content: &content})
 			require.ErrorIs(t, err, ErrNoteNotFound)
 
 			require.NoError(t, store.MoveToTrash(ctx, n.ID, userID))
-			_, err = store.Update(ctx, n.ID, userID, nil, &content, nil, nil, nil, nil, nil)
+			_, err = store.Update(ctx, n.ID, userID, NoteUpdate{Content: &content})
 			require.ErrorIs(t, err, ErrNoteNotFound, "a trashed note is not updatable")
 
 			trashed, err := store.GetByIDAnyState(ctx, n.ID, userID)

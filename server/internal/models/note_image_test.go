@@ -25,7 +25,7 @@ func newTestNoteImageStore(t *testing.T, driver string) (*noteStore, string, str
 	_, err := db.ExecContext(ctx, d.RewritePlaceholders(`INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)`), "user0000000000000000im", "imgowner", "x")
 	require.NoError(t, err)
 
-	note, err := store.Create(ctx, "user0000000000000000im", "", "Note with images", "", NoteTypeText, DefaultNoteColor)
+	note, err := store.Create(ctx, "user0000000000000000im", NewNote{Title: "Note with images", Type: NoteTypeText, Color: DefaultNoteColor})
 	require.NoError(t, err)
 
 	return store, "user0000000000000000im", note.ID
@@ -269,7 +269,7 @@ func TestNoteImageEmbeddedInNote(t *testing.T) {
 		assert.Equal(t, img.ID, note.Images[0].ID)
 		assert.Equal(t, "cat.png", note.Images[0].Filename)
 
-		notes, err := store.GetByUserID(ctx, userID, false, false, "", "", false)
+		notes, err := store.GetByUserID(ctx, userID, NoteFilter{})
 		require.NoError(t, err)
 		require.Len(t, notes, 1)
 		require.Len(t, notes[0].Images, 1)

@@ -51,7 +51,12 @@ type listNotesInput struct {
 
 func (h *Handler) handleListNotes(userID string) mcp.ToolHandlerFor[listNotesInput, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in listNotesInput) (*mcp.CallToolResult, any, error) {
-		notes, err := h.noteStore.GetByUserID(ctx, userID, in.Archived, in.Trashed, in.Search, in.Label, false)
+		notes, err := h.noteStore.GetByUserID(ctx, userID, models.NoteFilter{
+			Archived: in.Archived,
+			Trashed:  in.Trashed,
+			Search:   in.Search,
+			LabelID:  in.Label,
+		})
 		if err != nil {
 			return toolError("list notes: %w", err)
 		}
@@ -113,7 +118,12 @@ func (h *Handler) handleCreateNote(userID string) mcp.ToolHandlerFor[createNoteI
 			return toolError("%w", err)
 		}
 
-		note, err := h.noteStore.CreateWithItems(ctx, userID, "", in.Title, in.Content, noteType, color, items)
+		note, err := h.noteStore.CreateWithItems(ctx, userID, models.NewNote{
+			Title:   in.Title,
+			Content: in.Content,
+			Type:    noteType,
+			Color:   color,
+		}, items)
 		if err != nil {
 			return toolError("create note: %w", itemCapError(err))
 		}
@@ -210,7 +220,14 @@ func (h *Handler) handleUpdateNote(userID string) mcp.ToolHandlerFor[updateNoteI
 		if err := validateNoteFields(in.Title, in.Content, in.Color); err != nil {
 			return toolError("%w", err)
 		}
-		note, err := h.noteStore.Update(ctx, in.ID, userID, in.Title, in.Content, in.Color, in.Pinned, in.Archived, in.CheckedItemsCollapsed, nil)
+		note, err := h.noteStore.Update(ctx, in.ID, userID, models.NoteUpdate{
+			Title:                 in.Title,
+			Content:               in.Content,
+			Color:                 in.Color,
+			Pinned:                in.Pinned,
+			Archived:              in.Archived,
+			CheckedItemsCollapsed: in.CheckedItemsCollapsed,
+		})
 		if err != nil {
 			return toolError("update note: %w", err)
 		}

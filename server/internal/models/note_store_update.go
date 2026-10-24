@@ -11,10 +11,10 @@ import (
 )
 
 // Update applies a partial note update and returns the updated note as userID
-// sees it. When baseVersion is non-nil it enables
+// sees it. When u.BaseVersion is non-nil it enables
 // optimistic concurrency on the shared content (title/content): the write is
 // rejected with ErrNoteVersionConflict unless the note's current version still
-// matches baseVersion, so a stale offline edit cannot silently clobber a newer
+// matches u.BaseVersion, so a stale offline edit cannot silently clobber a newer
 // change made on another device (issue #489). The version counter is only
 // consulted/bumped when title or content is being changed; per-user fields
 // (color, pinned, archived, checked_items_collapsed) are never version-guarded,
@@ -25,7 +25,7 @@ import (
 // against the same locked read the write is based on, so a concurrent
 // conversion cannot slip between the check and the write. A note userID
 // cannot see reads as ErrNoteNotFound.
-func (s *noteStore) Update(ctx context.Context, id string, userID string, title, content, color *string, pinned, archived, checkedItemsCollapsed *bool, baseVersion *int) (*Note, error) {
+func (s *noteStore) Update(ctx context.Context, id string, userID string, u NoteUpdate) (*Note, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
@@ -38,16 +38,16 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 	if err != nil {
 		return nil, err
 	}
-	if err = ValidateNoteTypeFields(currentNote.NoteType, title, content, checkedItemsCollapsed); err != nil {
+	if err = ValidateNoteTypeFields(currentNote.NoteType, u.Title, u.Content, u.CheckedItemsCollapsed); err != nil {
 		return nil, err
 	}
 
-	resolvedTitle := deref(title, currentNote.Title)
-	resolvedContent := deref(content, currentNote.Content)
-	resolvedColor := deref(color, currentNote.Color)
-	resolvedPinned := deref(pinned, currentNote.Pinned)
-	resolvedArchived := deref(archived, currentNote.Archived)
-	resolvedCheckedItemsCollapsed := deref(checkedItemsCollapsed, currentNote.CheckedItemsCollapsed)
+	resolvedTitle := deref(u.Title, currentNote.Title)
+	resolvedContent := deref(u.Content, currentNote.Content)
+	resolvedColor := deref(u.Color, currentNote.Color)
+	resolvedPinned := deref(u.Pinned, currentNote.Pinned)
+	resolvedArchived := deref(u.Archived, currentNote.Archived)
+	resolvedCheckedItemsCollapsed := deref(u.CheckedItemsCollapsed, currentNote.CheckedItemsCollapsed)
 
 	now := Timestamp(Now())
 
@@ -56,10 +56,10 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 	// (e.g. an editor autosave that resends unchanged content) avoids a spurious
 	// version bump that would invalidate other devices' base_version, and avoids
 	// overwriting concurrent edits when only per-user fields are changing.
-	contentChanged := (title != nil || content != nil) &&
+	contentChanged := (u.Title != nil || u.Content != nil) &&
 		(resolvedTitle != currentNote.Title || resolvedContent != currentNote.Content)
 	if contentChanged {
-		if err = s.changeNoteContentTx(ctx, tx, id, userID, resolvedTitle, resolvedContent, baseVersion, now); err != nil {
+		if err = s.changeNoteContentTx(ctx, tx, id, userID, resolvedTitle, resolvedContent, u.BaseVersion, now); err != nil {
 			return nil, err
 		}
 	}

@@ -31,7 +31,7 @@ func newTestSearchStore(t *testing.T, driver string) (*noteStore, string) {
 // result order.
 func searchIDs(t *testing.T, store *noteStore, ctx context.Context, userID, query string) []string {
 	t.Helper()
-	notes, err := store.GetByUserID(ctx, userID, false, false, query, "", false)
+	notes, err := store.GetByUserID(ctx, userID, NoteFilter{Search: query})
 	require.NoError(t, err)
 	ids := make([]string, len(notes))
 	for i, n := range notes {
@@ -68,11 +68,11 @@ func TestNoteSearch(t *testing.T) {
 		t.Run("matches a single word in title or content", func(t *testing.T) {
 			store, userID := newTestSearchStore(t, driver)
 			ctx := t.Context()
-			byTitle, err := store.Create(ctx, userID, "", "Weekend plans", "", NoteTypeText, DefaultNoteColor)
+			byTitle, err := store.Create(ctx, userID, NewNote{Title: "Weekend plans", Type: NoteTypeText, Color: DefaultNoteColor})
 			require.NoError(t, err)
-			byContent, err := store.Create(ctx, userID, "", "Untitled", "buy some groceries", NoteTypeText, DefaultNoteColor)
+			byContent, err := store.Create(ctx, userID, NewNote{Title: "Untitled", Content: "buy some groceries", Type: NoteTypeText, Color: DefaultNoteColor})
 			require.NoError(t, err)
-			_, err = store.Create(ctx, userID, "", "Unrelated", "nothing here", NoteTypeText, DefaultNoteColor)
+			_, err = store.Create(ctx, userID, NewNote{Title: "Unrelated", Content: "nothing here", Type: NoteTypeText, Color: DefaultNoteColor})
 			require.NoError(t, err)
 
 			assert.ElementsMatch(t, []string{byTitle.ID}, searchIDs(t, store, ctx, userID, "weekend"))
@@ -84,11 +84,11 @@ func TestNoteSearch(t *testing.T) {
 			ctx := t.Context()
 			// "weekend" is the title; "groceries" is a list item. A single-row
 			// LIKE could never match this; the aggregated index does.
-			match, err := store.CreateWithItems(ctx, userID, "", "Weekend", "", NoteTypeList, DefaultNoteColor,
+			match, err := store.CreateWithItems(ctx, userID, NewNote{Title: "Weekend", Type: NoteTypeList, Color: DefaultNoteColor},
 				[]NewNoteItem{{Text: "buy groceries", Position: 0}, {Text: "clean garage", Position: 1}})
 			require.NoError(t, err)
 			// Has "weekend" but not "groceries".
-			_, err = store.Create(ctx, userID, "", "Weekend", "relax", NoteTypeText, DefaultNoteColor)
+			_, err = store.Create(ctx, userID, NewNote{Title: "Weekend", Content: "relax", Type: NoteTypeText, Color: DefaultNoteColor})
 			require.NoError(t, err)
 
 			assert.ElementsMatch(t, []string{match.ID}, searchIDs(t, store, ctx, userID, "weekend groceries"))
@@ -101,7 +101,7 @@ func TestNoteSearch(t *testing.T) {
 		t.Run("prefix-matches the last term for search-as-you-type", func(t *testing.T) {
 			store, userID := newTestSearchStore(t, driver)
 			ctx := t.Context()
-			n, err := store.Create(ctx, userID, "", "Saturday market", "", NoteTypeText, DefaultNoteColor)
+			n, err := store.Create(ctx, userID, NewNote{Title: "Saturday market", Type: NoteTypeText, Color: DefaultNoteColor})
 			require.NoError(t, err)
 
 			for _, q := range []string{"satu", "saturd", "market satu"} {
@@ -114,7 +114,7 @@ func TestNoteSearch(t *testing.T) {
 		t.Run("is case-insensitive including non-ASCII", func(t *testing.T) {
 			store, userID := newTestSearchStore(t, driver)
 			ctx := t.Context()
-			n, err := store.Create(ctx, userID, "", "Café au lait à München", "", NoteTypeText, DefaultNoteColor)
+			n, err := store.Create(ctx, userID, NewNote{Title: "Café au lait à München", Type: NoteTypeText, Color: DefaultNoteColor})
 			require.NoError(t, err)
 
 			for _, q := range []string{"café", "CAFÉ", "münchen", "MÜNCHEN"} {
@@ -127,7 +127,7 @@ func TestNoteSearch(t *testing.T) {
 		t.Run("treats query metacharacters as literal words without erroring", func(t *testing.T) {
 			store, userID := newTestSearchStore(t, driver)
 			ctx := t.Context()
-			n, err := store.Create(ctx, userID, "", "Progress 100 percent", "foo bar baz", NoteTypeText, DefaultNoteColor)
+			n, err := store.Create(ctx, userID, NewNote{Title: "Progress 100 percent", Content: "foo bar baz", Type: NoteTypeText, Color: DefaultNoteColor})
 			require.NoError(t, err)
 
 			// Each of these historically-dangerous inputs must run without a 500
@@ -146,16 +146,16 @@ func TestNoteSearch(t *testing.T) {
 			store, userID := newTestSearchStore(t, driver)
 			ctx := t.Context()
 			// titleHit repeats the term in the title -> strongest relevance.
-			titleHit, err := store.Create(ctx, userID, "", "mango mango", "fruit", NoteTypeText, DefaultNoteColor)
+			titleHit, err := store.Create(ctx, userID, NewNote{Title: "mango mango", Content: "fruit", Type: NoteTypeText, Color: DefaultNoteColor})
 			require.NoError(t, err)
 			// bodyHit mentions it once in content -> weaker.
-			bodyHit, err := store.Create(ctx, userID, "", "Shopping", "one mango please", NoteTypeText, DefaultNoteColor)
+			bodyHit, err := store.Create(ctx, userID, NewNote{Title: "Shopping", Content: "one mango please", Type: NoteTypeText, Color: DefaultNoteColor})
 			require.NoError(t, err)
 			// pinnedWeak has the weakest match but is pinned, so it sorts first.
-			pinnedWeak, err := store.Create(ctx, userID, "", "Reminder", "a mango", NoteTypeText, DefaultNoteColor)
+			pinnedWeak, err := store.Create(ctx, userID, NewNote{Title: "Reminder", Content: "a mango", Type: NoteTypeText, Color: DefaultNoteColor})
 			require.NoError(t, err)
 			pin := true
-			_, err = store.Update(ctx, pinnedWeak.ID, userID, nil, nil, nil, &pin, nil, nil, nil)
+			_, err = store.Update(ctx, pinnedWeak.ID, userID, NoteUpdate{Pinned: &pin})
 			require.NoError(t, err)
 
 			ids := searchIDs(t, store, ctx, userID, "mango")
@@ -174,12 +174,12 @@ func TestNoteSearchIndexConsistency(t *testing.T) {
 		t.Run("edit note content updates the index", func(t *testing.T) {
 			store, userID := newTestSearchStore(t, driver)
 			ctx := t.Context()
-			n, err := store.Create(ctx, userID, "", "Original", "alpha", NoteTypeText, DefaultNoteColor)
+			n, err := store.Create(ctx, userID, NewNote{Title: "Original", Content: "alpha", Type: NoteTypeText, Color: DefaultNoteColor})
 			require.NoError(t, err)
 			assert.ElementsMatch(t, []string{n.ID}, searchIDs(t, store, ctx, userID, "alpha"))
 
 			newContent := "beta gamma"
-			_, err = store.Update(ctx, n.ID, userID, nil, &newContent, nil, nil, nil, nil, nil)
+			_, err = store.Update(ctx, n.ID, userID, NoteUpdate{Content: &newContent})
 			require.NoError(t, err)
 			assert.Empty(t, searchIDs(t, store, ctx, userID, "alpha"))
 			assert.ElementsMatch(t, []string{n.ID}, searchIDs(t, store, ctx, userID, "gamma"))
@@ -188,7 +188,7 @@ func TestNoteSearchIndexConsistency(t *testing.T) {
 		t.Run("add, edit and delete list items update the index", func(t *testing.T) {
 			store, userID := newTestSearchStore(t, driver)
 			ctx := t.Context()
-			n, err := store.Create(ctx, userID, "", "List", "", NoteTypeList, DefaultNoteColor)
+			n, err := store.Create(ctx, userID, NewNote{Title: "List", Type: NoteTypeList, Color: DefaultNoteColor})
 			require.NoError(t, err)
 
 			item, err := store.CreateItemWithCompleted(ctx, n.ID, userID, "artichoke", 0, false, "", "")
@@ -208,7 +208,7 @@ func TestNoteSearchIndexConsistency(t *testing.T) {
 		t.Run("duplicate indexes the copy", func(t *testing.T) {
 			store, userID := newTestSearchStore(t, driver)
 			ctx := t.Context()
-			src, err := store.CreateWithItems(ctx, userID, "", "Recipe", "tasty", NoteTypeList, DefaultNoteColor,
+			src, err := store.CreateWithItems(ctx, userID, NewNote{Title: "Recipe", Content: "tasty", Type: NoteTypeList, Color: DefaultNoteColor},
 				[]NewNoteItem{{Text: "saffron", Position: 0}})
 			require.NoError(t, err)
 			full, err := store.GetByID(ctx, src.ID, userID)
@@ -223,7 +223,7 @@ func TestNoteSearchIndexConsistency(t *testing.T) {
 		t.Run("type conversion reindexes the new representation", func(t *testing.T) {
 			store, userID := newTestSearchStore(t, driver)
 			ctx := t.Context()
-			n, err := store.CreateWithItems(ctx, userID, "", "Todo", "", NoteTypeList, DefaultNoteColor,
+			n, err := store.CreateWithItems(ctx, userID, NewNote{Title: "Todo", Type: NoteTypeList, Color: DefaultNoteColor},
 				[]NewNoteItem{{Text: "kayak", Position: 0}})
 			require.NoError(t, err)
 			assert.ElementsMatch(t, []string{n.ID}, searchIDs(t, store, ctx, userID, "kayak"))
@@ -251,7 +251,7 @@ func TestNoteSearchIndexConsistency(t *testing.T) {
 		t.Run("trash removes from active search; purge removes entirely", func(t *testing.T) {
 			store, userID := newTestSearchStore(t, driver)
 			ctx := t.Context()
-			n, err := store.Create(ctx, userID, "", "Secret", "pineapple", NoteTypeText, DefaultNoteColor)
+			n, err := store.Create(ctx, userID, NewNote{Title: "Secret", Content: "pineapple", Type: NoteTypeText, Color: DefaultNoteColor})
 			require.NoError(t, err)
 			assert.ElementsMatch(t, []string{n.ID}, searchIDs(t, store, ctx, userID, "pineapple"))
 
@@ -259,7 +259,7 @@ func TestNoteSearchIndexConsistency(t *testing.T) {
 			// Gone from the active search...
 			assert.Empty(t, searchIDs(t, store, ctx, userID, "pineapple"))
 			// ...but still findable when searching the trash.
-			trashed, err := store.GetByUserID(ctx, userID, false, true, "pineapple", "", false)
+			trashed, err := store.GetByUserID(ctx, userID, NoteFilter{Trashed: true, Search: "pineapple"})
 			require.NoError(t, err)
 			require.Len(t, trashed, 1)
 			assert.Equal(t, n.ID, trashed[0].ID)
@@ -267,7 +267,7 @@ func TestNoteSearchIndexConsistency(t *testing.T) {
 			// Permanent delete drops it from the index for good.
 			_, err = store.DeleteFromTrash(ctx, n.ID, userID)
 			require.NoError(t, err)
-			gone, err := store.GetByUserID(ctx, userID, false, true, "pineapple", "", false)
+			gone, err := store.GetByUserID(ctx, userID, NoteFilter{Trashed: true, Search: "pineapple"})
 			require.NoError(t, err)
 			assert.Empty(t, gone)
 		})

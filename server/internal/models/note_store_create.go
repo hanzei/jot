@@ -10,13 +10,13 @@ import (
 	"github.com/hanzei/jot/server/internal/labelfold"
 )
 
-// Create inserts a new note for the user. When noteID is empty the server
+// Create inserts a new note for the user. When n.ID is empty the server
 // generates one; when non-empty the caller-supplied ID is used as the note's
 // primary key so an offline create can be replayed idempotently. Returns
 // ErrNoteExists if a note with that ID already exists (e.g. a replayed create
 // whose original request already committed).
-func (s *noteStore) Create(ctx context.Context, userID, noteID, title, content string, noteType NoteType, color string) (*Note, error) {
-	return s.CreateWithItems(ctx, userID, noteID, title, content, noteType, color, nil)
+func (s *noteStore) Create(ctx context.Context, userID string, n NewNote) (*Note, error) {
+	return s.CreateWithItems(ctx, userID, n, nil)
 }
 
 // CreateWithItems creates a note, its owner note_user_state, and all provided
@@ -26,11 +26,12 @@ func (s *noteStore) Create(ctx context.Context, userID, noteID, title, content s
 // validated and have their ParentID resolved to item IDs within this note.
 // Returns ErrNoteExists if the note ID is taken, and ErrNoteItemExists /
 // ErrInvalidParentRef for the corresponding item-level conflicts.
-func (s *noteStore) CreateWithItems(ctx context.Context, userID, noteID, title, content string, noteType NoteType, color string, items []NewNoteItem) (*Note, error) {
-	if !noteType.Valid() {
+func (s *noteStore) CreateWithItems(ctx context.Context, userID string, n NewNote, items []NewNoteItem) (*Note, error) {
+	if !n.Type.Valid() {
 		return nil, ErrInvalidNoteType
 	}
 
+	noteID := n.ID
 	if noteID == "" {
 		var err error
 		noteID, err = generateID()
@@ -75,7 +76,7 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID, noteID, title, 
 	if err = tx.QueryRowContext(ctx,
 		s.d.RewritePlaceholders(`INSERT INTO notes (id, user_id, title, content, note_type, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`),
-		noteID, userID, title, content, noteType, now, now,
+		noteID, userID, n.Title, n.Content, n.Type, now, now,
 	).Scan(&note.CreatedAt, &note.UpdatedAt); err != nil {
 		// Two concurrent creates with the same caller-supplied ID can both pass the
 		// existence check above (neither sees the other's uncommitted insert), so
@@ -89,7 +90,7 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID, noteID, title, 
 	if _, err = tx.ExecContext(ctx,
 		s.d.RewritePlaceholders(`INSERT INTO note_user_state (note_id, user_id, color, pinned, archived, position, unpinned_position, checked_items_collapsed, created_at, updated_at)
 		 VALUES (?, ?, ?, FALSE, FALSE, ?, ?, FALSE, ?, ?)`),
-		noteID, userID, color, nextPosition, nextPosition, now, now,
+		noteID, userID, n.Color, nextPosition, nextPosition, now, now,
 	); err != nil {
 		return nil, fmt.Errorf("failed to create note user state: %w", err)
 	}
@@ -104,11 +105,11 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID, noteID, title, 
 
 	note.ID = noteID
 	note.UserID = userID
-	note.Title = title
-	note.Content = content
-	note.NoteType = noteType
+	note.Title = n.Title
+	note.Content = n.Content
+	note.NoteType = n.Type
 	note.Version = 1
-	note.Color = color
+	note.Color = n.Color
 	note.Position = nextPosition
 	note.UnpinnedPosition = &nextPosition
 	note.CheckedItemsCollapsed = false
