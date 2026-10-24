@@ -66,7 +66,7 @@ func TestSetItemsCompleted(t *testing.T) {
 			doneC, err := generateID()
 			require.NoError(t, err)
 
-			note, err := store.CreateWithItems(ctx, userID, "", "Chores", "", NoteTypeList, DefaultNoteColor,
+			note, err := store.CreateWithItems(ctx, userID, NewNote{Title: "Chores", Type: NoteTypeList, Color: DefaultNoteColor},
 				[]NewNoteItem{
 					{ID: doneA, Text: "done a", Position: 0, Completed: true},
 					{Text: "todo b", Position: 1, Completed: false},
@@ -91,7 +91,7 @@ func TestSetItemsCompleted(t *testing.T) {
 			b, err := generateID()
 			require.NoError(t, err)
 
-			note, err := store.CreateWithItems(ctx, userID, "", "Chores", "", NoteTypeList, DefaultNoteColor,
+			note, err := store.CreateWithItems(ctx, userID, NewNote{Title: "Chores", Type: NoteTypeList, Color: DefaultNoteColor},
 				[]NewNoteItem{
 					{ID: a, Text: "a", Position: 0, Completed: true},
 					{ID: b, Text: "b", Position: 1, Completed: true},
@@ -112,7 +112,7 @@ func TestSetItemsCompleted(t *testing.T) {
 			store, userID := newTestBulkStore(t, driver)
 			ctx := t.Context()
 
-			note, err := store.CreateWithItems(ctx, userID, "", "Chores", "", NoteTypeList, DefaultNoteColor,
+			note, err := store.CreateWithItems(ctx, userID, NewNote{Title: "Chores", Type: NoteTypeList, Color: DefaultNoteColor},
 				[]NewNoteItem{{Text: "done", Position: 0, Completed: true}})
 			require.NoError(t, err)
 
@@ -128,7 +128,7 @@ func TestSetItemsCompleted(t *testing.T) {
 
 			parentID, err := generateID()
 			require.NoError(t, err)
-			note, err := store.CreateWithItems(ctx, userID, "", "Groups", "", NoteTypeList, DefaultNoteColor,
+			note, err := store.CreateWithItems(ctx, userID, NewNote{Title: "Groups", Type: NoteTypeList, Color: DefaultNoteColor},
 				[]NewNoteItem{
 					{ID: parentID, Text: "Parent", Position: 0, Completed: false},
 					{Text: "Child", Position: 1, Completed: false, ParentID: parentID},
@@ -152,7 +152,7 @@ func TestSetItemsCompleted(t *testing.T) {
 			require.NoError(t, err)
 			childID, err := generateID()
 			require.NoError(t, err)
-			note, err := store.CreateWithItems(ctx, userID, "", "Groups", "", NoteTypeList, DefaultNoteColor,
+			note, err := store.CreateWithItems(ctx, userID, NewNote{Title: "Groups", Type: NoteTypeList, Color: DefaultNoteColor},
 				[]NewNoteItem{
 					{ID: parentID, Text: "Parent", Position: 0, Completed: true},
 					{ID: childID, Text: "Child", Position: 1, Completed: true, ParentID: parentID},
@@ -173,7 +173,7 @@ func TestSetItemsCompleted(t *testing.T) {
 
 			a, err := generateID()
 			require.NoError(t, err)
-			note, err := store.CreateWithItems(ctx, userID, "", "Chores", "", NoteTypeList, DefaultNoteColor,
+			note, err := store.CreateWithItems(ctx, userID, NewNote{Title: "Chores", Type: NoteTypeList, Color: DefaultNoteColor},
 				[]NewNoteItem{{ID: a, Text: "todo", Position: 0, Completed: false}})
 			require.NoError(t, err)
 
@@ -201,7 +201,7 @@ func TestDeleteItems(t *testing.T) {
 			c, err := generateID()
 			require.NoError(t, err)
 
-			note, err := store.CreateWithItems(ctx, userID, "", "Chores", "", NoteTypeList, DefaultNoteColor,
+			note, err := store.CreateWithItems(ctx, userID, NewNote{Title: "Chores", Type: NoteTypeList, Color: DefaultNoteColor},
 				[]NewNoteItem{
 					{ID: a, Text: "remove a", Position: 0},
 					{Text: "keep b", Position: 1},
@@ -222,7 +222,7 @@ func TestDeleteItems(t *testing.T) {
 			parentID, err := generateID()
 			require.NoError(t, err)
 
-			note, err := store.CreateWithItems(ctx, userID, "", "Groups", "", NoteTypeList, DefaultNoteColor,
+			note, err := store.CreateWithItems(ctx, userID, NewNote{Title: "Groups", Type: NoteTypeList, Color: DefaultNoteColor},
 				[]NewNoteItem{
 					{ID: parentID, Text: "Parent", Position: 0, Completed: true},
 					{Text: "Child", Position: 1, Completed: false, ParentID: parentID},
@@ -240,7 +240,7 @@ func TestDeleteItems(t *testing.T) {
 			store, userID := newTestBulkStore(t, driver)
 			ctx := t.Context()
 
-			note, err := store.CreateWithItems(ctx, userID, "", "Chores", "", NoteTypeList, DefaultNoteColor,
+			note, err := store.CreateWithItems(ctx, userID, NewNote{Title: "Chores", Type: NoteTypeList, Color: DefaultNoteColor},
 				[]NewNoteItem{{Text: "keep", Position: 0}})
 			require.NoError(t, err)
 
@@ -253,7 +253,7 @@ func TestDeleteItems(t *testing.T) {
 			store, userID := newTestBulkStore(t, driver)
 			ctx := t.Context()
 
-			note, err := store.CreateWithItems(ctx, userID, "", "Chores", "", NoteTypeList, DefaultNoteColor,
+			note, err := store.CreateWithItems(ctx, userID, NewNote{Title: "Chores", Type: NoteTypeList, Color: DefaultNoteColor},
 				[]NewNoteItem{{Text: "keep", Position: 0}})
 			require.NoError(t, err)
 

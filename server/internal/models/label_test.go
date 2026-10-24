@@ -225,7 +225,7 @@ func TestLabelOrder(t *testing.T) {
 		ctx := t.Context()
 		notes := newNoteStore(store.db, store.d)
 
-		note, err := notes.CreateWithItems(ctx, userID, "", "", "labeled", NoteTypeText, DefaultNoteColor, nil)
+		note, err := notes.CreateWithItems(ctx, userID, NewNote{Content: "labeled", Type: NoteTypeText, Color: DefaultNoteColor}, nil)
 		require.NoError(t, err)
 		// Inserted out of order, and mixing case so a case-sensitive or
 		// locale-dependent sort would give a different answer.

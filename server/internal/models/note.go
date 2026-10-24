@@ -79,6 +79,42 @@ type NoteItemPatch struct {
 	AssignedTo *string
 }
 
+// NewNote describes a note to insert with Create or CreateWithItems. ID is the
+// caller-supplied note ID, or "" to generate one server-side.
+type NewNote struct {
+	ID      string
+	Title   string
+	Content string
+	Type    NoteType
+	Color   string
+}
+
+// NoteUpdate carries the fields that may be changed by a partial note update.
+// Nil fields are left untouched (resolved against the note's current stored
+// value). BaseVersion, when non-nil, enables optimistic concurrency on the
+// shared title/content; see noteStore.Update.
+type NoteUpdate struct {
+	Title                 *string
+	Content               *string
+	Color                 *string
+	Pinned                *bool
+	Archived              *bool
+	CheckedItemsCollapsed *bool
+	BaseVersion           *int
+}
+
+// NoteFilter selects which of a user's notes GetByUserID returns. The zero
+// value is the active, non-archived grid. Trashed takes precedence over
+// MyTasks, which takes precedence over Archived; Search and LabelID narrow any
+// of them further.
+type NoteFilter struct {
+	Archived bool
+	Trashed  bool
+	MyTasks  bool
+	Search   string
+	LabelID  string
+}
+
 // DeletedNoteAudience describes which users should receive a note_deleted SSE
 // event after a permanent delete succeeds.
 type DeletedNoteAudience struct {
