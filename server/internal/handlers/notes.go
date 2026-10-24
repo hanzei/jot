@@ -984,7 +984,7 @@ func (h *NotesHandler) ReorderNotes(w http.ResponseWriter, r *http.Request) (int
 		if errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusForbidden, nil, err
 		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("reorder notes: %w", err)
+		return storeError(err, "reorder notes")
 	}
 
 	return http.StatusNoContent, nil, nil

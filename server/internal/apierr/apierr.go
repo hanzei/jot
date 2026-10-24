@@ -115,8 +115,8 @@ func New(code Code, msg string) error {
 // take the status from [SentinelStatus] rather than mapping it by hand. A zero
 // status means the status depends on the endpoint, so the handler picks it; an
 // empty code means the status's generic code applies. A handler that needs a
-// different status for a sentinel (ErrNoteNoAccess is 403 on the label
-// endpoints) checks for it before falling back to [SentinelStatus].
+// different status for a sentinel checks for it before falling back to
+// [SentinelStatus].
 var sentinels = []struct {
 	err    error
 	status int

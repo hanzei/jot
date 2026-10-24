@@ -136,7 +136,7 @@ func (h *PATsHandler) RevokePAT(w http.ResponseWriter, r *http.Request) (int, an
 
 	deleted, err := h.patStore.Delete(r.Context(), id, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return storeError(err, "delete PAT")
 	}
 	if !deleted {
 		return http.StatusNotFound, nil, errors.New("personal access token not found")

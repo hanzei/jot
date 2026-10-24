@@ -247,7 +247,7 @@ func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int
 		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
 			return http.StatusNotFound, nil, errors.New("label not found")
 		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("get label note IDs: %w", err)
+		return storeError(err, "get label note IDs")
 	}
 
 	label, err := h.labelStore.RenameLabel(r.Context(), labelID, user.ID, req.Name)
@@ -258,7 +258,7 @@ func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int
 		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
 			return http.StatusNotFound, nil, errors.New("label not found")
 		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("rename label: %w", err)
+		return storeError(err, "rename label")
 	}
 
 	h.events.LabelNoteUpdates(r.Context(), noteIDs, user.ID)
@@ -313,7 +313,7 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
 			return http.StatusNotFound, nil, errors.New("label not found")
 		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("add label to note: %w", err)
+		return storeError(err, "add label to note")
 	}
 
 	note, err := h.noteStore.GetByID(r.Context(), noteID, user.ID)
@@ -353,7 +353,7 @@ func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int
 		if errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusForbidden, nil, errors.New("no access to note")
 		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("remove label from note: %w", err)
+		return storeError(err, "remove label from note")
 	}
 
 	note, err := h.noteStore.GetByID(r.Context(), noteID, user.ID)
@@ -390,13 +390,13 @@ func (h *LabelsHandler) DeleteLabel(w http.ResponseWriter, r *http.Request) (int
 		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
 			return http.StatusNotFound, nil, errors.New("label not found")
 		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("get label note IDs: %w", err)
+		return storeError(err, "get label note IDs")
 	}
 	if err := h.labelStore.DeleteLabel(r.Context(), labelID, user.ID); err != nil {
 		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
 			return http.StatusNotFound, nil, errors.New("label not found")
 		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("delete label: %w", err)
+		return storeError(err, "delete label")
 	}
 
 	h.events.LabelNoteUpdates(r.Context(), noteIDs, user.ID)

@@ -307,12 +307,10 @@ func (h *OIDCHandler) completeLink(w http.ResponseWriter, r *http.Request, userI
 func (h *OIDCHandler) bindIdentity(ctx context.Context, userID, issuer, subject string) (int, error) {
 	err := h.userStore.LinkOIDCIdentity(ctx, userID, issuer, subject)
 	switch {
-	case errors.Is(err, models.ErrOIDCIdentityLinked):
-		return http.StatusConflict, models.ErrOIDCIdentityLinked
 	case errors.Is(err, models.ErrUserNotFound):
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, errUnauthorized
 	case err != nil:
-		return http.StatusInternalServerError, fmt.Errorf("link SSO identity: %w", err)
+		return storeStatus(err, "link SSO identity")
 	}
 	return 0, nil
 }
@@ -420,14 +418,10 @@ func (h *OIDCHandler) Unlink(_ http.ResponseWriter, r *http.Request) (int, any, 
 	}
 	err := h.userStore.UnlinkOIDCIdentity(r.Context(), user.ID)
 	switch {
-	case errors.Is(err, models.ErrWouldStrandAccount):
-		// A resource-state precondition, not malformed input, so 422 per the API
-		// conventions.
-		return http.StatusUnprocessableEntity, nil, models.ErrWouldStrandAccount
 	case errors.Is(err, models.ErrUserNotFound):
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+		return http.StatusUnauthorized, nil, errUnauthorized
 	case err != nil:
-		return http.StatusInternalServerError, nil, fmt.Errorf("unlink SSO identity: %w", err)
+		return storeError(err, "unlink SSO identity")
 	}
 	return http.StatusNoContent, nil, nil
 }
