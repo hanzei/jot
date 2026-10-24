@@ -67,12 +67,14 @@ func TestNoteUnreadState(t *testing.T) {
 		// The owner never reopened the note since creating it: their baseline is
 		// the per-user row's created_at.
 		content := "edited by collab"
-		require.NoError(t, store.Update(ctx, note.ID, collabID, NoteUpdate{Content: &content}))
+		_, err = store.Update(ctx, note.ID, collabID, NoteUpdate{Content: &content})
+		require.NoError(t, err)
 		assert.Equal(t, NoteUnreadUpdated, unreadFor(t, store, note.ID, ownerID))
 		assert.Empty(t, unreadFor(t, store, note.ID, collabID))
 
 		content = "edited by owner"
-		require.NoError(t, store.Update(ctx, note.ID, ownerID, NoteUpdate{Content: &content}))
+		_, err = store.Update(ctx, note.ID, ownerID, NoteUpdate{Content: &content})
+		require.NoError(t, err)
 		assert.Empty(t, unreadFor(t, store, note.ID, ownerID), "the actor's own change clears it for them")
 		assert.Equal(t, NoteUnreadUpdated, unreadFor(t, store, note.ID, collabID))
 
@@ -132,7 +134,8 @@ func TestNoteUnreadState(t *testing.T) {
 		// leaves that change unread, and never moves the view time backward.
 		openedOffline := Now()
 		content = "edited by collab while owner was offline"
-		require.NoError(t, store.Update(ctx, note.ID, collabID, NoteUpdate{Content: &content}))
+		_, err = store.Update(ctx, note.ID, collabID, NoteUpdate{Content: &content})
+		require.NoError(t, err)
 		changed, err := store.MarkViewed(ctx, note.ID, ownerID, openedOffline)
 		require.NoError(t, err)
 		assert.False(t, changed)
@@ -158,14 +161,15 @@ func TestNoteUnreadState(t *testing.T) {
 		_, err = store.MarkViewed(ctx, note.ID, viewerID, base.Add(-time.Minute))
 		require.NoError(t, err)
 		content = "newer edit by collab"
-		require.NoError(t, store.Update(ctx, note.ID, collabID, NoteUpdate{Content: &content}))
+		_, err = store.Update(ctx, note.ID, collabID, NoteUpdate{Content: &content})
+		require.NoError(t, err)
 		require.Equal(t, NoteUnreadUpdated, unreadFor(t, store, note.ID, viewerID))
 		staleWriters := map[string]func(tx *sql.Tx) error{
 			"touchNoteTx": func(tx *sql.Tx) error {
 				return touchNoteTx(ctx, tx, store.d, note.ID, ownerID, stale)
 			},
 			"changeNoteContentTx": func(tx *sql.Tx) error {
-				return store.changeNoteContentTx(ctx, tx, note.ID, ownerID, new("stale title"), new("stale content"), nil, stale)
+				return store.changeNoteContentTx(ctx, tx, note.ID, ownerID, "stale title", "stale content", nil, stale)
 			},
 			"convertNoteRowTx": func(tx *sql.Tx) error {
 				_, convErr := store.convertNoteRowTx(ctx, tx, note.ID, ownerID, note.NoteType, "stale title", "stale content", nil, nil, stale)

@@ -10,7 +10,8 @@ import (
 	"strings"
 )
 
-// Update applies a partial note update. When u.BaseVersion is non-nil it enables
+// Update applies a partial note update and returns the updated note as userID
+// sees it. When u.BaseVersion is non-nil it enables
 // optimistic concurrency on the shared content (title/content): the write is
 // rejected with ErrNoteVersionConflict unless the note's current version still
 // matches u.BaseVersion, so a stale offline edit cannot silently clobber a newer
@@ -19,92 +20,110 @@ import (
 // (color, pinned, archived, checked_items_collapsed) are never version-guarded,
 // since they live in note_user_state and differ per collaborator.
 //
-// Every write is decided against the row as stored when it runs, never against
-// an earlier read: columns are written as COALESCE(new, column), so a field the
-// caller did not send keeps whatever a concurrent update put there, and the
-// no-op and pin-flip checks are guards in the UPDATE statements themselves.
-func (s *noteStore) Update(ctx context.Context, id string, userID string, u NoteUpdate) error {
-	hasAccess, err := s.HasAccess(ctx, id, userID)
-	if err != nil {
-		return fmt.Errorf("failed to check access: %w", err)
-	}
-	if !hasAccess {
-		return ErrNoteNoAccess
-	}
-
+// A field the note's type does not allow (see ValidateNoteTypeFields) is
+// rejected with an error matching ErrNoteFieldNotAllowed. The type is checked
+// against the same locked read the write is based on, so a concurrent
+// conversion cannot slip between the check and the write. A note userID
+// cannot see reads as ErrNoteNotFound.
+func (s *noteStore) Update(ctx context.Context, id string, userID string, u NoteUpdate) (*Note, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// Current per-user view, to merge partial updates and detect pin changes.
+	// Only the note row is needed here; the full note is loaded after commit.
+	currentNote, err := s.getNoteRowForUpdateTx(ctx, tx, id, userID)
+	if err != nil {
+		return nil, err
+	}
+	if err = ValidateNoteTypeFields(currentNote.NoteType, u.Title, u.Content, u.CheckedItemsCollapsed); err != nil {
+		return nil, err
+	}
+
+	resolvedTitle := deref(u.Title, currentNote.Title)
+	resolvedContent := deref(u.Content, currentNote.Content)
+	resolvedColor := deref(u.Color, currentNote.Color)
+	resolvedPinned := deref(u.Pinned, currentNote.Pinned)
+	resolvedArchived := deref(u.Archived, currentNote.Archived)
+	resolvedCheckedItemsCollapsed := deref(u.CheckedItemsCollapsed, currentNote.CheckedItemsCollapsed)
+
 	now := Timestamp(Now())
 
-	if u.Title != nil || u.Content != nil {
-		if err = s.changeNoteContentTx(ctx, tx, id, userID, u.Title, u.Content, u.BaseVersion, now); err != nil {
-			return err
+	// Only touch the shared fields (title/content) when the caller provided at
+	// least one AND it actually differs from the stored value. Skipping a no-op
+	// (e.g. an editor autosave that resends unchanged content) avoids a spurious
+	// version bump that would invalidate other devices' base_version, and avoids
+	// overwriting concurrent edits when only per-user fields are changing.
+	contentChanged := (u.Title != nil || u.Content != nil) &&
+		(resolvedTitle != currentNote.Title || resolvedContent != currentNote.Content)
+	if contentChanged {
+		if err = s.changeNoteContentTx(ctx, tx, id, userID, resolvedTitle, resolvedContent, u.BaseVersion, now); err != nil {
+			return nil, err
 		}
 	}
 
 	// Per-user fields live in note_user_state.
-	if u.Pinned != nil {
-		if err = s.setPinnedTx(ctx, tx, id, userID, *u.Pinned); err != nil {
-			return err
-		}
-	}
-
 	result, err := tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE note_user_state SET archived = COALESCE(?, archived),
-		 color = COALESCE(?, color), checked_items_collapsed = COALESCE(?, checked_items_collapsed), updated_at = ?
+		s.d.RewritePlaceholders(`UPDATE note_user_state SET pinned = ?, archived = ?, color = ?, checked_items_collapsed = ?, updated_at = ?
 		 WHERE note_id = ? AND user_id = ?`),
-		u.Archived, u.Color, u.CheckedItemsCollapsed, now, id, userID,
+		resolvedPinned, resolvedArchived, resolvedColor, resolvedCheckedItemsCollapsed, now, id, userID,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to update note user state: %w", err)
+		return nil, fmt.Errorf("failed to update note user state: %w", err)
 	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
+		return nil, fmt.Errorf("failed to get rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		return ErrNoteNotFound
+		return nil, ErrNoteNotFound
+	}
+
+	if currentNote.Pinned != resolvedPinned {
+		if err = s.handlePinStatusChangeTx(ctx, tx, id, userID, currentNote, resolvedPinned); err != nil {
+			return nil, fmt.Errorf("handle pin status change: %w", err)
+		}
 	}
 
 	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("commit note update: %w", err)
+		return nil, fmt.Errorf("commit note update: %w", err)
 	}
-	return nil
+
+	updated, err := s.GetByID(ctx, id, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load updated note: %w", err)
+	}
+	return updated, nil
 }
 
-// setPinnedTx sets userID's pin flag on the note with a guarded statement, and
-// moves the note's position only when the stored row actually flipped, so a
-// repeated pin or unpin never repositions it twice.
-func (s *noteStore) setPinnedTx(ctx context.Context, tx *sql.Tx, id, userID string, pinned bool) error {
-	result, err := tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE note_user_state SET pinned = ? WHERE note_id = ? AND user_id = ? AND pinned <> ?`),
-		pinned, id, userID, pinned,
-	)
+// getNoteRowForUpdateTx reads the note row and userID's per-user state inside
+// tx, locking both rows (on Postgres) until tx ends. Unlike GetByID it does not
+// load items, labels, shares or images, which Update does not need. A note
+// that is trashed or that userID cannot see reads as ErrNoteNotFound.
+func (s *noteStore) getNoteRowForUpdateTx(ctx context.Context, tx *sql.Tx, id, userID string) (*Note, error) {
+	query := `SELECT ` + noteSelectColumns + `
+			  FROM active_notes n
+			  INNER JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = ?
+			  WHERE n.id = ?` + s.d.ForUpdate()
+
+	var note Note
+	err := tx.QueryRowContext(ctx, s.d.RewritePlaceholders(query), userID, id).Scan(noteScanDest(&note)...)
 	if err != nil {
-		return fmt.Errorf("update note pin state: %w", err)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNoteNotFound
+		}
+		return nil, fmt.Errorf("get current note: %w", err)
 	}
-	flipped, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("get pin rows affected: %w", err)
-	}
-	if flipped == 0 {
-		return nil
-	}
-	if err = s.handlePinStatusChangeTx(ctx, tx, id, userID, pinned); err != nil {
-		return fmt.Errorf("handle pin status change: %w", err)
-	}
-	return nil
+	return &note, nil
 }
 
 // changeNoteContentTx writes userID's title/content change, which records it
-// for unread tracking, and marks the note viewed by userID. A no-op or an
-// idempotent replay wrote nothing, so it is not this user's change (mirrors
-// ConvertType's alreadyApplied check).
-func (s *noteStore) changeNoteContentTx(ctx context.Context, tx *sql.Tx, id, userID string, title, content *string, baseVersion *int, now string) error {
+// for unread tracking, and marks the note viewed by userID. An idempotent
+// replay wrote nothing, so it is not this user's change (mirrors ConvertType's
+// alreadyApplied check).
+func (s *noteStore) changeNoteContentTx(ctx context.Context, tx *sql.Tx, id, userID, title, content string, baseVersion *int, now string) error {
 	applied, err := s.updateNoteContentTx(ctx, tx, id, userID, title, content, baseVersion, now)
 	if err != nil || !applied {
 		return err
@@ -112,20 +131,13 @@ func (s *noteStore) changeNoteContentTx(ctx context.Context, tx *sql.Tx, id, use
 	return markViewedTx(ctx, tx, s.d, id, userID, now)
 }
 
-// updateNoteContentTx updates title and/or content (a nil one is left as
-// stored) and bumps version inside tx, but only when a provided value differs
-// from the stored one: skipping a no-op (e.g. an editor autosave that resends
-// unchanged content) avoids a spurious version bump that would invalidate
-// other devices' base_version. When baseVersion is non-nil the write is also
-// gated on the current version.
-//
-// Zero rows affected means the note is gone (ErrNoteNotFound), the provided
-// values are already stored (applied == false, nil), or — only with
-// baseVersion — the version guard failed (ErrNoteVersionConflict).
-func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, actorID string, title, content *string, baseVersion *int, now string) (applied bool, err error) {
-	query := `UPDATE notes SET title = COALESCE(?, title), content = COALESCE(?, content), version = version + 1, updated_at = ?, ` + contentChangedSet +
-		` WHERE id = ? AND deleted_at IS NULL AND (title <> COALESCE(?, title) OR content <> COALESCE(?, content))`
-	args := append(appendContentChangedArgs([]any{title, content, now}, now, actorID), id, title, content)
+// updateNoteContentTx updates title, content, and version inside tx. When baseVersion is non-nil
+// the write is gated on the current version; on a version mismatch (zero rows affected) it re-reads
+// the current title/content: if they already match the requested values it returns nil (idempotent
+// success, reported as applied == false), otherwise ErrNoteVersionConflict.
+func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, actorID, title, content string, baseVersion *int, now string) (applied bool, err error) {
+	query := `UPDATE notes SET title = ?, content = ?, version = version + 1, updated_at = ?, ` + contentChangedSet + ` WHERE id = ?`
+	args := append(appendContentChangedArgs([]any{title, content, now}, now, actorID), id)
 	if baseVersion != nil {
 		query += ` AND version = ?`
 		args = append(args, *baseVersion)
@@ -134,32 +146,34 @@ func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, act
 	if err != nil {
 		return false, fmt.Errorf("failed to update note: %w", err)
 	}
+	if baseVersion == nil {
+		return true, nil
+	}
 	rows, err := result.RowsAffected()
 	if err != nil {
 		return false, fmt.Errorf("failed to get rows affected: %w", err)
 	}
-	if rows > 0 {
-		return true, nil
-	}
-
-	var currentTitle, currentContent string
-	err = tx.QueryRowContext(ctx,
-		s.d.RewritePlaceholders(`SELECT title, content FROM notes WHERE id = ? AND deleted_at IS NULL`),
-		id,
-	).Scan(&currentTitle, &currentContent)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return false, ErrNoteNotFound
+	// Zero rows means the version guard did not match. Re-read to check whether the
+	// winning write already applied the same title/content; if so, treat this as a
+	// no-op success rather than a conflict, since the desired state is already present.
+	if rows == 0 {
+		var currentTitle, currentContent string
+		err = tx.QueryRowContext(ctx,
+			s.d.RewritePlaceholders(`SELECT title, content FROM notes WHERE id = ? AND deleted_at IS NULL`),
+			id,
+		).Scan(&currentTitle, &currentContent)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return false, ErrNoteNotFound
+			}
+			return false, fmt.Errorf("get current note content: %w", err)
 		}
-		return false, fmt.Errorf("get current note content: %w", err)
+		if currentTitle == title && currentContent == content {
+			return false, nil
+		}
+		return false, ErrNoteVersionConflict
 	}
-	// Without a version guard only the no-op guard can have stopped the write.
-	// A version-guarded write whose values another write already stored is an
-	// idempotent replay, not a conflict.
-	if baseVersion == nil || (deref(title, currentTitle) == currentTitle && deref(content, currentContent) == currentContent) {
-		return false, nil
-	}
-	return false, ErrNoteVersionConflict
+	return true, nil
 }
 
 // ConvertType changes a note's type in place, replacing its content
@@ -351,17 +365,15 @@ func groupedNewNoteItems(items []NewNoteItem) []NewNoteItem {
 }
 
 // handlePinStatusChangeTx updates note positions when a note is pinned or unpinned within a transaction.
-// Both read the note's stored positions inside tx rather than taking them from
-// an earlier, possibly stale, read.
-func (s *noteStore) handlePinStatusChangeTx(ctx context.Context, tx *sql.Tx, id, ownerID string, nowPinned bool) error {
+func (s *noteStore) handlePinStatusChangeTx(ctx context.Context, tx *sql.Tx, id, ownerID string, currentNote *Note, nowPinned bool) error {
 	if nowPinned {
-		return s.handlePinningTx(ctx, tx, id, ownerID)
+		return s.handlePinningTx(ctx, tx, id, ownerID, currentNote)
 	}
-	return s.handleUnpinningTx(ctx, tx, id, ownerID)
+	return s.handleUnpinningTx(ctx, tx, id, ownerID, currentNote)
 }
 
 // handlePinningTx stores the current position as unpinned_position and moves the note to the end of the pinned list.
-func (s *noteStore) handlePinningTx(ctx context.Context, tx *sql.Tx, id, userID string) error {
+func (s *noteStore) handlePinningTx(ctx context.Context, tx *sql.Tx, id, userID string, currentNote *Note) error {
 	var maxPosition int
 	posQuery := s.d.RewritePlaceholders(`SELECT COALESCE(MAX(nus.position), -1)
 	             FROM note_user_state nus
@@ -372,10 +384,8 @@ func (s *noteStore) handlePinningTx(ctx context.Context, tx *sql.Tx, id, userID 
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		// unpinned_position = position reads the pre-update value: SET
-		// expressions all see the row as it was before the statement.
-		s.d.RewritePlaceholders(`UPDATE note_user_state SET position = ?, unpinned_position = position WHERE note_id = ? AND user_id = ?`),
-		maxPosition+1, id, userID,
+		s.d.RewritePlaceholders(`UPDATE note_user_state SET position = ?, unpinned_position = ? WHERE note_id = ? AND user_id = ?`),
+		maxPosition+1, currentNote.Position, id, userID,
 	); err != nil {
 		return fmt.Errorf("failed to update position: %w", err)
 	}
@@ -383,18 +393,11 @@ func (s *noteStore) handlePinningTx(ctx context.Context, tx *sql.Tx, id, userID 
 }
 
 // handleUnpinningTx restores the note to its saved unpinned_position, or appends it to the end of the unpinned list.
-func (s *noteStore) handleUnpinningTx(ctx context.Context, tx *sql.Tx, id, userID string) error {
-	var unpinnedPosition *int
-	if err := tx.QueryRowContext(ctx,
-		s.d.RewritePlaceholders(`SELECT unpinned_position FROM note_user_state WHERE note_id = ? AND user_id = ?`),
-		id, userID,
-	).Scan(&unpinnedPosition); err != nil {
-		return fmt.Errorf("get unpinned position: %w", err)
-	}
-
+func (s *noteStore) handleUnpinningTx(ctx context.Context, tx *sql.Tx, id, userID string, currentNote *Note) error {
 	var targetPosition int
-	if unpinnedPosition != nil {
-		targetPosition = *unpinnedPosition
+
+	if currentNote.UnpinnedPosition != nil {
+		targetPosition = *currentNote.UnpinnedPosition
 
 		// Shift other unpinned notes to make room
 		if _, err := tx.ExecContext(ctx,

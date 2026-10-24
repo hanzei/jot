@@ -220,27 +220,16 @@ func (h *Handler) handleUpdateNote(userID string) mcp.ToolHandlerFor[updateNoteI
 		if err := validateNoteFields(in.Title, in.Content, in.Color); err != nil {
 			return toolError("%w", err)
 		}
-		current, err := h.noteStore.GetByID(ctx, in.ID, userID)
-		if err != nil {
-			return toolError("get note: %w", err)
-		}
-		if err = models.ValidateNoteTypeFields(current.NoteType, in.Title, in.Content, in.CheckedItemsCollapsed); err != nil {
-			return toolError("%w", err)
-		}
-
-		if err = h.noteStore.Update(ctx, in.ID, userID, models.NoteUpdate{
+		note, err := h.noteStore.Update(ctx, in.ID, userID, models.NoteUpdate{
 			Title:                 in.Title,
 			Content:               in.Content,
 			Color:                 in.Color,
 			Pinned:                in.Pinned,
 			Archived:              in.Archived,
 			CheckedItemsCollapsed: in.CheckedItemsCollapsed,
-		}); err != nil {
-			return toolError("update note: %w", err)
-		}
-		note, err := h.noteStore.GetByID(ctx, in.ID, userID)
+		})
 		if err != nil {
-			return toolError("get updated note: %w", err)
+			return toolError("update note: %w", err)
 		}
 
 		// Title and content are shared with collaborators; the other fields
