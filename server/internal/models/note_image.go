@@ -45,7 +45,7 @@ func (s *noteStore) CreateNoteImage(ctx context.Context, noteID, uploaderID, fil
 			s.d.RewritePlaceholders(`SELECT COUNT(*) FROM note_images WHERE note_id = ?`),
 			noteID,
 		).Scan(&count); err != nil {
-			return nil, fmt.Errorf("count note images: %w", err)
+			return nil, fmt.Errorf("query note image count: %w", err)
 		}
 		if count >= maxImages {
 			return nil, ErrNoteImageCapExceeded

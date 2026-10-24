@@ -25,7 +25,7 @@ func markViewedTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, u
 		 WHERE note_id = ? AND user_id = ? AND (last_viewed_at IS NULL OR last_viewed_at < ?)`),
 		now, noteID, userID, now,
 	); err != nil {
-		return fmt.Errorf("mark note viewed: %w", err)
+		return fmt.Errorf("update last_viewed_at: %w", err)
 	}
 	return nil
 }

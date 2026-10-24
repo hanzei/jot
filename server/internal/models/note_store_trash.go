@@ -97,7 +97,7 @@ func (s *noteStore) MoveToTrash(ctx context.Context, id string, userID string) e
 		now, now, id, userID,
 	)
 	if err != nil {
-		return fmt.Errorf("move note to trash: %w", err)
+		return fmt.Errorf("set note deleted_at: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()

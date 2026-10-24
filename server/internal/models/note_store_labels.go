@@ -106,7 +106,7 @@ func (s *noteStore) AddLabelToNote(ctx context.Context, noteID, labelID, userID 
 
 	id, err := generateID()
 	if err != nil {
-		return fmt.Errorf("generate note_label ID: %w", err)
+		return fmt.Errorf("generate note label ID: %w", err)
 	}
 	q := s.d.RewritePlaceholders(
 		s.d.InsertIgnore("note_labels", "id, note_id, label_id, user_id, created_at", "?, ?, ?, ?, ?"),

@@ -33,10 +33,11 @@ func dbTimeNow(m dsl.Matcher) {
 		Report(`use models.Now() for any value persisted to or compared against a timestamp column (CLAUDE.md); //nolint:gocritic if this measures elapsed time`)
 }
 
-// Wrap messages name the failed operation ("get note: …"), not "failed to get
-// note: …" — chained wraps otherwise read "update note: failed to …: failed
-// to …" (server/CLAUDE.md, #1106). The helpers that build a wrap from an op
-// string (execChanged, storeStatus/storeError, toolError) are covered too.
+// Error messages name the failed operation ("get note: …", as in the
+// server/CLAUDE.md example), not "failed to get note: …" — chained wraps
+// otherwise read "update note: failed to …: failed to …" (#1106). errors.New
+// and the helpers that build a wrap from an op string (execChanged,
+// storeStatus/storeError, toolError) are covered too.
 func failedToErrorWrap(m dsl.Matcher) {
 	m.Match(
 		`fmt.Errorf($msg, $*_)`,

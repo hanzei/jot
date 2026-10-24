@@ -481,13 +481,13 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 
 	if preDelete != nil {
 		if err = preDelete(ctx, tx); err != nil {
-			return fmt.Errorf("pre-delete read failed: %w", err)
+			return fmt.Errorf("pre-delete read: %w", err)
 		}
 	}
 
 	result, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(`DELETE FROM users WHERE id = ?`), id)
 	if err != nil {
-		return fmt.Errorf("delete user: %w", err)
+		return fmt.Errorf("delete user row: %w", err)
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {
@@ -499,7 +499,7 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 
 	if postDelete != nil {
 		if err = postDelete(ctx, tx); err != nil {
-			return fmt.Errorf("post-delete cleanup failed: %w", err)
+			return fmt.Errorf("post-delete cleanup: %w", err)
 		}
 	}
 

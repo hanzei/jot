@@ -96,7 +96,7 @@ func HashSessionToken(rawToken string) string {
 func (s *sessionStore) Create(ctx context.Context, userID, userAgent string) (*Session, string, error) {
 	token, err := generateSessionToken()
 	if err != nil {
-		return nil, "", fmt.Errorf("create session: %w", err)
+		return nil, "", fmt.Errorf("generate session token: %w", err)
 	}
 	tokenHash := HashSessionToken(token)
 

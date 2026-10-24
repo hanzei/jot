@@ -281,7 +281,7 @@ func (s *labelStore) RenameLabel(ctx context.Context, labelID, userID, newName s
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrLabelNotFoundOrNotOwned
 		}
-		return nil, fmt.Errorf("rename label: %w", err)
+		return nil, fmt.Errorf("update label name: %w", err)
 	}
 	return &l, nil
 }

@@ -256,7 +256,7 @@ func insertImportedLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect,
 
 		noteLabelID, err := generateID()
 		if err != nil {
-			return fmt.Errorf("generate note_label ID: %w", err)
+			return fmt.Errorf("generate note label ID: %w", err)
 		}
 		q := d.RewritePlaceholders(
 			d.InsertIgnore("note_labels", "id, note_id, label_id, user_id, created_at", "?, ?, ?, ?, ?"),

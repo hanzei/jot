@@ -66,7 +66,7 @@ func (s *noteStore) ShareNote(ctx context.Context, noteID string, sharedByUserID
 		if s.d.IsUniqueConstraintError(err) {
 			return ErrNoteAlreadyShared
 		}
-		return fmt.Errorf("share note: %w", err)
+		return fmt.Errorf("insert note share: %w", err)
 	}
 
 	// Ensure the collaborator has a per-user state row for this note. Only create
@@ -113,7 +113,7 @@ func (s *noteStore) UnshareNote(ctx context.Context, noteID string, sharedWithUs
 
 	result, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(`DELETE FROM note_shares WHERE note_id = ? AND shared_with_user_id = ?`), noteID, sharedWithUserID)
 	if err != nil {
-		return fmt.Errorf("unshare note: %w", err)
+		return fmt.Errorf("delete note share: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()

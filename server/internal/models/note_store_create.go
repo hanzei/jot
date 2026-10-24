@@ -84,7 +84,7 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID string, n NewNot
 		if s.d.IsUniqueConstraintError(err) {
 			return nil, ErrNoteExists
 		}
-		return nil, fmt.Errorf("create note: %w", err)
+		return nil, fmt.Errorf("insert note: %w", err)
 	}
 
 	if _, err = tx.ExecContext(ctx,

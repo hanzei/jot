@@ -36,7 +36,7 @@ func (s *noteStore) getNoteAudiencesTx(ctx context.Context, tx *sql.Tx, noteIDs 
 		audiences[noteID] = append(audiences[noteID], audienceID)
 	}
 	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed while reading note audiences: %w", err)
+		return nil, fmt.Errorf("read note audiences: %w", err)
 	}
 	return audiences, nil
 }
