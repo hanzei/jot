@@ -1,7 +1,6 @@
 package models
 
 import (
-	"database/sql"
 	"testing"
 
 	"github.com/hanzei/jot/server/internal/database/dbtest"
@@ -104,65 +103,84 @@ func TestUpdateUnpinning(t *testing.T) {
 	})
 }
 
-// TestUpdateStaleSnapshot covers a concurrent update committing between
-// Update's read of the note and its writes: applyUpdateTx is handed the read
-// taken before that update, and must not write any of its values back.
-func TestUpdateStaleSnapshot(t *testing.T) {
+// TestUpdatePartialWrites covers updates whose fields were changed by another
+// update after the caller last read the note: every write and every no-op or
+// pin-flip decision must go by the row as stored, never by an earlier read.
+func TestUpdatePartialWrites(t *testing.T) {
 	dbtest.ForEachDriver(t, func(t *testing.T, driver string) {
+		// setup returns a fresh store and the note as first read, which the
+		// cases treat as a client's (soon stale) copy.
 		setup := func(t *testing.T) (*noteStore, string, *Note) {
 			t.Helper()
 			store, userID := newTestBulkStore(t, driver)
 			note, err := store.Create(t.Context(), userID, NewNote{Title: "title", Content: "content", Type: NoteTypeText, Color: DefaultNoteColor})
 			require.NoError(t, err)
-			snapshot, err := store.GetByID(t.Context(), note.ID, userID)
+			read, err := store.GetByID(t.Context(), note.ID, userID)
 			require.NoError(t, err)
-			return store, userID, snapshot
-		}
-		applyStale := func(t *testing.T, store *noteStore, userID string, snapshot *Note, u NoteUpdate) error {
-			t.Helper()
-			return inTx(t.Context(), store, func(tx *sql.Tx) error {
-				return store.applyUpdateTx(t.Context(), tx, snapshot.ID, userID, snapshot, u, Timestamp(Now()))
-			})
+			return store, userID, read
 		}
 
-		t.Run("a title-only write keeps content changed after the snapshot", func(t *testing.T) {
-			store, userID, snapshot := setup(t)
+		t.Run("a title-only write keeps content changed since the read", func(t *testing.T) {
+			store, userID, read := setup(t)
 			ctx := t.Context()
-			require.NoError(t, store.Update(ctx, snapshot.ID, userID, NoteUpdate{Content: new("newer content")}))
+			require.NoError(t, store.Update(ctx, read.ID, userID, NoteUpdate{Content: new("newer content")}))
 
-			require.NoError(t, applyStale(t, store, userID, snapshot, NoteUpdate{Title: new("new title")}))
+			require.NoError(t, store.Update(ctx, read.ID, userID, NoteUpdate{Title: new("new title")}))
 
-			got, err := store.GetByID(ctx, snapshot.ID, userID)
+			got, err := store.GetByID(ctx, read.ID, userID)
 			require.NoError(t, err)
 			assert.Equal(t, "new title", got.Title)
 			assert.Equal(t, "newer content", got.Content)
 		})
 
-		t.Run("a per-user write keeps the other per-user fields changed after the snapshot", func(t *testing.T) {
-			store, userID, snapshot := setup(t)
+		t.Run("a per-user write keeps the other per-user fields changed since the read", func(t *testing.T) {
+			store, userID, read := setup(t)
 			ctx := t.Context()
-			require.NoError(t, store.Update(ctx, snapshot.ID, userID, NoteUpdate{Archived: new(true), CheckedItemsCollapsed: new(true)}))
+			require.NoError(t, store.Update(ctx, read.ID, userID, NoteUpdate{Archived: new(true), CheckedItemsCollapsed: new(true)}))
 
-			require.NoError(t, applyStale(t, store, userID, snapshot, NoteUpdate{Color: new("#fbbc04")}))
+			require.NoError(t, store.Update(ctx, read.ID, userID, NoteUpdate{Color: new("#fbbc04")}))
 
-			got, err := store.GetByID(ctx, snapshot.ID, userID)
+			got, err := store.GetByID(ctx, read.ID, userID)
 			require.NoError(t, err)
 			assert.Equal(t, "#fbbc04", got.Color)
 			assert.True(t, got.Archived)
 			assert.True(t, got.CheckedItemsCollapsed)
 		})
 
-		t.Run("an unpin restores the position even when the snapshot predates the pin", func(t *testing.T) {
-			store, userID, snapshot := setup(t)
+		t.Run("a write matching the read but not the stored value is applied", func(t *testing.T) {
+			store, userID, read := setup(t)
 			ctx := t.Context()
-			require.NoError(t, store.Update(ctx, snapshot.ID, userID, NoteUpdate{Pinned: new(true)}))
+			require.NoError(t, store.Update(ctx, read.ID, userID, NoteUpdate{Title: new("other title")}))
 
-			require.NoError(t, applyStale(t, store, userID, snapshot, NoteUpdate{Pinned: new(false)}))
+			require.NoError(t, store.Update(ctx, read.ID, userID, NoteUpdate{Title: new(read.Title)}))
 
-			got, err := store.GetByID(ctx, snapshot.ID, userID)
+			got, err := store.GetByID(ctx, read.ID, userID)
+			require.NoError(t, err)
+			assert.Equal(t, read.Title, got.Title)
+		})
+
+		t.Run("a write that changes nothing does not bump the version", func(t *testing.T) {
+			store, userID, read := setup(t)
+			ctx := t.Context()
+
+			require.NoError(t, store.Update(ctx, read.ID, userID, NoteUpdate{Title: new(read.Title), Content: new(read.Content)}))
+
+			got, err := store.GetByID(ctx, read.ID, userID)
+			require.NoError(t, err)
+			assert.Equal(t, read.Version, got.Version)
+		})
+
+		t.Run("an unpin restores the position saved by the pin", func(t *testing.T) {
+			store, userID, read := setup(t)
+			ctx := t.Context()
+			require.NoError(t, store.Update(ctx, read.ID, userID, NoteUpdate{Pinned: new(true)}))
+
+			require.NoError(t, store.Update(ctx, read.ID, userID, NoteUpdate{Pinned: new(false)}))
+
+			got, err := store.GetByID(ctx, read.ID, userID)
 			require.NoError(t, err)
 			assert.False(t, got.Pinned)
-			assert.Equal(t, snapshot.Position, got.Position)
+			assert.Equal(t, read.Position, got.Position)
 			assert.Nil(t, got.UnpinnedPosition, "unpinned_position is cleared once consumed")
 		})
 
@@ -172,13 +190,11 @@ func TestUpdateStaleSnapshot(t *testing.T) {
 			note, err := store.Create(ctx, userID, NewNote{Title: "pinned", Type: NoteTypeText, Color: DefaultNoteColor})
 			require.NoError(t, err)
 			require.NoError(t, store.Update(ctx, note.ID, userID, NoteUpdate{Pinned: new(true)}))
-			snapshot, err := store.GetByID(ctx, note.ID, userID)
-			require.NoError(t, err)
 			require.NoError(t, store.Update(ctx, note.ID, userID, NoteUpdate{Pinned: new(false)}))
 			before, err := store.GetByID(ctx, other.ID, userID)
 			require.NoError(t, err)
 
-			require.NoError(t, applyStale(t, store, userID, snapshot, NoteUpdate{Pinned: new(false)}))
+			require.NoError(t, store.Update(ctx, note.ID, userID, NoteUpdate{Pinned: new(false)}))
 
 			after, err := store.GetByID(ctx, other.ID, userID)
 			require.NoError(t, err)
@@ -186,22 +202,22 @@ func TestUpdateStaleSnapshot(t *testing.T) {
 		})
 
 		t.Run("a guarded title-only write conflicts when the title changed since base_version", func(t *testing.T) {
-			store, userID, snapshot := setup(t)
+			store, userID, read := setup(t)
 			ctx := t.Context()
-			require.NoError(t, store.Update(ctx, snapshot.ID, userID, NoteUpdate{Title: new("other title")}))
+			require.NoError(t, store.Update(ctx, read.ID, userID, NoteUpdate{Title: new("other title")}))
 
-			err := applyStale(t, store, userID, snapshot, NoteUpdate{Title: new("new title"), BaseVersion: new(snapshot.Version)})
+			err := store.Update(ctx, read.ID, userID, NoteUpdate{Title: new("new title"), BaseVersion: new(read.Version)})
 			require.ErrorIs(t, err, ErrNoteVersionConflict)
 		})
 
 		t.Run("a guarded title-only write is an idempotent no-op when only content changed and the title already matches", func(t *testing.T) {
-			store, userID, snapshot := setup(t)
+			store, userID, read := setup(t)
 			ctx := t.Context()
-			require.NoError(t, store.Update(ctx, snapshot.ID, userID, NoteUpdate{Title: new("new title"), Content: new("newer content")}))
+			require.NoError(t, store.Update(ctx, read.ID, userID, NoteUpdate{Title: new("new title"), Content: new("newer content")}))
 
-			require.NoError(t, applyStale(t, store, userID, snapshot, NoteUpdate{Title: new("new title"), BaseVersion: new(snapshot.Version)}))
+			require.NoError(t, store.Update(ctx, read.ID, userID, NoteUpdate{Title: new("new title"), BaseVersion: new(read.Version)}))
 
-			got, err := store.GetByID(ctx, snapshot.ID, userID)
+			got, err := store.GetByID(ctx, read.ID, userID)
 			require.NoError(t, err)
 			assert.Equal(t, "newer content", got.Content)
 		})

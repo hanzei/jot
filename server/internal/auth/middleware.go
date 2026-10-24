@@ -25,8 +25,7 @@ const sessionTokenHashContextKey contextKey = "session_token_hash"
 
 func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		hasBearer := strings.HasPrefix(authHeader, "Bearer ")
+		rawToken, hasBearer := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 
 		// Try cookie-based session first. A rejected cookie (typically a
 		// stale one left over from an expired or revoked session) falls
@@ -50,7 +49,6 @@ func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 
 		// Fall back to Bearer token (personal access token).
 		if hasBearer {
-			rawToken := strings.TrimPrefix(authHeader, "Bearer ")
 			user, err := s.authenticateWithPAT(r.Context(), rawToken)
 			if err != nil {
 				logPATRejection(r.Context(), err)
