@@ -125,6 +125,18 @@ func (d *Dialect) LimitAll() string {
 	return "-1"
 }
 
+// ForUpdate returns the row-locking clause to append to a SELECT inside a
+// transaction that later writes based on what it read: " FOR UPDATE" for
+// PostgreSQL, so a concurrent writer to the same rows waits for this
+// transaction to commit. SQLite has no such clause and needs none, since Jot
+// serializes all SQLite access through a single connection.
+func (d *Dialect) ForUpdate() string {
+	if d.Driver == DriverPostgres {
+		return " FOR UPDATE"
+	}
+	return ""
+}
+
 // FullTextMatchExpr builds the backend-specific match expression bound into the
 // full-text search query, from tokens already normalized by the caller (lower
 // cased, split into literal alphanumeric words). Terms are ANDed and the final

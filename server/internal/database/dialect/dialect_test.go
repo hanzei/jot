@@ -117,6 +117,18 @@ func TestLimitAll(t *testing.T) {
 	})
 }
 
+func TestForUpdate(t *testing.T) {
+	t.Run("SQLite returns empty", func(t *testing.T) {
+		d := &dialect.Dialect{Driver: "sqlite"}
+		assert.Empty(t, d.ForUpdate())
+	})
+
+	t.Run("PostgreSQL returns FOR UPDATE", func(t *testing.T) {
+		d := &dialect.Dialect{Driver: "postgres"}
+		assert.Equal(t, " FOR UPDATE", d.ForUpdate())
+	})
+}
+
 func TestIsUniqueConstraintError(t *testing.T) {
 	t.Run("PostgreSQL 23505 returns true", func(t *testing.T) {
 		d := &dialect.Dialect{Driver: "postgres"}

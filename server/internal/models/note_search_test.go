@@ -155,7 +155,8 @@ func TestNoteSearch(t *testing.T) {
 			pinnedWeak, err := store.Create(ctx, userID, "", "Reminder", "a mango", NoteTypeText, DefaultNoteColor)
 			require.NoError(t, err)
 			pin := true
-			require.NoError(t, store.Update(ctx, pinnedWeak.ID, userID, nil, nil, nil, &pin, nil, nil, nil))
+			_, err = store.Update(ctx, pinnedWeak.ID, userID, nil, nil, nil, &pin, nil, nil, nil)
+			require.NoError(t, err)
 
 			ids := searchIDs(t, store, ctx, userID, "mango")
 			require.Len(t, ids, 3)
@@ -178,7 +179,8 @@ func TestNoteSearchIndexConsistency(t *testing.T) {
 			assert.ElementsMatch(t, []string{n.ID}, searchIDs(t, store, ctx, userID, "alpha"))
 
 			newContent := "beta gamma"
-			require.NoError(t, store.Update(ctx, n.ID, userID, nil, &newContent, nil, nil, nil, nil, nil))
+			_, err = store.Update(ctx, n.ID, userID, nil, &newContent, nil, nil, nil, nil, nil)
+			require.NoError(t, err)
 			assert.Empty(t, searchIDs(t, store, ctx, userID, "alpha"))
 			assert.ElementsMatch(t, []string{n.ID}, searchIDs(t, store, ctx, userID, "gamma"))
 		})

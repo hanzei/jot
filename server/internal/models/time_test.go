@@ -150,12 +150,13 @@ func TestStoreTimestampsHaveSubSecondPrecision(t *testing.T) {
 		store := newNoteStore(db, d)
 		userID := seedTimestampTestUser(t, db, d)
 
-		note, err := store.CreateWithItems(ctx, userID, "", "Sortable", "", NoteTypeText, DefaultNoteColor, nil)
+		note, err := store.CreateWithItems(ctx, userID, "", "", "Sortable", NoteTypeText, DefaultNoteColor, nil)
 		require.NoError(t, err)
 
 		first := updatedAtOf(t, db, d, note.ID)
-		title := "Edited"
-		require.NoError(t, store.Update(ctx, note.ID, userID, &title, nil, nil, nil, nil, nil, nil))
+		content := "Edited"
+		_, err = store.Update(ctx, note.ID, userID, nil, &content, nil, nil, nil, nil, nil)
+		require.NoError(t, err)
 		second := updatedAtOf(t, db, d, note.ID)
 
 		assert.True(t, second.After(first),

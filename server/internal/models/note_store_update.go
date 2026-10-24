@@ -10,7 +10,8 @@ import (
 	"strings"
 )
 
-// Update applies a partial note update. When baseVersion is non-nil it enables
+// Update applies a partial note update and returns the updated note as userID
+// sees it. When baseVersion is non-nil it enables
 // optimistic concurrency on the shared content (title/content): the write is
 // rejected with ErrNoteVersionConflict unless the note's current version still
 // matches baseVersion, so a stale offline edit cannot silently clobber a newer
@@ -18,19 +19,27 @@ import (
 // consulted/bumped when title or content is being changed; per-user fields
 // (color, pinned, archived, checked_items_collapsed) are never version-guarded,
 // since they live in note_user_state and differ per collaborator.
-func (s *noteStore) Update(ctx context.Context, id string, userID string, title, content, color *string, pinned, archived, checkedItemsCollapsed *bool, baseVersion *int) error {
-	hasAccess, err := s.HasAccess(ctx, id, userID)
+//
+// A field the note's type does not allow (see ValidateNoteTypeFields) is
+// rejected with an error matching ErrNoteFieldNotAllowed. The type is checked
+// against the same locked read the write is based on, so a concurrent
+// conversion cannot slip between the check and the write. A note userID
+// cannot see reads as ErrNoteNotFound.
+func (s *noteStore) Update(ctx context.Context, id string, userID string, title, content, color *string, pinned, archived, checkedItemsCollapsed *bool, baseVersion *int) (*Note, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to check access: %w", err)
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	if !hasAccess {
-		return ErrNoteNoAccess
-	}
+	defer func() { _ = tx.Rollback() }()
 
-	// Get current note state (per-user view) to merge partial updates and detect pin changes.
-	currentNote, err := s.GetByID(ctx, id, userID)
+	// Current per-user view, to merge partial updates and detect pin changes.
+	// Only the note row is needed here; the full note is loaded after commit.
+	currentNote, err := s.getNoteRowForUpdateTx(ctx, tx, id, userID)
 	if err != nil {
-		return fmt.Errorf("failed to get current note: %w", err)
+		return nil, err
+	}
+	if err = ValidateNoteTypeFields(currentNote.NoteType, title, content, checkedItemsCollapsed); err != nil {
+		return nil, err
 	}
 
 	resolvedTitle := deref(title, currentNote.Title)
@@ -39,12 +48,6 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 	resolvedPinned := deref(pinned, currentNote.Pinned)
 	resolvedArchived := deref(archived, currentNote.Archived)
 	resolvedCheckedItemsCollapsed := deref(checkedItemsCollapsed, currentNote.CheckedItemsCollapsed)
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
 
 	now := Timestamp(Now())
 
@@ -57,7 +60,7 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 		(resolvedTitle != currentNote.Title || resolvedContent != currentNote.Content)
 	if contentChanged {
 		if err = s.changeNoteContentTx(ctx, tx, id, userID, resolvedTitle, resolvedContent, baseVersion, now); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -68,26 +71,52 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 		resolvedPinned, resolvedArchived, resolvedColor, resolvedCheckedItemsCollapsed, now, id, userID,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to update note user state: %w", err)
+		return nil, fmt.Errorf("failed to update note user state: %w", err)
 	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
+		return nil, fmt.Errorf("failed to get rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		return ErrNoteNotFound
+		return nil, ErrNoteNotFound
 	}
 
 	if currentNote.Pinned != resolvedPinned {
 		if err = s.handlePinStatusChangeTx(ctx, tx, id, userID, currentNote, resolvedPinned); err != nil {
-			return fmt.Errorf("handle pin status change: %w", err)
+			return nil, fmt.Errorf("handle pin status change: %w", err)
 		}
 	}
 
 	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("commit note update: %w", err)
+		return nil, fmt.Errorf("commit note update: %w", err)
 	}
-	return nil
+
+	updated, err := s.GetByID(ctx, id, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load updated note: %w", err)
+	}
+	return updated, nil
+}
+
+// getNoteRowForUpdateTx reads the note row and userID's per-user state inside
+// tx, locking both rows (on Postgres) until tx ends. Unlike GetByID it does not
+// load items, labels, shares or images, which Update does not need. A note
+// that is trashed or that userID cannot see reads as ErrNoteNotFound.
+func (s *noteStore) getNoteRowForUpdateTx(ctx context.Context, tx *sql.Tx, id, userID string) (*Note, error) {
+	query := `SELECT ` + noteSelectColumns + `
+			  FROM active_notes n
+			  INNER JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = ?
+			  WHERE n.id = ?` + s.d.ForUpdate()
+
+	var note Note
+	err := tx.QueryRowContext(ctx, s.d.RewritePlaceholders(query), userID, id).Scan(noteScanDest(&note)...)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNoteNotFound
+		}
+		return nil, fmt.Errorf("get current note: %w", err)
+	}
+	return &note, nil
 }
 
 // changeNoteContentTx writes userID's title/content change, which records it

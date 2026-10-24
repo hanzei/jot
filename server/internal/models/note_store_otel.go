@@ -65,7 +65,7 @@ func (s *NoteStore) GetByIDAnyState(ctx context.Context, id string, userID strin
 	return s.inner.GetByIDAnyState(ctx, id, userID)
 }
 
-func (s *NoteStore) Update(ctx context.Context, id string, userID string, title, content, color *string, pinned, archived, checkedItemsCollapsed *bool, baseVersion *int) (err error) {
+func (s *NoteStore) Update(ctx context.Context, id string, userID string, title, content, color *string, pinned, archived, checkedItemsCollapsed *bool, baseVersion *int) (_ *Note, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.Update", &err,
 		attribute.String("note.id", id),
 	)
