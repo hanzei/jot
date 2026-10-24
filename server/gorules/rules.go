@@ -35,9 +35,17 @@ func dbTimeNow(m dsl.Matcher) {
 
 // Wrap messages name the failed operation ("get note: …"), not "failed to get
 // note: …" — chained wraps otherwise read "update note: failed to …: failed
-// to …" (server/CLAUDE.md, #1106).
+// to …" (server/CLAUDE.md, #1106). The helpers that build a wrap from an op
+// string (execChanged, storeStatus/storeError, toolError) are covered too.
 func failedToErrorWrap(m dsl.Matcher) {
-	m.Match(`fmt.Errorf($msg, $*_)`).
-		Where(m["msg"].Text.Matches(`^"[Ff]ailed to `)).
+	m.Match(
+		`fmt.Errorf($msg, $*_)`,
+		`errors.New($msg)`,
+		`execChanged($_, $_, $_, $msg, $*_)`,
+		`storeStatus($_, $msg)`,
+		`storeError($_, $msg)`,
+		`toolError($msg, $*_)`,
+	).
+		Where(m["msg"].Text.Matches("^[\"`][Ff]ailed to ")).
 		Report(`drop the "failed to" prefix: describe the operation, e.g. "get note: %w" (server/CLAUDE.md)`)
 }

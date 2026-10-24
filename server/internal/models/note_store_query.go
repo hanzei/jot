@@ -145,7 +145,7 @@ func (s *noteStore) GetByUserID(ctx context.Context, userID string, f NoteFilter
 
 	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), args...)
 	if err != nil {
-		return nil, fmt.Errorf("get notes: %w", err)
+		return nil, fmt.Errorf("query notes: %w", err)
 	}
 
 	scannedNotes, err := collectRows(rows, scanNote)
@@ -245,7 +245,7 @@ func (s *noteStore) GetByID(ctx context.Context, id string, userID string) (*Not
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNoteNotFound
 		}
-		return nil, fmt.Errorf("get note: %w", err)
+		return nil, fmt.Errorf("query note: %w", err)
 	}
 
 	if err := s.populateNoteDetails(ctx, &note, userID); err != nil {

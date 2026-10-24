@@ -30,7 +30,7 @@ func (s *noteStore) GetNoteShares(ctx context.Context, noteID string) ([]NoteSha
 
 	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), noteID)
 	if err != nil {
-		return nil, fmt.Errorf("get note shares: %w", err)
+		return nil, fmt.Errorf("query note shares: %w", err)
 	}
 
 	shares, err := collectRows(rows, scanNoteShare)

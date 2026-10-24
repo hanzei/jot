@@ -77,7 +77,7 @@ func (s *noteStore) GetOwnerID(ctx context.Context, noteID string) (string, erro
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", ErrNoteNotFound
 		}
-		return "", fmt.Errorf("get note owner: %w", err)
+		return "", fmt.Errorf("query note owner: %w", err)
 	}
 	return ownerID, nil
 }

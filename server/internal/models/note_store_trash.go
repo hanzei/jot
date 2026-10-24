@@ -268,7 +268,7 @@ func (s *noteStore) EmptyTrash(ctx context.Context, userID string) ([]DeletedNot
 	deleteQuery := `DELETE FROM notes WHERE user_id = ? AND deleted_at IS NOT NULL AND id IN (` + placeholders + `)` // #nosec G202 -- only generated "?" placeholders are concatenated
 	result, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(deleteQuery), deleteArgs...)
 	if err != nil {
-		return nil, nil, fmt.Errorf("empty trash: %w", err)
+		return nil, nil, fmt.Errorf("delete trashed notes: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()

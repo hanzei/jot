@@ -148,7 +148,7 @@ func (s *userStore) GetByUsername(ctx context.Context, username string) (*User, 
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrUserNotFound
 		}
-		return nil, fmt.Errorf("get user: %w", err)
+		return nil, fmt.Errorf("query user by username: %w", err)
 	}
 	return &user, nil
 }
@@ -166,7 +166,7 @@ func (s *userStore) GetByID(ctx context.Context, id string) (*User, error) {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrUserNotFound
 		}
-		return nil, fmt.Errorf("get user: %w", err)
+		return nil, fmt.Errorf("query user by ID: %w", err)
 	}
 
 	return &user, nil
@@ -248,7 +248,7 @@ func (s *userStore) Search(ctx context.Context, term, excludeUserID string, limi
 
 	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), like, like, like, excludeUserID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("search users: %w", err)
+		return nil, fmt.Errorf("query matching users: %w", err)
 	}
 
 	users, err := collectRows(rows, scanUser)
@@ -334,7 +334,7 @@ func (s *userStore) UpdatePassword(ctx context.Context, id, newPassword string) 
 		string(hashedPassword), Timestamp(Now()), id,
 	)
 	if err != nil {
-		return fmt.Errorf("update password: %w", err)
+		return fmt.Errorf("update password hash: %w", err)
 	}
 
 	rows, err := result.RowsAffected()
@@ -631,7 +631,7 @@ func (s *userStore) ProvisionSSOUser(ctx context.Context, issuer, subject, usern
 			return &user, nil
 		}
 		if !s.d.IsUniqueConstraintError(err) {
-			return nil, fmt.Errorf("provision SSO user: %w", err)
+			return nil, fmt.Errorf("insert SSO user: %w", err)
 		}
 		// A unique violation is either the username (retry with a suffix) or the
 		// OIDC identity (already linked — do not retry). Distinguish by checking
@@ -641,7 +641,7 @@ func (s *userStore) ProvisionSSOUser(ctx context.Context, issuer, subject, usern
 		}
 		// Otherwise it was a username collision; loop to try the next suffix.
 	}
-	return nil, fmt.Errorf("provision SSO user: exhausted username candidates for %q", base)
+	return nil, fmt.Errorf("exhausted username candidates for %q", base)
 }
 
 // LinkOIDCIdentity binds an (issuer, subject) pair to an existing user. Returns

@@ -103,7 +103,7 @@ func (s *noteStore) GetNoteImageByID(ctx context.Context, imageID string) (*Note
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNoteImageNotFound
 		}
-		return nil, fmt.Errorf("get note image: %w", err)
+		return nil, fmt.Errorf("query note image: %w", err)
 	}
 	return &img, nil
 }
@@ -142,7 +142,7 @@ func (s *noteStore) GetNoteImageCountByNoteID(ctx context.Context, noteID string
 		noteID,
 	).Scan(&count)
 	if err != nil {
-		return 0, fmt.Errorf("count note images: %w", err)
+		return 0, fmt.Errorf("query note image count: %w", err)
 	}
 	return count, nil
 }
@@ -241,7 +241,7 @@ func (s *noteStore) GetNoteImageRefCount(ctx context.Context, sha256 string) (in
 		sha256,
 	).Scan(&count)
 	if err != nil {
-		return 0, fmt.Errorf("get note image refcount: %w", err)
+		return 0, fmt.Errorf("query note image refcount: %w", err)
 	}
 	return count, nil
 }

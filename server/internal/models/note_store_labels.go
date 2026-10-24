@@ -113,7 +113,7 @@ func (s *noteStore) AddLabelToNote(ctx context.Context, noteID, labelID, userID 
 	)
 	_, err = s.db.ExecContext(ctx, q, id, noteID, labelID, userID, Timestamp(Now()))
 	if err != nil {
-		return fmt.Errorf("add label to note: %w", err)
+		return fmt.Errorf("insert note label: %w", err)
 	}
 	return nil
 }

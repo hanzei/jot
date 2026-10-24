@@ -389,7 +389,7 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, actorID, itemID strin
 			  WHERE id = ? AND note_id = ? RETURNING position, created_at, updated_at`),
 		resolvedText, resolvedCompleted, patch.Position, nullableParentID(resolvedParent), nullableAssignedTo(resolvedAssignedTo), now, itemID, noteID,
 	).Scan(&item.Position, &item.CreatedAt, &item.UpdatedAt); err != nil {
-		return nil, fmt.Errorf("update note item: %w", err)
+		return nil, fmt.Errorf("update note item row: %w", err)
 	}
 
 	// Keep the same parent/child completion invariant as ToggleItemCompleted.

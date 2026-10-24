@@ -129,7 +129,7 @@ func (s *sessionStore) Create(ctx context.Context, userID, userAgent string) (*S
 
 	insertQuery := `INSERT INTO sessions (token_hash, user_id, user_agent, expires_at, created_at) VALUES (?, ?, ?, ?, ?)`
 	if _, err = tx.ExecContext(ctx, s.d.RewritePlaceholders(insertQuery), tokenHash, userID, userAgent, Timestamp(expiresAt), Timestamp(now)); err != nil {
-		return nil, "", fmt.Errorf("create session: %w", err)
+		return nil, "", fmt.Errorf("insert session: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
@@ -199,7 +199,7 @@ func (s *sessionStore) GetByUserID(ctx context.Context, userID string) (sessions
 func (s *sessionStore) Delete(ctx context.Context, rawToken string) error {
 	query := `DELETE FROM sessions WHERE token_hash = ?`
 	if _, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), HashSessionToken(rawToken)); err != nil {
-		return fmt.Errorf("delete session: %w", err)
+		return fmt.Errorf("delete session by token: %w", err)
 	}
 	return nil
 }

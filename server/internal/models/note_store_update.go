@@ -144,7 +144,7 @@ func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, act
 	}
 	result, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(query), args...)
 	if err != nil {
-		return false, fmt.Errorf("update note: %w", err)
+		return false, fmt.Errorf("update note row: %w", err)
 	}
 	if baseVersion == nil {
 		return true, nil
