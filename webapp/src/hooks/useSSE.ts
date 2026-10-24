@@ -1,19 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import type { SSEEvent } from '@jot/shared';
 import { CLIENT_ID } from '@/utils/api';
+import {
+  getDiagnostics,
+  resetSSEDiagnostics,
+  subscribeToDiagnostics,
+  updateSSEDiagnostics,
+  type SSEStatus,
+} from '@/utils/diagnostics';
 
-export type { SSEEvent };
+const getSSEStatus = () => getDiagnostics().sse.status;
 
-// Connection lifecycle exposed to the UI:
-// - 'connecting'   — establishing the very first connection (never opened yet).
-// - 'connected'    — the stream is open and receiving events.
-// - 'reconnecting' — the connection dropped after having been open and we are
-//                    retrying (browser auto-reconnect, or our own manual retry
-//                    after the browser gave up).
-// - 'disconnected' — the browser gave up reconnecting (EventSource CLOSED) and
-//                    we have not yet re-established the stream. This is a
-//                    transient state: a manual reconnect is always scheduled.
-export type SSEStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
+export type { SSEEvent, SSEStatus };
 
 // Backoff bounds for our manual reconnect loop. The native EventSource only
 // auto-reconnects on transient failures; once it reaches CLOSED (e.g. the
@@ -36,7 +34,6 @@ export function useSSE({ onEvent, onConnected }: UseSSEOptions): SSEStatus {
   // Tracks whether the stream has opened at least once, so we can distinguish a
   // slow first connect ('connecting') from a dropped connection ('reconnecting').
   const hasConnectedRef = useRef(false);
-  const [status, setStatus] = useState<SSEStatus>('connecting');
   // Keep refs in sync after every render. useEffect (no deps) runs after every
   // render and is guaranteed to fire before the next scheduled effect, so the
   // EventSource handlers always see the latest callbacks.
@@ -52,6 +49,9 @@ export function useSSE({ onEvent, onConnected }: UseSSEOptions): SSEStatus {
     // Set on cleanup so a pending reconnect timer doesn't open a new stream
     // after the effect has torn down.
     let cancelled = false;
+    // The diagnostics store owns the connection state: this hook reads its
+    // status back, and Settings > Diagnostics reads all of it.
+    let reconnectAttempts = 0;
 
     const scheduleReconnect = () => {
       if (cancelled || reconnectTimer !== undefined) return;
@@ -71,11 +71,13 @@ export function useSSE({ onEvent, onConnected }: UseSSEOptions): SSEStatus {
       es.onopen = () => {
         hasConnectedRef.current = true;
         reconnectDelay = INITIAL_RECONNECT_DELAY_MS;
-        setStatus('connected');
+        reconnectAttempts = 0;
+        updateSSEDiagnostics({ status: 'connected', reconnectAttempts });
         onConnectedRef.current?.();
       };
 
       es.onmessage = (e: MessageEvent) => {
+        updateSSEDiagnostics({ lastEventAt: new Date().toISOString() });
         let event: SSEEvent;
         try {
           event = JSON.parse(e.data as string) as SSEEvent;
@@ -94,18 +96,27 @@ export function useSSE({ onEvent, onConnected }: UseSSEOptions): SSEStatus {
       // reconnect. Session expiry is handled by the axios 401 interceptor on
       // the next regular API call, which redirects to /login and tears down
       // this component; the backoff above bounds retries until that happens.
+      // Each error is one failed connection, retried by the browser or by
+      // scheduleReconnect, so it counts as one reconnect attempt.
       es.onerror = () => {
+        reconnectAttempts += 1;
+        let next: SSEStatus;
         if (es?.readyState === EventSource.CLOSED) {
           es.close();
           es = null;
-          setStatus(hasConnectedRef.current ? 'reconnecting' : 'disconnected');
+          next = hasConnectedRef.current ? 'reconnecting' : 'disconnected';
           scheduleReconnect();
         } else {
-          setStatus(hasConnectedRef.current ? 'reconnecting' : 'connecting');
+          next = hasConnectedRef.current ? 'reconnecting' : 'connecting';
         }
+        updateSSEDiagnostics({ status: next, reconnectAttempts });
       };
     };
 
+    // Reset on start rather than on teardown: when the root error boundary
+    // unmounts the layout, its crash report should still show the stream's
+    // last state, not a fresh one.
+    resetSSEDiagnostics();
     connect();
 
     return () => {
@@ -115,5 +126,5 @@ export function useSSE({ onEvent, onConnected }: UseSSEOptions): SSEStatus {
     };
   }, []); // empty deps — connect once, stay connected (with manual reconnect)
 
-  return status;
+  return useSyncExternalStore(subscribeToDiagnostics, getSSEStatus);
 }

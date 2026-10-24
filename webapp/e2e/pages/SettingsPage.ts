@@ -2,6 +2,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import type { Page, Locator } from '@playwright/test';
 import { expect } from '@playwright/test';
+import { failRequests } from '../fixtures/apiErrors';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -146,4 +147,39 @@ export class SettingsPage {
     await expect(labelRow).toBeVisible();
     await labelRow.locator('button').first().click();
   }
+
+  /** Answers every token create with a 500 carrying `requestId`, so the attempt lands in Diagnostics. */
+  async failPATCreates(requestId: string) {
+    await failRequests(this.page, '**/api/v1/pats', 'POST', {
+      status: 500, code: 'internal', message: 'internal server error', requestId,
+    });
+  }
+
+  async createPAT(name: string) {
+    await this.page.getByPlaceholder('Token name').fill(name);
+    await this.page.getByRole('button', { name: 'Create', exact: true }).click();
+  }
+
+  diagnosticsSection() {
+    return this.page.getByTestId('diagnostics-section');
+  }
+
+  diagnosticsField(field: 'sse-status' | 'sse-attempts') {
+    return this.diagnosticsSection().getByTestId(`diagnostics-${field}`);
+  }
+
+  diagnosticsFailedRequests() {
+    return this.diagnosticsSection().getByRole('list', { name: 'Recent failed requests' });
+  }
+
+  async copyDiagnosticsReport() {
+    await this.diagnosticsSection().getByRole('button', { name: 'Copy report' }).click();
+    await expect(this.diagnosticsSection().getByRole('button', { name: 'Report copied' })).toBeVisible();
+  }
+
+  async openAbout() {
+    await this.page.getByRole('button', { name: 'About Jot' }).click();
+    return this.page.getByRole('dialog', { name: 'About Jot' });
+  }
+
 }

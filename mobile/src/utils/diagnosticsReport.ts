@@ -7,7 +7,7 @@ import { isServerReachable, getServerReachabilityChangedAt } from '../api/server
 import { getPersistedLogs } from './logger';
 import { getAppBuildInfo } from './appInfo';
 import { getAboutInfo } from '../api/settings';
-import type { AboutInfo } from '@jot/shared';
+import type { AboutInfo, DiagnosticsCrash } from '@jot/shared';
 
 /** Cap on log entries embedded in a shared diagnostics report, to keep the payload shareable. */
 const SHARED_REPORT_LOG_LIMIT = 500;
@@ -20,14 +20,6 @@ export interface DiagnosticsSyncState {
   syncError: boolean;
   consecutiveFailureCount: number;
   deadLetterCount: number;
-}
-
-/** A render error caught by an error boundary. Name, message and stacks only — never props or state. */
-export interface DiagnosticsCrash {
-  name: string;
-  message: string;
-  stack: string | null;
-  componentStack: string | null;
 }
 
 export interface DiagnosticsReportInput {

@@ -585,9 +585,10 @@ Every response carries an `X-Request-Id` header, and the server's
 `Request completed` log line records the same value as `request_id` (next to
 `trace_id`/`span_id` when tracing is on). With tracing on, the request's span
 also carries it as the `request.id` attribute, so a trace backend can find it
-without the logs. The webapp shows it as a copyable
-`Ref:` on error toasts for server errors, and the mobile app writes it into the
-log line for each failed request, which the shared diagnostics report
+without the logs. The webapp shows it as a copyable `Ref:` on error toasts for
+server errors and lists it for each recent failed request under Settings >
+Diagnostics (whose "Copy report" output includes it); the mobile app writes it
+into the log line for each failed request, which the shared diagnostics report
 includes. To find a reported failure, search the logs for that ID. A request
 may send its own `X-Request-Id` (at most 64 characters of `[A-Za-z0-9._-]`),
 for example from a reverse proxy, and the server uses it; any other value is
@@ -707,7 +708,10 @@ docker run -p 8080:8080 -v ./data:/data jot
 ```
 
 The Docker image uses multi-stage build:
-1. **Node.js stage**: Builds the React frontend
+1. **Node.js stage**: Builds the React frontend, stamped with the `VERSION` and
+   `COMMIT_SHA` build args (outside Docker, `JOT_BUILD_VERSION` and
+   `JOT_BUILD_COMMIT`, defaulting to `dev` and the git commit), which
+   Settings > About shows next to the server's
 2. **Go stage**: Builds the backend binary
 3. **Alpine stage**: Combines everything in minimal production image
 
@@ -753,8 +757,10 @@ services:
 1. **Start from the report.** A user's report usually carries what you need to
    find the failure in the server logs:
    - **Webapp:** error toasts for server errors show a copyable `Ref:`, the
-     request ID. If a page crashes, its error screen offers **Copy error
-     details**.
+     request ID. Settings → Diagnostics → **Copy report** copies the webapp
+     and server versions, the live-update connection state, and the last 50
+     failed requests with their request IDs. If a page crashes, its error
+     screen offers **Copy error details**, the same report plus the error.
    - **Mobile:** Settings → Developer → Diagnostics → **Share Diagnostics
      Report** sends app and server versions, connection and sync state, the
      sync and image-upload queues, and the persisted app logs. Each server

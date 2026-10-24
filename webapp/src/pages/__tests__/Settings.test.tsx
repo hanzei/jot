@@ -9,6 +9,7 @@ import * as authUtils from '@/utils/auth';
 import type { SSOConfig, UserSettings } from '@jot/shared';
 import i18n from '@/i18n';
 import { createApiError } from '@/utils/__tests__/test-helpers';
+import { recordFailedRequest, resetDiagnosticsForTest, updateSSEDiagnostics } from '@/utils/diagnostics';
 
 vi.mock('@/utils/api', () => ({
   auth: {
@@ -32,6 +33,9 @@ vi.mock('@/utils/api', () => ({
   },
   sso: {
     unlink: vi.fn().mockResolvedValue(undefined),
+  },
+  about: {
+    get: vi.fn().mockResolvedValue({ version: '1.2.3', commit: 'abc1234' }),
   },
   SSO_LINK_URL: '/api/v1/auth/oidc/link',
 }));
@@ -531,6 +535,33 @@ describe('Settings', () => {
       await waitFor(() => {
         expect(users.changePassword).toHaveBeenCalledWith({ current_password: 'oldpassword123', new_password: 'newpassword123' });
       });
+    });
+  });
+
+  describe('Diagnostics', () => {
+    beforeEach(() => {
+      resetDiagnosticsForTest();
+    });
+
+    it('updates live while open', async () => {
+      renderSettings();
+      const section = within(screen.getByTestId('diagnostics-section'));
+      expect(await section.findByText('No failed requests since this page was loaded.')).toBeInTheDocument();
+      expect(section.getByTestId('diagnostics-sse-status')).toHaveTextContent('Connecting');
+
+      act(() => {
+        updateSSEDiagnostics({ status: 'reconnecting', reconnectAttempts: 2 });
+        recordFailedRequest({
+          config: { method: 'delete', url: '/notes/abcdefghijklmnopqrstuv' },
+          response: { status: 503, headers: { 'x-request-id': 'req123' } },
+        });
+      });
+
+      expect(section.getByTestId('diagnostics-sse-status')).toHaveTextContent('Reconnecting');
+      expect(section.getByTestId('diagnostics-sse-attempts')).toHaveTextContent('2');
+      const list = within(section.getByRole('list', { name: 'Recent failed requests' }));
+      expect(list.getByText('DELETE /notes/{id}')).toBeInTheDocument();
+      expect(list.getByText('Ref: req123')).toBeInTheDocument();
     });
   });
 });

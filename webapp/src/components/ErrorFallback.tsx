@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import i18n from '@/i18n';
-import { buildErrorDetails } from '@/utils/errorDetails';
-import { about } from '@/utils/api';
+import { pageDiagnosticsReport } from '@/utils/diagnosticsReport';
+import { useServerInfo } from '@/hooks/useServerInfo';
 import type { ErrorBoundaryFallbackProps } from '@/components/ErrorBoundary';
 
 interface ErrorFallbackProps extends ErrorBoundaryFallbackProps {
@@ -14,49 +14,21 @@ interface ErrorFallbackProps extends ErrorBoundaryFallbackProps {
 
 type CopyStatus = 'idle' | 'copied' | 'failed';
 
-// Fetched at most once per page load, however often a fallback mounts. A
-// failed fetch is dropped so the next fallback can try again.
-let serverVersionRequest: Promise<string> | null = null;
-
-/**
- * Best-effort server version for the copied details. Fetched on mount rather
- * than on click: an await before the clipboard write can cost the user
- * activation it needs. Skips the 401 redirect, which would replace the
- * fallback the user is reading.
- */
-function useServerVersion(): string {
-  const [version, setVersion] = useState('unknown');
-  useEffect(() => {
-    let cancelled = false;
-    serverVersionRequest ??= about.get({ skipAuthRedirect: true })
-      .then((info) => info.version)
-      .catch(() => {
-        serverVersionRequest = null;
-        return 'unknown';
-      });
-    void serverVersionRequest.then((v) => { if (!cancelled) setVersion(v); });
-    return () => { cancelled = true; };
-  }, []);
-  return version;
-}
-
 /**
  * Fallback for the error boundaries. Strings come from the i18n instance
  * directly rather than a hook, so it renders whatever failed below it.
  */
 export default function ErrorFallback({ error, componentStack, reset, variant }: ErrorFallbackProps) {
-  const serverVersion = useServerVersion();
+  const serverInfo = useServerInfo();
   const [copyStatus, setCopyStatus] = useState<CopyStatus>('idle');
   const t = i18n.t.bind(i18n);
 
   const handleCopy = async () => {
-    const details = buildErrorDetails({
-      error,
-      componentStack,
-      serverVersion,
-      route: window.location.pathname,
-      userAgent: navigator.userAgent,
-      now: new Date(),
+    const details = pageDiagnosticsReport(serverInfo, {
+      name: error.name,
+      message: error.message,
+      stack: error.stack ?? null,
+      componentStack: componentStack?.trim() ?? null,
     });
     try {
       await navigator.clipboard.writeText(details);

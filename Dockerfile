@@ -20,8 +20,12 @@ RUN npm ci
 COPY shared/ ../shared/
 COPY webapp/ ./
 
-# Build the frontend
-RUN npm run build
+# Build the frontend, stamped with the same version and commit as the server
+# so Settings > About can show a stale cached bundle. Declared after
+# `npm ci` so a new commit does not invalidate the install layer.
+ARG COMMIT_SHA=unknown
+ARG VERSION=dev
+RUN JOT_BUILD_VERSION="${VERSION}" JOT_BUILD_COMMIT="${COMMIT_SHA}" npm run build
 
 # Backend build stage
 FROM golang:1.27-alpine@sha256:8a5910f31396cd4d89662f56c68b3ae31d374308270a1c3bd96672ee5ed43414 AS backend-builder

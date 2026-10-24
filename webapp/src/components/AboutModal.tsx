@@ -4,11 +4,19 @@ import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { about } from '@/utils/api';
 import { getUser } from '@/utils/auth';
+import { WEBAPP_BUILD } from '@/utils/buildInfo';
+import { InfoRow, InfoSubheading } from '@/components/InfoList';
 import type { AboutInfo } from '@jot/shared';
 
 interface AboutModalProps {
   isOpen: boolean;
   onClose: () => void;
+}
+
+/** A server build time for display, or '—' when it does not parse. */
+function formatBuildTime(iso: string, locale: string | undefined): string {
+  const dt = new Date(iso);
+  return isNaN(dt.getTime()) ? '—' : dt.toLocaleString(locale);
 }
 
 export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
@@ -57,35 +65,24 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
 
             <div className="space-y-4">
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
-                  {t('about.clientInfo')}
-                </h3>
+                <InfoSubheading>{t('about.clientInfo')}</InfoSubheading>
                 <dl className="space-y-1">
-                  <div className="flex justify-between text-sm min-w-0 gap-2">
-                    <dt className="shrink-0 text-gray-500 dark:text-gray-400">{t('about.username')}</dt>
-                    <dd className="truncate text-gray-900 dark:text-white font-mono">{user?.username ?? '—'}</dd>
-                  </div>
-                  <div className="flex justify-between text-sm min-w-0 gap-2">
-                    <dt className="shrink-0 text-gray-500 dark:text-gray-400">{t('about.userId')}</dt>
-                    <dd className="truncate text-gray-900 dark:text-white font-mono">{user?.id ?? '—'}</dd>
-                  </div>
-                  <div className="flex justify-between text-sm min-w-0 gap-2">
-                    <dt className="shrink-0 text-gray-500 dark:text-gray-400">{t('about.role')}</dt>
-                    <dd className="truncate text-gray-900 dark:text-white font-mono">{user?.role ?? '—'}</dd>
-                  </div>
-                  <div className="flex justify-between text-sm min-w-0 gap-2">
-                    <dt className="shrink-0 text-gray-500 dark:text-gray-400">{t('about.accountCreated')}</dt>
-                    <dd className="truncate text-gray-900 dark:text-white font-mono">
-                      {user?.created_at ? new Date(user.created_at).toLocaleDateString(i18n.resolvedLanguage) : '—'}
-                    </dd>
-                  </div>
+                  <InfoRow label={t('about.username')} value={user?.username ?? '—'} />
+                  <InfoRow label={t('about.userId')} value={user?.id ?? '—'} />
+                  <InfoRow label={t('about.role')} value={user?.role ?? '—'} />
+                  <InfoRow
+                    label={t('about.accountCreated')}
+                    value={user?.created_at ? new Date(user.created_at).toLocaleDateString(i18n.resolvedLanguage) : '—'}
+                  />
+                  {/* This bundle's own build. It can trail the server's below
+                      while the service worker still serves a cached bundle. */}
+                  <InfoRow label={t('about.appVersion')} value={WEBAPP_BUILD.version} testId="about-webapp-version" />
+                  <InfoRow label={t('about.commit')} value={WEBAPP_BUILD.commit ?? '—'} testId="about-webapp-commit" />
                 </dl>
               </div>
 
               <div className="border-t border-gray-200 dark:border-slate-700 pt-4">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
-                  {t('about.serverInfo')}
-                </h3>
+                <InfoSubheading>{t('about.serverInfo')}</InfoSubheading>
                 {isLoading && (
                   <p className="text-sm text-gray-500 dark:text-gray-400">{t('about.loading')}</p>
                 )}
@@ -94,27 +91,13 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
                 )}
                 {serverInfo && (
                   <dl className="space-y-1">
-                    <div className="flex justify-between text-sm min-w-0 gap-2">
-                      <dt className="shrink-0 text-gray-500 dark:text-gray-400">{t('about.appVersion')}</dt>
-                      <dd className="truncate text-gray-900 dark:text-white font-mono">{serverInfo.version}</dd>
-                    </div>
-                    <div className="flex justify-between text-sm min-w-0 gap-2">
-                      <dt className="shrink-0 text-gray-500 dark:text-gray-400">{t('about.commit')}</dt>
-                      <dd className="truncate text-gray-900 dark:text-white font-mono">{serverInfo.commit}</dd>
-                    </div>
+                    <InfoRow label={t('about.appVersion')} value={serverInfo.version} />
+                    <InfoRow label={t('about.commit')} value={serverInfo.commit} />
                     {serverInfo.build_time && (
-                      <div className="flex justify-between text-sm min-w-0 gap-2">
-                        <dt className="shrink-0 text-gray-500 dark:text-gray-400">{t('about.buildTime')}</dt>
-                        <dd className="truncate text-gray-900 dark:text-white font-mono">
-                          {(() => { const dt = new Date(serverInfo.build_time!); return isNaN(dt.getTime()) ? '—' : dt.toLocaleString(i18n.resolvedLanguage); })()}
-                        </dd>
-                      </div>
+                      <InfoRow label={t('about.buildTime')} value={formatBuildTime(serverInfo.build_time, i18n.resolvedLanguage)} />
                     )}
                     {serverInfo.go_version && (
-                      <div className="flex justify-between text-sm min-w-0 gap-2">
-                        <dt className="shrink-0 text-gray-500 dark:text-gray-400">{t('about.goVersion')}</dt>
-                        <dd className="truncate text-gray-900 dark:text-white font-mono">{serverInfo.go_version}</dd>
-                      </div>
+                      <InfoRow label={t('about.goVersion')} value={serverInfo.go_version} />
                     )}
                   </dl>
                 )}

@@ -3,9 +3,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import ErrorBoundary from '../ErrorBoundary';
 import ErrorFallback from '../ErrorFallback';
 import { about } from '@/utils/api';
+import { recordFailedRequest, resetDiagnosticsForTest } from '@/utils/diagnostics';
 
 vi.mock('@/utils/api', () => ({
-  about: { get: vi.fn(() => Promise.resolve({ version: '1.2.3' })) },
+  about: { get: vi.fn(() => Promise.resolve({ version: '1.2.3', commit: 'abc1234' })) },
 }));
 
 let shouldThrow = true;
@@ -30,6 +31,7 @@ describe('ErrorBoundary', () => {
 
   beforeEach(() => {
     shouldThrow = true;
+    resetDiagnosticsForTest();
     // React and the boundary both report the caught error; both are expected here.
     vi.spyOn(console, 'error').mockImplementation(() => {});
     writeText.mockReset().mockResolvedValue();
@@ -89,8 +91,12 @@ describe('ErrorBoundary', () => {
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
   });
 
-  it('copies the version, route, message and stacks', async () => {
+  it('copies a diagnostics report with the route, message and stacks', async () => {
     window.history.pushState({}, '', '/notes/abc?q=secret');
+    recordFailedRequest({
+      config: { method: 'get', url: '/labels' },
+      response: { status: 500, headers: { 'x-request-id': 'req123' } },
+    });
     renderBoundary();
     // Let the version fetch settle before copying.
     await act(async () => {});
@@ -98,13 +104,15 @@ describe('ErrorBoundary', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
 
     const details = writeText.mock.lastCall![0];
-    expect(details).toContain('Server version: 1.2.3');
-    expect(details).toContain('Route: /notes/abc');
     expect(details).not.toContain('secret');
-    expect(details).toContain('Error: Error: render exploded');
-    expect(details).toContain('Stack:');
-    expect(details).toContain('Component stack:');
-    expect(details).toContain('Thrower');
+    const report = JSON.parse(details);
+    expect(report.server).toMatchObject({ version: '1.2.3', commit: 'abc1234' });
+    expect(report.route).toBe('/notes/abc');
+    expect(report.crash).toMatchObject({ name: 'Error', message: 'render exploded' });
+    expect(report.crash.stack).toContain('render exploded');
+    expect(report.crash.componentStack).toContain('Thrower');
+    // The same builder as Settings > Diagnostics, so recent failures ride along.
+    expect(report.failedRequests).toEqual([expect.objectContaining({ route: '/labels', requestId: 'req123' })]);
     expect(await screen.findByText('Error details copied')).toBeInTheDocument();
     window.history.pushState({}, '', '/');
   });

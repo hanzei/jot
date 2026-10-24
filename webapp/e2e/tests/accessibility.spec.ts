@@ -206,6 +206,17 @@ for (const theme of THEMES) {
       await expectNoViolations(page);
     });
 
+    test('settings diagnostics with a failed request has no WCAG A/AA violations', async ({ page, authenticatedUser, settingsPage }) => {
+      void authenticatedUser;
+      await settingsPage.goto();
+      await settingsPage.failPATCreates('a11y0123456789ab');
+      await settingsPage.createPAT('A11y token');
+      await expect(settingsPage.diagnosticsFailedRequests()).toBeVisible();
+      await expectTheme(page, theme);
+
+      await expectNoViolations(page, { include: ['[data-testid="diagnostics-section"]'] });
+    });
+
     test('my tasks view has no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage }) => {
       void authenticatedUser;
       await dashboardPage.goto();
