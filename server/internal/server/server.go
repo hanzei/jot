@@ -924,13 +924,14 @@ func (s *Server) closeResources() error {
 		}
 	}
 
+	var closeErr error
 	if s.db != nil {
 		if err := s.db.Close(); err != nil {
-			return errors.Join(unregisterErr, fmt.Errorf("close database: %w", err))
+			closeErr = fmt.Errorf("close database: %w", err)
 		}
 	}
 
-	return unregisterErr
+	return errors.Join(unregisterErr, closeErr)
 }
 
 func (s *Server) WaitUntilStarted(ctx context.Context) error {

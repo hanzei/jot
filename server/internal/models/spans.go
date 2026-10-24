@@ -60,13 +60,11 @@ func startSpan(ctx context.Context, instr instrumentation, name string, err *err
 		}
 		span.End()
 
-		if instr.slowThreshold > 0 {
-			if elapsed := time.Since(start); elapsed > instr.slowThreshold {
-				logutil.FromContext(ctx).WithFields(logrus.Fields{
-					"op":       name,
-					"duration": elapsed.String(),
-				}).Warn("Slow store operation")
-			}
+		if elapsed := time.Since(start); instr.slowThreshold > 0 && elapsed > instr.slowThreshold {
+			logutil.FromContext(ctx).WithFields(logrus.Fields{
+				"op":       name,
+				"duration": elapsed.String(),
+			}).Warn("Slow store operation")
 		}
 	}
 }

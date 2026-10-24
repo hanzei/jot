@@ -61,42 +61,11 @@ func TestNewDebugMux(t *testing.T) {
 	}
 }
 
-// TestStartPeriodicTaskSetsGoroutineLabel asserts the label actually lands on
-// the running goroutine, not just that the call compiles.
-func TestStartPeriodicTaskSetsGoroutineLabel(t *testing.T) {
-	t.Parallel()
-
-	log := logrus.New()
-	log.SetOutput(io.Discard)
-	s := &Server{log: log}
-
-	ctx, cancel := context.WithCancel(t.Context())
-	t.Cleanup(func() {
-		cancel()
-		s.bgWg.Wait()
-	})
-
-	ran := make(chan struct{})
-	s.startPeriodicTask(ctx, "test-job", time.Hour, true, func(context.Context) error {
-		close(ran)
-		return nil
-	}, "run the test job")
-
-	select {
-	case <-ran:
-	case <-time.After(5 * time.Second):
-		t.Fatal("periodic task did not run")
-	}
-
-	var buf bytes.Buffer
-	require.NoError(t, pprof.Lookup("goroutine").WriteTo(&buf, 1))
-	assert.Contains(t, buf.String(), `"job":"test-job"`)
-}
-
-// TestStartPeriodicTaskContextLogger checks that code logging through the
-// task's context (such as the slow store operation warning) reaches the
-// server's logger with the job field, not the global logrus logger.
-func TestStartPeriodicTaskContextLogger(t *testing.T) {
+// TestStartPeriodicTask checks what a periodic task's goroutine carries: the
+// job as a pprof label, and a context whose logger is the server's with the job
+// field, so code logging through it (such as the slow store operation warning)
+// does not fall back to the global logrus logger.
+func TestStartPeriodicTask(t *testing.T) {
 	t.Parallel()
 
 	log, hook := newCapturingLogger()
@@ -121,14 +90,13 @@ func TestStartPeriodicTaskContextLogger(t *testing.T) {
 		t.Fatal("periodic task did not run")
 	}
 
-	var found bool
-	for _, entry := range hook.AllEntries() {
-		if entry.Message == "From the task" {
-			found = true
-			assert.Equal(t, "test-job", entry.Data["job"])
-		}
-	}
-	assert.True(t, found, "task log line not written to the server logger")
+	var buf bytes.Buffer
+	require.NoError(t, pprof.Lookup("goroutine").WriteTo(&buf, 1))
+	assert.Contains(t, buf.String(), `"job":"test-job"`)
+
+	require.Len(t, hook.AllEntries(), 1)
+	assert.Equal(t, "From the task", hook.LastEntry().Message)
+	assert.Equal(t, "test-job", hook.LastEntry().Data["job"])
 }
 
 // TestStartCleansUpAfterFailure covers the failed-start path for each way Start

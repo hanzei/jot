@@ -1,7 +1,6 @@
 package models
 
 import (
-	"context"
 	"io"
 	"testing"
 	"time"
@@ -35,15 +34,11 @@ func TestStartSpanSlowOperationLog(t *testing.T) {
 			hook := logtest.NewLocal(logger)
 			ctx := logutil.NewContext(t.Context(), logutil.NewRequestLogger(logger.WithField("request_id", "req-1")))
 
-			fakeOp := func(ctx context.Context) (err error) {
-				_, end := startSpan(ctx, newInstrumentation(tc.threshold), "FakeStore.Op", &err,
-					attribute.String("note.content", "secret"),
-				)
-				defer end()
-				time.Sleep(tc.sleep)
-				return nil
-			}
-			require.NoError(t, fakeOp(ctx))
+			_, end := startSpan(ctx, newInstrumentation(tc.threshold), "FakeStore.Op", nil,
+				attribute.String("note.content", "secret"),
+			)
+			time.Sleep(tc.sleep)
+			end()
 
 			if !tc.wantLog {
 				assert.Empty(t, hook.AllEntries())
