@@ -98,6 +98,11 @@ export function resetSSEDiagnostics(): void {
   updateSSEDiagnostics({ status: INITIAL_SSE.status, reconnectAttempts: 0 });
 }
 
+/** Drops the failed-request history, so the next user on this tab never sees it. */
+export function clearFailedRequests(): void {
+  setState({ ...state, failedRequests: [] });
+}
+
 /** Test-only: clears everything. */
 export function resetDiagnosticsForTest(): void {
   setState({ failedRequests: [], sse: INITIAL_SSE });

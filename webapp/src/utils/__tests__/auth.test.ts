@@ -7,6 +7,7 @@ import {
   isAdmin
 } from '../auth';
 import { ROLES, type User } from '@jot/shared';
+import { getDiagnostics, recordFailedRequest } from '../diagnostics';
 
 // Mock localStorage
 const mockLocalStorage = {
@@ -57,6 +58,13 @@ describe('Auth Utilities', () => {
       removeUser();
 
       expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('user');
+    });
+
+    it('drops the failed-request history, so the next user never sees it', () => {
+      recordFailedRequest({ config: { method: 'get', url: '/notes' }, response: { status: 500 } });
+      removeUser();
+
+      expect(getDiagnostics().failedRequests).toEqual([]);
     });
 
     it('deletes the api-cache from CacheStorage', async () => {

@@ -1,4 +1,5 @@
 import { ROLES, type User, type UserSettings } from '@jot/shared';
+import { clearFailedRequests } from '@/utils/diagnostics';
 
 export const getUser = (): User | null => {
   const userStr = localStorage.getItem('user');
@@ -17,6 +18,7 @@ export const setUser = (user: User): void => {
 export const removeUser = (): Promise<void> => {
   localStorage.removeItem('user');
   localStorage.removeItem('settings');
+  clearFailedRequests();
   if (window.caches) {
     return caches.delete('api-cache').then(() => {}).catch(() => {});
   }

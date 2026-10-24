@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import i18n from '@/i18n';
-import type { AboutInfo } from '@jot/shared';
 import { formatDiagnosticsReport } from '@/utils/diagnosticsReport';
 import { getDiagnostics } from '@/utils/diagnostics';
-import { about } from '@/utils/api';
+import { useServerInfo } from '@/hooks/useServerInfo';
 import type { ErrorBoundaryFallbackProps } from '@/components/ErrorBoundary';
 
 interface ErrorFallbackProps extends ErrorBoundaryFallbackProps {
@@ -15,31 +14,6 @@ interface ErrorFallbackProps extends ErrorBoundaryFallbackProps {
 }
 
 type CopyStatus = 'idle' | 'copied' | 'failed';
-
-// Fetched at most once per page load, however often a fallback mounts. A
-// failed fetch is dropped so the next fallback can try again.
-let serverInfoRequest: Promise<AboutInfo | null> | null = null;
-
-/**
- * Best-effort server build info for the copied details. Fetched on mount
- * rather than on click: an await before the clipboard write can cost the user
- * activation it needs. Skips the 401 redirect, which would replace the
- * fallback the user is reading.
- */
-function useServerInfo(): AboutInfo | null {
-  const [info, setInfo] = useState<AboutInfo | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    serverInfoRequest ??= about.get({ skipAuthRedirect: true })
-      .catch(() => {
-        serverInfoRequest = null;
-        return null;
-      });
-    void serverInfoRequest.then((v) => { if (!cancelled) setInfo(v); });
-    return () => { cancelled = true; };
-  }, []);
-  return info;
-}
 
 /**
  * Fallback for the error boundaries. Strings come from the i18n instance

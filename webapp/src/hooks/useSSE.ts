@@ -118,13 +118,16 @@ export function useSSE({ onEvent, onConnected }: UseSSEOptions): SSEStatus {
       };
     };
 
+    // Reset on start rather than on teardown: when the root error boundary
+    // unmounts the layout, its crash report should still show the stream's
+    // last state, not a fresh one.
+    resetSSEDiagnostics();
     connect();
 
     return () => {
       cancelled = true;
       if (reconnectTimer !== undefined) clearTimeout(reconnectTimer);
       es?.close();
-      resetSSEDiagnostics();
     };
   }, []); // empty deps — connect once, stay connected (with manual reconnect)
 

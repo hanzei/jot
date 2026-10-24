@@ -392,7 +392,11 @@ describe('useSSE', () => {
       act(() => es.simulateError());
       expect(getDiagnostics().sse).toMatchObject({ status: 'reconnecting', reconnectAttempts: 2 });
 
+      // The last state outlives the hook, for a crash report taken after the
+      // layout unmounted; the next stream starts afresh.
       unmount();
+      expect(getDiagnostics().sse).toMatchObject({ status: 'reconnecting', reconnectAttempts: 2 });
+      renderHook(() => useSSE({ onEvent: vi.fn() }));
       expect(getDiagnostics().sse).toMatchObject({ status: 'connecting', reconnectAttempts: 0 });
     });
   });

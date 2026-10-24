@@ -1,11 +1,10 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AboutInfo } from '@jot/shared';
 import SettingsSectionCard from '@/pages/settings/SettingsSectionCard';
-import { about } from '@/utils/api';
 import { getDiagnostics, subscribeToDiagnostics } from '@/utils/diagnostics';
 import { formatDiagnosticsReport } from '@/utils/diagnosticsReport';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
+import { useServerInfo } from '@/hooks/useServerInfo';
 import type { SSEStatus } from '@/hooks/useSSE';
 
 const SSE_STATUS_KEYS: Record<SSEStatus, string> = {
@@ -33,17 +32,9 @@ const Row = ({ label, value, testId }: { label: string; value: string; testId: s
 const DiagnosticsSection = () => {
   const { t, i18n } = useTranslation();
   const diagnostics = useSyncExternalStore(subscribeToDiagnostics, getDiagnostics);
-  const [serverInfo, setServerInfo] = useState<AboutInfo | null>(null);
-  const { copied, copy } = useCopyToClipboard();
-
   // Not shown here (About has it), only put in the copied report.
-  useEffect(() => {
-    let cancelled = false;
-    about.get()
-      .then((info) => { if (!cancelled) setServerInfo(info); })
-      .catch(() => { /* the report says null; the failure itself lands in the list below */ });
-    return () => { cancelled = true; };
-  }, []);
+  const serverInfo = useServerInfo();
+  const { copied, copy } = useCopyToClipboard();
 
   const formatTime = (iso: string) => new Date(iso).toLocaleTimeString(i18n.resolvedLanguage);
   const { sse, failedRequests } = diagnostics;
@@ -89,8 +80,8 @@ const DiagnosticsSection = () => {
               className="max-h-64 overflow-y-auto divide-y divide-gray-200 dark:divide-slate-600 rounded-md border border-gray-200 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               {/* Newest first; the store keeps them oldest first. */}
-              {[...failedRequests].reverse().map((req, i) => (
-                <li key={`${req.time}-${i}`} className="px-3 py-2 text-xs font-mono space-y-0.5">
+              {failedRequests.map((req, i) => ({ req, key: `${req.time}-${i}` })).reverse().map(({ req, key }) => (
+                <li key={key} className="px-3 py-2 text-xs font-mono space-y-0.5">
                   <div className="flex justify-between gap-2 min-w-0">
                     <span className="truncate text-gray-900 dark:text-white">{req.method} {req.route}</span>
                     <span className="shrink-0 text-red-700 dark:text-red-300">
