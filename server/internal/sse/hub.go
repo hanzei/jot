@@ -228,9 +228,13 @@ func (h *Hub) Publish(ctx context.Context, userIDs []string, event Event) {
 			}
 		}
 	}
-	logutil.FromContext(ctx).WithFields(logrus.Fields{
-		"type":       string(event.Type),
-		"users":      len(seen),
-		"recipients": delivered,
-	}).Debug("SSE: published event")
+	// Publish runs on every write, so skip building the fields unless the
+	// line will actually be written.
+	if log := logutil.FromContext(ctx); log.IsLevelEnabled(logrus.DebugLevel) {
+		log.WithFields(logrus.Fields{
+			"type":       string(event.Type),
+			"users":      len(seen),
+			"recipients": delivered,
+		}).Debug("SSE: published event")
+	}
 }

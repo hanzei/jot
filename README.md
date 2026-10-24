@@ -583,7 +583,9 @@ exporters for local debugging.
 
 Every response carries an `X-Request-Id` header, and the server's
 `Request completed` log line records the same value as `request_id` (next to
-`trace_id`/`span_id` when tracing is on). The webapp shows it as a copyable
+`trace_id`/`span_id` when tracing is on). With tracing on, the request's span
+also carries it as the `request.id` attribute, so a trace backend can find it
+without the logs. The webapp shows it as a copyable
 `Ref:` on error toasts for server errors, and the mobile app writes it into the
 log line for each failed request, which the shared diagnostics report
 includes. To find a reported failure, search the logs for that ID. A request
@@ -746,9 +748,56 @@ services:
 
 ## Troubleshooting
 
+### Debugging a running instance
+
+1. **Start from the report.** A user's report usually carries what you need to
+   find the failure in the server logs:
+   - **Webapp:** error toasts for server errors show a copyable `Ref:`, the
+     request ID. If a page crashes, its error screen offers **Copy error
+     details**.
+   - **Mobile:** Settings → Developer → Diagnostics → **Share Diagnostics
+     Report** sends app and server versions, connection and sync state, the
+     sync and image-upload queues, and the persisted app logs. Each server
+     error (5xx) is logged there with its request ID. The crash screen offers
+     the same report.
+2. **Find the request.** Search the server logs for the ID: `request_id=<id>`
+   with `JOT_LOG_FORMAT=text`, `"request_id":"<id>"` with `json`. With tracing
+   on, the same value is the span attribute `request.id`, and the log line
+   carries `trace_id`. See [Request IDs](#request-ids).
+3. **Get more detail.** Restart with `JOT_LOG_LEVEL=debug` to log why
+   authentication was rejected, SSE subscriptions and event fan-out, image blob
+   reclaim decisions, and periodic background tasks. Switch back afterwards,
+   since debug output is verbose.
+4. **Check the server's state.** As an admin, open Admin → **Server**. It shows
+   the database backend and size, the schema (migration) version, uptime (a
+   short uptime that keeps resetting means a restart loop), live connections,
+   active sessions, and free space on the upload volume.
+5. **Check health and load.** `/livez` answers whenever the process is up.
+   `/readyz` also pings the database and fails while shutting down. For metrics,
+   traces and profiles, see [Observability](#observability).
+
 ### Common Issues
 
-1. **Frontend not loading**:
+1. **Server will not start after an upgrade**: look for
+   `Failed to initialize server` in the log. If it says `apply migrations:
+   Dirty database version N`, a schema migration was interrupted. **Do not
+   delete the database**, which deletes all data. Stop the server, restore the
+   database and `JOT_UPLOAD_DIR` together from the backup taken before the
+   upgrade (see [Backups](#backups)), and open an issue with the log output.
+
+2. **A setting has no effect**: Jot reads only `JOT_`-prefixed variables (plus
+   the standard `OTEL_*` ones), so an unprefixed name such as `LOG_LEVEL` is
+   silently ignored. An invalid value for a recognized variable stops startup
+   with an error naming it.
+
+3. **Login seems to do nothing over plain HTTP**: the session cookie is
+   `Secure` by default, so the browser drops it on `http://`. Serve Jot over
+   HTTPS, or set `JOT_COOKIE_SECURE=false` for local development only.
+
+4. **Image uploads fail**: check free space on the upload volume (Admin →
+   Server) and that the server can write to `JOT_UPLOAD_DIR`.
+
+5. **Frontend not loading** (building from source):
    ```bash
    # Check if frontend is built
    ls webapp/build/
@@ -757,25 +806,19 @@ services:
    cd webapp && npm ci && npm run build
    ```
 
-2. **Database permissions**:
+6. **Database permissions**:
    ```bash
    # Fix SQLite file permissions
    chmod 664 jot.db
    ```
 
-3. **Port conflicts**:
+7. **Port conflicts**:
    ```bash
    # Use different port
    JOT_PORT=9000 go run main.go
    ```
 
-4. **Migration errors**:
-   ```bash
-   # Reset database (WARNING: deletes all data)
-   rm jot.db
-   ```
-
-5. **Build errors**:
+8. **Build errors**:
    ```bash
    # Clean and rebuild
    cd webapp && rm -rf node_modules dist build && npm ci && npm run build
@@ -787,10 +830,11 @@ services:
 - **Frontend changes**: Rebuild with `npm run build` after React changes
 - **Backend changes**: Restart the server after code changes
 - **Database inspection**: Use SQLite browser or `sqlite3 jot.db`
-- **Logs**: Check console output for detailed error messages
+- **Logs**: The server logs to the console; set `JOT_LOG_LEVEL=debug` for more detail
+- **Throwaway database**: To start a development database over, stop the server and delete `jot.db` (this deletes all its data; never do it on a real instance)
 - **API testing**: Use browser dev tools or curl/Postman
 
-### Debugging
+### Debugging during development
 
 ```bash
 # Run the server directly
