@@ -14,7 +14,7 @@ import (
 // rather than just the unpinned note itself.
 func unpinnedOrder(t *testing.T, store *noteStore, userID string) []string {
 	t.Helper()
-	notes, err := store.GetByUserID(t.Context(), userID, false, false, "", "", false)
+	notes, err := store.GetByUserID(t.Context(), userID, NoteFilter{})
 	require.NoError(t, err)
 	titles := make([]string, 0, len(notes))
 	for _, n := range notes {
@@ -35,7 +35,7 @@ func TestUpdateUnpinning(t *testing.T) {
 			// as: D, C, B, A (most recently created first).
 			noteIDs := make([]string, 0, 4)
 			for _, title := range []string{"A", "B", "C", "D"} {
-				n, err := store.Create(ctx, userID, "", title, "", NoteTypeText, DefaultNoteColor)
+				n, err := store.Create(ctx, userID, NewNote{Title: title, Type: NoteTypeText, Color: DefaultNoteColor})
 				require.NoError(t, err)
 				noteIDs = append(noteIDs, n.ID)
 			}
@@ -43,12 +43,12 @@ func TestUpdateUnpinning(t *testing.T) {
 			require.Equal(t, []string{"D", "C", "B", "A"}, unpinnedOrder(t, store, userID))
 
 			pinned := true
-			require.NoError(t, store.Update(ctx, noteB, userID, nil, nil, nil, &pinned, nil, nil, nil))
+			require.NoError(t, store.Update(ctx, noteB, userID, NoteUpdate{Pinned: &pinned}))
 			// Pinning removes B from the unpinned list without touching the others.
 			require.Equal(t, []string{"D", "C", "A"}, unpinnedOrder(t, store, userID))
 
 			unpinned := false
-			require.NoError(t, store.Update(ctx, noteB, userID, nil, nil, nil, &unpinned, nil, nil, nil))
+			require.NoError(t, store.Update(ctx, noteB, userID, NoteUpdate{Pinned: &unpinned}))
 
 			// B returns to the slot it held before being pinned, and A (which sat at
 			// or past that slot) is pushed one further out to make room. D and C,
@@ -76,7 +76,7 @@ func TestUpdateUnpinning(t *testing.T) {
 
 			noteIDs := make([]string, 0, 3)
 			for _, title := range []string{"A", "B", "C"} {
-				n, err := store.Create(ctx, userID, "", title, "", NoteTypeText, DefaultNoteColor)
+				n, err := store.Create(ctx, userID, NewNote{Title: title, Type: NoteTypeText, Color: DefaultNoteColor})
 				require.NoError(t, err)
 				noteIDs = append(noteIDs, n.ID)
 			}
@@ -90,7 +90,7 @@ func TestUpdateUnpinning(t *testing.T) {
 			require.NoError(t, err)
 
 			unpinned := false
-			require.NoError(t, store.Update(ctx, noteToPin, userID, nil, nil, nil, &unpinned, nil, nil, nil))
+			require.NoError(t, store.Update(ctx, noteToPin, userID, NoteUpdate{Pinned: &unpinned}))
 
 			// With no saved slot to restore, B lands at the end of the unpinned
 			// list rather than crashing or silently keeping its stale position.
@@ -112,25 +112,25 @@ func TestUpdateStaleSnapshot(t *testing.T) {
 		setup := func(t *testing.T) (*noteStore, string, *Note) {
 			t.Helper()
 			store, userID := newTestBulkStore(t, driver)
-			note, err := store.Create(t.Context(), userID, "", "title", "content", NoteTypeText, DefaultNoteColor)
+			note, err := store.Create(t.Context(), userID, NewNote{Title: "title", Content: "content", Type: NoteTypeText, Color: DefaultNoteColor})
 			require.NoError(t, err)
 			snapshot, err := store.GetByID(t.Context(), note.ID, userID)
 			require.NoError(t, err)
 			return store, userID, snapshot
 		}
-		applyStale := func(t *testing.T, store *noteStore, userID string, snapshot *Note, upd noteUpdate) error {
+		applyStale := func(t *testing.T, store *noteStore, userID string, snapshot *Note, u NoteUpdate) error {
 			t.Helper()
 			return inTx(t.Context(), store, func(tx *sql.Tx) error {
-				return store.applyUpdateTx(t.Context(), tx, snapshot.ID, userID, snapshot, upd, Timestamp(Now()))
+				return store.applyUpdateTx(t.Context(), tx, snapshot.ID, userID, snapshot, u, Timestamp(Now()))
 			})
 		}
 
 		t.Run("a title-only write keeps content changed after the snapshot", func(t *testing.T) {
 			store, userID, snapshot := setup(t)
 			ctx := t.Context()
-			require.NoError(t, store.Update(ctx, snapshot.ID, userID, nil, new("newer content"), nil, nil, nil, nil, nil))
+			require.NoError(t, store.Update(ctx, snapshot.ID, userID, NoteUpdate{Content: new("newer content")}))
 
-			require.NoError(t, applyStale(t, store, userID, snapshot, noteUpdate{title: new("new title")}))
+			require.NoError(t, applyStale(t, store, userID, snapshot, NoteUpdate{Title: new("new title")}))
 
 			got, err := store.GetByID(ctx, snapshot.ID, userID)
 			require.NoError(t, err)
@@ -141,9 +141,9 @@ func TestUpdateStaleSnapshot(t *testing.T) {
 		t.Run("a per-user write keeps the other per-user fields changed after the snapshot", func(t *testing.T) {
 			store, userID, snapshot := setup(t)
 			ctx := t.Context()
-			require.NoError(t, store.Update(ctx, snapshot.ID, userID, nil, nil, nil, nil, new(true), new(true), nil))
+			require.NoError(t, store.Update(ctx, snapshot.ID, userID, NoteUpdate{Archived: new(true), CheckedItemsCollapsed: new(true)}))
 
-			require.NoError(t, applyStale(t, store, userID, snapshot, noteUpdate{color: new("#fbbc04")}))
+			require.NoError(t, applyStale(t, store, userID, snapshot, NoteUpdate{Color: new("#fbbc04")}))
 
 			got, err := store.GetByID(ctx, snapshot.ID, userID)
 			require.NoError(t, err)
@@ -155,9 +155,9 @@ func TestUpdateStaleSnapshot(t *testing.T) {
 		t.Run("an unpin restores the position even when the snapshot predates the pin", func(t *testing.T) {
 			store, userID, snapshot := setup(t)
 			ctx := t.Context()
-			require.NoError(t, store.Update(ctx, snapshot.ID, userID, nil, nil, nil, new(true), nil, nil, nil))
+			require.NoError(t, store.Update(ctx, snapshot.ID, userID, NoteUpdate{Pinned: new(true)}))
 
-			require.NoError(t, applyStale(t, store, userID, snapshot, noteUpdate{pinned: new(false)}))
+			require.NoError(t, applyStale(t, store, userID, snapshot, NoteUpdate{Pinned: new(false)}))
 
 			got, err := store.GetByID(ctx, snapshot.ID, userID)
 			require.NoError(t, err)
@@ -169,16 +169,16 @@ func TestUpdateStaleSnapshot(t *testing.T) {
 		t.Run("a repeated unpin does not shift the other notes again", func(t *testing.T) {
 			store, userID, other := setup(t)
 			ctx := t.Context()
-			note, err := store.Create(ctx, userID, "", "pinned", "", NoteTypeText, DefaultNoteColor)
+			note, err := store.Create(ctx, userID, NewNote{Title: "pinned", Type: NoteTypeText, Color: DefaultNoteColor})
 			require.NoError(t, err)
-			require.NoError(t, store.Update(ctx, note.ID, userID, nil, nil, nil, new(true), nil, nil, nil))
+			require.NoError(t, store.Update(ctx, note.ID, userID, NoteUpdate{Pinned: new(true)}))
 			snapshot, err := store.GetByID(ctx, note.ID, userID)
 			require.NoError(t, err)
-			require.NoError(t, store.Update(ctx, note.ID, userID, nil, nil, nil, new(false), nil, nil, nil))
+			require.NoError(t, store.Update(ctx, note.ID, userID, NoteUpdate{Pinned: new(false)}))
 			before, err := store.GetByID(ctx, other.ID, userID)
 			require.NoError(t, err)
 
-			require.NoError(t, applyStale(t, store, userID, snapshot, noteUpdate{pinned: new(false)}))
+			require.NoError(t, applyStale(t, store, userID, snapshot, NoteUpdate{Pinned: new(false)}))
 
 			after, err := store.GetByID(ctx, other.ID, userID)
 			require.NoError(t, err)
@@ -188,18 +188,18 @@ func TestUpdateStaleSnapshot(t *testing.T) {
 		t.Run("a guarded title-only write conflicts when the title changed since base_version", func(t *testing.T) {
 			store, userID, snapshot := setup(t)
 			ctx := t.Context()
-			require.NoError(t, store.Update(ctx, snapshot.ID, userID, new("other title"), nil, nil, nil, nil, nil, nil))
+			require.NoError(t, store.Update(ctx, snapshot.ID, userID, NoteUpdate{Title: new("other title")}))
 
-			err := applyStale(t, store, userID, snapshot, noteUpdate{title: new("new title"), baseVersion: new(snapshot.Version)})
+			err := applyStale(t, store, userID, snapshot, NoteUpdate{Title: new("new title"), BaseVersion: new(snapshot.Version)})
 			require.ErrorIs(t, err, ErrNoteVersionConflict)
 		})
 
 		t.Run("a guarded title-only write is an idempotent no-op when only content changed and the title already matches", func(t *testing.T) {
 			store, userID, snapshot := setup(t)
 			ctx := t.Context()
-			require.NoError(t, store.Update(ctx, snapshot.ID, userID, new("new title"), new("newer content"), nil, nil, nil, nil, nil))
+			require.NoError(t, store.Update(ctx, snapshot.ID, userID, NoteUpdate{Title: new("new title"), Content: new("newer content")}))
 
-			require.NoError(t, applyStale(t, store, userID, snapshot, noteUpdate{title: new("new title"), baseVersion: new(snapshot.Version)}))
+			require.NoError(t, applyStale(t, store, userID, snapshot, NoteUpdate{Title: new("new title"), BaseVersion: new(snapshot.Version)}))
 
 			got, err := store.GetByID(ctx, snapshot.ID, userID)
 			require.NoError(t, err)

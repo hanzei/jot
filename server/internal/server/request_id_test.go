@@ -9,6 +9,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 // TestRequestIDHeader checks that every response carries X-Request-Id and that
@@ -80,4 +83,30 @@ func TestRequestIDHeader(t *testing.T) {
 		}
 		assert.Len(t, ids, 20)
 	})
+}
+
+// TestRequestIDSpanAttribute checks that the request log middleware also puts
+// the request ID on the active span, so traces can be searched by it. It uses
+// a local tracer provider rather than the global one, which other tests share.
+func TestRequestIDSpanAttribute(t *testing.T) {
+	t.Parallel()
+
+	log, _ := newCapturingLogger()
+	s := &Server{log: log}
+	recorder := tracetest.NewSpanRecorder()
+	tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)).Tracer("test")
+
+	handler := requestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx, span := tracer.Start(r.Context(), "request")
+		defer span.End()
+		s.requestLoggerMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).
+			ServeHTTP(w, r.WithContext(ctx))
+	}))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/config", nil)
+	req.Header.Set(requestIDHeader, "trace-me")
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	spans := recorder.Ended()
+	require.Len(t, spans, 1)
+	assert.Contains(t, spans[0].Attributes(), attribute.String("request.id", "trace-me"))
 }

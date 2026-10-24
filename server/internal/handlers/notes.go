@@ -307,17 +307,19 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 	}
 
 	q := r.URL.Query()
-	trashed := q.Get("trashed") == queryTrue
-	archived := q.Get("archived") == queryTrue
-	search := q.Get(SearchQueryParam)
-	labelID := q.Get("label")
-	myTasks := q.Get("my_tasks") == queryTrue
+	filter := models.NoteFilter{
+		Archived: q.Get("archived") == queryTrue,
+		Trashed:  q.Get("trashed") == queryTrue,
+		MyTasks:  q.Get("my_tasks") == queryTrue,
+		Search:   q.Get(SearchQueryParam),
+		LabelID:  q.Get("label"),
+	}
 
-	if err := validateSearchQuery(search); err != nil {
+	if err := validateSearchQuery(filter.Search); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 
-	notes, err := h.noteStore.GetByUserID(r.Context(), user.ID, archived, trashed, search, labelID, myTasks)
+	notes, err := h.noteStore.GetByUserID(r.Context(), user.ID, filter)
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("get notes: %w", err)
 	}
@@ -375,7 +377,13 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 
 	// Create the note and its items atomically so a bad item never leaves an
 	// orphaned or partially-populated note behind.
-	note, err := h.noteStore.CreateWithItems(r.Context(), user.ID, req.ID, req.Title, req.Content, req.NoteType, req.Color, items)
+	note, err := h.noteStore.CreateWithItems(r.Context(), user.ID, models.NewNote{
+		ID:      req.ID,
+		Title:   req.Title,
+		Content: req.Content,
+		Type:    req.NoteType,
+		Color:   req.Color,
+	}, items)
 	if err != nil {
 		switch {
 		case errors.Is(err, models.ErrNoteExists):
@@ -781,7 +789,15 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return status, nil, prefetchErr
 	}
 
-	err := h.noteStore.Update(r.Context(), id, user.ID, req.Title, req.Content, req.Color, req.Pinned, req.Archived, req.CheckedItemsCollapsed, req.BaseVersion)
+	err := h.noteStore.Update(r.Context(), id, user.ID, models.NoteUpdate{
+		Title:                 req.Title,
+		Content:               req.Content,
+		Color:                 req.Color,
+		Pinned:                req.Pinned,
+		Archived:              req.Archived,
+		CheckedItemsCollapsed: req.CheckedItemsCollapsed,
+		BaseVersion:           req.BaseVersion,
+	})
 	if err != nil {
 		if errors.Is(err, models.ErrNoteNotFound) || errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusNotFound, nil, err

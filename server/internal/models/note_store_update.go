@@ -10,15 +10,15 @@ import (
 	"strings"
 )
 
-// Update applies a partial note update. When baseVersion is non-nil it enables
+// Update applies a partial note update. When u.BaseVersion is non-nil it enables
 // optimistic concurrency on the shared content (title/content): the write is
 // rejected with ErrNoteVersionConflict unless the note's current version still
-// matches baseVersion, so a stale offline edit cannot silently clobber a newer
+// matches u.BaseVersion, so a stale offline edit cannot silently clobber a newer
 // change made on another device (issue #489). The version counter is only
 // consulted/bumped when title or content is being changed; per-user fields
 // (color, pinned, archived, checked_items_collapsed) are never version-guarded,
 // since they live in note_user_state and differ per collaborator.
-func (s *noteStore) Update(ctx context.Context, id string, userID string, title, content, color *string, pinned, archived, checkedItemsCollapsed *bool, baseVersion *int) error {
+func (s *noteStore) Update(ctx context.Context, id string, userID string, u NoteUpdate) error {
 	hasAccess, err := s.HasAccess(ctx, id, userID)
 	if err != nil {
 		return fmt.Errorf("failed to check access: %w", err)
@@ -41,12 +41,7 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	upd := noteUpdate{
-		title: title, content: content, color: color,
-		pinned: pinned, archived: archived, checkedItemsCollapsed: checkedItemsCollapsed,
-		baseVersion: baseVersion,
-	}
-	if err = s.applyUpdateTx(ctx, tx, id, userID, currentNote, upd, Timestamp(Now())); err != nil {
+	if err = s.applyUpdateTx(ctx, tx, id, userID, currentNote, u, Timestamp(Now())); err != nil {
 		return err
 	}
 
@@ -56,29 +51,22 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 	return nil
 }
 
-// noteUpdate is a partial note update: a nil field is left unchanged.
-type noteUpdate struct {
-	title, content, color                   *string
-	pinned, archived, checkedItemsCollapsed *bool
-	baseVersion                             *int
-}
-
-// applyUpdateTx writes upd inside tx. currentNote is the caller's earlier read
+// applyUpdateTx writes u inside tx. currentNote is the caller's earlier read
 // of the note, used only to decide whether the shared content changed. Every
 // column is written as COALESCE(new, column), so a field the caller did not
 // send keeps whatever value is stored when the write runs, even if a
 // concurrent update changed it after currentNote was read. Whether the pin
 // state flipped is likewise decided against the stored row, not currentNote.
-func (s *noteStore) applyUpdateTx(ctx context.Context, tx *sql.Tx, id, userID string, currentNote *Note, upd noteUpdate, now string) error {
+func (s *noteStore) applyUpdateTx(ctx context.Context, tx *sql.Tx, id, userID string, currentNote *Note, u NoteUpdate, now string) error {
 	// Only touch the shared fields (title/content) when the caller provided at
 	// least one AND it actually differs from the stored value. Skipping a no-op
 	// (e.g. an editor autosave that resends unchanged content) avoids a spurious
 	// version bump that would invalidate other devices' base_version, and avoids
 	// overwriting concurrent edits when only per-user fields are changing.
-	contentChanged := deref(upd.title, currentNote.Title) != currentNote.Title ||
-		deref(upd.content, currentNote.Content) != currentNote.Content
+	contentChanged := deref(u.Title, currentNote.Title) != currentNote.Title ||
+		deref(u.Content, currentNote.Content) != currentNote.Content
 	if contentChanged {
-		if err := s.changeNoteContentTx(ctx, tx, id, userID, upd.title, upd.content, upd.baseVersion, now); err != nil {
+		if err := s.changeNoteContentTx(ctx, tx, id, userID, u.Title, u.Content, u.BaseVersion, now); err != nil {
 			return err
 		}
 	}
@@ -88,10 +76,10 @@ func (s *noteStore) applyUpdateTx(ctx context.Context, tx *sql.Tx, id, userID st
 	// positions need moving) is known from the stored row: a stale currentNote
 	// would either miss a flip or reposition the note twice.
 	pinFlipped := false
-	if upd.pinned != nil {
+	if u.Pinned != nil {
 		result, err := tx.ExecContext(ctx,
 			s.d.RewritePlaceholders(`UPDATE note_user_state SET pinned = ? WHERE note_id = ? AND user_id = ? AND pinned <> ?`),
-			*upd.pinned, id, userID, *upd.pinned,
+			*u.Pinned, id, userID, *u.Pinned,
 		)
 		if err != nil {
 			return fmt.Errorf("update note pin state: %w", err)
@@ -107,7 +95,7 @@ func (s *noteStore) applyUpdateTx(ctx context.Context, tx *sql.Tx, id, userID st
 		s.d.RewritePlaceholders(`UPDATE note_user_state SET archived = COALESCE(?, archived),
 		 color = COALESCE(?, color), checked_items_collapsed = COALESCE(?, checked_items_collapsed), updated_at = ?
 		 WHERE note_id = ? AND user_id = ?`),
-		nullable(upd.archived), nullable(upd.color), nullable(upd.checkedItemsCollapsed), now, id, userID,
+		nullable(u.Archived), nullable(u.Color), nullable(u.CheckedItemsCollapsed), now, id, userID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update note user state: %w", err)
@@ -121,7 +109,7 @@ func (s *noteStore) applyUpdateTx(ctx context.Context, tx *sql.Tx, id, userID st
 	}
 
 	if pinFlipped {
-		if err = s.handlePinStatusChangeTx(ctx, tx, id, userID, *upd.pinned); err != nil {
+		if err = s.handlePinStatusChangeTx(ctx, tx, id, userID, *u.Pinned); err != nil {
 			return fmt.Errorf("handle pin status change: %w", err)
 		}
 	}
