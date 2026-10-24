@@ -169,6 +169,34 @@ test.describe('Settings', () => {
       void authenticatedUser;
     });
 
+    test('a settings fetch answered before the change does not undo it', async ({ authenticatedUser, dashboardPage, settingsPage, page }) => {
+      void authenticatedUser;
+      await dashboardPage.goto();
+      await expect(page.getByRole('button', { name: 'New Note' })).toBeVisible();
+
+      // Settings fetches /me on mount. Let the server answer it now (theme
+      // still "system") but hold that answer back until the change is saved.
+      let releaseMe!: () => void;
+      const meHeld = new Promise<void>((resolve) => { releaseMe = resolve; });
+      await page.route('**/api/v1/me', async (route) => {
+        const response = await route.fetch();
+        await meHeld;
+        await route.fulfill({ response });
+      });
+      // In-app navigation, so the app's own boot /me is not the one held.
+      await page.getByRole('button', { name: 'Profile menu' }).click();
+      await page.getByRole('menuitem', { name: 'Settings' }).click();
+
+      await settingsPage.selectTheme('Dark');
+      await expect(page.getByText('Theme updated')).toBeVisible();
+      const meAnswered = page.waitForResponse('**/api/v1/me');
+      releaseMe();
+      await meAnswered;
+
+      await expect(page.getByLabel('App theme')).toHaveValue('dark');
+      await expect(page.locator('html')).toHaveClass(/dark/);
+    });
+
     test('theme preference persists across page reload', async ({ authenticatedUser, settingsPage, page }) => {
       await settingsPage.goto();
 
