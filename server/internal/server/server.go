@@ -36,6 +36,7 @@ import (
 	"github.com/sirupsen/logrus"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -762,12 +763,17 @@ func (s *Server) requestLoggerMiddleware(next http.Handler) http.Handler {
 		start := time.Now() //nolint:gocritic // elapsed request time, never persisted; a duration has no time zone
 		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 
+		requestID := middleware.GetReqID(r.Context())
 		entry := s.log.WithFields(logrus.Fields{
-			"request_id": middleware.GetReqID(r.Context()),
+			"request_id": requestID,
 			"method":     r.Method,
 			"path":       r.URL.Path,
 		})
-		if sc := trace.SpanFromContext(r.Context()).SpanContext(); sc.IsValid() {
+		span := trace.SpanFromContext(r.Context())
+		// Also on the span, so an operator who keeps traces but not logs can
+		// find a reported X-Request-Id directly.
+		span.SetAttributes(attribute.String("request.id", requestID))
+		if sc := span.SpanContext(); sc.IsValid() {
 			entry = entry.WithFields(logrus.Fields{
 				"trace_id": sc.TraceID().String(),
 				"span_id":  sc.SpanID().String(),

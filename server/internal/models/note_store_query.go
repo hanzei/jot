@@ -53,7 +53,7 @@ const noteSelectColumns = `n.id, n.user_id, n.title, n.content, n.note_type, n.v
 				  nus.color, nus.pinned, nus.archived, nus.position, nus.unpinned_position, nus.checked_items_collapsed,
 				  n.deleted_at, n.created_at, n.updated_at, ` + noteUnreadExpr
 
-func buildGetByUserIDQuery(d *dialect.Dialect, userID string, archived bool, trashed bool, search string, labelID string, myTasks bool) (string, []any) {
+func buildGetByUserIDQuery(d *dialect.Dialect, userID string, f NoteFilter) (string, []any) {
 	// No DISTINCT: every join below is one-to-one with a note (the per-user
 	// state join, the full-text search join, and — for My Tasks — an IN
 	// subquery rather than a row-multiplying note_items join), so each note
@@ -67,7 +67,7 @@ func buildGetByUserIDQuery(d *dialect.Dialect, userID string, archived bool, tra
 
 	// FROM + per-user state join.
 	switch {
-	case trashed:
+	case f.Trashed:
 		b.WriteString(`
 				  FROM notes n
 				  INNER JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = ?`)
@@ -82,10 +82,10 @@ func buildGetByUserIDQuery(d *dialect.Dialect, userID string, archived bool, tra
 	// Full-text search: join candidate note IDs (with relevance rank) from the
 	// note_search index. A query of only punctuation tokenizes to nothing;
 	// treat that as matching nothing rather than erroring or matching all.
-	tokens := buildSearchTokens(search)
-	matchedNothing := search != "" && len(tokens) == 0
+	tokens := buildSearchTokens(f.Search)
+	matchedNothing := f.Search != "" && len(tokens) == 0
 	rankOrder := ""
-	if search != "" && len(tokens) > 0 {
+	if f.Search != "" && len(tokens) > 0 {
 		join, order := d.FullTextSearchJoin()
 		b.WriteString(join)
 		args = append(args, d.FullTextMatchExpr(tokens))
@@ -93,24 +93,24 @@ func buildGetByUserIDQuery(d *dialect.Dialect, userID string, archived bool, tra
 	}
 
 	switch {
-	case trashed:
+	case f.Trashed:
 		b.WriteString(` WHERE n.user_id = ? AND n.deleted_at IS NOT NULL`)
 		args = append(args, userID)
-	case myTasks:
+	case f.MyTasks:
 		b.WriteString(` WHERE n.id IN (SELECT note_id FROM note_items WHERE assigned_to = ?)`)
 		args = append(args, userID)
 	default:
 		b.WriteString(` WHERE nus.archived = ?`)
-		args = append(args, archived)
+		args = append(args, f.Archived)
 	}
 
 	if matchedNothing {
 		b.WriteString(` AND 1 = 0`)
 	}
 
-	if labelID != "" {
+	if f.LabelID != "" {
 		b.WriteString(` AND n.id IN (SELECT note_id FROM note_labels WHERE label_id = ? AND user_id = ?)`)
-		args = append(args, labelID, userID)
+		args = append(args, f.LabelID, userID)
 	}
 
 	// Search results order by relevance within the pinned/unpinned split; the
@@ -140,8 +140,8 @@ func scanNote(rows *sql.Rows) (Note, error) {
 	return note, err
 }
 
-func (s *noteStore) GetByUserID(ctx context.Context, userID string, archived bool, trashed bool, search string, labelID string, myTasks bool) ([]*Note, error) {
-	query, args := buildGetByUserIDQuery(s.d, userID, archived, trashed, search, labelID, myTasks)
+func (s *noteStore) GetByUserID(ctx context.Context, userID string, f NoteFilter) ([]*Note, error) {
+	query, args := buildGetByUserIDQuery(s.d, userID, f)
 
 	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), args...)
 	if err != nil {
