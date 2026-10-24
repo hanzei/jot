@@ -12,6 +12,7 @@ import (
 	"os"
 	"runtime"
 	"runtime/pprof"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -93,7 +94,7 @@ func New(cfg *config.Config) (*Server, error) {
 // suite uses this to give each test server a logger writing to that test's own
 // t.Log, which is what lets those tests run in parallel without fighting over
 // the standard logger's output.
-func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
+func NewWithLogger(cfg *config.Config, log *logrus.Logger) (_ *Server, err error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config must not be nil")
 	}
@@ -101,12 +102,22 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
 		return nil, fmt.Errorf("logger must not be nil")
 	}
 
+	// undo releases what has been acquired so far if a later step fails.
+	var undo cleanupStack
+	defer func() {
+		if err != nil {
+			undo.run()
+		}
+	}()
+
 	db, err := database.New(cfg.DBDriver, cfg.DBDSN)
 	if err != nil {
 		return nil, fmt.Errorf("initialize database: %w", err)
 	}
+	undo.push(func() { _ = db.Close() })
 
 	ctx, cancel := context.WithCancel(context.Background())
+	undo.push(cancel)
 
 	d := &dialect.Dialect{Driver: cfg.DBDriver}
 
@@ -116,8 +127,6 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
 	adminStatsStore := models.NewAdminStatsStore(db, d)
 	sessionStore, err := models.NewSessionStore(db, d)
 	if err != nil {
-		cancel()
-		_ = db.Close()
 		return nil, fmt.Errorf("initialize session store: %w", err)
 	}
 	userSettingsStore := models.NewUserSettingsStore(db, d)
@@ -127,24 +136,18 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
 
 	hub, err := sse.NewHub()
 	if err != nil {
-		cancel()
-		_ = db.Close()
 		return nil, fmt.Errorf("initialize SSE hub: %w", err)
 	}
 
 	imageStore, err := blobstore.NewImageStore(cfg.UploadDir)
 	if err != nil {
-		cancel()
-		_ = db.Close()
 		return nil, fmt.Errorf("initialize image store: %w", err)
 	}
+	undo.push(func() { _ = imageStore.Close() })
 
 	authHandler := handlers.NewAuthHandler(userStore, noteStore, sessionService, userSettingsStore, hub, cfg.RegistrationEnabled, cfg.LocalLoginEnabled, cfg.PasswordMinLength)
 	notesHandler, err := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub, imageStore, int64(cfg.UploadMaxBytes))
 	if err != nil {
-		cancel()
-		_ = imageStore.Close()
-		_ = db.Close()
 		return nil, fmt.Errorf("initialize notes handler: %w", err)
 	}
 	labelsHandler := handlers.NewLabelsHandler(noteStore, labelStore, hub)
@@ -160,17 +163,11 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
 	// discovery fails.
 	oidcHandler, err := buildOIDCHandler(ctx, cfg, userStore, userSettingsStore, sessionService)
 	if err != nil {
-		cancel()
-		_ = imageStore.Close()
-		_ = db.Close()
 		return nil, err
 	}
 
 	rl, err := newRateLimiter(cfg)
 	if err != nil {
-		cancel()
-		_ = imageStore.Close()
-		_ = db.Close()
 		return nil, fmt.Errorf("initialize rate limiter: %w", err)
 	}
 
@@ -218,21 +215,32 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
 		logImageSweepReport(log, report)
 		return err
 	}, "sweep orphaned note image blobs")
-
-	if err := s.setupRoutes(); err != nil {
-		// Unlike the failure paths above, the periodic tasks are already
-		// running by this point, and the trash purge and orphan sweep run
-		// immediately rather than waiting for their first tick — so they may
-		// be using the db or imageStore right now. cancel() only signals;
-		// wait for the goroutines to actually stop before closing what they
-		// are still using.
+	// The trash purge and orphan sweep run immediately rather than waiting for
+	// their first tick, so they may be using the db or imageStore right now.
+	// cancel() only signals; wait for the goroutines to actually stop before
+	// the earlier entries close what they are still using.
+	undo.push(func() {
 		cancel()
 		s.bgWg.Wait()
-		_ = imageStore.Close()
-		_ = db.Close()
+	})
+
+	if err := s.setupRoutes(); err != nil {
 		return nil, fmt.Errorf("setup routes: %w", err)
 	}
 	return s, nil
+}
+
+// cleanupStack holds the release functions of resources in the order they were
+// acquired. run calls them in reverse, so nothing is closed while something
+// acquired after it may still be using it.
+type cleanupStack []func()
+
+func (c *cleanupStack) push(f func()) { *c = append(*c, f) }
+
+func (c *cleanupStack) run() {
+	for _, f := range slices.Backward(*c) {
+		f()
+	}
 }
 
 // imageOrphanSweepGrace is how old a blob must be before the orphan sweep may

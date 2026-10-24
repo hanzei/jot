@@ -33,7 +33,7 @@ var usernameRegex = regexp.MustCompile(`^[a-z0-9_-]+$`)
 
 // Keep in sync with shared/src/constants.ts VALIDATION for clients.
 // All character limits are measured in Unicode code points (utf8.RuneCountInString).
-// passwordMinLength is configurable via config.Config.PasswordMinLength (env PASSWORD_MIN_LENGTH).
+// passwordMinLength is configurable via config.Config.PasswordMinLength (env JOT_PASSWORD_MIN_LENGTH).
 const (
 	// The note field limits are shared with the MCP server, so they are defined
 	// once in models rather than duplicated per write surface.
