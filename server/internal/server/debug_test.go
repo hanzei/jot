@@ -15,7 +15,6 @@ import (
 	"github.com/hanzei/jot/server/internal/config"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/sirupsen/logrus"
-	logtest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -100,9 +99,7 @@ func TestStartPeriodicTaskSetsGoroutineLabel(t *testing.T) {
 func TestStartPeriodicTaskContextLogger(t *testing.T) {
 	t.Parallel()
 
-	log := logrus.New()
-	log.SetOutput(io.Discard)
-	hook := logtest.NewLocal(log)
+	log, hook := newCapturingLogger()
 	s := &Server{log: log}
 
 	ctx, cancel := context.WithCancel(t.Context())
