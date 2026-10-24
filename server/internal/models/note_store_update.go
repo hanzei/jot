@@ -27,9 +27,9 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 		return ErrNoteNoAccess
 	}
 
-	// Get current note state (per-user view) to detect no-op content writes and
-	// pin changes. It is read outside the transaction and may be stale by the
-	// time the writes run, so applyUpdateTx never writes a value taken from it.
+	// Get current note state (per-user view) to detect no-op content writes. It
+	// is read outside the transaction and may be stale by the time the writes
+	// run, so applyUpdateTx never writes a value taken from it.
 	currentNote, err := s.GetByID(ctx, id, userID)
 	if err != nil {
 		return fmt.Errorf("failed to get current note: %w", err)
@@ -64,11 +64,11 @@ type noteUpdate struct {
 }
 
 // applyUpdateTx writes upd inside tx. currentNote is the caller's earlier read
-// of the note, used only to decide whether the shared content changed and
-// whether the pin state flipped. Every column is written as COALESCE(new,
-// column), so a field the caller did not send keeps whatever value is stored
-// when the write runs, even if a concurrent update changed it after
-// currentNote was read.
+// of the note, used only to decide whether the shared content changed. Every
+// column is written as COALESCE(new, column), so a field the caller did not
+// send keeps whatever value is stored when the write runs, even if a
+// concurrent update changed it after currentNote was read. Whether the pin
+// state flipped is likewise decided against the stored row, not currentNote.
 func (s *noteStore) applyUpdateTx(ctx context.Context, tx *sql.Tx, id, userID string, currentNote *Note, upd noteUpdate, now string) error {
 	// Only touch the shared fields (title/content) when the caller provided at
 	// least one AND it actually differs from the stored value. Skipping a no-op
@@ -83,12 +83,31 @@ func (s *noteStore) applyUpdateTx(ctx context.Context, tx *sql.Tx, id, userID st
 		}
 	}
 
-	// Per-user fields live in note_user_state.
+	// Per-user fields live in note_user_state. The pin flag is written by a
+	// separate guarded statement so that whether it actually flipped (and the
+	// positions need moving) is known from the stored row: a stale currentNote
+	// would either miss a flip or reposition the note twice.
+	pinFlipped := false
+	if upd.pinned != nil {
+		result, err := tx.ExecContext(ctx,
+			s.d.RewritePlaceholders(`UPDATE note_user_state SET pinned = ? WHERE note_id = ? AND user_id = ? AND pinned <> ?`),
+			*upd.pinned, id, userID, *upd.pinned,
+		)
+		if err != nil {
+			return fmt.Errorf("update note pin state: %w", err)
+		}
+		flipped, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("get pin rows affected: %w", err)
+		}
+		pinFlipped = flipped > 0
+	}
+
 	result, err := tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE note_user_state SET pinned = COALESCE(?, pinned), archived = COALESCE(?, archived),
+		s.d.RewritePlaceholders(`UPDATE note_user_state SET archived = COALESCE(?, archived),
 		 color = COALESCE(?, color), checked_items_collapsed = COALESCE(?, checked_items_collapsed), updated_at = ?
 		 WHERE note_id = ? AND user_id = ?`),
-		nullable(upd.pinned), nullable(upd.archived), nullable(upd.color), nullable(upd.checkedItemsCollapsed), now, id, userID,
+		nullable(upd.archived), nullable(upd.color), nullable(upd.checkedItemsCollapsed), now, id, userID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update note user state: %w", err)
@@ -101,8 +120,8 @@ func (s *noteStore) applyUpdateTx(ctx context.Context, tx *sql.Tx, id, userID st
 		return ErrNoteNotFound
 	}
 
-	if upd.pinned != nil && *upd.pinned != currentNote.Pinned {
-		if err = s.handlePinStatusChangeTx(ctx, tx, id, userID, currentNote, *upd.pinned); err != nil {
+	if pinFlipped {
+		if err = s.handlePinStatusChangeTx(ctx, tx, id, userID, *upd.pinned); err != nil {
 			return fmt.Errorf("handle pin status change: %w", err)
 		}
 	}
@@ -366,15 +385,17 @@ func groupedNewNoteItems(items []NewNoteItem) []NewNoteItem {
 }
 
 // handlePinStatusChangeTx updates note positions when a note is pinned or unpinned within a transaction.
-func (s *noteStore) handlePinStatusChangeTx(ctx context.Context, tx *sql.Tx, id, ownerID string, currentNote *Note, nowPinned bool) error {
+// Both read the note's stored positions inside tx rather than taking them from
+// an earlier, possibly stale, read.
+func (s *noteStore) handlePinStatusChangeTx(ctx context.Context, tx *sql.Tx, id, ownerID string, nowPinned bool) error {
 	if nowPinned {
-		return s.handlePinningTx(ctx, tx, id, ownerID, currentNote)
+		return s.handlePinningTx(ctx, tx, id, ownerID)
 	}
-	return s.handleUnpinningTx(ctx, tx, id, ownerID, currentNote)
+	return s.handleUnpinningTx(ctx, tx, id, ownerID)
 }
 
 // handlePinningTx stores the current position as unpinned_position and moves the note to the end of the pinned list.
-func (s *noteStore) handlePinningTx(ctx context.Context, tx *sql.Tx, id, userID string, currentNote *Note) error {
+func (s *noteStore) handlePinningTx(ctx context.Context, tx *sql.Tx, id, userID string) error {
 	var maxPosition int
 	posQuery := s.d.RewritePlaceholders(`SELECT COALESCE(MAX(nus.position), -1)
 	             FROM note_user_state nus
@@ -385,8 +406,10 @@ func (s *noteStore) handlePinningTx(ctx context.Context, tx *sql.Tx, id, userID 
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE note_user_state SET position = ?, unpinned_position = ? WHERE note_id = ? AND user_id = ?`),
-		maxPosition+1, currentNote.Position, id, userID,
+		// unpinned_position = position reads the pre-update value: SET
+		// expressions all see the row as it was before the statement.
+		s.d.RewritePlaceholders(`UPDATE note_user_state SET position = ?, unpinned_position = position WHERE note_id = ? AND user_id = ?`),
+		maxPosition+1, id, userID,
 	); err != nil {
 		return fmt.Errorf("failed to update position: %w", err)
 	}
@@ -394,11 +417,18 @@ func (s *noteStore) handlePinningTx(ctx context.Context, tx *sql.Tx, id, userID 
 }
 
 // handleUnpinningTx restores the note to its saved unpinned_position, or appends it to the end of the unpinned list.
-func (s *noteStore) handleUnpinningTx(ctx context.Context, tx *sql.Tx, id, userID string, currentNote *Note) error {
-	var targetPosition int
+func (s *noteStore) handleUnpinningTx(ctx context.Context, tx *sql.Tx, id, userID string) error {
+	var unpinnedPosition sql.NullInt64
+	if err := tx.QueryRowContext(ctx,
+		s.d.RewritePlaceholders(`SELECT unpinned_position FROM note_user_state WHERE note_id = ? AND user_id = ?`),
+		id, userID,
+	).Scan(&unpinnedPosition); err != nil {
+		return fmt.Errorf("get unpinned position: %w", err)
+	}
 
-	if currentNote.UnpinnedPosition != nil {
-		targetPosition = *currentNote.UnpinnedPosition
+	var targetPosition int
+	if unpinnedPosition.Valid {
+		targetPosition = int(unpinnedPosition.Int64)
 
 		// Shift other unpinned notes to make room
 		if _, err := tx.ExecContext(ctx,

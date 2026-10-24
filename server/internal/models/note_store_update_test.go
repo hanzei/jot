@@ -152,6 +152,39 @@ func TestUpdateStaleSnapshot(t *testing.T) {
 			assert.True(t, got.CheckedItemsCollapsed)
 		})
 
+		t.Run("an unpin restores the position even when the snapshot predates the pin", func(t *testing.T) {
+			store, userID, snapshot := setup(t)
+			ctx := t.Context()
+			require.NoError(t, store.Update(ctx, snapshot.ID, userID, nil, nil, nil, new(true), nil, nil, nil))
+
+			require.NoError(t, applyStale(t, store, userID, snapshot, noteUpdate{pinned: new(false)}))
+
+			got, err := store.GetByID(ctx, snapshot.ID, userID)
+			require.NoError(t, err)
+			assert.False(t, got.Pinned)
+			assert.Equal(t, snapshot.Position, got.Position)
+			assert.Nil(t, got.UnpinnedPosition, "unpinned_position is cleared once consumed")
+		})
+
+		t.Run("a repeated unpin does not shift the other notes again", func(t *testing.T) {
+			store, userID, other := setup(t)
+			ctx := t.Context()
+			note, err := store.Create(ctx, userID, "", "pinned", "", NoteTypeText, DefaultNoteColor)
+			require.NoError(t, err)
+			require.NoError(t, store.Update(ctx, note.ID, userID, nil, nil, nil, new(true), nil, nil, nil))
+			snapshot, err := store.GetByID(ctx, note.ID, userID)
+			require.NoError(t, err)
+			require.NoError(t, store.Update(ctx, note.ID, userID, nil, nil, nil, new(false), nil, nil, nil))
+			before, err := store.GetByID(ctx, other.ID, userID)
+			require.NoError(t, err)
+
+			require.NoError(t, applyStale(t, store, userID, snapshot, noteUpdate{pinned: new(false)}))
+
+			after, err := store.GetByID(ctx, other.ID, userID)
+			require.NoError(t, err)
+			assert.Equal(t, before.Position, after.Position)
+		})
+
 		t.Run("a guarded title-only write conflicts when the title changed since base_version", func(t *testing.T) {
 			store, userID, snapshot := setup(t)
 			ctx := t.Context()
