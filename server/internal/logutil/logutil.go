@@ -47,6 +47,12 @@ func (rl *RequestLogger) WithError(err error) *RequestLogger {
 	return &RequestLogger{entry: rl.entry.WithError(err)}
 }
 
+// IsLevelEnabled reports whether a line at level would be written, so a caller
+// on a hot path can skip building fields for a line that would be dropped.
+func (rl *RequestLogger) IsLevelEnabled(level logrus.Level) bool {
+	return rl.entry.Logger.IsLevelEnabled(level)
+}
+
 func (rl *RequestLogger) Debug(args ...any) { rl.entry.Debug(args...) }
 func (rl *RequestLogger) Info(args ...any)  { rl.entry.Info(args...) }
 func (rl *RequestLogger) Warn(args ...any)  { rl.entry.Warn(args...) }
