@@ -42,12 +42,14 @@ func TestUpdateUnpinning(t *testing.T) {
 			require.Equal(t, []string{"D", "C", "B", "A"}, unpinnedOrder(t, store, userID))
 
 			pinned := true
-			require.NoError(t, store.Update(ctx, noteB, userID, NoteUpdate{Pinned: &pinned}))
+			_, err := store.Update(ctx, noteB, userID, NoteUpdate{Pinned: &pinned})
+			require.NoError(t, err)
 			// Pinning removes B from the unpinned list without touching the others.
 			require.Equal(t, []string{"D", "C", "A"}, unpinnedOrder(t, store, userID))
 
 			unpinned := false
-			require.NoError(t, store.Update(ctx, noteB, userID, NoteUpdate{Pinned: &unpinned}))
+			_, err = store.Update(ctx, noteB, userID, NoteUpdate{Pinned: &unpinned})
+			require.NoError(t, err)
 
 			// B returns to the slot it held before being pinned, and A (which sat at
 			// or past that slot) is pushed one further out to make room. D and C,
@@ -89,7 +91,8 @@ func TestUpdateUnpinning(t *testing.T) {
 			require.NoError(t, err)
 
 			unpinned := false
-			require.NoError(t, store.Update(ctx, noteToPin, userID, NoteUpdate{Pinned: &unpinned}))
+			_, err = store.Update(ctx, noteToPin, userID, NoteUpdate{Pinned: &unpinned})
+			require.NoError(t, err)
 
 			// With no saved slot to restore, B lands at the end of the unpinned
 			// list rather than crashing or silently keeping its stale position.
@@ -99,6 +102,107 @@ func TestUpdateUnpinning(t *testing.T) {
 			require.NoError(t, err)
 			assert.False(t, restored.Pinned)
 			assert.Nil(t, restored.UnpinnedPosition)
+		})
+	})
+}
+
+func TestUpdate(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, driver string) {
+		t.Run("returns the updated note", func(t *testing.T) {
+			store, userID := newTestBulkStore(t, driver)
+			ctx := t.Context()
+
+			n, err := store.Create(ctx, userID, NewNote{Content: "before", Type: NoteTypeText, Color: DefaultNoteColor})
+			require.NoError(t, err)
+
+			content, color, pinned := "after", "#ff0000", true
+			updated, err := store.Update(ctx, n.ID, userID, NoteUpdate{Content: &content, Color: &color, Pinned: &pinned})
+			require.NoError(t, err)
+
+			reread, err := store.GetByID(ctx, n.ID, userID)
+			require.NoError(t, err)
+			assert.Equal(t, reread, updated)
+			assert.Equal(t, "after", updated.Content)
+			assert.Equal(t, "#ff0000", updated.Color)
+			assert.True(t, updated.Pinned)
+			assert.Equal(t, n.Version+1, updated.Version)
+		})
+
+		t.Run("rejects a field the note type does not allow, without writing", func(t *testing.T) {
+			store, userID := newTestBulkStore(t, driver)
+			ctx := t.Context()
+
+			text, err := store.Create(ctx, userID, NewNote{Content: "body", Type: NoteTypeText, Color: DefaultNoteColor})
+			require.NoError(t, err)
+			list, err := store.Create(ctx, userID, NewNote{Title: "List", Type: NoteTypeList, Color: DefaultNoteColor})
+			require.NoError(t, err)
+
+			title, content, color, collapsed := "Title", "content", "#ff0000", true
+			cases := []struct {
+				name                  string
+				id                    string
+				title, content        *string
+				checkedItemsCollapsed *bool
+				wantMsg               string
+			}{
+				{"title on a text note", text.ID, &title, nil, nil, "text notes cannot have a title"},
+				{"content on a list note", list.ID, nil, &content, nil, "list notes cannot have content"},
+				{"checked_items_collapsed on a text note", text.ID, nil, nil, &collapsed, "text notes cannot have checked_items_collapsed"},
+			}
+			for _, tc := range cases {
+				t.Run(tc.name, func(t *testing.T) {
+					before, err := store.GetByID(ctx, tc.id, userID)
+					require.NoError(t, err)
+
+					_, err = store.Update(ctx, tc.id, userID, NoteUpdate{Title: tc.title, Content: tc.content, Color: &color, CheckedItemsCollapsed: tc.checkedItemsCollapsed})
+					require.ErrorIs(t, err, ErrNoteFieldNotAllowed)
+					require.EqualError(t, err, tc.wantMsg)
+
+					after, err := store.GetByID(ctx, tc.id, userID)
+					require.NoError(t, err)
+					assert.Equal(t, before, after, "a rejected update must not write the other fields either")
+				})
+			}
+		})
+
+		t.Run("checks the type the note has now, after a conversion", func(t *testing.T) {
+			store, userID := newTestBulkStore(t, driver)
+			ctx := t.Context()
+
+			n, err := store.Create(ctx, userID, NewNote{Content: "body", Type: NoteTypeText, Color: DefaultNoteColor})
+			require.NoError(t, err)
+			_, err = store.ConvertType(ctx, n.ID, userID, NoteTypeList, "", "", nil, nil)
+			require.NoError(t, err)
+
+			content := "text again"
+			_, err = store.Update(ctx, n.ID, userID, NoteUpdate{Content: &content})
+			require.ErrorIs(t, err, ErrNoteFieldNotAllowed)
+		})
+
+		t.Run("reports a note the user cannot see as not found", func(t *testing.T) {
+			store, userID := newTestBulkStore(t, driver)
+			ctx := t.Context()
+
+			const strangerID = "user0000000000000strange"
+			_, err := store.db.ExecContext(ctx,
+				store.d.RewritePlaceholders(`INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)`),
+				strangerID, "stranger", "x")
+			require.NoError(t, err)
+
+			n, err := store.Create(ctx, userID, NewNote{Content: "body", Type: NoteTypeText, Color: DefaultNoteColor})
+			require.NoError(t, err)
+
+			content := "intrusion"
+			_, err = store.Update(ctx, n.ID, strangerID, NoteUpdate{Content: &content})
+			require.ErrorIs(t, err, ErrNoteNotFound)
+
+			require.NoError(t, store.MoveToTrash(ctx, n.ID, userID))
+			_, err = store.Update(ctx, n.ID, userID, NoteUpdate{Content: &content})
+			require.ErrorIs(t, err, ErrNoteNotFound, "a trashed note is not updatable")
+
+			trashed, err := store.GetByIDAnyState(ctx, n.ID, userID)
+			require.NoError(t, err)
+			assert.Equal(t, "body", trashed.Content)
 		})
 	})
 }

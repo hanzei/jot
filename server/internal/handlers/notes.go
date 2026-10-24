@@ -650,15 +650,6 @@ func (h *NotesHandler) ConvertNoteType(w http.ResponseWriter, r *http.Request) (
 	return http.StatusOK, sanitized, nil
 }
 
-// validateUpdateNoteTypeFields rejects updates that set fields incompatible with
-// the note's type (e.g., title on a text note, content on a list note).
-func validateUpdateNoteTypeFields(noteType models.NoteType, req *UpdateNoteRequest) (int, error) {
-	if err := models.ValidateNoteTypeFields(noteType, req.Title, req.Content, req.CheckedItemsCollapsed); err != nil {
-		return http.StatusBadRequest, err
-	}
-	return http.StatusOK, nil
-}
-
 func normalizeUpdateNoteRequest(req *UpdateNoteRequest) (int, error) {
 	if req.Title != nil {
 		if err := models.ValidateNoteTitle(*req.Title); err != nil {
@@ -677,21 +668,6 @@ func normalizeUpdateNoteRequest(req *UpdateNoteRequest) (int, error) {
 		if err := models.ValidateNoteColor(*req.Color); err != nil {
 			return http.StatusBadRequest, err
 		}
-	}
-	return http.StatusOK, nil
-}
-
-// validateUpdateNoteFields fetches the current note to check that the requested
-// fields are compatible with the note's type (e.g. a title cannot be set on a
-// text note). It is called before the store update so type-mismatch errors are
-// caught without a partial write.
-func (h *NotesHandler) validateUpdateNoteFields(ctx context.Context, id, userID string, req *UpdateNoteRequest) (int, error) {
-	currentNote, err := h.noteStore.GetByID(ctx, id, userID)
-	if err != nil {
-		return storeStatus(err, "get note")
-	}
-	if status, typeErr := validateUpdateNoteTypeFields(currentNote.NoteType, req); typeErr != nil {
-		return status, typeErr
 	}
 	return http.StatusOK, nil
 }
@@ -732,11 +708,7 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return status, nil, err
 	}
 
-	if status, prefetchErr := h.validateUpdateNoteFields(r.Context(), id, user.ID, &req); prefetchErr != nil {
-		return status, nil, prefetchErr
-	}
-
-	err := h.noteStore.Update(r.Context(), id, user.ID, models.NoteUpdate{
+	note, err := h.noteStore.Update(r.Context(), id, user.ID, models.NoteUpdate{
 		Title:                 req.Title,
 		Content:               req.Content,
 		Color:                 req.Color,
@@ -747,11 +719,6 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 	})
 	if err != nil {
 		return storeError(err, "update note")
-	}
-
-	note, err := h.noteStore.GetByID(r.Context(), id, user.ID)
-	if err != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
 
 	// Title and content are shared fields: every collaborator must receive their
