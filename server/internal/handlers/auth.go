@@ -102,10 +102,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, any
 
 	user, err := h.userStore.Create(r.Context(), req.Username, req.Password)
 	if err != nil {
-		if errors.Is(err, models.ErrUsernameTaken) {
-			return http.StatusConflict, nil, models.ErrUsernameTaken
-		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("create user: %w", err)
+		return storeError(err, "create user")
 	}
 
 	settings, err := h.userSettingsStore.GetOrCreate(r.Context(), user.ID)
@@ -294,13 +291,14 @@ func (h *AuthHandler) applySettingsUpdate(ctx context.Context, userID string, cu
 //	@Success	200		{object}	AuthResponse
 //	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
 //	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	404		{object}	apierr.ErrorResponse	"user not found"
 //	@Failure	409		{object}	apierr.ErrorResponse	"username already taken"
 //	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/users/me [patch]
 func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	currentUser, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	currentUser, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
 	var req UpdateUserRequest
@@ -336,10 +334,7 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, a
 
 	user, err := h.userStore.UpdateProfile(r.Context(), currentUser.ID, username, firstName, lastName)
 	if err != nil {
-		if errors.Is(err, models.ErrUsernameTaken) {
-			return http.StatusConflict, nil, models.ErrUsernameTaken
-		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("update user profile: %w", err)
+		return storeError(err, "update user profile")
 	}
 
 	settings, status, settingsErr := h.applySettingsUpdate(r.Context(), currentUser.ID, settings, req.Language, req.Theme, req.NoteSort)
@@ -375,9 +370,9 @@ type ChangePasswordRequest struct {
 //	@Failure		500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router			/users/me/password [put]
 func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	currentUser, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	currentUser, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
 	var req ChangePasswordRequest
@@ -441,9 +436,9 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 //	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/me [get]
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
 	settings, err := h.userSettingsStore.GetOrCreate(r.Context(), user.ID)
@@ -616,9 +611,9 @@ func resizeToJPEG(img image.Image, cfg image.Config, maxDim int) ([]byte, error)
 //	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/users/me/profile-icon [post]
 func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	currentUser, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	currentUser, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, profileIconMaxBytes+multipartOverheadBytes)
@@ -675,9 +670,9 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 //	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/users/me/profile-icon [delete]
 func (h *AuthHandler) DeleteProfileIcon(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	currentUser, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	currentUser, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
 	if err := h.userStore.DeleteProfileIcon(r.Context(), currentUser.ID); err != nil {
@@ -736,10 +731,7 @@ func (h *AuthHandler) GetUserProfileIcon(w http.ResponseWriter, r *http.Request)
 
 	data, contentType, err := h.userStore.GetProfileIcon(r.Context(), id)
 	if err != nil {
-		if errors.Is(err, models.ErrUserNotFound) {
-			return http.StatusNotFound, nil, errors.New("user not found")
-		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("fetch profile icon: %w", err)
+		return storeError(err, "fetch profile icon")
 	}
 	if len(data) == 0 {
 		return http.StatusNotFound, nil, errors.New("no profile icon set")

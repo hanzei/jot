@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"unicode/utf8"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/models"
 )
 
@@ -64,10 +62,8 @@ type ReorderNoteItemsRequest struct {
 func (h *NotesHandler) loadListNoteForItemOp(ctx context.Context, noteID, userID string) (*models.Note, int, error) {
 	note, err := h.noteStore.GetByID(ctx, noteID, userID)
 	if err != nil {
-		if errors.Is(err, models.ErrNoteNotFound) {
-			return nil, http.StatusNotFound, err
-		}
-		return nil, http.StatusInternalServerError, fmt.Errorf("get note: %w", err)
+		status, mapped := storeStatus(err, "get note")
+		return nil, status, mapped
 	}
 	if note.NoteType != models.NoteTypeList {
 		return nil, http.StatusBadRequest, errors.New("items can only be modified on list notes")
@@ -136,14 +132,14 @@ func validateItemText(text string) (int, error) {
 //	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/items [post]
 func (h *NotesHandler) CreateNoteItem(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
-	noteID := chi.URLParam(r, "id")
-	if !models.IsValidID(noteID) {
-		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
+	noteID, idErr := pathID(r, "id", "note")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
 	}
 
 	if _, status, err := h.loadListNoteForItemOp(r.Context(), noteID, user.ID); err != nil {
@@ -179,16 +175,10 @@ func (h *NotesHandler) CreateNoteItem(w http.ResponseWriter, r *http.Request) (i
 	// The item-count cap is enforced atomically inside the create transaction.
 	item, err := h.noteStore.CreateItemWithID(r.Context(), noteID, user.ID, itemID, req.Text, req.Position, req.Completed, req.ParentID, req.AssignedTo, noteItemsMaxCount)
 	if err != nil {
-		if errors.Is(err, models.ErrNoteItemExists) {
-			return http.StatusConflict, nil, err
-		}
 		if errors.Is(err, models.ErrNoteItemCapExceeded) {
 			return http.StatusUnprocessableEntity, nil, errItemLimitReached
 		}
-		if errors.Is(err, models.ErrInvalidParentRef) {
-			return http.StatusBadRequest, nil, err
-		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("create item: %w", err)
+		return storeError(err, "create item")
 	}
 
 	h.publishItemChangeEvent(r.Context(), noteID, user.ID)
@@ -212,15 +202,18 @@ func (h *NotesHandler) CreateNoteItem(w http.ResponseWriter, r *http.Request) (i
 //	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/items/{item_id} [patch]
 func (h *NotesHandler) UpdateNoteItem(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
-	noteID := chi.URLParam(r, "id")
-	itemID := chi.URLParam(r, "item_id")
-	if !models.IsValidID(noteID) || !models.IsValidID(itemID) {
-		return http.StatusBadRequest, nil, errors.New("invalid ID format")
+	noteID, idErr := pathID(r, "id", "note")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
+	}
+	itemID, idErr := pathID(r, "item_id", "item")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
 	}
 
 	if _, status, err := h.loadListNoteForItemOp(r.Context(), noteID, user.ID); err != nil {
@@ -252,13 +245,7 @@ func (h *NotesHandler) UpdateNoteItem(w http.ResponseWriter, r *http.Request) (i
 		AssignedTo: req.AssignedTo,
 	})
 	if err != nil {
-		if errors.Is(err, models.ErrNoteItemNotFound) {
-			return http.StatusNotFound, nil, err
-		}
-		if errors.Is(err, models.ErrInvalidParentRef) {
-			return http.StatusBadRequest, nil, err
-		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("update item: %w", err)
+		return storeError(err, "update item")
 	}
 
 	h.publishItemChangeEvent(r.Context(), noteID, user.ID)
@@ -279,15 +266,18 @@ func (h *NotesHandler) UpdateNoteItem(w http.ResponseWriter, r *http.Request) (i
 //	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/items/{item_id} [delete]
 func (h *NotesHandler) DeleteNoteItem(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
-	noteID := chi.URLParam(r, "id")
-	itemID := chi.URLParam(r, "item_id")
-	if !models.IsValidID(noteID) || !models.IsValidID(itemID) {
-		return http.StatusBadRequest, nil, errors.New("invalid ID format")
+	noteID, idErr := pathID(r, "id", "note")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
+	}
+	itemID, idErr := pathID(r, "item_id", "item")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
 	}
 
 	if _, status, err := h.loadListNoteForItemOp(r.Context(), noteID, user.ID); err != nil {
@@ -295,10 +285,7 @@ func (h *NotesHandler) DeleteNoteItem(w http.ResponseWriter, r *http.Request) (i
 	}
 
 	if err := h.noteStore.DeleteItemFromNote(r.Context(), noteID, user.ID, itemID); err != nil {
-		if errors.Is(err, models.ErrNoteItemNotFound) {
-			return http.StatusNotFound, nil, err
-		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("delete item: %w", err)
+		return storeError(err, "delete item")
 	}
 
 	h.publishItemChangeEvent(r.Context(), noteID, user.ID)
@@ -321,14 +308,14 @@ func (h *NotesHandler) DeleteNoteItem(w http.ResponseWriter, r *http.Request) (i
 //	@Failure		500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router			/notes/{id}/items/reorder [post]
 func (h *NotesHandler) ReorderNoteItems(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
-	noteID := chi.URLParam(r, "id")
-	if !models.IsValidID(noteID) {
-		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
+	noteID, idErr := pathID(r, "id", "note")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
 	}
 
 	if _, status, err := h.loadListNoteForItemOp(r.Context(), noteID, user.ID); err != nil {
@@ -349,10 +336,7 @@ func (h *NotesHandler) ReorderNoteItems(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := h.noteStore.ReorderItems(r.Context(), noteID, user.ID, req.ItemIDs); err != nil {
-		if errors.Is(err, models.ErrNoteItemNotFound) {
-			return http.StatusNotFound, nil, err
-		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("reorder items: %w", err)
+		return storeError(err, "reorder items")
 	}
 
 	h.publishItemChangeEvent(r.Context(), noteID, user.ID)
@@ -377,15 +361,18 @@ func (h *NotesHandler) ReorderNoteItems(w http.ResponseWriter, r *http.Request) 
 //	@Failure		500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router			/notes/{id}/items/{item_id}/toggle-completed [post]
 func (h *NotesHandler) ToggleNoteItemCompleted(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
-	noteID := chi.URLParam(r, "id")
-	itemID := chi.URLParam(r, "item_id")
-	if !models.IsValidID(noteID) || !models.IsValidID(itemID) {
-		return http.StatusBadRequest, nil, errors.New("invalid ID format")
+	noteID, idErr := pathID(r, "id", "note")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
+	}
+	itemID, idErr := pathID(r, "item_id", "item")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
 	}
 
 	if _, status, err := h.loadListNoteForItemOp(r.Context(), noteID, user.ID); err != nil {
@@ -402,10 +389,7 @@ func (h *NotesHandler) ToggleNoteItemCompleted(w http.ResponseWriter, r *http.Re
 
 	items, err := h.noteStore.ToggleItemCompleted(r.Context(), noteID, user.ID, itemID, *req.Completed)
 	if err != nil {
-		if errors.Is(err, models.ErrNoteItemNotFound) {
-			return http.StatusNotFound, nil, err
-		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("toggle item completed: %w", err)
+		return storeError(err, "toggle item completed")
 	}
 
 	h.publishItemChangeEvent(r.Context(), noteID, user.ID)
@@ -462,14 +446,14 @@ type DeleteNoteItemsRequest struct {
 //	@Failure		500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router			/notes/{id}/items/set-completed [post]
 func (h *NotesHandler) SetNoteItemsCompleted(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
-	noteID := chi.URLParam(r, "id")
-	if !models.IsValidID(noteID) {
-		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
+	noteID, idErr := pathID(r, "id", "note")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
 	}
 
 	if _, status, err := h.loadListNoteForItemOp(r.Context(), noteID, user.ID); err != nil {
@@ -513,14 +497,14 @@ func (h *NotesHandler) SetNoteItemsCompleted(w http.ResponseWriter, r *http.Requ
 //	@Failure		500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router			/notes/{id}/items/delete [post]
 func (h *NotesHandler) DeleteNoteItems(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
-	noteID := chi.URLParam(r, "id")
-	if !models.IsValidID(noteID) {
-		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
+	noteID, idErr := pathID(r, "id", "note")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
 	}
 
 	if _, status, err := h.loadListNoteForItemOp(r.Context(), noteID, user.ID); err != nil {

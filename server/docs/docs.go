@@ -3336,6 +3336,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
+                    "404": {
+                        "description": "user not found",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
                     "409": {
                         "description": "username already taken",
                         "schema": {

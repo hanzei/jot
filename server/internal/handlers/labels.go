@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/notify"
 	"github.com/hanzei/jot/server/internal/sse"
@@ -69,9 +68,9 @@ type LabelListResponse struct {
 //	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/labels [get]
 func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
 	labels, err := h.labelStore.GetLabels(r.Context(), user.ID)
@@ -93,9 +92,9 @@ func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, 
 //	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/labels/counts [get]
 func (h *LabelsHandler) GetLabelCounts(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
 	counts, err := h.labelStore.GetLabelCounts(r.Context(), user.ID)
@@ -134,9 +133,9 @@ func (h *LabelsHandler) GetLabelCounts(w http.ResponseWriter, r *http.Request) (
 //	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/labels [post]
 func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
 	var req AddLabelRequest
@@ -167,11 +166,8 @@ func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int
 		label, created, err = h.labelStore.GetOrCreateLabel(r.Context(), user.ID, req.Name)
 		if err != nil {
 			// An overlong name still matches an existing label; only a new
-			// one is rejected.
-			if errors.Is(err, models.ErrLabelNameTooLong) {
-				return http.StatusUnprocessableEntity, nil, err
-			}
-			return http.StatusInternalServerError, nil, fmt.Errorf("get or create label: %w", err)
+			// one is rejected (ErrLabelNameTooLong, a 422).
+			return storeError(err, "get or create label")
 		}
 	}
 
@@ -203,10 +199,9 @@ func (h *LabelsHandler) createLabelWithID(ctx context.Context, userID, id, name 
 		return nil, http.StatusConflict, errors.New("label already exists")
 	case errors.Is(err, models.ErrLabelNameConflict):
 		return nil, http.StatusConflict, models.ErrLabelNameConflict
-	case errors.Is(err, models.ErrLabelNameTooLong):
-		return nil, http.StatusUnprocessableEntity, err
 	default:
-		return nil, http.StatusInternalServerError, fmt.Errorf("create label: %w", err)
+		status, mapped := storeStatus(err, "create label")
+		return nil, status, mapped
 	}
 }
 
@@ -227,9 +222,9 @@ func (h *LabelsHandler) createLabelWithID(ctx context.Context, userID, id, name 
 //	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/labels/{id} [patch]
 func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
 	labelID := chi.URLParam(r, "id")
@@ -252,7 +247,7 @@ func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int
 		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
 			return http.StatusNotFound, nil, errors.New("label not found")
 		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("get label note IDs: %w", err)
+		return storeError(err, "get label note IDs")
 	}
 
 	label, err := h.labelStore.RenameLabel(r.Context(), labelID, user.ID, req.Name)
@@ -263,7 +258,7 @@ func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int
 		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
 			return http.StatusNotFound, nil, errors.New("label not found")
 		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("rename label: %w", err)
+		return storeError(err, "rename label")
 	}
 
 	h.events.LabelNoteUpdates(r.Context(), noteIDs, user.ID)
@@ -289,9 +284,9 @@ func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int
 //	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/labels [post]
 func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
 	noteID := chi.URLParam(r, "id")
@@ -308,10 +303,7 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 
 	label, _, err := h.labelStore.GetOrCreateLabel(r.Context(), user.ID, req.Name)
 	if err != nil {
-		if errors.Is(err, models.ErrLabelNameTooLong) {
-			return http.StatusUnprocessableEntity, nil, err
-		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("get or create label: %w", err)
+		return storeError(err, "get or create label")
 	}
 
 	if err = h.noteStore.AddLabelToNote(r.Context(), noteID, label.ID, user.ID); err != nil {
@@ -321,7 +313,7 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
 			return http.StatusNotFound, nil, errors.New("label not found")
 		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("add label to note: %w", err)
+		return storeError(err, "add label to note")
 	}
 
 	note, err := h.noteStore.GetByID(r.Context(), noteID, user.ID)
@@ -349,9 +341,9 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 //	@Failure	500			{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/labels/{label_id} [delete]
 func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
 	noteID := chi.URLParam(r, "id")
@@ -361,7 +353,7 @@ func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int
 		if errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusForbidden, nil, errors.New("no access to note")
 		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("remove label from note: %w", err)
+		return storeError(err, "remove label from note")
 	}
 
 	note, err := h.noteStore.GetByID(r.Context(), noteID, user.ID)
@@ -387,9 +379,9 @@ func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int
 //	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/labels/{id} [delete]
 func (h *LabelsHandler) DeleteLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
 	labelID := chi.URLParam(r, "id")
@@ -398,13 +390,13 @@ func (h *LabelsHandler) DeleteLabel(w http.ResponseWriter, r *http.Request) (int
 		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
 			return http.StatusNotFound, nil, errors.New("label not found")
 		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("get label note IDs: %w", err)
+		return storeError(err, "get label note IDs")
 	}
 	if err := h.labelStore.DeleteLabel(r.Context(), labelID, user.ID); err != nil {
 		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
 			return http.StatusNotFound, nil, errors.New("label not found")
 		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("delete label: %w", err)
+		return storeError(err, "delete label")
 	}
 
 	h.events.LabelNoteUpdates(r.Context(), noteIDs, user.ID)

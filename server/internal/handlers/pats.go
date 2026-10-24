@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/apierr"
-	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/models"
 )
 
@@ -46,9 +45,9 @@ type PATListResponse struct {
 //	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
 //	@Router		/pats [get]
 func (h *PATsHandler) ListPATs(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
 	pats, err := h.patStore.GetByUserID(r.Context(), user.ID)
@@ -82,9 +81,9 @@ func (h *PATsHandler) ListPATs(w http.ResponseWriter, r *http.Request) (int, any
 //	@Failure	422		{object}	apierr.ErrorResponse	"personal access token cap exceeded (pat_limit_reached)"
 //	@Router		/pats [post]
 func (h *PATsHandler) CreatePAT(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
 	var req createPATRequest
@@ -128,16 +127,16 @@ func (h *PATsHandler) CreatePAT(w http.ResponseWriter, r *http.Request) (int, an
 //	@Failure	404	{object}	apierr.ErrorResponse	"not found"
 //	@Router		/pats/{id} [delete]
 func (h *PATsHandler) RevokePAT(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
 	id := chi.URLParam(r, "id")
 
 	deleted, err := h.patStore.Delete(r.Context(), id, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return storeError(err, "delete PAT")
 	}
 	if !deleted {
 		return http.StatusNotFound, nil, errors.New("personal access token not found")

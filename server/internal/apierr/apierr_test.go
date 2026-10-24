@@ -46,6 +46,31 @@ func TestCodeFor(t *testing.T) {
 	}
 }
 
+func TestSentinelStatus(t *testing.T) {
+	tests := []struct {
+		name   string
+		err    error
+		want   int
+		wantOK bool
+	}{
+		{"not found", models.ErrNoteNotFound, http.StatusNotFound, true},
+		{"no access is not found", models.ErrNoteNoAccess, http.StatusNotFound, true},
+		{"version conflict", models.ErrNoteVersionConflict, http.StatusConflict, true},
+		{"wrapped sentinel", fmt.Errorf("update note: %w", models.ErrNoteVersionConflict), http.StatusConflict, true},
+		{"sentinel with a code", models.ErrLastAdmin, http.StatusConflict, true},
+		{"status depends on endpoint", models.ErrLabelNameConflict, 0, false},
+		{"not a sentinel", errors.New("boom"), 0, false},
+		{"nil", nil, 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := SentinelStatus(tt.err)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestWithCodePreservesErrorChain(t *testing.T) {
 	err := WithCode(CodeLastAdmin, models.ErrLastAdmin)
 	require.ErrorIs(t, err, models.ErrLastAdmin)

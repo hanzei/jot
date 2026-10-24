@@ -64,9 +64,9 @@ type SessionListResponse struct {
 //	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
 //	@Router		/sessions [get]
 func (h *SessionsHandler) ListSessions(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
 	currentTokenHash, _ := auth.GetSessionTokenHashFromContext(r.Context())
@@ -96,9 +96,9 @@ func (h *SessionsHandler) ListSessions(w http.ResponseWriter, r *http.Request) (
 //	@Failure	404	{object}	apierr.ErrorResponse	"session not found"
 //	@Router		/sessions/{id} [delete]
 func (h *SessionsHandler) RevokeSession(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
 	targetID := chi.URLParam(r, "id")

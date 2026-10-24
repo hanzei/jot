@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
@@ -89,9 +88,9 @@ type jotExportEnvelope struct {
 //	@Failure		500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router			/notes/export [get]
 func (h *NotesHandler) ExportNotes(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
 	notes, err := h.noteStore.GetOwnedNotesForExport(r.Context(), user.ID)

@@ -1,11 +1,9 @@
 package handlers
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 
-	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/models"
 )
 
@@ -48,9 +46,9 @@ type UserSearchResponse struct {
 //	@Failure		500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router			/users [get]
 func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	currentUser, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	currentUser, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
 	search := r.URL.Query().Get("search")
