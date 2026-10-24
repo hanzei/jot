@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"unicode/utf8"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/models"
 )
 
@@ -208,10 +207,13 @@ func (h *NotesHandler) UpdateNoteItem(w http.ResponseWriter, r *http.Request) (i
 		return http.StatusUnauthorized, nil, authErr
 	}
 
-	noteID := chi.URLParam(r, "id")
-	itemID := chi.URLParam(r, "item_id")
-	if !models.IsValidID(noteID) || !models.IsValidID(itemID) {
-		return http.StatusBadRequest, nil, errors.New("invalid ID format")
+	noteID, idErr := pathID(r, "id", "note")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
+	}
+	itemID, idErr := pathID(r, "item_id", "item")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
 	}
 
 	if _, status, err := h.loadListNoteForItemOp(r.Context(), noteID, user.ID); err != nil {
@@ -269,10 +271,13 @@ func (h *NotesHandler) DeleteNoteItem(w http.ResponseWriter, r *http.Request) (i
 		return http.StatusUnauthorized, nil, authErr
 	}
 
-	noteID := chi.URLParam(r, "id")
-	itemID := chi.URLParam(r, "item_id")
-	if !models.IsValidID(noteID) || !models.IsValidID(itemID) {
-		return http.StatusBadRequest, nil, errors.New("invalid ID format")
+	noteID, idErr := pathID(r, "id", "note")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
+	}
+	itemID, idErr := pathID(r, "item_id", "item")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
 	}
 
 	if _, status, err := h.loadListNoteForItemOp(r.Context(), noteID, user.ID); err != nil {
@@ -361,10 +366,13 @@ func (h *NotesHandler) ToggleNoteItemCompleted(w http.ResponseWriter, r *http.Re
 		return http.StatusUnauthorized, nil, authErr
 	}
 
-	noteID := chi.URLParam(r, "id")
-	itemID := chi.URLParam(r, "item_id")
-	if !models.IsValidID(noteID) || !models.IsValidID(itemID) {
-		return http.StatusBadRequest, nil, errors.New("invalid ID format")
+	noteID, idErr := pathID(r, "id", "note")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
+	}
+	itemID, idErr := pathID(r, "item_id", "item")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
 	}
 
 	if _, status, err := h.loadListNoteForItemOp(r.Context(), noteID, user.ID); err != nil {

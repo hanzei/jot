@@ -291,6 +291,7 @@ func (h *AuthHandler) applySettingsUpdate(ctx context.Context, userID string, cu
 //	@Success	200		{object}	AuthResponse
 //	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
 //	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	404		{object}	apierr.ErrorResponse	"user not found"
 //	@Failure	409		{object}	apierr.ErrorResponse	"username already taken"
 //	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/users/me [patch]

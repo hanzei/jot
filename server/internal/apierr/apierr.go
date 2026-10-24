@@ -134,7 +134,6 @@ var sentinels = []struct {
 	{models.ErrNoteItemExists, http.StatusConflict, ""},
 	{models.ErrNoteVersionConflict, http.StatusConflict, ""},
 	{models.ErrInvalidParentRef, http.StatusBadRequest, ""},
-	{models.ErrNoteTypeUnchanged, http.StatusBadRequest, ""},
 	{models.ErrUsernameTaken, http.StatusConflict, CodeUsernameTaken},
 	{models.ErrNoteAlreadyShared, http.StatusConflict, CodeAlreadyShared},
 	{models.ErrLabelNameConflict, 0, CodeLabelNameTaken},

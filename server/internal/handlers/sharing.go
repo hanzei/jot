@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
@@ -109,13 +108,9 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusBadRequest, nil, idErr
 	}
 
-	userID := chi.URLParam(r, "user_id")
-	if userID == "" {
-		return http.StatusBadRequest, nil, errors.New("missing user_id")
-	}
-
-	if !models.IsValidID(userID) {
-		return http.StatusBadRequest, nil, errors.New("invalid user_id")
+	userID, idErr := pathID(r, "user_id", "user")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
 	}
 
 	// Owners may remove any collaborator. A non-owner may remove only their own

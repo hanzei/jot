@@ -372,16 +372,7 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 	// orphaned or partially-populated note behind.
 	note, err := h.noteStore.CreateWithItems(r.Context(), user.ID, req.ID, req.Title, req.Content, req.NoteType, req.Color, items)
 	if err != nil {
-		switch {
-		case errors.Is(err, models.ErrNoteExists):
-			return http.StatusConflict, nil, fmt.Errorf("create note: %w", err)
-		case errors.Is(err, models.ErrNoteItemExists):
-			return http.StatusConflict, nil, fmt.Errorf("create note item: %w", err)
-		case errors.Is(err, models.ErrInvalidParentRef):
-			return http.StatusBadRequest, nil, fmt.Errorf("create note item: %w", err)
-		default:
-			return http.StatusInternalServerError, nil, fmt.Errorf("create note: %w", err)
-		}
+		return storeError(err, "create note")
 	}
 
 	needRefetch := len(items) > 0

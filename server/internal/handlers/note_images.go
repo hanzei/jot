@@ -269,7 +269,7 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 		if errors.Is(err, models.ErrNoteImageCapExceeded) {
 			return http.StatusUnprocessableEntity, nil, errImageLimitReached
 		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("create note image: %w", err)
+		return storeError(err, "create note image")
 	}
 
 	h.publishNoteImageEvent(r.Context(), noteID, sse.EventNoteImageAdded, sse.NoteImageEventData{NoteID: noteID, Image: img}, user.ID)

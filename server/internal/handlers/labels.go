@@ -166,11 +166,8 @@ func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int
 		label, created, err = h.labelStore.GetOrCreateLabel(r.Context(), user.ID, req.Name)
 		if err != nil {
 			// An overlong name still matches an existing label; only a new
-			// one is rejected.
-			if errors.Is(err, models.ErrLabelNameTooLong) {
-				return http.StatusUnprocessableEntity, nil, err
-			}
-			return http.StatusInternalServerError, nil, fmt.Errorf("get or create label: %w", err)
+			// one is rejected (ErrLabelNameTooLong, a 422).
+			return storeError(err, "get or create label")
 		}
 	}
 
@@ -202,10 +199,9 @@ func (h *LabelsHandler) createLabelWithID(ctx context.Context, userID, id, name 
 		return nil, http.StatusConflict, errors.New("label already exists")
 	case errors.Is(err, models.ErrLabelNameConflict):
 		return nil, http.StatusConflict, models.ErrLabelNameConflict
-	case errors.Is(err, models.ErrLabelNameTooLong):
-		return nil, http.StatusUnprocessableEntity, err
 	default:
-		return nil, http.StatusInternalServerError, fmt.Errorf("create label: %w", err)
+		status, mapped := storeStatus(err, "create label")
+		return nil, status, mapped
 	}
 }
 
