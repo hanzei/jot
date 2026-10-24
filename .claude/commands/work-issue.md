@@ -95,6 +95,7 @@ production:
 - A `shared/` change verified with `task test-shared` only. Both consumers compile
   `shared/src` directly; mobile's Babel setup is the stricter of the two.
 - An API or handler-annotation change without regenerated docs.
+- A store method added or changed without regenerated tracing wrappers (`task gen-go`).
 - A change that breaks existing installations without the migration path the Development
   Status Notice requires.
 

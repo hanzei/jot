@@ -135,6 +135,7 @@ task build-jotctl        # the CLI has its own main; it can break independently
 task test-server
 task lint-server
 task gen-docs && git diff --exit-code docs/
+task check-generated     # a toolchain bump can change go/format output in *_gen.go
 ```
 
 Note the pathspec: git resolves it relative to the current directory, so from `server/` it
