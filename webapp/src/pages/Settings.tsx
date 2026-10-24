@@ -158,15 +158,30 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
     await handleRevokeSession(sessionID);
   };
 
+  // Set once the user picks a language or theme on this page. The mount-time
+  // fetch below may have been answered before that choice was saved, so it
+  // must not overwrite it with the older value.
+  const prefsChangedRef = useRef({ language: false, theme: false });
+
   useEffect(() => {
     auth.me().then(({ settings: serverSettings }) => {
-      setSettings(serverSettings);
-      const langPref = serverSettings.language as LanguagePreference;
-      setLanguagePref(langPref);
-      i18n.changeLanguage(resolveLanguage(langPref));
-      const tPref = serverSettings.theme as ThemePreference;
-      setThemePref(tPref);
-      applyTheme(tPref);
+      const changed = prefsChangedRef.current;
+      const local = getSettings();
+      setSettings({
+        ...serverSettings,
+        ...(changed.language && local ? { language: local.language } : {}),
+        ...(changed.theme && local ? { theme: local.theme } : {}),
+      });
+      if (!changed.language) {
+        const langPref = serverSettings.language as LanguagePreference;
+        setLanguagePref(langPref);
+        i18n.changeLanguage(resolveLanguage(langPref));
+      }
+      if (!changed.theme) {
+        const tPref = serverSettings.theme as ThemePreference;
+        setThemePref(tPref);
+        applyTheme(tPref);
+      }
     }).catch(() => { /* keep cached/system default */ });
   }, []);
 
@@ -228,6 +243,7 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
   };
 
   const handleLanguageChange = async (pref: LanguagePreference) => {
+    prefsChangedRef.current.language = true;
     const prev = languagePref;
     const current = getSettings();
     setLanguagePref(pref);
@@ -249,6 +265,7 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
   };
 
   const handleThemeChange = async (pref: ThemePreference) => {
+    prefsChangedRef.current.theme = true;
     const prev = themePref;
     const current = getSettings();
     setThemePref(pref);
