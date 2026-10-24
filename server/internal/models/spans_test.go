@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"go/ast"
+	"go/build"
 	"go/parser"
 	"go/token"
-	"os"
 	"strings"
 	"testing"
 
@@ -24,11 +24,11 @@ func TestStartSpan(t *testing.T) {
 	tests := []struct {
 		name         string
 		err          error
+		attrs        []attribute.KeyValue
 		wantStatus   codes.Code
 		wantExpected string // error.expected attribute, "" for none
-		wantEvents   int
 	}{
-		{name: "success", err: nil, wantStatus: codes.Ok},
+		{name: "success", attrs: []attribute.KeyValue{attribute.String("note.id", "n1")}, wantStatus: codes.Ok},
 		{name: "expected sentinel", err: ErrNoteNotFound, wantStatus: codes.Ok, wantExpected: ErrNoteNotFound.Error()},
 		{
 			name:         "wrapped expected sentinel",
@@ -36,7 +36,7 @@ func TestStartSpan(t *testing.T) {
 			wantStatus:   codes.Ok,
 			wantExpected: "update note: " + ErrNoteVersionConflict.Error(),
 		},
-		{name: "unexpected error", err: errors.New("database is locked"), wantStatus: codes.Error, wantEvents: 1},
+		{name: "unexpected error", err: errors.New("database is locked"), wantStatus: codes.Error},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -45,7 +45,7 @@ func TestStartSpan(t *testing.T) {
 			tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)).Tracer("test")
 
 			op := func() (err error) {
-				_, end := startSpan(t.Context(), tracer, "Store.Op", &err)
+				_, end := startSpan(t.Context(), tracer, "Store.Op", &err, tt.attrs...)
 				defer end()
 				return tt.err
 			}
@@ -53,31 +53,19 @@ func TestStartSpan(t *testing.T) {
 
 			spans := recorder.Ended()
 			require.Len(t, spans, 1)
-			assert.Equal(t, tt.wantStatus, spans[0].Status().Code)
-			assert.Len(t, spans[0].Events(), tt.wantEvents)
-			var expected string
-			for _, kv := range spans[0].Attributes() {
-				if kv.Key == "error.expected" {
-					expected = kv.Value.AsString()
-				}
+			span := spans[0]
+			assert.Equal(t, "Store.Op", span.Name())
+			assert.Equal(t, tt.wantStatus, span.Status().Code)
+			// Only a failed span records the error as an exception event.
+			assert.Equal(t, tt.wantStatus == codes.Error, len(span.Events()) == 1)
+			for _, kv := range tt.attrs {
+				assert.Contains(t, span.Attributes(), kv)
 			}
-			assert.Equal(t, tt.wantExpected, expected)
+			set := attribute.NewSet(span.Attributes()...)
+			expected, _ := set.Value("error.expected")
+			assert.Equal(t, tt.wantExpected, expected.AsString())
 		})
 	}
-
-	t.Run("attributes", func(t *testing.T) {
-		t.Parallel()
-		recorder := tracetest.NewSpanRecorder()
-		tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)).Tracer("test")
-		var err error
-		_, end := startSpan(t.Context(), tracer, "Store.Op", &err, attribute.String("note.id", "n1"))
-		end()
-
-		spans := recorder.Ended()
-		require.Len(t, spans, 1)
-		assert.Equal(t, "Store.Op", spans[0].Name())
-		assert.Contains(t, spans[0].Attributes(), attribute.String("note.id", "n1"))
-	})
 }
 
 // TestExpectedErrorsCoverSentinels fails when a package-level Err* sentinel is
@@ -122,16 +110,13 @@ func TestExpectedErrorsCoverSentinels(t *testing.T) {
 // this package.
 func packageVars(t *testing.T) []*ast.ValueSpec {
 	t.Helper()
-	entries, err := os.ReadDir(".")
+	bp, err := build.Default.ImportDir(".", 0)
 	require.NoError(t, err)
 
 	fset := token.NewFileSet()
 	var specs []*ast.ValueSpec
-	for _, e := range entries {
-		if !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
-			continue
-		}
-		f, err := parser.ParseFile(fset, e.Name(), nil, 0)
+	for _, name := range bp.GoFiles {
+		f, err := parser.ParseFile(fset, name, nil, 0)
 		require.NoError(t, err)
 		for _, decl := range f.Decls {
 			gd, ok := decl.(*ast.GenDecl)
