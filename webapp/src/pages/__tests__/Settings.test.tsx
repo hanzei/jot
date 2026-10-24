@@ -259,6 +259,56 @@ describe('Settings', () => {
     });
   });
 
+  describe('Late settings fetch', () => {
+    // The mount-time /me can be answered before a change on this page is
+    // saved and arrive after it; that older answer must not undo the change.
+    const holdMe = () => {
+      let release!: () => void;
+      vi.mocked(auth.me).mockReturnValueOnce(new Promise((resolve) => {
+        release = () => resolve({ user: mockUser, settings: defaultSettings });
+      }));
+      return () => act(async () => { release(); });
+    };
+
+    it('keeps a theme picked before it arrives', async () => {
+      const user = userEvent.setup();
+      const saved: UserSettings = { ...defaultSettings, theme: 'dark' };
+      vi.mocked(users.updateMe).mockResolvedValue({ user: mockUser, settings: saved });
+      vi.mocked(authUtils.getSettings).mockReturnValue(saved);
+      const releaseMe = holdMe();
+
+      renderSettings();
+      await user.selectOptions(screen.getByLabelText('App theme'), 'dark');
+      await waitFor(() => expect(users.updateMe).toHaveBeenCalledWith({ theme: 'dark' }));
+      await releaseMe();
+
+      expect(screen.getByLabelText('App theme')).toHaveValue('dark');
+      expect(document.documentElement).toHaveClass('dark');
+      expect(authUtils.setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ theme: 'dark' }));
+      vi.mocked(authUtils.getSettings).mockReturnValue(null);
+      document.documentElement.classList.remove('dark');
+    });
+
+    it('keeps a language picked before it arrives', async () => {
+      const user = userEvent.setup();
+      const saved: UserSettings = { ...defaultSettings, language: 'de' };
+      vi.mocked(users.updateMe).mockResolvedValue({ user: mockUser, settings: saved });
+      vi.mocked(authUtils.getSettings).mockReturnValue(saved);
+      const releaseMe = holdMe();
+
+      renderSettings();
+      await user.selectOptions(screen.getByLabelText('App language'), 'de');
+      await waitFor(() => expect(users.updateMe).toHaveBeenCalledWith({ language: 'de' }));
+      await releaseMe();
+
+      expect(screen.getByRole('combobox', { name: 'App-Sprache' })).toHaveValue('de');
+      expect(i18n.language).toBe('de');
+      expect(authUtils.setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ language: 'de' }));
+      vi.mocked(authUtils.getSettings).mockReturnValue(null);
+      await act(async () => { await i18n.changeLanguage('en'); });
+    });
+  });
+
   describe('Session revocation confirmation', () => {
     const getSessionsSection = async () => {
       const sessionsHeading = await screen.findByRole('heading', { name: i18n.t('settings.sessionsSection') });

@@ -13,7 +13,7 @@ import (
 // rather than just the unpinned note itself.
 func unpinnedOrder(t *testing.T, store *noteStore, userID string) []string {
 	t.Helper()
-	notes, err := store.GetByUserID(t.Context(), userID, false, false, "", "", false)
+	notes, err := store.GetByUserID(t.Context(), userID, NoteFilter{})
 	require.NoError(t, err)
 	titles := make([]string, 0, len(notes))
 	for _, n := range notes {
@@ -34,7 +34,7 @@ func TestUpdateUnpinning(t *testing.T) {
 			// as: D, C, B, A (most recently created first).
 			noteIDs := make([]string, 0, 4)
 			for _, title := range []string{"A", "B", "C", "D"} {
-				n, err := store.Create(ctx, userID, "", title, "", NoteTypeText, DefaultNoteColor)
+				n, err := store.Create(ctx, userID, NewNote{Title: title, Type: NoteTypeText, Color: DefaultNoteColor})
 				require.NoError(t, err)
 				noteIDs = append(noteIDs, n.ID)
 			}
@@ -42,12 +42,12 @@ func TestUpdateUnpinning(t *testing.T) {
 			require.Equal(t, []string{"D", "C", "B", "A"}, unpinnedOrder(t, store, userID))
 
 			pinned := true
-			require.NoError(t, store.Update(ctx, noteB, userID, nil, nil, nil, &pinned, nil, nil, nil))
+			require.NoError(t, store.Update(ctx, noteB, userID, NoteUpdate{Pinned: &pinned}))
 			// Pinning removes B from the unpinned list without touching the others.
 			require.Equal(t, []string{"D", "C", "A"}, unpinnedOrder(t, store, userID))
 
 			unpinned := false
-			require.NoError(t, store.Update(ctx, noteB, userID, nil, nil, nil, &unpinned, nil, nil, nil))
+			require.NoError(t, store.Update(ctx, noteB, userID, NoteUpdate{Pinned: &unpinned}))
 
 			// B returns to the slot it held before being pinned, and A (which sat at
 			// or past that slot) is pushed one further out to make room. D and C,
@@ -75,7 +75,7 @@ func TestUpdateUnpinning(t *testing.T) {
 
 			noteIDs := make([]string, 0, 3)
 			for _, title := range []string{"A", "B", "C"} {
-				n, err := store.Create(ctx, userID, "", title, "", NoteTypeText, DefaultNoteColor)
+				n, err := store.Create(ctx, userID, NewNote{Title: title, Type: NoteTypeText, Color: DefaultNoteColor})
 				require.NoError(t, err)
 				noteIDs = append(noteIDs, n.ID)
 			}
@@ -89,7 +89,7 @@ func TestUpdateUnpinning(t *testing.T) {
 			require.NoError(t, err)
 
 			unpinned := false
-			require.NoError(t, store.Update(ctx, noteToPin, userID, nil, nil, nil, &unpinned, nil, nil, nil))
+			require.NoError(t, store.Update(ctx, noteToPin, userID, NoteUpdate{Pinned: &unpinned}))
 
 			// With no saved slot to restore, B lands at the end of the unpinned
 			// list rather than crashing or silently keeping its stale position.
