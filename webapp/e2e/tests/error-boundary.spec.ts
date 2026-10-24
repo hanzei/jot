@@ -1,4 +1,5 @@
 import { test, expect } from '../fixtures';
+import { readClipboard } from '../fixtures/clipboard';
 
 test.describe('Error boundaries', () => {
   test.beforeEach(async ({ context }) => {
@@ -17,7 +18,7 @@ test.describe('Error boundaries', () => {
 
     await errorFallbackPage.copyDetails(fallback);
     await expect(fallback.getByText('Error details copied')).toBeVisible();
-    const details = JSON.parse(await errorFallbackPage.clipboardText());
+    const details = JSON.parse(await readClipboard(page));
     expect(details.server.version).toEqual(expect.any(String));
     expect(details.webapp.version).toEqual(expect.any(String));
     expect(details.route).toBe('/');
@@ -41,7 +42,7 @@ test.describe('Error boundaries', () => {
 
     await errorFallbackPage.copyDetails(fallback);
     await expect(fallback.getByText('Error details copied')).toBeVisible();
-    expect(JSON.parse(await errorFallbackPage.clipboardText()).route).toBe('/');
+    expect(JSON.parse(await readClipboard(page)).route).toBe('/');
 
     // The header still works, and navigating away in-app clears the error.
     await page.getByRole('button', { name: 'Profile menu' }).click();

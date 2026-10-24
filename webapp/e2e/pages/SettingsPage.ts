@@ -2,6 +2,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import type { Page, Locator } from '@playwright/test';
 import { expect } from '@playwright/test';
+import { failRequests } from '../fixtures/apiErrors';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -149,17 +150,8 @@ export class SettingsPage {
 
   /** Answers every token create with a 500 carrying `requestId`, so the attempt lands in Diagnostics. */
   async failPATCreates(requestId: string) {
-    await this.page.route('**/api/v1/pats', async (route) => {
-      if (route.request().method() !== 'POST') {
-        await route.continue();
-        return;
-      }
-      await route.fulfill({
-        status: 500,
-        headers: { 'X-Request-Id': requestId },
-        contentType: 'application/json',
-        body: JSON.stringify({ error: { code: 'internal', message: 'internal server error' } }),
-      });
+    await failRequests(this.page, '**/api/v1/pats', 'POST', {
+      status: 500, code: 'internal', message: 'internal server error', requestId,
     });
   }
 
@@ -190,7 +182,4 @@ export class SettingsPage {
     return this.page.getByRole('dialog', { name: 'About Jot' });
   }
 
-  async clipboardText(): Promise<string> {
-    return this.page.evaluate(() => navigator.clipboard.readText());
-  }
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { TFunction } from 'i18next';
-import SettingsSectionCard from '@/pages/settings/SettingsSectionCard';
+import SettingsSectionCard, { SETTINGS_BTN_CLASSES } from '@/pages/settings/SettingsSectionCard';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { sso as ssoApi, SSO_LINK_URL } from '@/utils/api';
 import { apiErrorMessage } from '@/utils/apiError';
@@ -81,7 +81,7 @@ export default function SsoSettingsSection({ t, providerName, linked, localLogin
           </p>
           <a
             href={SSO_LINK_URL}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-slate-600 text-sm font-medium rounded-md shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900"
+            className={SETTINGS_BTN_CLASSES}
           >
             {t('settings.ssoConnect', { provider: providerName })}
           </a>

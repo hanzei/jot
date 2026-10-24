@@ -29,6 +29,17 @@ export interface AboutInfo {
   go_version?: string;
 }
 
+/**
+ * A render error caught by an error boundary, as both clients' diagnostics
+ * reports carry it. Name, message and stacks only — never props or state.
+ */
+export interface DiagnosticsCrash {
+  name: string;
+  message: string;
+  stack: string | null;
+  componentStack: string | null;
+}
+
 export type UserRole = 'user' | 'admin';
 
 export interface User {

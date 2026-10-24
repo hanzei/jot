@@ -41,8 +41,4 @@ export class ErrorFallbackPage {
   async copyDetails(fallback: Locator) {
     await fallback.getByRole('button', { name: 'Copy error details' }).click();
   }
-
-  async clipboardText(): Promise<string> {
-    return this.page.evaluate(() => navigator.clipboard.readText());
-  }
 }

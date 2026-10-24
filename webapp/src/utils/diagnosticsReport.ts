@@ -1,14 +1,6 @@
-import type { AboutInfo } from '@jot/shared';
+import type { AboutInfo, DiagnosticsCrash } from '@jot/shared';
 import { getDiagnostics, type DiagnosticsState } from '@/utils/diagnostics';
 import { WEBAPP_BUILD } from '@/utils/buildInfo';
-
-/** A render error caught by an error boundary. Name, message and stacks only — never props or state. */
-export interface DiagnosticsCrash {
-  name: string;
-  message: string;
-  stack: string | null;
-  componentStack: string | null;
-}
 
 export interface DiagnosticsReportInput {
   diagnostics: DiagnosticsState;

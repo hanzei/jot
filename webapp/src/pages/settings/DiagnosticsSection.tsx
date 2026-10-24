@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import SettingsSectionCard, { SETTINGS_BTN_CLASSES } from '@/pages/settings/SettingsSectionCard';
-import InfoRow from '@/components/InfoRow';
+import { InfoRow, InfoSubheading } from '@/components/InfoList';
 import { getDiagnostics, subscribeToDiagnostics, type SSEStatus } from '@/utils/diagnostics';
 import { pageDiagnosticsReport } from '@/utils/diagnosticsReport';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
@@ -13,8 +13,6 @@ const SSE_STATUS_KEYS: Record<SSEStatus, string> = {
   reconnecting: 'settings.diagnosticsSseReconnecting',
   disconnected: 'settings.diagnosticsSseDisconnected',
 };
-
-const SUBHEADING_CLASSES = 'text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2';
 
 /**
  * Live-update state and recent failed requests, for a user to paste into a
@@ -42,7 +40,7 @@ const DiagnosticsSection = () => {
         <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.diagnosticsDescription')}</p>
 
         <div>
-          <h3 className={SUBHEADING_CLASSES}>{t('settings.diagnosticsLiveUpdates')}</h3>
+          <InfoSubheading>{t('settings.diagnosticsLiveUpdates')}</InfoSubheading>
           <dl className="space-y-1">
             <InfoRow label={t('settings.diagnosticsSseStatus')} value={t(SSE_STATUS_KEYS[sse.status])} testId="diagnostics-sse-status" />
             <InfoRow label={t('settings.diagnosticsReconnectAttempts')} value={String(sse.reconnectAttempts)} testId="diagnostics-sse-attempts" />
@@ -54,7 +52,7 @@ const DiagnosticsSection = () => {
         </div>
 
         <div>
-          <h3 className={SUBHEADING_CLASSES}>{t('settings.diagnosticsFailedRequests', { n: failedRequests.length })}</h3>
+          <InfoSubheading>{t('settings.diagnosticsFailedRequests', { n: failedRequests.length })}</InfoSubheading>
           {failedRequests.length === 0 ? (
             <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.diagnosticsNoFailedRequests')}</p>
           ) : (

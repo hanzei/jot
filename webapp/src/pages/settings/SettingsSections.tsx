@@ -567,7 +567,7 @@ export const PreferencesInfoColumn = ({
       <button
         type="button"
         onClick={onOpenAboutModal}
-        className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-slate-600 text-sm font-medium rounded-md shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900"
+        className={SETTINGS_BTN_CLASSES}
       >
         {t('settings.aboutButton')}
       </button>

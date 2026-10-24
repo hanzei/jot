@@ -1,4 +1,5 @@
 import { test, expect } from '../fixtures';
+import { readClipboard } from '../fixtures/clipboard';
 
 // Settings > Diagnostics: live-update state and recent failed requests, plus a
 // JSON report (with both builds) to paste into a bug report. The builds
@@ -44,7 +45,7 @@ test.describe('Settings diagnostics', () => {
     await expect(list).toContainText(`Ref: ${REQUEST_ID}`);
   });
 
-  test('copies the report as JSON', async ({ context, settingsPage }) => {
+  test('copies the report as JSON', async ({ page, context, settingsPage }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await settingsPage.goto();
     await expect(settingsPage.diagnosticsField('sse-status')).toHaveText('Connected');
@@ -54,7 +55,7 @@ test.describe('Settings diagnostics', () => {
 
     await settingsPage.copyDiagnosticsReport();
 
-    const text = await settingsPage.clipboardText();
+    const text = await readClipboard(page);
     // Request bodies are never recorded.
     expect(text).not.toContain('Doomed token');
     const report = JSON.parse(text);

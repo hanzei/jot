@@ -1,5 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
+import { failRequests } from '../fixtures/apiErrors';
+import { readClipboard } from '../fixtures/clipboard';
 
 // A server error toast shows the failed request's X-Request-Id, so a user can
 // quote it and an operator can find the matching server log line and trace.
@@ -8,19 +10,8 @@ const REQUEST_ID = 'e2e0123456789abc';
 const DELETE_FAILED = 'Failed to move note to trash.';
 
 // Answers every note DELETE with the given status and error envelope.
-async function failDeletes(page: Page, status: number, code: string, message: string) {
-  await page.route('**/api/v1/notes/*', async route => {
-    if (route.request().method() !== 'DELETE') {
-      await route.continue();
-      return;
-    }
-    await route.fulfill({
-      status,
-      headers: { 'X-Request-Id': REQUEST_ID },
-      contentType: 'application/json',
-      body: JSON.stringify({ error: { code, message } }),
-    });
-  });
+function failDeletes(page: Page, status: number, code: string, message: string) {
+  return failRequests(page, '**/api/v1/notes/*', 'DELETE', { status, code, message, requestId: REQUEST_ID });
 }
 
 test.describe('Error toast reference', () => {
@@ -43,7 +34,7 @@ test.describe('Error toast reference', () => {
 
     await reference.click();
     await expect(reference).toHaveText('Copied!');
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(REQUEST_ID);
+    expect(await readClipboard(page)).toBe(REQUEST_ID);
   });
 
   test('a client error shows no reference', async ({ page, dashboardPage, toastPage }) => {
