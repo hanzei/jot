@@ -154,10 +154,7 @@ func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) (int, 
 
 	user, err := h.userStore.CreateByAdmin(r.Context(), req.Username, req.Password, req.Role)
 	if err != nil {
-		if errors.Is(err, models.ErrUsernameTaken) {
-			return http.StatusConflict, nil, models.ErrUsernameTaken
-		}
-		return http.StatusInternalServerError, nil, err
+		return storeError(err, "create user")
 	}
 
 	if _, err := h.userSettingsStore.GetOrCreate(r.Context(), user.ID); err != nil {
@@ -198,13 +195,7 @@ func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) (i
 	}
 	user, err := h.userStore.UpdateRole(r.Context(), userID, req.Role)
 	if err != nil {
-		if errors.Is(err, models.ErrUserNotFound) {
-			return http.StatusNotFound, nil, err
-		}
-		if errors.Is(err, models.ErrLastAdmin) {
-			return http.StatusConflict, nil, err
-		}
-		return http.StatusInternalServerError, nil, err
+		return storeError(err, "update user role")
 	}
 	return http.StatusOK, user, nil
 }
@@ -229,9 +220,9 @@ type SetUserPasswordRequest struct {
 //	@Failure		404		{object}	apierr.ErrorResponse	"user not found"
 //	@Router			/admin/users/{id}/password [put]
 func (h *AdminHandler) SetUserPassword(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	requestingUser, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	requestingUser, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
 	targetID := chi.URLParam(r, "id")
@@ -246,10 +237,7 @@ func (h *AdminHandler) SetUserPassword(w http.ResponseWriter, r *http.Request) (
 	}
 
 	if err := h.userStore.UpdatePassword(r.Context(), targetID, req.NewPassword); err != nil {
-		if errors.Is(err, models.ErrUserNotFound) {
-			return http.StatusNotFound, nil, err
-		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("update password: %w", err)
+		return storeError(err, "update password")
 	}
 
 	// Invalidate the target user's existing sessions so no login can continue
@@ -283,9 +271,9 @@ func (h *AdminHandler) SetUserPassword(w http.ResponseWriter, r *http.Request) (
 //	@Router		/admin/users/{id} [delete]
 func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	targetID := chi.URLParam(r, "id")
-	requestingUser, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	requestingUser, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
 	// Deleting the user cascades away both their owned notes' note_images
@@ -309,16 +297,7 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, 
 		},
 	)
 	if err != nil {
-		if errors.Is(err, models.ErrUserNotFound) {
-			return http.StatusNotFound, nil, err
-		}
-		if errors.Is(err, models.ErrLastAdmin) {
-			return http.StatusConflict, nil, err
-		}
-		if errors.Is(err, models.ErrCannotDeleteSelf) {
-			return http.StatusForbidden, nil, err
-		}
-		return http.StatusInternalServerError, nil, err
+		return storeError(err, "delete user")
 	}
 
 	reclaimOrphanedImageBlobs(r.Context(), h.noteStore, h.imageStore, shas)
@@ -344,13 +323,13 @@ type DeleteUserNotesResponse struct {
 //	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/admin/users/{id}/notes [delete]
 func (h *AdminHandler) DeleteUserNotes(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	if _, ok := auth.GetUserFromContext(r.Context()); !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	if _, authErr := requireUser(r); authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
-	targetID := chi.URLParam(r, "id")
-	if !models.IsValidID(targetID) {
-		return http.StatusBadRequest, nil, errors.New("invalid user ID format")
+	targetID, idErr := pathID(r, "id", "user")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
 	}
 
 	deleted, shas, err := h.noteStore.DeleteAllByUser(r.Context(), targetID)

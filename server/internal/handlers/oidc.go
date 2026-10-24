@@ -150,9 +150,9 @@ func (h *OIDCHandler) Link(w http.ResponseWriter, r *http.Request) (int, any, er
 	if !h.localLoginEnabled {
 		return http.StatusForbidden, nil, errSSOLinkUnavailable
 	}
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 	return h.startFlow(w, r, flowState{Intent: oidcIntentLink, UserID: user.ID})
 }
@@ -414,9 +414,9 @@ func (h *OIDCHandler) Unlink(_ http.ResponseWriter, r *http.Request) (int, any, 
 	if !h.localLoginEnabled {
 		return http.StatusForbidden, nil, apierr.New(apierr.CodeSSOUnlinkUnavailable, "unlinking SSO is unavailable when local login is disabled")
 	}
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 	err := h.userStore.UnlinkOIDCIdentity(r.Context(), user.ID)
 	switch {

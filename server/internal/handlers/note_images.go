@@ -11,9 +11,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/apierr"
-	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
@@ -198,14 +196,14 @@ func (h *NotesHandler) storeNoteImage(ctx context.Context, img inspectedNoteImag
 //	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/images [post]
 func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
-	noteID := chi.URLParam(r, "id")
-	if !models.IsValidID(noteID) {
-		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
+	noteID, idErr := pathID(r, "id", "note")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
 	}
 
 	hasAccess, err := h.noteStore.HasAccess(r.Context(), noteID, user.ID)
@@ -293,22 +291,19 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 //	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/images/{id} [get]
 func (h *NotesHandler) GetNoteImage(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
-	imageID := chi.URLParam(r, "id")
-	if !models.IsValidID(imageID) {
-		return http.StatusBadRequest, nil, errors.New("invalid image ID format")
+	imageID, idErr := pathID(r, "id", "image")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
 	}
 
 	img, err := h.loadNoteImageForAccess(r.Context(), imageID, user.ID)
 	if err != nil {
-		if errors.Is(err, models.ErrNoteImageNotFound) {
-			return http.StatusNotFound, nil, err
-		}
-		return http.StatusInternalServerError, nil, err
+		return storeError(err, "load note image")
 	}
 
 	blob, err := h.imageStore.Open(r.Context(), img.SHA256)
@@ -349,22 +344,19 @@ func (h *NotesHandler) GetNoteImage(w http.ResponseWriter, r *http.Request) (int
 //	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/images/{id}/thumbnail [get]
 func (h *NotesHandler) GetNoteImageThumbnail(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
-	imageID := chi.URLParam(r, "id")
-	if !models.IsValidID(imageID) {
-		return http.StatusBadRequest, nil, errors.New("invalid image ID format")
+	imageID, idErr := pathID(r, "id", "image")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
 	}
 
 	img, err := h.loadNoteImageForAccess(r.Context(), imageID, user.ID)
 	if err != nil {
-		if errors.Is(err, models.ErrNoteImageNotFound) {
-			return http.StatusNotFound, nil, err
-		}
-		return http.StatusInternalServerError, nil, err
+		return storeError(err, "load note image")
 	}
 
 	thumb, err := h.imageStore.OpenThumbnail(r.Context(), img.SHA256)
@@ -482,29 +474,23 @@ func (h *NotesHandler) loadNoteImageForAccess(ctx context.Context, imageID, user
 //	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/images/{id} [delete]
 func (h *NotesHandler) DeleteNoteImage(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
-	imageID := chi.URLParam(r, "id")
-	if !models.IsValidID(imageID) {
-		return http.StatusBadRequest, nil, errors.New("invalid image ID format")
+	imageID, idErr := pathID(r, "id", "image")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
 	}
 
 	if _, err := h.loadNoteImageForAccess(r.Context(), imageID, user.ID); err != nil {
-		if errors.Is(err, models.ErrNoteImageNotFound) {
-			return http.StatusNotFound, nil, err
-		}
-		return http.StatusInternalServerError, nil, err
+		return storeError(err, "load note image")
 	}
 
 	deleted, err := h.noteStore.DeleteNoteImage(r.Context(), imageID, user.ID)
 	if err != nil {
-		if errors.Is(err, models.ErrNoteImageNotFound) {
-			return http.StatusNotFound, nil, err
-		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("delete note image: %w", err)
+		return storeError(err, "delete note image")
 	}
 
 	h.reclaimNoteImageBlob(r.Context(), deleted.SHA256)

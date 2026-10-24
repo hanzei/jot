@@ -17,7 +17,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/hanzei/jot/server/internal/apierr"
-	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 )
@@ -466,9 +465,9 @@ func validateJotImportItems(noteIdx int, items []jotImportNoteItem) ([]models.Jo
 //	@Failure		500			{object}	apierr.ErrorResponse	"internal server error"
 //	@Router			/notes/import [post]
 func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
 	// A bundle can take far longer to upload and process than the server-wide

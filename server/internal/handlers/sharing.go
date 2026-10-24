@@ -7,7 +7,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/apierr"
-	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/sse"
@@ -34,17 +33,14 @@ type ShareNoteRequest struct {
 //	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/share [post]
 func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
-	id := chi.URLParam(r, "id")
-	if id == "" {
-		return http.StatusBadRequest, nil, errors.New("missing note ID")
-	}
-	if !models.IsValidID(id) {
-		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
+	id, idErr := pathID(r, "id", "note")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
 	}
 
 	var req ShareNoteRequest
@@ -69,18 +65,12 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, a
 	}
 
 	if _, lookupErr := h.userStore.GetByID(r.Context(), req.UserID); lookupErr != nil {
-		if errors.Is(lookupErr, models.ErrUserNotFound) {
-			return http.StatusNotFound, nil, lookupErr
-		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("get user: %w", lookupErr)
+		return storeError(lookupErr, "get user")
 	}
 
 	err = h.noteStore.ShareNote(r.Context(), id, user.ID, req.UserID)
 	if err != nil {
-		if errors.Is(err, models.ErrNoteAlreadyShared) {
-			return http.StatusConflict, nil, err
-		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("share note: %w", err)
+		return storeError(err, "share note")
 	}
 
 	// Publish personalized events so each recipient sees only their own labels.
@@ -109,17 +99,14 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, a
 //	@Failure		500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router			/notes/{id}/shares/{user_id} [delete]
 func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
-	id := chi.URLParam(r, "id")
-	if id == "" {
-		return http.StatusBadRequest, nil, errors.New("missing note ID")
-	}
-	if !models.IsValidID(id) {
-		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
+	id, idErr := pathID(r, "id", "note")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
 	}
 
 	userID := chi.URLParam(r, "user_id")
@@ -150,10 +137,7 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 
 	err := h.noteStore.UnshareNote(r.Context(), id, userID)
 	if err != nil {
-		if errors.Is(err, models.ErrNoteShareNotFound) {
-			return http.StatusNotFound, nil, err
-		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("unshare note: %w", err)
+		return storeError(err, "unshare note")
 	}
 
 	if audienceErr == nil && h.hub != nil {
@@ -188,17 +172,14 @@ type NoteShareListResponse struct {
 //	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/shares [get]
 func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 
-	id := chi.URLParam(r, "id")
-	if id == "" {
-		return http.StatusBadRequest, nil, errors.New("missing note ID")
-	}
-	if !models.IsValidID(id) {
-		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
+	id, idErr := pathID(r, "id", "note")
+	if idErr != nil {
+		return http.StatusBadRequest, nil, idErr
 	}
 
 	// Anyone with access to the note may see who it is shared with: the owner

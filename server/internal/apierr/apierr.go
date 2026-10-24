@@ -109,23 +109,53 @@ func New(code Code, msg string) error {
 	return WithCode(code, errors.New(msg))
 }
 
-// sentinelCodes maps store sentinels to their specific code, so a handler that
-// returns one of these (wrapped or not) gets the right code without having to
-// attach it. Sentinels without an entry take the status fallback.
-var sentinelCodes = []struct {
-	err  error
-	code Code
+// sentinels maps store sentinels to the status they produce and, for those a
+// client needs to tell apart, a specific code. A handler that returns one of
+// these (wrapped or not) gets the code without having to attach it, and can
+// take the status from [SentinelStatus] rather than mapping it by hand. A zero
+// status means the status depends on the endpoint, so the handler picks it; an
+// empty code means the status's generic code applies. A handler that needs a
+// different status for a sentinel (ErrNoteNoAccess is 403 on the label
+// endpoints) checks for it before falling back to [SentinelStatus].
+var sentinels = []struct {
+	err    error
+	status int
+	code   Code
 }{
-	{models.ErrUsernameTaken, CodeUsernameTaken},
-	{models.ErrNoteAlreadyShared, CodeAlreadyShared},
-	{models.ErrLabelNameConflict, CodeLabelNameTaken},
-	{models.ErrLastAdmin, CodeLastAdmin},
-	{models.ErrCannotDeleteSelf, CodeCannotDeleteSelf},
-	{models.ErrOIDCIdentityLinked, CodeSSOIdentityLinked},
-	{models.ErrWouldStrandAccount, CodeWouldStrandAccount},
-	{models.ErrLabelNameTooLong, CodeLabelNameTooLong},
-	{models.ErrNoteItemCapExceeded, CodeItemLimitReached},
-	{models.ErrNoteImageCapExceeded, CodeImageLimitReached},
+	{models.ErrNoteNotFound, http.StatusNotFound, ""},
+	{models.ErrNoteNoAccess, http.StatusNotFound, ""},
+	{models.ErrNoteNotOwnedByUser, http.StatusNotFound, ""},
+	{models.ErrNoteNotInTrash, http.StatusNotFound, ""},
+	{models.ErrNoteShareNotFound, http.StatusNotFound, ""},
+	{models.ErrNoteItemNotFound, http.StatusNotFound, ""},
+	{models.ErrNoteImageNotFound, http.StatusNotFound, ""},
+	{models.ErrUserNotFound, http.StatusNotFound, ""},
+	{models.ErrNoteExists, http.StatusConflict, ""},
+	{models.ErrNoteItemExists, http.StatusConflict, ""},
+	{models.ErrNoteVersionConflict, http.StatusConflict, ""},
+	{models.ErrInvalidParentRef, http.StatusBadRequest, ""},
+	{models.ErrNoteTypeUnchanged, http.StatusBadRequest, ""},
+	{models.ErrUsernameTaken, http.StatusConflict, CodeUsernameTaken},
+	{models.ErrNoteAlreadyShared, http.StatusConflict, CodeAlreadyShared},
+	{models.ErrLabelNameConflict, 0, CodeLabelNameTaken},
+	{models.ErrLastAdmin, http.StatusConflict, CodeLastAdmin},
+	{models.ErrCannotDeleteSelf, http.StatusForbidden, CodeCannotDeleteSelf},
+	{models.ErrOIDCIdentityLinked, http.StatusConflict, CodeSSOIdentityLinked},
+	{models.ErrWouldStrandAccount, http.StatusUnprocessableEntity, CodeWouldStrandAccount},
+	{models.ErrLabelNameTooLong, http.StatusUnprocessableEntity, CodeLabelNameTooLong},
+	{models.ErrNoteItemCapExceeded, http.StatusUnprocessableEntity, CodeItemLimitReached},
+	{models.ErrNoteImageCapExceeded, http.StatusUnprocessableEntity, CodeImageLimitReached},
+}
+
+// SentinelStatus returns the status for err when it is (or wraps) a store
+// sentinel with a fixed status, and false otherwise.
+func SentinelStatus(err error) (int, bool) {
+	for _, s := range sentinels {
+		if s.status != 0 && errors.Is(err, s.err) {
+			return s.status, true
+		}
+	}
+	return 0, false
 }
 
 // CodeFor picks the code for an error response: always [CodeInternal] for a
@@ -140,8 +170,8 @@ func CodeFor(status int, err error) Code {
 		if errors.As(err, &ce) {
 			return ce.code
 		}
-		for _, s := range sentinelCodes {
-			if errors.Is(err, s.err) {
+		for _, s := range sentinels {
+			if s.code != "" && errors.Is(err, s.err) {
 				return s.code
 			}
 		}

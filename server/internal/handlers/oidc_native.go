@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/oidc"
 )
@@ -165,9 +164,9 @@ func (h *OIDCHandler) NativeLink(w http.ResponseWriter, r *http.Request) (int, a
 	if !h.localLoginEnabled {
 		return http.StatusForbidden, nil, errSSOLinkUnavailable
 	}
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
 	}
 	rec, status, err := h.redeemNativeCode(w, r, oidcIntentLink)
 	if err != nil {
