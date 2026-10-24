@@ -126,7 +126,10 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (_ *Server, err error
 	}
 	undo.push(func() { _ = dbPoolMetrics.Unregister() })
 
-	ctx, cancel := context.WithCancel(context.Background())
+	// Background work derives from ctx, so give it the server's logger: code
+	// logging through logutil.FromContext (such as the slow store operation
+	// warning) would otherwise fall back to the global logrus logger.
+	ctx, cancel := context.WithCancel(logutil.NewContext(context.Background(), logutil.NewRequestLogger(logrus.NewEntry(log))))
 	undo.push(cancel)
 
 	d := &dialect.Dialect{Driver: cfg.DBDriver}
@@ -974,9 +977,9 @@ func (s *Server) StopBackgroundTasks() {
 // profiles as the same startPeriodicTask.func1 frame, with nothing to tell
 // them apart.
 //
-// fn receives ctx carrying the task's logger (with the job field), so code
-// that logs through logutil.FromContext, such as the slow store operation
-// warning, writes to the server's logger rather than the global one.
+// fn receives ctx with the task's logger (the server's, plus the job field),
+// so lines logged through logutil.FromContext, such as the slow store
+// operation warning, say which task ran them.
 func (s *Server) startPeriodicTask(ctx context.Context, job string, interval time.Duration, runNow bool, fn func(ctx context.Context) error, logMsg string) {
 	s.bgWg.Add(1)
 	go func() {
