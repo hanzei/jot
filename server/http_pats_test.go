@@ -200,6 +200,37 @@ func TestPATs(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, resp2.StatusCode)
 	})
 
+	t.Run("Bearer token is used when the session cookie is stale", func(t *testing.T) {
+		ts := setupTestServer(t)
+		u := ts.createTestUser(t, "alice", "password123", false)
+		pat := createPAT(t, ts, u, "stale cookie")
+
+		tests := []struct {
+			name   string
+			path   string
+			token  string
+			status int
+		}{
+			{name: "valid token authenticates", path: "/api/v1/me", token: pat.Token, status: http.StatusOK},
+			{name: "invalid token is rejected", path: "/api/v1/me", token: "not-a-real-token", status: http.StatusUnauthorized},
+			{name: "session-only endpoint still requires a session", path: "/api/v1/pats", token: pat.Token, status: http.StatusForbidden},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+tt.path, nil)
+				require.NoError(t, err)
+				//nolint:gosec // outgoing cookie added to a test request, not a server response
+				req.AddCookie(&http.Cookie{Name: "jot_session", Value: "expired-or-revoked-session"})
+				req.Header.Set("Authorization", "Bearer "+tt.token)
+
+				resp, err := ts.HTTPServer.Client().Do(req)
+				require.NoError(t, err)
+				defer resp.Body.Close()
+				assert.Equal(t, tt.status, resp.StatusCode)
+			})
+		}
+	})
+
 	t.Run("create with empty name returns 400", func(t *testing.T) {
 		ts := setupTestServer(t)
 		u := ts.createTestUser(t, "alice", "password123", false)
