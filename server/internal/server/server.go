@@ -206,10 +206,10 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (_ *Server, err error
 		rateLimiter:     rl,
 	}
 
-	s.startPeriodicTask(ctx, "session-cleanup", time.Hour, false, func() error {
+	s.startPeriodicTask(ctx, "session-cleanup", time.Hour, false, func(ctx context.Context) error {
 		return sessionStore.DeleteExpired(ctx)
 	}, "delete expired sessions")
-	s.startPeriodicTask(ctx, "trash-purge", time.Hour, true, func() error {
+	s.startPeriodicTask(ctx, "trash-purge", time.Hour, true, func(ctx context.Context) error {
 		shas, err := noteStore.PurgeOldTrashedNotes(ctx, 7*24*time.Hour)
 		if err != nil {
 			return err
@@ -221,7 +221,7 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (_ *Server, err error
 		}
 		return nil
 	}, "purge old trashed notes")
-	s.startPeriodicTask(ctx, "image-orphan-sweep", 24*time.Hour, true, func() error {
+	s.startPeriodicTask(ctx, "image-orphan-sweep", 24*time.Hour, true, func(ctx context.Context) error {
 		report, err := blobstore.Sweep(ctx, noteStore, imageStore, imageOrphanSweepGrace)
 		logImageSweepReport(log, report)
 		return err
@@ -915,19 +915,22 @@ func (s *Server) closeResources() error {
 		}
 	}
 
+	// Unregister before closing the pool the callback reads, but close the
+	// database even if unregistering fails.
+	var unregisterErr error
 	if s.dbPoolMetrics != nil {
 		if err := s.dbPoolMetrics.Unregister(); err != nil {
-			return fmt.Errorf("unregister database pool metrics: %w", err)
+			unregisterErr = fmt.Errorf("unregister database pool metrics: %w", err)
 		}
 	}
 
 	if s.db != nil {
 		if err := s.db.Close(); err != nil {
-			return fmt.Errorf("close database: %w", err)
+			return errors.Join(unregisterErr, fmt.Errorf("close database: %w", err))
 		}
 	}
 
-	return nil
+	return unregisterErr
 }
 
 func (s *Server) WaitUntilStarted(ctx context.Context) error {
@@ -969,7 +972,11 @@ func (s *Server) StopBackgroundTasks() {
 // job becomes the goroutine's pprof label. Without it every periodic task
 // profiles as the same startPeriodicTask.func1 frame, with nothing to tell
 // them apart.
-func (s *Server) startPeriodicTask(ctx context.Context, job string, interval time.Duration, runNow bool, fn func() error, logMsg string) {
+//
+// fn receives ctx carrying the task's logger (with the job field), so code
+// that logs through logutil.FromContext, such as the slow store operation
+// warning, writes to the server's logger rather than the global one.
+func (s *Server) startPeriodicTask(ctx context.Context, job string, interval time.Duration, runNow bool, fn func(ctx context.Context) error, logMsg string) {
 	s.bgWg.Add(1)
 	go func() {
 		defer s.bgWg.Done()
@@ -977,10 +984,11 @@ func (s *Server) startPeriodicTask(ctx context.Context, job string, interval tim
 		// is found parked on the ticker.
 		pprof.SetGoroutineLabels(pprof.WithLabels(ctx, pprof.Labels("job", job)))
 		log := s.log.WithField("job", job)
+		taskCtx := logutil.NewContext(ctx, logutil.NewRequestLogger(log))
 		run := func() {
 			start := time.Now() //nolint:gocritic // elapsed task time, never persisted; a duration has no time zone
 			log.Debug("Periodic task started")
-			err := fn()
+			err := fn(taskCtx)
 			done := log.WithField("duration", time.Since(start).String())
 			if err != nil {
 				done.WithError(err).Errorf("Failed to %s", logMsg)

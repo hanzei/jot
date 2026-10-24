@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"github.com/hanzei/jot/server/internal/config"
+	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/sirupsen/logrus"
+	logtest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -76,7 +78,7 @@ func TestStartPeriodicTaskSetsGoroutineLabel(t *testing.T) {
 	})
 
 	ran := make(chan struct{})
-	s.startPeriodicTask(ctx, "test-job", time.Hour, true, func() error {
+	s.startPeriodicTask(ctx, "test-job", time.Hour, true, func(context.Context) error {
 		close(ran)
 		return nil
 	}, "run the test job")
@@ -90,6 +92,46 @@ func TestStartPeriodicTaskSetsGoroutineLabel(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, pprof.Lookup("goroutine").WriteTo(&buf, 1))
 	assert.Contains(t, buf.String(), `"job":"test-job"`)
+}
+
+// TestStartPeriodicTaskContextLogger checks that code logging through the
+// task's context (such as the slow store operation warning) reaches the
+// server's logger with the job field, not the global logrus logger.
+func TestStartPeriodicTaskContextLogger(t *testing.T) {
+	t.Parallel()
+
+	log := logrus.New()
+	log.SetOutput(io.Discard)
+	hook := logtest.NewLocal(log)
+	s := &Server{log: log}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(func() {
+		cancel()
+		s.bgWg.Wait()
+	})
+
+	ran := make(chan struct{})
+	s.startPeriodicTask(ctx, "test-job", time.Hour, true, func(ctx context.Context) error {
+		logutil.FromContext(ctx).Warn("From the task")
+		close(ran)
+		return nil
+	}, "run the test job")
+
+	select {
+	case <-ran:
+	case <-time.After(5 * time.Second):
+		t.Fatal("periodic task did not run")
+	}
+
+	var found bool
+	for _, entry := range hook.AllEntries() {
+		if entry.Message == "From the task" {
+			found = true
+			assert.Equal(t, "test-job", entry.Data["job"])
+		}
+	}
+	assert.True(t, found, "task log line not written to the server logger")
 }
 
 // TestStartCleansUpAfterFailure covers the failed-start path for each way Start
@@ -162,7 +204,7 @@ func TestStartCleansUpAfterFailure(t *testing.T) {
 				cancel:     cancel,
 				startReady: make(chan struct{}),
 			}
-			s.startPeriodicTask(ctx, "test-job", time.Hour, false, func() error { return nil }, "run the test job")
+			s.startPeriodicTask(ctx, "test-job", time.Hour, false, func(context.Context) error { return nil }, "run the test job")
 
 			done := make(chan error, 1)
 			go func() { done <- s.Start(apiAddr) }()

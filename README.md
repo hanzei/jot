@@ -636,7 +636,8 @@ break these queries).
 Every database store operation that takes longer than
 `JOT_SLOW_QUERY_THRESHOLD` (default `500ms`) logs one warning, whether or not
 tracing is on. It names the operation and its duration, plus the `request_id`
-(and `user_id`) of the request that ran it; it never logs query parameters,
+(and `user_id`) of the request that ran it, or the `job` of the background task
+that did; it never logs query parameters,
 which can hold note content:
 
 ```
@@ -655,9 +656,11 @@ connection pool, labelled with the driver as `db_client_connection_pool_name`:
 
 On SQLite, the default, the pool holds a single connection, so one slow
 operation makes every other request wait behind it. The wait counters climb
-when that happens, and the slow-operation warning names the operation that
-held the connection. The dashboard's **Database** row plots both counters and
-the connections in use.
+when that happens. A warning's duration includes any time the operation spent
+queued for the connection, so the operations that waited behind a slow one
+log a warning too: the one that held the connection is usually the earliest
+to start (log time minus duration) and the longest. The dashboard's
+**Database** row plots both counters and the connections in use.
 
 ### Distinguishing environments in the dashboard
 

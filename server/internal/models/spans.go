@@ -35,8 +35,9 @@ func newInstrumentation(slowThreshold time.Duration) instrumentation {
 // carries request_id, when the operation took longer than the slow threshold.
 // That works with tracing off, which is the default: on SQLite's single
 // connection one slow operation stalls every request behind it, and this line
-// names the one that held the connection. It logs the operation name only,
-// never attrs or arguments, which can carry note content.
+// names it. The elapsed time includes any wait for a pool connection, so the
+// operations queued behind a slow one are logged too. It logs the operation
+// name only, never attrs or arguments, which can carry note content.
 //
 // Usage:
 //
