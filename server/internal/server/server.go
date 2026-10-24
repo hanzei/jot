@@ -37,8 +37,10 @@ import (
 	"github.com/sirupsen/logrus"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -57,6 +59,7 @@ type Server struct {
 	log             *logrus.Logger
 	router          chi.Router
 	db              *sql.DB
+	dbPoolMetrics   metric.Registration
 	httpServer      *http.Server
 	debugServer     *http.Server
 	staticRoot      *os.Root
@@ -117,21 +120,27 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (_ *Server, err error
 	}
 	undo.push(func() { _ = db.Close() })
 
+	dbPoolMetrics, err := database.RegisterPoolMetrics(otel.GetMeterProvider().Meter("github.com/hanzei/jot/server"), db, cfg.DBDriver)
+	if err != nil {
+		return nil, fmt.Errorf("initialize database pool metrics: %w", err)
+	}
+	undo.push(func() { _ = dbPoolMetrics.Unregister() })
+
 	ctx, cancel := context.WithCancel(context.Background())
 	undo.push(cancel)
 
 	d := &dialect.Dialect{Driver: cfg.DBDriver}
 
-	userStore := models.NewUserStore(db, d)
-	noteStore := models.NewNoteStore(db, d)
-	labelStore := models.NewLabelStore(db, d)
-	adminStatsStore := models.NewAdminStatsStore(db, d)
-	sessionStore, err := models.NewSessionStore(db, d)
+	userStore := models.NewUserStore(db, d, cfg.SlowQueryThreshold)
+	noteStore := models.NewNoteStore(db, d, cfg.SlowQueryThreshold)
+	labelStore := models.NewLabelStore(db, d, cfg.SlowQueryThreshold)
+	adminStatsStore := models.NewAdminStatsStore(db, d, cfg.SlowQueryThreshold)
+	sessionStore, err := models.NewSessionStore(db, d, cfg.SlowQueryThreshold)
 	if err != nil {
 		return nil, fmt.Errorf("initialize session store: %w", err)
 	}
-	userSettingsStore := models.NewUserSettingsStore(db, d)
-	patStore := models.NewPATStore(db, d)
+	userSettingsStore := models.NewUserSettingsStore(db, d, cfg.SlowQueryThreshold)
+	patStore := models.NewPATStore(db, d, cfg.SlowQueryThreshold)
 
 	sessionService := auth.NewSessionService(sessionStore, userStore, patStore, cfg.CookieSecure)
 
@@ -177,6 +186,7 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (_ *Server, err error
 		log:             log,
 		router:          chi.NewRouter(),
 		db:              db,
+		dbPoolMetrics:   dbPoolMetrics,
 		startReady:      make(chan struct{}),
 		ctx:             ctx,
 		cancel:          cancel,
@@ -902,6 +912,12 @@ func (s *Server) closeResources() error {
 	if s.imageStore != nil {
 		if err := s.imageStore.Close(); err != nil {
 			return fmt.Errorf("close image store: %w", err)
+		}
+	}
+
+	if s.dbPoolMetrics != nil {
+		if err := s.dbPoolMetrics.Unregister(); err != nil {
+			return fmt.Errorf("unregister database pool metrics: %w", err)
 		}
 	}
 

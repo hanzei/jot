@@ -8,7 +8,7 @@ import (
 )
 
 func (s *NoteStore) GetNoteShares(ctx context.Context, noteID string) (_ []NoteShare, err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetNoteShares", &err,
+	ctx, end := startSpan(ctx, s.instr, "NoteStore.GetNoteShares", &err,
 		attribute.String("note.id", noteID),
 	)
 	defer end()
@@ -16,7 +16,7 @@ func (s *NoteStore) GetNoteShares(ctx context.Context, noteID string) (_ []NoteS
 }
 
 func (s *NoteStore) ShareNote(ctx context.Context, noteID string, sharedByUserID, sharedWithUserID string) (err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.ShareNote", &err,
+	ctx, end := startSpan(ctx, s.instr, "NoteStore.ShareNote", &err,
 		attribute.String("note.id", noteID),
 		attribute.String("shared_with.user.id", sharedWithUserID),
 	)
@@ -25,7 +25,7 @@ func (s *NoteStore) ShareNote(ctx context.Context, noteID string, sharedByUserID
 }
 
 func (s *NoteStore) UnshareNote(ctx context.Context, noteID string, sharedWithUserID string) (err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.UnshareNote", &err,
+	ctx, end := startSpan(ctx, s.instr, "NoteStore.UnshareNote", &err,
 		attribute.String("note.id", noteID),
 		attribute.String("shared_with.user.id", sharedWithUserID),
 	)
@@ -34,7 +34,7 @@ func (s *NoteStore) UnshareNote(ctx context.Context, noteID string, sharedWithUs
 }
 
 func (s *NoteStore) ClearUserAssignmentsTx(ctx context.Context, tx *sql.Tx, userID string) (err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.ClearUserAssignmentsTx", &err)
+	ctx, end := startSpan(ctx, s.instr, "NoteStore.ClearUserAssignmentsTx", &err)
 	defer end()
 	return s.inner.ClearUserAssignmentsTx(ctx, tx, userID)
 }

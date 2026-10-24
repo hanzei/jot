@@ -8,7 +8,7 @@ import (
 )
 
 func (s *NoteStore) MarkViewed(ctx context.Context, noteID, userID string, viewedAt time.Time) (_ bool, err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.MarkViewed", &err,
+	ctx, end := startSpan(ctx, s.instr, "NoteStore.MarkViewed", &err,
 		attribute.String("note.id", noteID),
 	)
 	defer end()
