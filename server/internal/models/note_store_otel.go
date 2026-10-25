@@ -257,6 +257,46 @@ func (s *NoteStore) RemoveLabelFromNote(ctx context.Context, noteID, labelID, us
 	return s.inner.RemoveLabelFromNote(ctx, noteID, labelID, userID)
 }
 
+func (s *NoteStore) GetNoteShares(ctx context.Context, noteID string) (_ []NoteShare, err error) {
+	ctx, end := startSpan(ctx, s.instr, "NoteStore.GetNoteShares", &err,
+		attribute.String("note.id", noteID),
+	)
+	defer end()
+	return s.inner.GetNoteShares(ctx, noteID)
+}
+
+func (s *NoteStore) ShareNote(ctx context.Context, noteID string, sharedByUserID, sharedWithUserID string) (err error) {
+	ctx, end := startSpan(ctx, s.instr, "NoteStore.ShareNote", &err,
+		attribute.String("note.id", noteID),
+		attribute.String("shared_with.user.id", sharedWithUserID),
+	)
+	defer end()
+	return s.inner.ShareNote(ctx, noteID, sharedByUserID, sharedWithUserID)
+}
+
+func (s *NoteStore) UnshareNote(ctx context.Context, noteID string, sharedWithUserID string) (err error) {
+	ctx, end := startSpan(ctx, s.instr, "NoteStore.UnshareNote", &err,
+		attribute.String("note.id", noteID),
+		attribute.String("shared_with.user.id", sharedWithUserID),
+	)
+	defer end()
+	return s.inner.UnshareNote(ctx, noteID, sharedWithUserID)
+}
+
+func (s *NoteStore) ClearUserAssignmentsTx(ctx context.Context, tx *sql.Tx, userID string) (err error) {
+	ctx, end := startSpan(ctx, s.instr, "NoteStore.ClearUserAssignmentsTx", &err)
+	defer end()
+	return s.inner.ClearUserAssignmentsTx(ctx, tx, userID)
+}
+
+func (s *NoteStore) MarkViewed(ctx context.Context, noteID, userID string, viewedAt time.Time) (_ bool, err error) {
+	ctx, end := startSpan(ctx, s.instr, "NoteStore.MarkViewed", &err,
+		attribute.String("note.id", noteID),
+	)
+	defer end()
+	return s.inner.MarkViewed(ctx, noteID, userID, viewedAt)
+}
+
 func (s *NoteStore) CreateNoteImage(ctx context.Context, noteID, uploaderID, filename, contentType string, sizeBytes int64, sha256 string, width, height, maxImages int) (_ *NoteImage, err error) {
 	ctx, end := startSpan(ctx, s.instr, "NoteStore.CreateNoteImage", &err,
 		attribute.String("note.id", noteID),
