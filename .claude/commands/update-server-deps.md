@@ -41,14 +41,19 @@ Sort what you find into three buckets, because each has a different risk profile
 ### Coupled families
 
 **OpenTelemetry** is the big one. `go.opentelemetry.io/otel*` modules are released as a
-set with three parallel version lines that must stay consistent with each other:
+set with parallel version lines that must stay consistent with each other:
 
 | Line | Current | Modules |
 |---|---|---|
-| Stable | `v1.46.0` | `otel`, `otel/trace`, `otel/metric`, `otel/sdk`, `exporters/otlp/otlp{trace,metric}*`, `exporters/stdout/stdouttrace` |
-| Experimental log | `v0.22.0` | `otel/log`, `otel/sdk/log`, `exporters/otlp/otlplog/*`, `exporters/stdout/stdoutlog` |
-| Prometheus exporter | `v0.68.0` | `exporters/prometheus` |
-| Contrib | `v0.20.1` / `v0.71.0` | `contrib/bridges/otellogrus`, `contrib/instrumentation/*` |
+| Stable | `v1.47.0` | `otel`, `otel/trace`, `otel/metric`, `otel/sdk`, `otel/log`, `otel/sdk/log`, `exporters/otlp/otlp{trace,metric}*`, `exporters/stdout/stdouttrace` |
+| Experimental log exporters | `v0.23.0` | `exporters/otlp/otlplog/*`, `exporters/stdout/stdoutlog` |
+| Prometheus exporter | `v0.69.0` | `exporters/prometheus` |
+| Contrib | `v0.21.0` / `v0.72.0` | `contrib/bridges/otellogrus`, `contrib/instrumentation/*` |
+
+The Logs API and SDK (`otel/log`, `otel/sdk/log`) went stable in v1.47.0 and jumped from
+`v0.22.0` straight onto the stable line; only the log *exporters* are still `v0.x`. The
+quickest consistency check is to read each exporter's and contrib module's `go.mod` on
+`proxy.golang.org` and confirm they all require the same stable version.
 
 Mixing lines (e.g. stable `1.45` with a log exporter still on the `1.44`-era `0.20`)
 compiles but panics or silently drops signals at runtime. Bump every OTel module in one
@@ -87,12 +92,16 @@ go build ./... && task test-server && task lint-server
 does **not** touch them, because no package imports them.
 
 ```bash
-go get -u tool     # upgrades every module in the tool block
+go get github.com/golangci/golangci-lint/v2@vX.Y.Z github.com/swaggo/swag@vX.Y.Z
 go mod tidy
 ```
 
-If your Go version rejects the `tool` meta-pattern, name the modules explicitly:
-`go get -u github.com/golangci/golangci-lint/v2 github.com/swaggo/swag`.
+Name the versions and leave off `-u`. `go get -u tool` (or `-u` on the module names) also
+raises every *transitive* dependency of the tools to its latest release, past what the
+linter was built and tested against. In practice that does not compile: a `gobwas/glob`
+bump left depguard and protogetter with `undefined: glob.Glob`, and `go-openapi/spec`
+jumped from v0.22 to v1.0 under swag. Without `-u`, MVS keeps the versions the tool's own
+`go.mod` pins, which is the combination its release was tested with.
 
 Two things reliably break here — expect them rather than being surprised:
 
