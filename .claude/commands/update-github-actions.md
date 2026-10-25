@@ -10,10 +10,11 @@ Local composite actions live in `.github/actions/` (today just `setup-task`); th
 `action.yml` files carry external `uses:` pins too, so every grep below covers both
 directories — a pin there drifts silently if a check only looks at the workflows.
 
-Dependabot (`.github/dependabot.yml`) opens one grouped PR a month that re-pins these
-actions to current SHAs, so routine drift is already handled — this command is for the work
-Dependabot cannot do: bumping majors, reconciling the same action pinned to two different
-SHAs across workflows, and reviewing runner labels, permissions, and path filters. Expect
+Dependabot (`.github/dependabot.yml`) opens one grouped PR a month per directory (the
+workflows, plus each composite action) that re-pins these actions to current SHAs, so
+routine drift is already handled — this command is for the work Dependabot cannot do:
+bumping majors, reconciling the same action pinned to two different SHAs across
+workflows, and reviewing runner labels, permissions, and path filters. Expect
 the inventory in step 1 to be closer to current than it would be otherwise; that is
 Dependabot working, not a reason to skip the sweep.
 
