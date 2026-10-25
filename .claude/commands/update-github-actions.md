@@ -6,11 +6,15 @@ description: Re-pin GitHub Actions to current commit SHAs, bump action majors, a
 
 Nine workflows live in `.github/workflows/`: `server-ci`, `webapp-ci`, `shared-ci`,
 `mobile-ci`, `mobile-apk`, `mobile-e2e`, `docker`, `docker-cleanup`, and `release`.
+Local composite actions live in `.github/actions/` (today just `setup-task`); their
+`action.yml` files carry external `uses:` pins too, so every grep below covers both
+directories — a pin there drifts silently if a check only looks at the workflows.
 
-Dependabot (`.github/dependabot.yml`) opens one grouped PR a month that re-pins these
-actions to current SHAs, so routine drift is already handled — this command is for the work
-Dependabot cannot do: bumping majors, reconciling the same action pinned to two different
-SHAs across workflows, and reviewing runner labels, permissions, and path filters. Expect
+Dependabot (`.github/dependabot.yml`) opens one grouped PR a month per directory (the
+workflows, plus each composite action) that re-pins these actions to current SHAs, so
+routine drift is already handled — this command is for the work Dependabot cannot do:
+bumping majors, reconciling the same action pinned to two different SHAs across
+workflows, and reviewing runner labels, permissions, and path filters. Expect
 the inventory in step 1 to be closer to current than it would be otherwise; that is
 Dependabot working, not a reason to skip the sweep.
 
@@ -30,7 +34,7 @@ git checkout -b chore/update-github-actions   # or the branch you were told to u
 ## 1. Inventory
 
 ```bash
-grep -rhoE 'uses: [^ ]+@[0-9a-f]{40} # \S+' .github/workflows | sort -u
+grep -rhoE 'uses: [^ ]+@[0-9a-f]{40} # \S+' .github/workflows .github/actions | sort -u
 ```
 
 That lists what is pinned, but by construction it can only show refs that are *already*
@@ -38,7 +42,7 @@ compliant — an `actions/cache@v4` slipped in by hand is invisible to it. So st
 the complement: every external `uses:` that is **not** a SHA-plus-comment pin.
 
 ```bash
-grep -rnE '^\s*(- )?uses:' .github/workflows \
+grep -rnE '^\s*(- )?uses:' .github/workflows .github/actions \
   | grep -v 'uses: \./' \
   | grep -vE 'uses: [^ ]+@[0-9a-f]{40} +# \S+'
 ```
@@ -53,7 +57,7 @@ workflows, the failure mode this repo is most prone to because `actions/checkout
 appears in eight files:
 
 ```bash
-grep -rhoE '[A-Za-z0-9._/-]+@[0-9a-f]{40}' .github/workflows \
+grep -rhoE '[A-Za-z0-9._/-]+@[0-9a-f]{40}' .github/workflows .github/actions \
   | sort -u | cut -d@ -f1 | uniq -d
 ```
 
@@ -91,7 +95,7 @@ Batch same-major re-pins; give each **major** its own commit. Move every workflo
 together — a scripted replace is more reliable than seven manual edits:
 
 ```bash
-grep -rl 'actions/upload-artifact@OLDSHA' .github/workflows \
+grep -rl 'actions/upload-artifact@OLDSHA' .github/workflows .github/actions \
   | xargs sed -i 's|actions/upload-artifact@OLDSHA # v<old>|actions/upload-artifact@NEWSHA # v<new>|g'
 ```
 
@@ -176,9 +180,9 @@ There is no local runner, so verification is mostly static:
 actionlint            # if installed: syntax, expression, and shellcheck on run: blocks
 
 # both §1 checks again — every external ref pinned, and each action on one SHA
-grep -rnE '^\s*(- )?uses:' .github/workflows | grep -v 'uses: \./' \
+grep -rnE '^\s*(- )?uses:' .github/workflows .github/actions | grep -v 'uses: \./' \
   | grep -vE 'uses: [^ ]+@[0-9a-f]{40} +# \S+'
-grep -rhoE '[A-Za-z0-9._/-]+@[0-9a-f]{40}' .github/workflows | sort -u | cut -d@ -f1 | uniq -d
+grep -rhoE '[A-Za-z0-9._/-]+@[0-9a-f]{40}' .github/workflows .github/actions | sort -u | cut -d@ -f1 | uniq -d
 ```
 
 Both must print nothing. Re-running the first one here is the point: a hand-edited
