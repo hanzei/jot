@@ -829,6 +829,14 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     (lastFocusedElementRef.current as HTMLElement | null)?.focus();
   };
 
+  // The modal created a note without closing (an image picked on an unsaved
+  // note): keep it open on the new note so the upload can attach to it.
+  const handleNoteCreated = (note: Note) => {
+    void Promise.all([loadNotes(), loadLabelCounts()]);
+    loadLabels();
+    setEditingNote(note);
+  };
+
   const handleNoteRefresh = () => {
     void Promise.all([loadNotes(), loadLabelCounts()]);
     loadLabels();
@@ -1516,6 +1524,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
               (lastFocusedElementRef.current as HTMLElement | null)?.focus();
             }}
             onSave={handleNoteUpdate}
+            onCreated={handleNoteCreated}
             onRefresh={handleNoteRefresh}
             onShare={handleShareNote}
             onDelete={handleDeleteNote}

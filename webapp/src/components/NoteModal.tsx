@@ -137,6 +137,10 @@ interface NoteModalProps {
   note?: Note | null;
   onClose: () => void;
   onSave: () => void;
+  // Called when the modal creates a brand-new note without closing (picking
+  // an image on an unsaved note). The caller should pass the created note
+  // back in as `note` so the modal continues editing it.
+  onCreated?: (note: Note) => void;
   onRefresh?: () => void;
   onShare?: (note: Note) => void;
   onDelete?: (noteId: string) => void;
@@ -160,7 +164,7 @@ interface NoteModalProps {
   initialContent?: string | undefined;
 }
 
-export default function NoteModal({ note = null, onClose, onSave, onRefresh, onShare, onDelete, onDuplicate, onConvert, onRestore, onPermanentlyDelete, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent }: NoteModalProps) {
+export default function NoteModal({ note = null, onClose, onSave, onCreated, onRefresh, onShare, onDelete, onDuplicate, onConvert, onRestore, onPermanentlyDelete, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent }: NoteModalProps) {
   const { t, i18n } = useTranslation();
   const { showToast, showErrorToast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -218,15 +222,63 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
     };
   }, []);
 
+  const buildCreateRequest = (): CreateNoteRequest => (noteType === 'list'
+    ? {
+        note_type: 'list',
+        title,
+        color,
+        // The bulk create path is positional: it reconstructs parent_id by
+        // attaching each indented item to the nearest preceding top-level
+        // one. items is kept in normalized order (a parent precedes its
+        // children), so deriving indent_level from parentId is sufficient.
+        items: items.map((item, idx) => ({
+          id: item.id,
+          text: item.text,
+          position: idx,
+          completed: item.completed,
+          indent_level: indentOf(item),
+        })),
+        labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
+      }
+    : {
+        note_type: 'text',
+        content,
+        color,
+        labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
+      });
+
+  // Images picked on a note that doesn't exist yet. Uploads need a note id,
+  // so the note is created first — even when it is otherwise empty, which is
+  // what makes an image-only note possible — and the files are queued once
+  // the caller has passed the created note back in (see the effect below).
+  const pendingNewNoteImagesRef = useRef<{ noteId: string; files: File[] } | null>(null);
+  const createNoteForImages = async (files: File[]) => {
+    if (!onCreated || !beginExclusiveSave()) return;
+    cancelPendingSave();
+    setLoading(true);
+    try {
+      const created = await notes.create(buildCreateRequest());
+      pendingNewNoteImagesRef.current = { noteId: created.id, files };
+      onCreated(created);
+    } catch (error) {
+      reportSaveFailure('Failed to save note:', error);
+    } finally {
+      endExclusiveSave();
+      setLoading(false);
+    }
+  };
+
   // Note image add/remove UI (upload queue, optimistic overlay, deferred
   // removal undo, drag-to-upload). Uploads require an existing note — an id to
-  // attach to — so the hook gates all of it on `note` being set.
+  // attach to — so the hook gates all of it on `note` being set, except the
+  // toolbar picker, which hands its files to createNoteForImages instead.
   const {
     displayedImages,
     imageUploads,
     removedImages,
     isDraggingImage,
     imageFileInputRef,
+    queueImageFiles,
     handleImageFileInputChange,
     handleImageDragEnter,
     handleImageDragOver,
@@ -238,7 +290,13 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
     retryImageUpload,
     removeUploadTile,
     resetForNoteSwitch: resetImagesForNoteSwitch,
-  } = useNoteImages({ note, uploadMaxBytes, onRefresh, showError });
+  } = useNoteImages({
+    note,
+    uploadMaxBytes,
+    onRefresh,
+    showError,
+    onFilesForNewNote: onCreated ? (files) => { void createNoteForImages(files); } : undefined,
+  });
 
   // Tracks the note id whose state we have adopted into local editor state, so
   // we can tell "switched to a different note" (always adopt) apart from "same
@@ -418,6 +476,16 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
 
     adoptNote(note);
   }, [adoptNote, note, hasUnflushedWork, resetImagesForNoteSwitch, resetCompletedItemsForNoteSwitch]);
+
+  // Second half of createNoteForImages: once the created note has been
+  // adopted (the effect above, which also resets the upload queue on the
+  // switch from no note), upload the files that were picked for it.
+  useEffect(() => {
+    const pending = pendingNewNoteImagesRef.current;
+    if (!pending || note?.id !== pending.noteId) return;
+    pendingNewNoteImagesRef.current = null;
+    queueImageFiles(pending.files);
+  }, [note?.id, queueImageFiles]);
 
   useEffect(() => {
     if (!showColorPicker) return;
@@ -1325,31 +1393,7 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
       if (note) {
         await persistExistingNote();
       } else {
-        const createData: CreateNoteRequest = noteType === 'list'
-          ? {
-              note_type: 'list',
-              title,
-              color,
-              // The bulk create path is positional: it reconstructs parent_id by
-              // attaching each indented item to the nearest preceding top-level
-              // one. items is kept in normalized order (a parent precedes its
-              // children), so deriving indent_level from parentId is sufficient.
-              items: items.map((item, idx) => ({
-                id: item.id,
-                text: item.text,
-                position: idx,
-                completed: item.completed,
-                indent_level: indentOf(item),
-              })),
-              labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
-            }
-          : {
-              note_type: 'text',
-              content,
-              color,
-              labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
-            };
-        await notes.create(createData);
+        await notes.create(buildCreateRequest());
       }
       onSave();
     } catch (error) {
@@ -2457,7 +2501,10 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
                   <Palette className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                 </button>
 
-                {note && (
+                {/* Add image. On an unsaved note, picking a file creates the
+                    note first (createNoteForImages), so a note can be just an
+                    image. */}
+                {(note || onCreated) && (
                   <>
                     <input
                       ref={imageFileInputRef}
@@ -2471,13 +2518,18 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
                     <button
                       type="button"
                       onClick={() => !isReadOnly && imageFileInputRef.current?.click()}
-                      disabled={isReadOnly}
+                      disabled={isReadOnly || loading}
                       className={`p-1 rounded-full transition-colors ${isReadOnly ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-200 dark:hover:bg-slate-700'}`}
                       title={t('images.addImage')}
                       aria-label={t('images.addImage')}
                     >
                       <Image className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                     </button>
+                  </>
+                )}
+
+                {note && (
+                  <>
                     <button
                       onClick={handlePinToggle}
                       disabled={isReadOnly}

@@ -136,6 +136,28 @@ test.describe('Note image gallery', () => {
     await expect(page.getByRole('dialog').last().getByAltText('test-icon.png')).toBeVisible();
   });
 
+  test('creates an image-only note when an image is picked on a blank new note', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    const before = await page.request.get('/api/v1/notes');
+    const { notes: notesBefore }: { notes: unknown[] } = await before.json();
+
+    await dashboardPage.clickNewNote();
+    const dialog = page.getByRole('dialog').last();
+    await dialog.getByTestId('note-image-file-input').setInputFiles(path.join(__dirname, '../fixtures/test-icon.png'));
+
+    // The modal stays open on the newly created note and shows the upload.
+    await expect(dialog.getByAltText('test-icon.png')).toBeVisible();
+    await expect(dialog.getByTestId('image-upload-tile')).not.toBeAttached();
+
+    await dashboardPage.closeNoteModal();
+    await expect.poll(async () => {
+      const after = await page.request.get('/api/v1/notes');
+      const { notes: notesAfter }: { notes: Array<{ content: string; images?: unknown[] }> } = await after.json();
+      if (notesAfter.length !== notesBefore.length + 1) return null;
+      return notesAfter.filter((n) => n.content === '' && (n.images?.length ?? 0) === 1).length;
+    }).toBe(1);
+  });
+
   test('removes an image via the bin icon and undo restores it', async ({ page, dashboardPage }) => {
     await dashboardPage.goto();
     const title = `Remove undo note ${Date.now()}`;

@@ -16,6 +16,10 @@ interface UseNoteImagesOptions {
   onRefresh?: (() => void) | undefined;
   // Surfaces a validation/upload error in the modal's own error banner.
   showError: (message: string) => void;
+  // Receives the files that passed validation when the toolbar picker is used
+  // on a note that doesn't exist yet. The caller creates the note and then
+  // hands the files back to queueImageFiles once `note` is set.
+  onFilesForNewNote?: ((files: File[]) => void) | undefined;
 }
 
 // useNoteImages owns the note-image add/remove UI: the upload queue and its
@@ -23,7 +27,7 @@ interface UseNoteImagesOptions {
 // self-echo, the client-deferred removal undo window, and the drag-to-upload
 // state. These are coupled to each other and barely to the rest of the editor,
 // which is what makes them separable; the caller only renders what comes back.
-export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError }: UseNoteImagesOptions) {
+export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError, onFilesForNewNote }: UseNoteImagesOptions) {
   const { t } = useTranslation();
 
   const [imageUploads, setImageUploads] = useState<PendingImageUpload[]>([]);
@@ -188,15 +192,17 @@ export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError }: Us
   // Entry point for the toolbar picker, drag & drop, and paste. Validates
   // each file and enforces the per-note image cap client-side (the server
   // enforces it authoritatively) before starting an upload per valid file.
+  // Without a note, the valid files go to onFilesForNewNote instead, so a
+  // note is only created when there is something to upload to it.
   const queueImageFiles = useCallback((files: File[]) => {
-    if (!note || files.length === 0) return;
+    if (files.length === 0 || (!note && !onFilesForNewNote)) return;
 
-    const noteImages = note.images ?? [];
+    const noteImages = note?.images ?? [];
     const confirmedIds = new Set(noteImages.map(img => img.id));
     // Images this session already uploaded to this note that note.images
     // doesn't reflect yet (see optimisticImages above) still occupy a slot.
     const unconfirmedOptimisticCount = optimisticImagesRef.current.filter(
-      e => e.noteId === note.id && !confirmedIds.has(e.image.id)
+      e => e.noteId === note?.id && !confirmedIds.has(e.image.id)
     ).length;
     let remainingSlots = IMAGE_MAX_PER_NOTE
       - noteImages.length
@@ -208,6 +214,7 @@ export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError }: Us
     // several invalid files in one action would otherwise only ever surface
     // the last file's error.
     const errors = new Set<string>();
+    const accepted: File[] = [];
     for (const file of files) {
       const validationError = validateImageFile(file);
       if (validationError) {
@@ -219,10 +226,16 @@ export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError }: Us
         break;
       }
       remainingSlots -= 1;
-      startImageUpload(file);
+      accepted.push(file);
     }
     if (errors.size > 0) showError(Array.from(errors).join(' '));
-  }, [note, showError, startImageUpload, t, validateImageFile]);
+    if (accepted.length === 0) return;
+    if (note) {
+      accepted.forEach(startImageUpload);
+    } else {
+      onFilesForNewNote?.(accepted);
+    }
+  }, [note, onFilesForNewNote, showError, startImageUpload, t, validateImageFile]);
 
   const handleImageFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -379,6 +392,7 @@ export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError }: Us
     removedImages,
     isDraggingImage,
     imageFileInputRef,
+    queueImageFiles,
     handleImageFileInputChange,
     handleImageDragEnter,
     handleImageDragOver,
