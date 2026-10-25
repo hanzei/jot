@@ -2196,6 +2196,22 @@ describe('NoteModal', () => {
       expect(mockNotesUpdate).not.toHaveBeenCalled();
     });
 
+    it('toggles pin with the p shortcut, while the note-only shortcuts stay inert', async () => {
+      const onShare = vi.fn();
+      renderNoteModal({ ...defaultProps, onShare });
+      // Shortcuts are ignored while a text field has focus.
+      (document.activeElement as HTMLElement | null)?.blur();
+
+      fireEvent.keyDown(window, { key: 'p' });
+      fireEvent.keyDown(window, { key: 's' });
+      await vi.runAllTimersAsync();
+
+      expect(screen.getByRole('button', { name: 'Unpin note' })).toBeInTheDocument();
+      expect(onShare).not.toHaveBeenCalled();
+      expect(mockNotesCreate).not.toHaveBeenCalled();
+      expect(mockNotesUpdate).not.toHaveBeenCalled();
+    });
+
     it('closing a blank note that was only pinned creates nothing', async () => {
       const onClose = vi.fn();
       renderNoteModal({ ...defaultProps, onClose });

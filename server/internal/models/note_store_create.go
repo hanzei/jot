@@ -62,18 +62,13 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID string, n NewNot
 	// An unpinned note goes to the top of the unpinned grid, so shift the
 	// existing unpinned notes down to make room at position 0. A pinned note is
 	// placed as if it had been created and then pinned: at the end of the pinned
-	// list, remembering the top of the unpinned grid as its unpinned_position
-	// (unpinning later shifts the others to make room, see handleUnpinningTx).
+	// list (nextPinnedPositionTx, as handlePinningTx does), remembering the top
+	// of the unpinned grid as its unpinned_position (unpinning later shifts the
+	// others to make room, see handleUnpinningTx).
 	position, unpinnedPosition := 0, 0
 	if n.Pinned {
-		if err = tx.QueryRowContext(ctx,
-			s.d.RewritePlaceholders(`SELECT COALESCE(MAX(nus.position), -1) + 1
-			 FROM note_user_state nus
-			 INNER JOIN notes n ON nus.note_id = n.id AND n.deleted_at IS NULL
-			 WHERE nus.user_id = ? AND nus.pinned = TRUE AND nus.archived = FALSE`),
-			userID,
-		).Scan(&position); err != nil {
-			return nil, fmt.Errorf("failed to get max pinned position: %w", err)
+		if position, err = s.nextPinnedPositionTx(ctx, tx, noteID, userID); err != nil {
+			return nil, fmt.Errorf("place pinned note: %w", err)
 		}
 	} else if _, err = tx.ExecContext(ctx,
 		s.d.RewritePlaceholders(`UPDATE note_user_state SET position = position + 1

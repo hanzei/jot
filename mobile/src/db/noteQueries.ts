@@ -546,6 +546,18 @@ export async function getLocalNotePositions(db: SQLiteDatabase, ids: string[]): 
 }
 
 /**
+ * The position just past the last active pinned note, mirroring where the
+ * server places a note created pinned (`POST /notes` with `pinned`), so a
+ * pinned note created offline sorts the same way locally before it syncs.
+ */
+export async function getNextLocalPinnedPosition(db: SQLiteDatabase): Promise<number> {
+  const row = await db.getFirstAsync<{ next: number }>(
+    'SELECT COALESCE(MAX(position), -1) + 1 AS next FROM notes WHERE pinned = 1 AND archived = 0 AND deleted_at IS NULL',
+  );
+  return row?.next ?? 0;
+}
+
+/**
  * Read a note's current optimistic-concurrency version, or null if the note
  * isn't in the local DB. Used by the queue drain to resolve an update's
  * base_version at replay time (see {@link setLocalNoteVersion}, #489).

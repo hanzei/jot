@@ -1325,11 +1325,16 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
       if (note) {
         await persistExistingNote();
       } else {
+        const metadata = {
+          color,
+          labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
+          // Pin toggled before the note existed (see handlePinToggle).
+          pinned: pinned || undefined,
+        };
         const createData: CreateNoteRequest = noteType === 'list'
           ? {
               note_type: 'list',
               title,
-              color,
               // The bulk create path is positional: it reconstructs parent_id by
               // attaching each indented item to the nearest preceding top-level
               // one. items is kept in normalized order (a parent precedes its
@@ -1341,17 +1346,9 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
                 completed: item.completed,
                 indent_level: indentOf(item),
               })),
-              labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
-              // Pin toggled before the note existed (see handlePinToggle).
-              pinned: pinned || undefined,
+              ...metadata,
             }
-          : {
-              note_type: 'text',
-              content,
-              color,
-              labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
-              pinned: pinned || undefined,
-            };
+          : { note_type: 'text', content, ...metadata };
         await notes.create(createData);
       }
       onSave();
@@ -1680,16 +1677,22 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
     if (e.defaultPrevented) return;
 
     if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
-    if (!note || isReadOnly || isEditableElementFocused()) return;
+    if (isReadOnly || isEditableElementFocused()) return;
 
     const key = e.key === 'Backspace' ? 'backspace' : e.key === 'Delete' ? 'delete' : e.key.toLowerCase();
+
+    // Pin works on a new note too, like its button (handlePinToggle); every
+    // other shortcut acts on a note that exists.
+    if (key === 'p') {
+      e.preventDefault();
+      handlePinToggle();
+      return;
+    }
+    if (!note) return;
 
     if (key === 'a') {
       e.preventDefault();
       handleArchiveToggle();
-    } else if (key === 'p') {
-      e.preventDefault();
-      handlePinToggle();
     } else if (key === 'd') {
       e.preventDefault();
       if (!onDuplicate) return;

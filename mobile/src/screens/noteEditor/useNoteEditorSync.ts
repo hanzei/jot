@@ -23,7 +23,7 @@ import { useSSESubscription } from '../../store/SSEContext';
 import { isServerReachable } from '../../api/serverReachability';
 import { isWhiteHexColor } from '../../utils/colorContrast';
 import type { ToastType } from '../../hooks/useToast';
-import { itemSnapshot, serializeItems, toLocalItems, type ItemSnapshot, type LocalItem } from './listItemModel';
+import { isBlankDraft, itemSnapshot, serializeItems, toLocalItems, type ItemSnapshot, type LocalItem } from './listItemModel';
 import type { EditorDocHandle } from './useEditorDoc';
 import type { CachedNote, EditorNavProp } from './types';
 
@@ -397,28 +397,18 @@ export function useNoteEditorSync({
       };
 
       if (!currentNoteId) {
-        const isEmpty = currentNoteType === 'list'
-          ? !currentTitle && currentItems.length === 0
-          : !currentContent;
-        if (isEmpty) {
+        if (isBlankDraft(currentNoteType, currentTitle, currentContent, currentItems)) {
           hasPendingChangesRef.current = false;
           return true;
         }
+        const metadata = {
+          color: !isWhiteHexColor(currentColor) ? currentColor : undefined,
+          // Pin toggled before the note existed (see handleTogglePin).
+          pinned: currentPinned || undefined,
+        };
         const req: CreateNoteRequest = currentNoteType === 'list'
-          ? {
-              note_type: 'list',
-              title: currentTitle,
-              color: !isWhiteHexColor(currentColor) ? currentColor : undefined,
-              items: serializeItems(currentItems),
-              // Pin toggled before the note existed (see handleTogglePin).
-              pinned: currentPinned || undefined,
-            }
-          : {
-              note_type: 'text',
-              content: currentContent,
-              color: !isWhiteHexColor(currentColor) ? currentColor : undefined,
-              pinned: currentPinned || undefined,
-            };
+          ? { note_type: 'list', title: currentTitle, items: serializeItems(currentItems), ...metadata }
+          : { note_type: 'text', content: currentContent, ...metadata };
         const newNote = await createMutateRef.current(req);
         clearPendingUnlessEditedMidSave();
         // The server honors the client-supplied item IDs, so the items we just

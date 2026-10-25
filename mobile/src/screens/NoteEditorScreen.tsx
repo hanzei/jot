@@ -60,6 +60,7 @@ import { getActiveServer, listServers, type ServerAccountEntry } from '../store/
 import { setPendingShare, usePendingShare } from '../store/shareIntent';
 import {
   type LocalItem,
+  isBlankDraft,
   itemHasChildren,
 } from './noteEditor/listItemModel';
 import { MarkdownToolbarContent } from './noteEditor/EditorToolbars';
@@ -927,15 +928,19 @@ export default function NoteEditorScreen() {
   const handleTogglePin = useCallback(async () => {
     if (noteIdRef.current === null) {
       // Not created yet (blank, or still waiting for its first autosave): pin is
-      // a local toggle, like colour, and the create request carries it. Nothing
-      // is created here, so pinning a blank note never leaves an empty note
-      // behind. Set the ref too so a flush in this tick reads the new value; if
-      // a create is already in flight, the follow-up save patches the
-      // difference against the baseline that create recorded.
+      // a local toggle and the create request carries it. Nothing is created
+      // here, so pinning a blank note never leaves an empty note behind. Set the
+      // ref too so a flush in this tick reads the new value; if a create is
+      // already in flight, the follow-up save patches the difference against
+      // the baseline that create recorded. On a blank draft a pin alone is not
+      // a pending edit (flushSave would create nothing anyway); the first
+      // content edit schedules the create, which reads pinnedRef then.
       const newPinned = !pinnedRef.current;
       setPinned(newPinned);
       pinnedRef.current = newPinned;
-      markDirtyAndScheduleUpdate();
+      if (!isBlankDraft(noteTypeRef.current, titleRef.current, contentRef.current, itemsRef.current)) {
+        markDirtyAndScheduleUpdate();
+      }
       return;
     }
     await withSavedNote(async (id) => {
@@ -949,7 +954,7 @@ export default function NoteEditorScreen() {
         Alert.alert(t('common.error'), t('note.failedUpdate'));
       }
     });
-  }, [commitMetadataBaseline, markDirtyAndScheduleUpdate, noteIdRef, pinnedRef, runMetadataUpdate, setPinned, withSavedNote, t]);
+  }, [commitMetadataBaseline, contentRef, itemsRef, markDirtyAndScheduleUpdate, noteIdRef, noteTypeRef, pinnedRef, runMetadataUpdate, setPinned, titleRef, withSavedNote, t]);
 
   const handleToggleArchive = useCallback(() => {
     if (archivedRef.current) {
@@ -1131,11 +1136,10 @@ export default function NoteEditorScreen() {
 
   const hasNoteColor = !!color && !isWhiteHexColor(color);
 
-  // A brand-new note with nothing in it yet — the case flushSave declines to
-  // create. Archive is disabled here: there is nothing to archive, and
-  // archiving would create an empty note just to hide it.
-  const isBlankNewNote = noteId === null
-    && (noteType === 'list' ? !title && items.length === 0 : !content);
+  // A brand-new note with nothing in it yet (isBlankDraft), which flushSave
+  // declines to create. Archive is disabled here: there is nothing to archive,
+  // and archiving would create an empty note just to hide it.
+  const isBlankNewNote = noteId === null && isBlankDraft(noteType, title, content, items);
 
   // Share, Labels, and Add-image all act on a note that exists on the server.
   // A brand-new note (noteId === null) no longer has to wait for the first
