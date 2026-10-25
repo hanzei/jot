@@ -1342,12 +1342,15 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
                 indent_level: indentOf(item),
               })),
               labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
+              // Pin toggled before the note existed (see handlePinToggle).
+              pinned: pinned || undefined,
             }
           : {
               note_type: 'text',
               content,
               color,
               labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
+              pinned: pinned || undefined,
             };
         await notes.create(createData);
       }
@@ -1498,7 +1501,14 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
   };
 
   const handlePinToggle = async () => {
-    if (!note || isReadOnly) return;
+    if (isReadOnly) return;
+    if (!note) {
+      // A new note does not exist yet: pin is a local toggle, like colour, and
+      // the create request carries it. On its own it is not an unsaved change
+      // (hasUnsavedChanges), so closing a blank pinned note creates nothing.
+      setPinned(!pinned);
+      return;
+    }
 
     const newPinnedState = !pinned;
     setPinned(newPinnedState);
@@ -2478,18 +2488,26 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
                     >
                       <Image className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                     </button>
-                    <button
-                      onClick={handlePinToggle}
-                      disabled={isReadOnly}
-                      className={`p-1 rounded-full transition-colors ${isReadOnly ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-200 dark:hover:bg-slate-700'}`}
-                      title={pinned ? t('note.unpinNote') : t('note.pinNote')}
-                      aria-label={pinned ? t('note.unpinNote') : t('note.pinNote')}
-                    >
-                      <Pin
-                        className={pinned ? 'h-5 w-5 text-blue-500' : 'h-5 w-5 text-gray-600 dark:text-gray-300'}
-                        fill={pinned ? 'currentColor' : 'none'}
-                      />
-                    </button>
+                  </>
+                )}
+
+                {/* Pin also works on a new note: a local toggle the create
+                    request carries (handlePinToggle). */}
+                <button
+                  onClick={handlePinToggle}
+                  disabled={isReadOnly}
+                  className={`p-1 rounded-full transition-colors ${isReadOnly ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-200 dark:hover:bg-slate-700'}`}
+                  title={pinned ? t('note.unpinNote') : t('note.pinNote')}
+                  aria-label={pinned ? t('note.unpinNote') : t('note.pinNote')}
+                >
+                  <Pin
+                    className={pinned ? 'h-5 w-5 text-blue-500' : 'h-5 w-5 text-gray-600 dark:text-gray-300'}
+                    fill={pinned ? 'currentColor' : 'none'}
+                  />
+                </button>
+
+                {note && (
+                  <>
                     <button
                       onClick={handleArchiveToggle}
                       disabled={isReadOnly}

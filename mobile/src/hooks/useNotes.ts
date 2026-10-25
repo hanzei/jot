@@ -261,7 +261,7 @@ export function useCreateNote() {
         // the first successful sync replaces it with the canonical server note.
         version: 1,
         color: data.color ?? DEFAULT_NOTE_COLOR,
-        pinned: false,
+        pinned: data.pinned ?? false,
         archived: false,
         position: 0,
         is_shared: false,

@@ -233,6 +233,43 @@ test.describe('Notes', () => {
     await expect(dashboardPage.noteCard('Note to Pin')).toBeVisible();
   });
 
+  test('pins a new note before it has content and creates it pinned', async ({ dashboardPage, page }) => {
+    await dashboardPage.goto();
+    await dashboardPage.clickNewNote();
+    await dashboardPage.selectListType();
+
+    // Pin is available on a new note and toggles locally; archive is not
+    // offered until the note exists.
+    await dashboardPage.modalToolbarButton('Pin note').click();
+    await expect(dashboardPage.modalToolbarButton('Unpin note')).toBeVisible();
+    await expect(dashboardPage.modalToolbarButton('Archive note')).toHaveCount(0);
+
+    await page.getByRole('dialog').last().getByPlaceholder('Note title...').fill('Pinned From Birth');
+    await dashboardPage.closeNoteModal();
+
+    await expect(dashboardPage.pinnedSectionHeading()).toBeVisible();
+    await expect(dashboardPage.noteCard('Pinned From Birth')).toBeVisible();
+
+    // The card opens pinned, and archive is offered now that the note exists.
+    await dashboardPage.openNote('Pinned From Birth');
+    await expect(dashboardPage.modalToolbarButton('Unpin note')).toBeVisible();
+    await expect(dashboardPage.modalToolbarButton('Archive note')).toBeVisible();
+  });
+
+  test('pinning a blank new note and closing it creates nothing', async ({ dashboardPage, page }) => {
+    await dashboardPage.goto();
+    await dashboardPage.clickNewNote();
+    await dashboardPage.modalToolbarButton('Pin note').click();
+    await expect(dashboardPage.modalToolbarButton('Unpin note')).toBeVisible();
+    await dashboardPage.closeNoteModal();
+
+    // The empty state only renders once the (empty) note list has loaded.
+    await page.reload();
+    await dashboardPage.expectEmptyState();
+    await expect(page.getByTestId('note-card')).toHaveCount(0);
+    await expect(dashboardPage.pinnedSectionHeading()).toHaveCount(0);
+  });
+
   test('unpins a pinned note', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('Pinned Note');

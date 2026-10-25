@@ -410,11 +410,14 @@ export function useNoteEditorSync({
               title: currentTitle,
               color: !isWhiteHexColor(currentColor) ? currentColor : undefined,
               items: serializeItems(currentItems),
+              // Pin toggled before the note existed (see handleTogglePin).
+              pinned: currentPinned || undefined,
             }
           : {
               note_type: 'text',
               content: currentContent,
               color: !isWhiteHexColor(currentColor) ? currentColor : undefined,
+              pinned: currentPinned || undefined,
             };
         const newNote = await createMutateRef.current(req);
         clearPendingUnlessEditedMidSave();

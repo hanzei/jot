@@ -263,6 +263,26 @@ describe('useNotes hooks', () => {
       );
       expect(result.current.data?.id).toBe('ClientNoteId000000000A');
     });
+
+    it('creates a pinned note locally and carries pinned in the queued create', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+
+      const { result } = await renderHook(() => useCreateNote(), { wrapper: createWrapper() });
+
+      const created = await result.current.mutateAsync({ content: 'Pinned offline', note_type: 'text', pinned: true });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      // The local row is pinned straight away, and the replayed POST asks the
+      // server to create it pinned.
+      expect(created.pinned).toBe(true);
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operation: 'create',
+          body: expect.objectContaining({ content: 'Pinned offline', pinned: true }),
+        }),
+      );
+    });
   });
 
   describe('permanent server-format item IDs in local/offline creates (#513)', () => {

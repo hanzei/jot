@@ -2178,6 +2178,82 @@ describe('NoteModal', () => {
     });
   });
 
+  describe('Pin and archive on a new note', () => {
+    it('shows pin but not archive before the note exists', () => {
+      renderNoteModal(defaultProps);
+      expect(screen.getByRole('button', { name: 'Pin note' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Archive note' })).not.toBeInTheDocument();
+    });
+
+    it('toggles pin locally without creating or updating anything', async () => {
+      renderNoteModal(defaultProps);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Pin note' }));
+      await vi.runAllTimersAsync();
+
+      expect(screen.getByRole('button', { name: 'Unpin note' })).toBeInTheDocument();
+      expect(mockNotesCreate).not.toHaveBeenCalled();
+      expect(mockNotesUpdate).not.toHaveBeenCalled();
+    });
+
+    it('closing a blank note that was only pinned creates nothing', async () => {
+      const onClose = vi.fn();
+      renderNoteModal({ ...defaultProps, onClose });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Pin note' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+      await vi.runAllTimersAsync();
+
+      expect(mockNotesCreate).not.toHaveBeenCalled();
+      expect(onClose).toHaveBeenCalled();
+    });
+
+    it('creates a text note pinned once it has content', async () => {
+      renderNoteModal(defaultProps);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Pin note' }));
+      fireEvent.change(screen.getByPlaceholderText('Take a note...'), { target: { value: 'Pinned from the start' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+      await vi.runAllTimersAsync();
+
+      expect(mockNotesCreate).toHaveBeenCalledWith(expect.objectContaining({
+        note_type: 'text',
+        content: 'Pinned from the start',
+        pinned: true,
+      }));
+      expect(mockNotesUpdate).not.toHaveBeenCalled();
+    });
+
+    it('creates a list note pinned', async () => {
+      renderNoteModal(defaultProps);
+
+      fireEvent.click(screen.getByText('List'));
+      fireEvent.click(screen.getByRole('button', { name: 'Pin note' }));
+      fireEvent.change(screen.getByPlaceholderText('Note title...'), { target: { value: 'Groceries' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+      await vi.runAllTimersAsync();
+
+      expect(mockNotesCreate).toHaveBeenCalledWith(expect.objectContaining({
+        note_type: 'list',
+        title: 'Groceries',
+        pinned: true,
+      }));
+    });
+
+    it('does not send pinned when the new note is left unpinned', async () => {
+      renderNoteModal(defaultProps);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Pin note' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Unpin note' }));
+      fireEvent.change(screen.getByPlaceholderText('Take a note...'), { target: { value: 'Plain note' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+      await vi.runAllTimersAsync();
+
+      expect(mockNotesCreate).toHaveBeenCalledTimes(1);
+      expect(mockNotesCreate.mock.calls[0]![0]).not.toHaveProperty('pinned', true);
+    });
+  });
+
   describe('Dashboard update on property changes', () => {
     it('autosaves and calls onRefresh when title changes on an existing list note', async () => {
       const note = createMockNote({ note_type: 'list', title: 'Test Note' });
