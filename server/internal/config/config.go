@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config holds all server configuration values.
@@ -36,6 +37,7 @@ type Config struct {
 	OTelLogsEnabled     bool
 	LogLevel            string
 	LogFormat           string
+	SlowQueryThreshold  time.Duration
 
 	RateLimitEnabled            bool
 	RateLimitPerMinute          int
@@ -87,6 +89,24 @@ func parseIntRangeEnv(name string, defaultVal, min, max int) (int, error) {
 		return 0, fmt.Errorf("invalid %s value %d: must be between %d and %d", name, n, min, max)
 	}
 	return n, nil
+}
+
+// parseDurationEnv reads a non-negative duration environment variable in Go's
+// time.ParseDuration syntax ("500ms", "2s"). Returns defaultVal when the
+// variable is not set.
+func parseDurationEnv(name string, defaultVal time.Duration) (time.Duration, error) {
+	v := os.Getenv(name)
+	if v == "" {
+		return defaultVal, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s value %q: must be a duration such as \"500ms\" or \"2s\"", name, v)
+	}
+	if d < 0 {
+		return 0, fmt.Errorf("invalid %s value %q: must not be negative", name, v)
+	}
+	return d, nil
 }
 
 // parseEnumEnv reads a string environment variable and validates it is one of
@@ -274,6 +294,13 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	cfg.OTelLogsEnabled = otelLogsEnabled
+
+	// 0 turns the slow store operation warning off.
+	slowQueryThreshold, err := parseDurationEnv("JOT_SLOW_QUERY_THRESHOLD", 500*time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
+	cfg.SlowQueryThreshold = slowQueryThreshold
 
 	rateLimitEnabled, err := parseBoolEnv("JOT_RATE_LIMIT_ENABLED", true)
 	if err != nil {

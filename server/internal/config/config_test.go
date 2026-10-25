@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -196,6 +197,36 @@ func TestLoadLogSettings(t *testing.T) {
 			_, err := Load()
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "invalid "+tc.name+" value")
+		})
+	}
+}
+
+func TestLoadSlowQueryThreshold(t *testing.T) {
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
+
+	for _, tc := range []struct {
+		value string
+		want  time.Duration
+	}{
+		{"", 500 * time.Millisecond},
+		{"0", 0},
+		{"250ms", 250 * time.Millisecond},
+		{"2s", 2 * time.Second},
+	} {
+		t.Run("value "+tc.value, func(t *testing.T) {
+			t.Setenv("JOT_SLOW_QUERY_THRESHOLD", tc.value)
+			cfg, err := Load()
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, cfg.SlowQueryThreshold)
+		})
+	}
+
+	for _, value := range []string{"500", "fast", "-1s"} {
+		t.Run("invalid "+value, func(t *testing.T) {
+			t.Setenv("JOT_SLOW_QUERY_THRESHOLD", value)
+			_, err := Load()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid JOT_SLOW_QUERY_THRESHOLD value")
 		})
 	}
 }

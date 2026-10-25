@@ -83,3 +83,31 @@ func TestSetupExposesGoRuntimeMetrics(t *testing.T) {
 		require.True(t, names[want], "expected %s to be exported", want)
 	}
 }
+
+// TestSetupPrometheusOnly covers JOT_METRICS_ENABLED without any OTel signal:
+// /metrics must still serve Jot's own instruments and the Go runtime metrics
+// the dashboard queries, not just the Prometheus client's built-in collectors.
+func TestSetupPrometheusOnly(t *testing.T) {
+	shutdown, err := Setup(t.Context(), Config{
+		ServiceName:       "jot-telemetry-test",
+		PrometheusEnabled: true,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, shutdown(t.Context()))
+	})
+
+	counter, err := otel.Meter("jot-telemetry-test").Int64Counter("telemetry_prometheus_only_counter")
+	require.NoError(t, err)
+	counter.Add(t.Context(), 1)
+
+	families, err := prometheus.DefaultGatherer.Gather()
+	require.NoError(t, err)
+
+	names := make(map[string]bool, len(families))
+	for _, family := range families {
+		names[family.GetName()] = true
+	}
+	require.True(t, names["telemetry_prometheus_only_counter_total"], "expected an OTel instrument to reach /metrics")
+	require.True(t, names["go_goroutine_count"], "expected OTel Go runtime metrics on /metrics")
+}

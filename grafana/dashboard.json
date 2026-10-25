@@ -15,7 +15,7 @@
       }
     ]
   },
-  "description": "Jot application observability \u2013 HTTP traffic, notes activity, sessions, SSE connections, rate limiting, and Go runtime via OpenTelemetry.",
+  "description": "Jot application observability \u2013 HTTP traffic, notes activity, sessions, SSE connections, rate limiting, database connections, and Go runtime via OpenTelemetry.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -1550,6 +1550,328 @@
         "x": 0,
         "y": 49
       },
+      "id": 106,
+      "title": "Database",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 50
+      },
+      "id": 20,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "last"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (deployment_environment) (rate(db_client_connection_waits_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
+          "legendFormat": "waits [{{deployment_environment}}]",
+          "refId": "A"
+        }
+      ],
+      "title": "Connection Wait Rate",
+      "type": "timeseries",
+      "description": "How often callers had to queue for a database connection. On SQLite the pool holds one connection, so a rise here means one slow operation is stalling other requests; look for \"Slow store operation\" warnings in the logs to find it."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 50
+      },
+      "id": 21,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "last"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (deployment_environment) (rate(db_client_connection_wait_duration_seconds_total{deployment_environment=~\"$environment\"}[$__rate_interval])) / sum by (deployment_environment) (rate(db_client_connection_waits_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
+          "legendFormat": "avg per wait [{{deployment_environment}}]",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (deployment_environment) (rate(db_client_connection_wait_duration_seconds_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
+          "legendFormat": "waited per second [{{deployment_environment}}]",
+          "refId": "B"
+        }
+      ],
+      "title": "Connection Wait Time",
+      "type": "timeseries",
+      "description": "Average time a queued caller waited for a connection, and total time spent waiting per second (roughly how many callers were queued on average)."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 50
+      },
+      "id": 22,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "last"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (db_client_connection_state, deployment_environment) (db_client_connection_count{deployment_environment=~\"$environment\"})",
+          "legendFormat": "{{db_client_connection_state}} [{{deployment_environment}}]",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (deployment_environment) (db_client_connection_max{deployment_environment=~\"$environment\"})",
+          "legendFormat": "max [{{deployment_environment}}]",
+          "refId": "B"
+        }
+      ],
+      "title": "Connections In Use",
+      "type": "timeseries",
+      "description": "Open database connections by state, against the pool maximum (0 means unlimited)."
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 58
+      },
       "id": 104,
       "title": "Go Runtime",
       "type": "row"
@@ -1613,7 +1935,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 50
+        "y": 59
       },
       "id": 16,
       "options": {
@@ -1705,7 +2027,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 50
+        "y": 59
       },
       "id": 17,
       "options": {
@@ -1815,7 +2137,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 50
+        "y": 59
       },
       "id": 18,
       "options": {
@@ -1910,5 +2232,5 @@
   "timezone": "browser",
   "title": "Jot Overview",
   "uid": "jot-overview-v1",
-  "version": 7
+  "version": 8
 }

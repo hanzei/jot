@@ -69,6 +69,12 @@ type Config struct {
 	// unaffected and always registered whenever OTel is set up at all.
 	MetricsEnabled bool
 
+	// PrometheusEnabled sets up the meter provider behind the /metrics handler
+	// (JOT_METRICS_ENABLED) even when no OTel signal is enabled. Without it,
+	// /metrics alone serves only the Prometheus client's own go_* and
+	// process_* collectors, none of Jot's metrics. It pushes nothing.
+	PrometheusEnabled bool
+
 	// LogsEnabled controls whether the log pipeline is set up at all.
 	// Defaults to false. When false, a noop LoggerProvider is registered
 	// instead so log forwarding stays a no-op.
@@ -81,16 +87,16 @@ type Config struct {
 // stop exporters.
 //
 // There is no single on/off switch: Setup runs whenever at least one of
-// TracesEnabled, MetricsEnabled, or LogsEnabled is true. The Prometheus metric
-// reader is always registered with prometheus.DefaultRegisterer in that case,
-// so the /metrics handler (mounted separately by the server) will serve OTel
-// custom metrics alongside the default Go runtime metrics, regardless of
-// MetricsEnabled.
+// TracesEnabled, MetricsEnabled, LogsEnabled, or PrometheusEnabled is true. The
+// Prometheus metric reader is always registered with
+// prometheus.DefaultRegisterer in that case, so the /metrics handler (mounted
+// separately by the server) will serve OTel custom metrics alongside the
+// default Go runtime metrics, regardless of MetricsEnabled.
 //
-// When all three are false, noop providers are already the default globals;
+// When all four are false, noop providers are already the default globals;
 // nothing to do.
 func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) error, err error) {
-	if !cfg.TracesEnabled && !cfg.MetricsEnabled && !cfg.LogsEnabled {
+	if !cfg.TracesEnabled && !cfg.MetricsEnabled && !cfg.LogsEnabled && !cfg.PrometheusEnabled {
 		// Noop providers are already the default globals; nothing to do.
 		return func(_ context.Context) error { return nil }, nil
 	}

@@ -431,6 +431,7 @@ accordingly.
 | --- | --- | --- |
 | `JOT_LOG_LEVEL` | `info` | Server log level: `debug`, `info`, `warn`, or `error`. `debug` adds detail on auth rejections, SSE subscriptions and fan-out, image blob reclaim decisions, and periodic background tasks. |
 | `JOT_LOG_FORMAT` | `text` | Server log format: `text` (logrus key=value) or `json` (one JSON object per line, for Loki, ELK and similar). Request lines carry `request_id`, plus `trace_id`/`span_id` when tracing is enabled. |
+| `JOT_SLOW_QUERY_THRESHOLD` | `500ms` | Logs a `Slow store operation` warning for any database store operation that takes longer than this (Go duration syntax: `250ms`, `2s`). `0` turns it off. See [Database load](#database-load). |
 | `JOT_METRICS_ENABLED` | `false` | Enables the separate Prometheus metrics HTTP server. |
 | `JOT_METRICS_HOST` | `127.0.0.1` | Bind host for the metrics server. |
 | `JOT_METRICS_PORT` | `8081` | Bind port for the metrics server. |
@@ -630,6 +631,37 @@ Collector — as long as the Collector's Prometheus-facing exporter isn't
 configured with a `namespace` (which would prefix every metric name and
 break these queries).
 
+### Database load
+
+Every database store operation that takes longer than
+`JOT_SLOW_QUERY_THRESHOLD` (default `500ms`) logs one warning, whether or not
+tracing is on. It names the operation and its duration, plus the `request_id`
+(and `user_id`) of the request that ran it, or the `job` of the background task
+that did; it never logs query parameters,
+which can hold note content:
+
+```
+level=warning msg="Slow store operation" duration=1.8s op=NoteStore.CreateWithItems request_id=... user_id=...
+```
+
+With `JOT_METRICS_ENABLED=true`, `/metrics` also exposes the database
+connection pool, labelled with the driver as `db_client_connection_pool_name`:
+
+| Metric | Meaning |
+| --- | --- |
+| `db_client_connection_count` | Open connections, by `db_client_connection_state` (`used` or `idle`). |
+| `db_client_connection_max` | The pool's connection limit (`0` is unlimited). |
+| `db_client_connection_waits_total` | Times a caller had to queue for a free connection. |
+| `db_client_connection_wait_duration_seconds_total` | Total time callers spent queued. |
+
+On SQLite, the default, the pool holds a single connection, so one slow
+operation makes every other request wait behind it. The wait counters climb
+when that happens. A warning's duration includes any time the operation spent
+queued for the connection, so the operations that waited behind a slow one
+log a warning too: the one that held the connection is usually the earliest
+to start (log time minus duration) and the longest. The dashboard's
+**Database** row plots both counters and the connections in use.
+
 ### Distinguishing environments in the dashboard
 
 If more than one Jot instance (for example a production deployment and a
@@ -770,15 +802,21 @@ services:
    with `JOT_LOG_FORMAT=text`, `"request_id":"<id>"` with `json`. With tracing
    on, the same value is the span attribute `request.id`, and the log line
    carries `trace_id`. See [Request IDs](#request-ids).
-3. **Get more detail.** Restart with `JOT_LOG_LEVEL=debug` to log why
+3. **If everything is slow, look for a slow operation.** Search the logs for
+   `Slow store operation`: each line names a database operation that took
+   longer than `JOT_SLOW_QUERY_THRESHOLD`, with the `request_id` that ran it.
+   On SQLite one such operation stalls every other request, which shows up as
+   a rising `db_client_connection_waits_total`. See
+   [Database load](#database-load).
+4. **Get more detail.** Restart with `JOT_LOG_LEVEL=debug` to log why
    authentication was rejected, SSE subscriptions and event fan-out, image blob
    reclaim decisions, and periodic background tasks. Switch back afterwards,
    since debug output is verbose.
-4. **Check the server's state.** As an admin, open Admin → **Server**. It shows
+5. **Check the server's state.** As an admin, open Admin → **Server**. It shows
    the database backend and size, the schema (migration) version, uptime (a
    short uptime that keeps resetting means a restart loop), live connections,
    active sessions, and free space on the upload volume.
-5. **Check health and load.** `/livez` answers whenever the process is up.
+6. **Check health and load.** `/livez` answers whenever the process is up.
    `/readyz` also pings the database and fails while shutting down. For metrics,
    traces and profiles, see [Observability](#observability).
 

@@ -72,6 +72,8 @@ func main() {
 		TracesEnabled:  cfg.OTelTracesEnabled,
 		MetricsEnabled: cfg.OTelMetricsEnabled,
 		LogsEnabled:    cfg.OTelLogsEnabled,
+		// /metrics needs the meter provider whether or not OTLP export is on.
+		PrometheusEnabled: cfg.MetricsEnabled,
 	})
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed to initialize OpenTelemetry")

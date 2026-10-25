@@ -37,8 +37,10 @@ import (
 	"github.com/sirupsen/logrus"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -57,6 +59,7 @@ type Server struct {
 	log             *logrus.Logger
 	router          chi.Router
 	db              *sql.DB
+	dbPoolMetrics   metric.Registration
 	httpServer      *http.Server
 	debugServer     *http.Server
 	staticRoot      *os.Root
@@ -117,21 +120,30 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (_ *Server, err error
 	}
 	undo.push(func() { _ = db.Close() })
 
-	ctx, cancel := context.WithCancel(context.Background())
+	dbPoolMetrics, err := database.RegisterPoolMetrics(otel.GetMeterProvider().Meter("github.com/hanzei/jot/server"), db, cfg.DBDriver)
+	if err != nil {
+		return nil, fmt.Errorf("initialize database pool metrics: %w", err)
+	}
+	undo.push(func() { _ = dbPoolMetrics.Unregister() })
+
+	// Background work derives from ctx, so give it the server's logger: code
+	// logging through logutil.FromContext (such as the slow store operation
+	// warning) would otherwise fall back to the global logrus logger.
+	ctx, cancel := context.WithCancel(logutil.NewContext(context.Background(), logutil.NewRequestLogger(logrus.NewEntry(log))))
 	undo.push(cancel)
 
 	d := &dialect.Dialect{Driver: cfg.DBDriver}
 
-	userStore := models.NewUserStore(db, d)
-	noteStore := models.NewNoteStore(db, d)
-	labelStore := models.NewLabelStore(db, d)
-	adminStatsStore := models.NewAdminStatsStore(db, d)
-	sessionStore, err := models.NewSessionStore(db, d)
+	userStore := models.NewUserStore(db, d, cfg.SlowQueryThreshold)
+	noteStore := models.NewNoteStore(db, d, cfg.SlowQueryThreshold)
+	labelStore := models.NewLabelStore(db, d, cfg.SlowQueryThreshold)
+	adminStatsStore := models.NewAdminStatsStore(db, d, cfg.SlowQueryThreshold)
+	sessionStore, err := models.NewSessionStore(db, d, cfg.SlowQueryThreshold)
 	if err != nil {
 		return nil, fmt.Errorf("initialize session store: %w", err)
 	}
-	userSettingsStore := models.NewUserSettingsStore(db, d)
-	patStore := models.NewPATStore(db, d)
+	userSettingsStore := models.NewUserSettingsStore(db, d, cfg.SlowQueryThreshold)
+	patStore := models.NewPATStore(db, d, cfg.SlowQueryThreshold)
 
 	sessionService := auth.NewSessionService(sessionStore, userStore, patStore, cfg.CookieSecure)
 
@@ -177,6 +189,7 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (_ *Server, err error
 		log:             log,
 		router:          chi.NewRouter(),
 		db:              db,
+		dbPoolMetrics:   dbPoolMetrics,
 		startReady:      make(chan struct{}),
 		ctx:             ctx,
 		cancel:          cancel,
@@ -196,10 +209,10 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (_ *Server, err error
 		rateLimiter:     rl,
 	}
 
-	s.startPeriodicTask(ctx, "session-cleanup", time.Hour, false, func() error {
+	s.startPeriodicTask(ctx, "session-cleanup", time.Hour, false, func(ctx context.Context) error {
 		return sessionStore.DeleteExpired(ctx)
 	}, "delete expired sessions")
-	s.startPeriodicTask(ctx, "trash-purge", time.Hour, true, func() error {
+	s.startPeriodicTask(ctx, "trash-purge", time.Hour, true, func(ctx context.Context) error {
 		shas, err := noteStore.PurgeOldTrashedNotes(ctx, 7*24*time.Hour)
 		if err != nil {
 			return err
@@ -211,7 +224,7 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (_ *Server, err error
 		}
 		return nil
 	}, "purge old trashed notes")
-	s.startPeriodicTask(ctx, "image-orphan-sweep", 24*time.Hour, true, func() error {
+	s.startPeriodicTask(ctx, "image-orphan-sweep", 24*time.Hour, true, func(ctx context.Context) error {
 		report, err := blobstore.Sweep(ctx, noteStore, imageStore, imageOrphanSweepGrace)
 		logImageSweepReport(log, report)
 		return err
@@ -905,13 +918,23 @@ func (s *Server) closeResources() error {
 		}
 	}
 
-	if s.db != nil {
-		if err := s.db.Close(); err != nil {
-			return fmt.Errorf("close database: %w", err)
+	// Unregister before closing the pool the callback reads, but close the
+	// database even if unregistering fails.
+	var unregisterErr error
+	if s.dbPoolMetrics != nil {
+		if err := s.dbPoolMetrics.Unregister(); err != nil {
+			unregisterErr = fmt.Errorf("unregister database pool metrics: %w", err)
 		}
 	}
 
-	return nil
+	var closeErr error
+	if s.db != nil {
+		if err := s.db.Close(); err != nil {
+			closeErr = fmt.Errorf("close database: %w", err)
+		}
+	}
+
+	return errors.Join(unregisterErr, closeErr)
 }
 
 func (s *Server) WaitUntilStarted(ctx context.Context) error {
@@ -953,7 +976,11 @@ func (s *Server) StopBackgroundTasks() {
 // job becomes the goroutine's pprof label. Without it every periodic task
 // profiles as the same startPeriodicTask.func1 frame, with nothing to tell
 // them apart.
-func (s *Server) startPeriodicTask(ctx context.Context, job string, interval time.Duration, runNow bool, fn func() error, logMsg string) {
+//
+// fn receives ctx with the task's logger (the server's, plus the job field),
+// so lines logged through logutil.FromContext, such as the slow store
+// operation warning, say which task ran them.
+func (s *Server) startPeriodicTask(ctx context.Context, job string, interval time.Duration, runNow bool, fn func(ctx context.Context) error, logMsg string) {
 	s.bgWg.Add(1)
 	go func() {
 		defer s.bgWg.Done()
@@ -961,10 +988,11 @@ func (s *Server) startPeriodicTask(ctx context.Context, job string, interval tim
 		// is found parked on the ticker.
 		pprof.SetGoroutineLabels(pprof.WithLabels(ctx, pprof.Labels("job", job)))
 		log := s.log.WithField("job", job)
+		taskCtx := logutil.NewContext(ctx, logutil.NewRequestLogger(log))
 		run := func() {
 			start := time.Now() //nolint:gocritic // elapsed task time, never persisted; a duration has no time zone
 			log.Debug("Periodic task started")
-			err := fn()
+			err := fn(taskCtx)
 			done := log.WithField("duration", time.Since(start).String())
 			if err != nil {
 				done.WithError(err).Errorf("Failed to %s", logMsg)

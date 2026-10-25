@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/hanzei/jot/server/internal/config"
+	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -60,13 +61,14 @@ func TestNewDebugMux(t *testing.T) {
 	}
 }
 
-// TestStartPeriodicTaskSetsGoroutineLabel asserts the label actually lands on
-// the running goroutine, not just that the call compiles.
-func TestStartPeriodicTaskSetsGoroutineLabel(t *testing.T) {
+// TestStartPeriodicTask checks what a periodic task's goroutine carries: the
+// job as a pprof label, and a context whose logger is the server's with the job
+// field, so code logging through it (such as the slow store operation warning)
+// does not fall back to the global logrus logger.
+func TestStartPeriodicTask(t *testing.T) {
 	t.Parallel()
 
-	log := logrus.New()
-	log.SetOutput(io.Discard)
+	log, hook := newCapturingLogger()
 	s := &Server{log: log}
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -76,7 +78,8 @@ func TestStartPeriodicTaskSetsGoroutineLabel(t *testing.T) {
 	})
 
 	ran := make(chan struct{})
-	s.startPeriodicTask(ctx, "test-job", time.Hour, true, func() error {
+	s.startPeriodicTask(ctx, "test-job", time.Hour, true, func(ctx context.Context) error {
+		logutil.FromContext(ctx).Warn("From the task")
 		close(ran)
 		return nil
 	}, "run the test job")
@@ -90,6 +93,10 @@ func TestStartPeriodicTaskSetsGoroutineLabel(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, pprof.Lookup("goroutine").WriteTo(&buf, 1))
 	assert.Contains(t, buf.String(), `"job":"test-job"`)
+
+	require.Len(t, hook.AllEntries(), 1)
+	assert.Equal(t, "From the task", hook.LastEntry().Message)
+	assert.Equal(t, "test-job", hook.LastEntry().Data["job"])
 }
 
 // TestStartCleansUpAfterFailure covers the failed-start path for each way Start
@@ -162,7 +169,7 @@ func TestStartCleansUpAfterFailure(t *testing.T) {
 				cancel:     cancel,
 				startReady: make(chan struct{}),
 			}
-			s.startPeriodicTask(ctx, "test-job", time.Hour, false, func() error { return nil }, "run the test job")
+			s.startPeriodicTask(ctx, "test-job", time.Hour, false, func(context.Context) error { return nil }, "run the test job")
 
 			done := make(chan error, 1)
 			go func() { done <- s.Start(apiAddr) }()
