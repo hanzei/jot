@@ -32,11 +32,16 @@ version: 2
 
 updates:
   - package-ecosystem: "github-actions"
-    directory: "/"
+    # "/" covers .github/workflows/ (and a root action.yml) only. Composite
+    # actions under .github/actions/ carry their own pins and are invisible to
+    # Dependabot unless listed here.
+    directories:
+      - "/"
+      - "/.github/actions/*"
     schedule:
       interval: "monthly"
-    # One PR for all action bumps rather than one per action — 13 distinct
-    # actions across 66 `uses:` refs would otherwise be 13 PRs a month.
+    # One PR for all action bumps rather than one per action — 15 distinct
+    # actions across 84 `uses:` refs would otherwise be 15 PRs a month.
     groups:
       github-actions:
         patterns:
