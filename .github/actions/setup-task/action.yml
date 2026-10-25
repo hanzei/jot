@@ -21,7 +21,7 @@ runs:
     # downloads anything, so a hit here skips the network entirely. The marker
     # file setup-task writes lives inside this directory, so it is restored too.
     - name: Cache Task
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
       with:
         path: ${{ runner.tool_cache }}/task/${{ inputs.version }}
         key: task-${{ runner.os }}-${{ inputs.version }}
