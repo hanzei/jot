@@ -49,7 +49,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # Maestro is a Gradle-style start script that bundles no JRE.
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
         with:
           distribution: temurin
           java-version: "17"
@@ -122,13 +122,13 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: .nvmrc
           cache: "npm"
           cache-dependency-path: mobile/package-lock.json
 
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
         with:
           distribution: temurin
           java-version: "17"
@@ -208,7 +208,7 @@ jobs:
         working-directory: ./mobile/android
 
       - name: Upload e2e APK
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: jot-e2e-apk-x86_64
           path: mobile/android/app/build/outputs/apk/release/app-release.apk
@@ -234,7 +234,7 @@ jobs:
 
       # Maestro is a Gradle-style start script that bundles no JRE — without Java
       # on PATH it dies before running a single flow.
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
         with:
           distribution: temurin
           java-version: "17"
@@ -249,12 +249,12 @@ jobs:
       # run.sh starts the mock IdP (webapp/e2e/fixtures/mock-idp.ts) for the SSO
       # flows. Node runs it directly through built-in type stripping, which
       # needs Node 22.18+; no npm install, it imports only node: built-ins.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: .nvmrc
 
       - name: Download e2e APK
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: jot-e2e-apk-x86_64
           path: apk
@@ -341,7 +341,7 @@ jobs:
       # every run: the only way to see those screens without an emulator.
       - name: Upload flow screenshots
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: mobile-e2e-screenshots
           path: mobile/e2e/screenshots/
@@ -353,7 +353,7 @@ jobs:
       # locally without them is impractical, so this is not optional.
       - name: Upload failure artifacts
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: mobile-e2e-failure
           path: |

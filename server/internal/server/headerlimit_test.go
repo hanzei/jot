@@ -47,7 +47,8 @@ func TestMaxHeaderValueCount(t *testing.T) {
 		_ = s.GetDB().Close()
 
 		select {
-		case <-served:
+		case err := <-served:
+			assert.NoError(t, err, "Start should return nil after a graceful Shutdown")
 		case <-time.After(30 * time.Second):
 			t.Error("Start did not return after Shutdown")
 		}
