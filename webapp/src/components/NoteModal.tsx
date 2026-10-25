@@ -213,7 +213,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     conflict, overwriteConflict,
     setSavedBaseline, markScalarSaved, applyDraftScalars, isDirty, hasUnflushedWork, baseline,
     reportSaveFailure, autoSaveNote, scheduleAutoSave, cancelPendingSave, flushSave,
-    beginExclusiveSave, endExclusiveSave, isSaving, requestAnotherSavePass,
+    beginExclusiveSave, endExclusiveSave, isSaving, requestAnotherSavePass, isMounted,
   } = useNoteDraft({ note, onRefresh, showError });
 
   useEffect(() => {
@@ -249,19 +249,25 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
 
   // Images picked on a note that doesn't exist yet. Uploads need a note id,
   // so the note is created first — even when it is otherwise empty, which is
-  // what makes an image-only note possible — and the files are queued once
-  // the caller has passed the created note back in (see the effect below).
-  const pendingNewNoteImagesRef = useRef<{ noteId: string; files: File[] } | null>(null);
-  const createNoteForImages = async (files: File[]) => {
-    if (!onCreated || !beginExclusiveSave()) return;
+  // what makes an image-only note possible — and the caller switches the
+  // modal over to it. If the modal was closed mid-create, the uploads still
+  // land; the caller just refreshes its list.
+  const canCreateForImages = !note && !!onCreated;
+  const createNoteForImages = async (): Promise<Note | null> => {
+    if (!onCreated || !beginExclusiveSave()) return null;
     cancelPendingSave();
     setLoading(true);
     try {
       const created = await notes.create(buildCreateRequest());
-      pendingNewNoteImagesRef.current = { noteId: created.id, files };
-      onCreated(created);
+      if (isMounted()) {
+        onCreated(created);
+      } else {
+        onRefresh?.();
+      }
+      return created;
     } catch (error) {
       reportSaveFailure('Failed to save note:', error);
+      return null;
     } finally {
       endExclusiveSave();
       setLoading(false);
@@ -271,14 +277,13 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
   // Note image add/remove UI (upload queue, optimistic overlay, deferred
   // removal undo, drag-to-upload). Uploads require an existing note — an id to
   // attach to — so the hook gates all of it on `note` being set, except the
-  // toolbar picker, which hands its files to createNoteForImages instead.
+  // toolbar picker, which has createNoteForImages create one first.
   const {
     displayedImages,
     imageUploads,
     removedImages,
     isDraggingImage,
     imageFileInputRef,
-    queueImageFiles,
     handleImageFileInputChange,
     handleImageDragEnter,
     handleImageDragOver,
@@ -295,7 +300,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     uploadMaxBytes,
     onRefresh,
     showError,
-    onFilesForNewNote: onCreated ? (files) => { void createNoteForImages(files); } : undefined,
+    ensureNote: canCreateForImages ? createNoteForImages : undefined,
   });
 
   // Tracks the note id whose state we have adopted into local editor state, so
@@ -476,16 +481,6 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
 
     adoptNote(note);
   }, [adoptNote, note, hasUnflushedWork, resetImagesForNoteSwitch, resetCompletedItemsForNoteSwitch]);
-
-  // Second half of createNoteForImages: once the created note has been
-  // adopted (the effect above, which also resets the upload queue on the
-  // switch from no note), upload the files that were picked for it.
-  useEffect(() => {
-    const pending = pendingNewNoteImagesRef.current;
-    if (!pending || note?.id !== pending.noteId) return;
-    pendingNewNoteImagesRef.current = null;
-    queueImageFiles(pending.files);
-  }, [note?.id, queueImageFiles]);
 
   useEffect(() => {
     if (!showColorPicker) return;
@@ -2504,7 +2499,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                 {/* Add image. On an unsaved note, picking a file creates the
                     note first (createNoteForImages), so a note can be just an
                     image. */}
-                {(note || onCreated) && (
+                {(note || canCreateForImages) && (
                   <>
                     <input
                       ref={imageFileInputRef}

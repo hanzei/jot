@@ -148,6 +148,7 @@ test.describe('Note image gallery', () => {
     // The modal stays open on the newly created note and shows the upload.
     await expect(dialog.getByAltText('test-icon.png')).toBeVisible();
     await expect(dialog.getByTestId('image-upload-tile')).not.toBeAttached();
+    await expect(page).toHaveURL(/\/notes\/[^/]+$/);
 
     await dashboardPage.closeNoteModal();
     await expect.poll(async () => {

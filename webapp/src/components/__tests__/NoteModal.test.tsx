@@ -432,6 +432,22 @@ describe('NoteModal', () => {
         expect(defaultProps.onSave).not.toHaveBeenCalled();
       });
 
+      it('still uploads to the created note when the modal closes mid-create', async () => {
+        const created = createMockNote({ id: 'new2', content: '', images: [] });
+        let resolveCreate: (note: Note) => void = () => {};
+        mockNotesCreate.mockReturnValueOnce(new Promise<Note>(resolve => { resolveCreate = resolve; }));
+        const { unmount } = render(<NewNoteHarness />);
+
+        const file = makeImageFile();
+        await uploadViaPicker(file);
+        unmount();
+        await act(async () => { resolveCreate(created); });
+
+        expect(mockImagesUpload).toHaveBeenCalledWith('new2', file, expect.any(Function));
+        expect(onCreated).not.toHaveBeenCalled();
+        expect(defaultProps.onRefresh).toHaveBeenCalled();
+      });
+
       it('does not create a note when every picked file is rejected', async () => {
         render(<NewNoteHarness />);
 

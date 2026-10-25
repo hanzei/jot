@@ -804,25 +804,35 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleCreateNote, handleViewChange, loading, showBin]);
 
-  const handleEditNote = (note: Note) => {
-    if (openNoteIdRef.current === note.id) return;
+  // Shows `note` in the modal and gives it its own /notes/{id} history entry,
+  // so the URL, Back and close (restoreReturnUrl) all work.
+  const showNoteInModal = (note: Note) => {
     if (!openNoteIdRef.current) {
       returnPathRef.current = window.location.pathname + window.location.search;
     }
-    lastFocusedElementRef.current = document.activeElement;
     openNoteIdRef.current = note.id;
     setEditingNote(note);
     setIsModalOpen(true);
     window.history.pushState({ returnTo: returnPathRef.current }, '', `/notes/${note.id}`);
   };
 
+  const handleEditNote = (note: Note) => {
+    if (openNoteIdRef.current === note.id) return;
+    lastFocusedElementRef.current = document.activeElement;
+    showNoteInModal(note);
+  };
+
   useEffect(() => {
     handleEditNoteRef.current = handleEditNote;
   });
 
-  const handleNoteUpdate = () => {
+  const reloadAfterNoteWrite = () => {
     void Promise.all([loadNotes(), loadLabelCounts()]);
     loadLabels();
+  };
+
+  const handleNoteUpdate = () => {
+    reloadAfterNoteWrite();
     setIsModalOpen(false);
     setEditingNote(null);
     restoreReturnUrl();
@@ -830,16 +840,15 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   };
 
   // The modal created a note without closing (an image picked on an unsaved
-  // note): keep it open on the new note so the upload can attach to it.
+  // note): keep it open on the new note. The reload also covers uploads that
+  // then fail, which would otherwise leave the note out of the list.
   const handleNoteCreated = (note: Note) => {
-    void Promise.all([loadNotes(), loadLabelCounts()]);
-    loadLabels();
-    setEditingNote(note);
+    reloadAfterNoteWrite();
+    showNoteInModal(note);
   };
 
   const handleNoteRefresh = () => {
-    void Promise.all([loadNotes(), loadLabelCounts()]);
-    loadLabels();
+    reloadAfterNoteWrite();
     // loadNotes() only refreshes notesList, not the currently open editingNote,
     // so callers relying on onRefresh to reflect a just-completed server change
     // in the open modal (e.g. a client-deferred image removal past its undo

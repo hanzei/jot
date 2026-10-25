@@ -83,7 +83,7 @@ import { animateListReflow, isReduceMotionEnabledSync } from '../utils/layoutAni
 import ActiveListRow from './noteEditor/ActiveListRow';
 import { useEditorDoc } from './noteEditor/useEditorDoc';
 import { useCardRectRegistry } from './notesList/cardRectRegistry';
-import { useNoteEditorSync } from './noteEditor/useNoteEditorSync';
+import { useNoteEditorSync, type FlushOptions } from './noteEditor/useNoteEditorSync';
 import { useListItemEditing } from './noteEditor/useListItemEditing';
 import { usePendingActionIndicator } from './noteEditor/usePendingActionIndicator';
 import type { EditorNavProp, EditorRouteProp } from './noteEditor/types';
@@ -558,32 +558,13 @@ export default function NoteEditorScreen() {
     return accepted;
   }, [existingNote?.images, showToast, t, validateImageFile]);
 
-  // Opens the add-image sheet. Unlike withSavedNote this doesn't require the
-  // note to exist yet: a blank new note may become an image-only note, which
-  // handlePickedImageFiles creates once the user has actually picked a file.
+  // Opens the add-image sheet after flushing pending edits. Unlike
+  // withSavedNote this doesn't require the note to exist yet: a blank new note
+  // may become an image-only note once the user actually picks a file.
   const openAddImageSheet = useCallback(async () => {
-    await withPendingIndicator(async () => {
-      const saved = await flushPendingChanges();
-      if (!saved) return; // save failed — error already surfaced by flushSave
-      setAddImageSheetVisible(true);
-    });
+    // A failed save has already surfaced its error via flushSave.
+    if (await withPendingIndicator(() => flushPendingChanges())) setAddImageSheetVisible(true);
   }, [flushPendingChanges, withPendingIndicator]);
-
-  // Entry point for the add-image action sheet. Uploads need a server-backed
-  // note, so a still-blank new note is created (empty) here first — but only
-  // once a valid file was picked, and never as a draft/orphan upload (spec
-  // §15.6).
-  const handlePickedImageFiles = useCallback(async (files: ImageUploadFile[]) => {
-    const accepted = selectUploadableImageFiles(files);
-    if (accepted.length === 0) return;
-    if (!noteIdRef.current) {
-      const created = await withPendingIndicator(
-        async () => await flushPendingChanges(true) && noteIdRef.current !== null,
-      );
-      if (!created) return; // save failed — error already surfaced by flushSave
-    }
-    accepted.forEach(startImageUpload);
-  }, [flushPendingChanges, noteIdRef, selectUploadableImageFiles, startImageUpload, withPendingIndicator]);
 
   const handleImagePermissionDenied = useCallback((source: 'camera' | 'library') => {
     showToast(source === 'camera' ? t('images.cameraPermissionDenied') : t('images.libraryPermissionDenied'), 'error');
@@ -779,16 +760,26 @@ export default function NoteEditorScreen() {
   // Save-first wrapper for note-level actions. A new/unsaved note is created by
   // flushing before the action runs, so bar actions no longer have to be hidden
   // until the first autosave. flushSave no-ops (and leaves noteId null) only for
-  // a genuinely empty note, in which case the action is skipped.
-  const withSavedNote = useCallback(async (action: (id: string) => void | Promise<void>) => {
+  // a genuinely empty note, in which case the action is skipped — unless
+  // `createIfEmpty` asks for the empty note to be created anyway.
+  const withSavedNote = useCallback(async (action: (id: string) => void | Promise<void>, options?: FlushOptions) => {
     await withPendingIndicator(async () => {
-      const saved = await flushPendingChanges();
+      const saved = await flushPendingChanges(options);
       if (!saved) return; // save failed — error already surfaced by flushSave
       const id = noteIdRef.current;
       if (!id) return; // empty note, nothing to act on
       await action(id);
     });
   }, [flushPendingChanges, noteIdRef, withPendingIndicator]);
+
+  // Entry point for the add-image action sheet. Uploads need a server-backed
+  // note, so a still-blank new note is created (empty) first — but only once
+  // a valid file was picked, and never as a draft/orphan upload (spec §15.6).
+  const handlePickedImageFiles = useCallback(async (files: ImageUploadFile[]) => {
+    const accepted = selectUploadableImageFiles(files);
+    if (accepted.length === 0) return;
+    await withSavedNote(() => accepted.forEach(startImageUpload), { createIfEmpty: true });
+  }, [selectUploadableImageFiles, startImageUpload, withSavedNote]);
 
   const handleTitleChange = useCallback(
     (newTitle: string) => {
