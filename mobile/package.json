@@ -37,6 +37,7 @@
     "expo-quick-actions": "^6.0.2",
     "expo-secure-store": "~57.0.4",
     "expo-share-intent": "^8.0.1",
+    "expo-sharing": "~57.0.24",
     "expo-sqlite": "~57.0.4",
     "expo-web-browser": "~57.0.3",
     "i18next": "^26.5.10",

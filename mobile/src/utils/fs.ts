@@ -120,9 +120,26 @@ export function listFileNames(uri: string): string[] {
  * on `result.status === 200` need a `try`/`catch` instead. On Android a failed
  * download can leave a partial file behind, so callers still clean up the
  * destination on failure.
+ *
+ * `headers` carries the session cookie for authenticated endpoints, since this
+ * bypasses the axios interceptor that normally attaches it. `signal` aborts the
+ * transfer; `onProgress` fires as bytes arrive.
  */
-export async function downloadFile(url: string, destUri: string): Promise<void> {
-  await File.downloadFileAsync(url, new File(destUri), { idempotent: true });
+export async function downloadFile(
+  url: string,
+  destUri: string,
+  options: {
+    headers?: Record<string, string>;
+    signal?: AbortSignal;
+    onProgress?: () => void;
+  } = {},
+): Promise<void> {
+  await File.downloadFileAsync(url, new File(destUri), {
+    idempotent: true,
+    ...(options.headers ? { headers: options.headers } : {}),
+    ...(options.signal ? { signal: options.signal } : {}),
+    ...(options.onProgress ? { onProgress: options.onProgress } : {}),
+  });
 }
 
 /** Read a whole file as text, or `null` when it is missing or unreadable. */

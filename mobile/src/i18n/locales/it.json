@@ -210,6 +210,7 @@
     "aboutSection": "Informazioni",
     "aboutButton": "Informazioni su Jot",
     "importSection": "Importa",
+    "exportSection": "Esporta",
     "noServerConfigured": "Nessun server configurato",
     "patsSection": "Token di accesso personali",
     "patsDescription": "Token per l'accesso alle API da script e strumenti esterni.",
@@ -483,6 +484,16 @@
     "importFailed": "Importazione non riuscita. Controlla il file e riprova.",
     "importing": "Importazione...",
     "importButton": "Importa"
+  },
+  "export": {
+    "description": "Scarica un backup di Jot (.zip) di tutte le tue note e delle relative immagini, poi salvalo o invialo con il menu di condivisione del dispositivo.",
+    "exportButton": "Esporta note",
+    "exporting": "Esportazione...",
+    "offline": "L'esportazione richiede una connessione al tuo server.",
+    "exportFailed": "Esportazione non riuscita. Riprova.",
+    "shareFailed": "Impossibile aprire il menu di condivisione. Riprova.",
+    "shareUnavailable": "La condivisione di file non è disponibile su questo dispositivo.",
+    "shareTitle": "Salva backup di Jot"
   },
   "upgrade": {
     "settingsSectionTitle": "Connetti a un server",

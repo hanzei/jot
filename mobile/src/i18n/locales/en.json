@@ -211,6 +211,7 @@
     "aboutSection": "About",
     "aboutButton": "About Jot",
     "importSection": "Import",
+    "exportSection": "Export",
     "patsSection": "Personal Access Tokens",
     "patsDescription": "Tokens for API access from scripts and external tools.",
     "patsNamePlaceholder": "Token name",
@@ -483,6 +484,16 @@
     "importFailed": "Import failed. Please check your file and try again.",
     "importing": "Importing...",
     "importButton": "Import"
+  },
+  "export": {
+    "description": "Download a Jot backup (.zip) of all your notes and their images, then save or send it with your device's share sheet.",
+    "exportButton": "Export notes",
+    "exporting": "Exporting...",
+    "offline": "Exporting needs a connection to your server.",
+    "exportFailed": "Export failed. Please try again.",
+    "shareFailed": "Could not open the share sheet. Please try again.",
+    "shareUnavailable": "Sharing files is not available on this device.",
+    "shareTitle": "Save Jot backup"
   },
   "upgrade": {
     "settingsSectionTitle": "Connect to a server",

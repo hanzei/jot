@@ -210,6 +210,7 @@
     "aboutSection": "Over",
     "aboutButton": "Over Jot",
     "importSection": "Importeren",
+    "exportSection": "Exporteren",
     "noServerConfigured": "Geen server geconfigureerd",
     "patsSection": "Persoonlijke toegangstokens",
     "patsDescription": "Tokens voor API-toegang vanuit scripts en externe tools.",
@@ -483,6 +484,16 @@
     "importFailed": "Importeren mislukt. Controleer je bestand en probeer het opnieuw.",
     "importing": "Importeren...",
     "importButton": "Importeren"
+  },
+  "export": {
+    "description": "Download een Jot-back-up (.zip) van al je notities en hun afbeeldingen en bewaar of verstuur deze via het deelmenu van je apparaat.",
+    "exportButton": "Notities exporteren",
+    "exporting": "Bezig met exporteren...",
+    "offline": "Exporteren vereist een verbinding met je server.",
+    "exportFailed": "Exporteren mislukt. Probeer het opnieuw.",
+    "shareFailed": "Het deelmenu kon niet worden geopend. Probeer het opnieuw.",
+    "shareUnavailable": "Bestanden delen is niet beschikbaar op dit apparaat.",
+    "shareTitle": "Jot-back-up opslaan"
   },
   "upgrade": {
     "settingsSectionTitle": "Verbinden met een server",
