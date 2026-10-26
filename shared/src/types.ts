@@ -455,6 +455,9 @@ export interface ShareNoteRequest {
   user_id: string;
 }
 
+/** The `import_type` values `POST /notes/import` accepts with an uploaded file. */
+export type FileImportType = 'google_keep' | 'jot_json';
+
 export interface ImportResponse {
   imported: number;
   skipped: number;

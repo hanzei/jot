@@ -54,6 +54,9 @@ IDP_PID=""
 # Set once the SSO flows reverse the IdP port, so cleanup only removes a
 # forward this script added.
 IDP_REVERSED=0
+# Set once the import fixtures are pushed to the device, so cleanup only
+# deletes files this script put there.
+IMPORT_FILES_PUSHED=0
 # Set once the offline flow puts the device in airplane mode, so cleanup only
 # touches the radio when this script was the one that changed it — a flow that
 # fails while offline must not leave a local emulator stuck that way.
@@ -64,6 +67,10 @@ cleanup() {
   fi
   if [ "$IDP_REVERSED" -eq 1 ]; then
     adb reverse --remove "tcp:${MOCK_IDP_PORT}" >/dev/null 2>&1 || true
+  fi
+  if [ "$IMPORT_FILES_PUSHED" -eq 1 ]; then
+    adb shell rm -f "$DEVICE_DOWNLOAD_DIR/$MAESTRO_JOT_KEEP_IMPORT_FILE" \
+      "$DEVICE_DOWNLOAD_DIR/$MAESTRO_JOT_JOT_IMPORT_FILE" >/dev/null 2>&1 || true
   fi
   stop_server
   if [ -n "$IDP_PID" ] && kill -0 "$IDP_PID" 2>/dev/null; then
@@ -221,10 +228,20 @@ DEEP_LINK_URL="jot://settings?server=${SERVER_URL_FROM_EMULATOR}"
 # local account must not be the one flow 15 provisions a fresh account from.
 MAESTRO_JOT_SSO_LINK_USERNAME="link${RUN_ID}"
 MAESTRO_JOT_SSO_USERNAME="sso${RUN_ID}"
+# The files flow 17 imports through the system picker, and the content text of
+# the note each one carries. prepare_import_files builds both and pushes them into
+# DEVICE_DOWNLOAD_DIR. The file names are per run so the picker can never offer
+# a stale copy a failed local run left behind.
+DEVICE_DOWNLOAD_DIR="/sdcard/Download"
+MAESTRO_JOT_KEEP_IMPORT_FILE="keep-takeout-${RUN_ID}.zip"
+MAESTRO_JOT_JOT_IMPORT_FILE="jot-backup-${RUN_ID}.zip"
+MAESTRO_JOT_KEEP_IMPORT_NOTE="Keep-import-note-${RUN_ID}"
+MAESTRO_JOT_JOT_IMPORT_NOTE="Jot-import-note-${RUN_ID}"
 readonly RUN_ID MAESTRO_JOT_USERNAME MAESTRO_JOT_PASSWORD MAESTRO_JOT_NOTE_TITLE \
   MAESTRO_JOT_OFFLINE_NOTE MAESTRO_JOT_SHARE_TEXT MAESTRO_JOT_KILL_NOTE \
   MAESTRO_JOT_SSE_NOTE DEEP_LINK_URL MAESTRO_JOT_SSO_LINK_USERNAME \
-  MAESTRO_JOT_SSO_USERNAME
+  MAESTRO_JOT_SSO_USERNAME DEVICE_DOWNLOAD_DIR MAESTRO_JOT_KEEP_IMPORT_FILE \
+  MAESTRO_JOT_JOT_IMPORT_FILE MAESTRO_JOT_KEEP_IMPORT_NOTE MAESTRO_JOT_JOT_IMPORT_NOTE
 
 # One flow at a time so airplane mode can be toggled between them. Each flow gets
 # its own JUnit report (report-<flow>.xml) so a multi-flow run does not clobber
@@ -268,6 +285,10 @@ run_maestro_flow() {
     -e MAESTRO_JOT_SSE_NOTE="$MAESTRO_JOT_SSE_NOTE" \
     -e MAESTRO_JOT_SSO_LINK_USERNAME="$MAESTRO_JOT_SSO_LINK_USERNAME" \
     -e MAESTRO_JOT_SSO_USERNAME="$MAESTRO_JOT_SSO_USERNAME" \
+    -e MAESTRO_JOT_KEEP_IMPORT_FILE="$MAESTRO_JOT_KEEP_IMPORT_FILE" \
+    -e MAESTRO_JOT_JOT_IMPORT_FILE="$MAESTRO_JOT_JOT_IMPORT_FILE" \
+    -e MAESTRO_JOT_KEEP_IMPORT_NOTE="$MAESTRO_JOT_KEEP_IMPORT_NOTE" \
+    -e MAESTRO_JOT_JOT_IMPORT_NOTE="$MAESTRO_JOT_JOT_IMPORT_NOTE" \
     --format junit \
     --output "$report" \
     --test-output-dir "$E2E_DIR/screenshots" \
@@ -372,6 +393,87 @@ create_note_via_api() {
     return 1
   fi
   echo "Out-of-band note created on the server."
+}
+
+# Build the two files flow 17 imports and push them into the device's Downloads
+# folder, where the system picker finds them. Runs before the SSO flows: the
+# Jot backup is a real GET /notes/export of the account flow 01 registered, and
+# the SSO-only restart for flow 16 turns password login off. Exporting rather
+# than committing a fixture keeps the backup in step with the bundle format.
+# The Keep file is shaped like a Takeout archive (Takeout/Keep/<note>.json).
+prepare_import_files() {
+  echo "==> Preparing the import files"
+  local api="http://localhost:${JOT_E2E_PORT}/api/v1"
+  local jar="$RUN_DIR/cookies.txt"
+  local keep_zip="$RUN_DIR/$MAESTRO_JOT_KEEP_IMPORT_FILE"
+  local jot_zip="$RUN_DIR/$MAESTRO_JOT_JOT_IMPORT_FILE"
+  if ! curl "${READY_CURL_OPTS[@]}" -c "$jar" -H 'Content-Type: application/json' \
+      -d "{\"username\":\"${MAESTRO_JOT_USERNAME}\",\"password\":\"${MAESTRO_JOT_PASSWORD}\"}" \
+      "$api/login" >/dev/null 2>&1; then
+    echo "Could not log in to build the Jot backup." >&2
+    return 1
+  fi
+  if ! curl "${READY_CURL_OPTS[@]}" -b "$jar" -H 'Content-Type: application/json' \
+      -d "{\"content\":\"${MAESTRO_JOT_JOT_IMPORT_NOTE}\",\"note_type\":\"text\"}" \
+      "$api/notes" >/dev/null 2>&1; then
+    echo "Could not create the note for the Jot backup." >&2
+    return 1
+  fi
+  if ! curl "${READY_CURL_OPTS[@]}" -b "$jar" -o "$jot_zip" "$api/notes/export"; then
+    echo "Could not export the Jot backup." >&2
+    return 1
+  fi
+  # No zip CLI on a bare dev machine; node is already required for the mock
+  # IdP, and zlib.crc32 is all a stored (uncompressed) archive needs.
+  if ! node -e '
+    const fs = require("node:fs");
+    const zlib = require("node:zlib");
+    const [out, text] = process.argv.slice(1);
+    const name = Buffer.from("Takeout/Keep/" + text + ".json");
+    const data = Buffer.from(JSON.stringify({ textContent: text }));
+    const crc = zlib.crc32(data);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    // 1980-01-01, the earliest valid DOS date; zero is not a valid date.
+    local.writeUInt16LE(0x21, 12);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(name.length, 26);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(0x21, 14);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(name.length, 28);
+    const centralSize = central.length + name.length;
+    const centralOffset = local.length + name.length + data.length;
+    const end = Buffer.alloc(22);
+    end.writeUInt32LE(0x06054b50, 0);
+    end.writeUInt16LE(1, 8);
+    end.writeUInt16LE(1, 10);
+    end.writeUInt32LE(centralSize, 12);
+    end.writeUInt32LE(centralOffset, 16);
+    fs.writeFileSync(out, Buffer.concat([local, name, data, central, name, end]));
+  ' "$keep_zip" "$MAESTRO_JOT_KEEP_IMPORT_NOTE"; then
+    echo "Could not build the Keep Takeout archive." >&2
+    return 1
+  fi
+  echo "==> Pushing the import files to $DEVICE_DOWNLOAD_DIR"
+  IMPORT_FILES_PUSHED=1
+  adb push "$keep_zip" "$jot_zip" "$DEVICE_DOWNLOAD_DIR/" >/dev/null
+  # adb push bypasses MediaStore. The picker's Downloads view also lists the
+  # folder's files directly, so the scan is best-effort: it only makes the files
+  # show up in Recent as well.
+  local file
+  for file in "$MAESTRO_JOT_KEEP_IMPORT_FILE" "$MAESTRO_JOT_JOT_IMPORT_FILE"; do
+    adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE \
+      -d "file://$DEVICE_DOWNLOAD_DIR/$file" >/dev/null 2>&1 || true
+  done
 }
 
 # Start the mock IdP (see MOCK_IDP_ISSUER above) with its registered redirect
@@ -569,6 +671,10 @@ if [ "$sse_post_pid" != "$sse_pre_pid" ]; then
 fi
 maestro_flow 11-sse-resync-catchup.yaml "$@"
 
+# Before the SSO block below: building the Jot backup needs password login,
+# which the restart for flow 16 turns off. Flow 17 imports the files at the end.
+prepare_import_files
+
 # 12-16 — SSO (#1016), against the mock IdP. The server restarts with OIDC on
 # (same database, so the app stays signed in) once the mock IdP is up and the
 # device can reach it. The IdP's authorize page opens in a Chrome Custom Tab,
@@ -596,3 +702,9 @@ stop_server
 start_server "${OIDC_ENV[@]}" JOT_LOCAL_LOGIN_ENABLED=false
 set_idp_username "$MAESTRO_JOT_SSO_USERNAME"
 maestro_flow 16-sso-only-login.yaml "$@"
+
+# 17 — import from Settings (#1134): a Keep Takeout zip and a Jot backup, each
+# picked in the system file picker and uploaded to the real server. Imports
+# into the account flow 16 signed in; the files were pushed before the SSO
+# block, by prepare_import_files.
+maestro_flow 17-import-files.yaml "$@"
