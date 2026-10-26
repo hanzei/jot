@@ -15,15 +15,16 @@ is fair game. Four phases, in order:
 4. **Converge and file** — a ranked shortlist, then issues for the ones the user picks.
 
 Nothing in this command changes code. No branch, no commits, no edits — the output is a
-discussion and, at most, a few GitHub issues.
+discussion and, at most, the GitHub issues the user selects.
 
 ## What not to be guided by
 
 **Open issues and PRs.** Do not read the issue tracker, the PR list, or issue numbers
 cited in the code before phase 4. The backlog is a record of what has already been
 thought of, and reading it first anchors every idea to it — the session turns into
-re-ranking the tracker instead of thinking. The tracker is consulted exactly once, as a
-duplicate check right before filing.
+re-ranking the tracker instead of thinking. The tracker is read only in phase 4, for
+duplicate checks: once over the selected ideas, then again right before each issue is
+created.
 
 **Code comments, at most lightly.** Comments explain why the code *is* the way it is;
 they are not a roadmap. Use them to avoid proposing something already rejected for a
@@ -139,21 +140,34 @@ When the user signals they are done exploring, write a **ranked shortlist** of t
 still standing: name, a two-to-four-sentence rationale, size, and your recommendation to
 file or leave each one.
 
-Then one `AskUserQuestion` with `multiSelect: true`, one option per shortlisted idea, the
-description carrying the size and your recommendation. Selecting nothing is a valid
-answer — a brainstorm that ends in a good conversation and no issues has still done its
-job.
+Then ask which to file with `AskUserQuestion`, one option per shortlisted idea, the
+description carrying the size and your recommendation. A question takes two to four
+options, so fit the call to the shortlist:
 
-### Duplicate check — the one time the tracker is read
+- **None left** — say so and skip the question.
+- **One idea** — a single-select question: file it or leave it.
+- **Two or more** — `multiSelect: true` questions of at most four ideas each, grouped
+  by theme, all in one call (it takes up to four questions). Treat the union of the
+  answers as the selection. A shortlist that doesn't fit in one call (over sixteen) is
+  not a shortlist yet; cut it with the user first.
+
+Selecting nothing is a valid answer — a brainstorm that ends in a good conversation and
+no issues has still done its job.
+
+### Duplicate check — the only time the tracker is read
 
 For each selected idea, search issues open *and* closed (`mcp__github__search_issues`,
 `owner: hanzei`, `repo: jot`). Open each plausible hit and read it; keyword overlap is
-not the same work. Then:
+not the same work. The same rules apply to the fresh check before each create (see
+**Filing**). Then:
 
 - **Same work, open** — don't file. Tell the user the idea was already on the radar, and
   which issue. If the brainstorm added something the issue lacks, offer to comment it
   there instead (and post only if they say yes).
-- **Same work, closed as completed** — it ships; phase 1 missed it. Say so.
+- **Same work, closed as completed** — the issue says the work is done; the code decides
+  whether it is. Look for it. If it ships, phase 1 missed it — say so. If it doesn't
+  (never merged, later removed), tell the user the issue's state is stale and treat the
+  idea as new, referencing the closed issue.
 - **Same work, closed as not planned** — it was weighed and declined. Show the user the
   reasoning and let them decide whether to re-propose it, with an explicit argument for
   why things have changed.
