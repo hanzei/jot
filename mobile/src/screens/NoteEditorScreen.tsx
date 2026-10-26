@@ -60,6 +60,7 @@ import { getActiveServer, listServers, type ServerAccountEntry } from '../store/
 import { setPendingShare, usePendingShare } from '../store/shareIntent';
 import {
   type LocalItem,
+  isBlankDraft,
   itemHasChildren,
 } from './noteEditor/listItemModel';
 import { MarkdownToolbarContent } from './noteEditor/EditorToolbars';
@@ -942,17 +943,36 @@ export default function NoteEditorScreen() {
     }
   }, [confirm, noteId, noteIdRef, permanentDeleteMutation, t, withPendingIndicator, zoomCloseAndExit]);
 
-  const handleTogglePin = useCallback(() => withSavedNote(async (id) => {
-    const newPinned = !pinnedRef.current;
-    setPinned(newPinned);
-    try {
-      await runMetadataUpdate(id, { pinned: newPinned });
-      commitMetadataBaseline({ pinned: newPinned });
-    } catch {
-      setPinned(!newPinned);
-      Alert.alert(t('common.error'), t('note.failedUpdate'));
+  const handleTogglePin = useCallback(async () => {
+    if (noteIdRef.current === null) {
+      // Not created yet (blank, or still waiting for its first autosave): pin is
+      // a local toggle and the create request carries it. Nothing is created
+      // here, so pinning a blank note never leaves an empty note behind. Set the
+      // ref too so a flush in this tick reads the new value; if a create is
+      // already in flight, the follow-up save patches the difference against
+      // the baseline that create recorded. On a blank draft a pin alone is not
+      // a pending edit (flushSave would create nothing anyway); the first
+      // content edit schedules the create, which reads pinnedRef then.
+      const newPinned = !pinnedRef.current;
+      setPinned(newPinned);
+      pinnedRef.current = newPinned;
+      if (!isBlankDraft(noteTypeRef.current, titleRef.current, contentRef.current, itemsRef.current)) {
+        markDirtyAndScheduleUpdate();
+      }
+      return;
     }
-  }), [commitMetadataBaseline, pinnedRef, runMetadataUpdate, setPinned, withSavedNote, t]);
+    await withSavedNote(async (id) => {
+      const newPinned = !pinnedRef.current;
+      setPinned(newPinned);
+      try {
+        await runMetadataUpdate(id, { pinned: newPinned });
+        commitMetadataBaseline({ pinned: newPinned });
+      } catch {
+        setPinned(!newPinned);
+        Alert.alert(t('common.error'), t('note.failedUpdate'));
+      }
+    });
+  }, [commitMetadataBaseline, contentRef, itemsRef, markDirtyAndScheduleUpdate, noteIdRef, noteTypeRef, pinnedRef, runMetadataUpdate, setPinned, titleRef, withSavedNote, t]);
 
   const handleToggleArchive = useCallback(() => {
     if (archivedRef.current) {
@@ -1133,6 +1153,11 @@ export default function NoteEditorScreen() {
   const isHydrating = initialNoteId !== null && !existingNote;
 
   const hasNoteColor = !!color && !isWhiteHexColor(color);
+
+  // A brand-new note with nothing in it yet (isBlankDraft), which flushSave
+  // declines to create. Archive is disabled here: there is nothing to archive,
+  // and archiving would create an empty note just to hide it.
+  const isBlankNewNote = noteId === null && isBlankDraft(noteType, title, content, items);
 
   // Share, Labels, and Add-image all act on a note that exists on the server.
   // A brand-new note (noteId === null) no longer has to wait for the first
@@ -1745,7 +1770,8 @@ export default function NoteEditorScreen() {
           <Image size={22} color={isReadOnly ? disabledBarIconColor : barIconColor} />
         </TouchableOpacity>
 
-        {/* Pin / Unpin. Save-first: an unsaved note is created before pinning. */}
+        {/* Pin / Unpin. On a note that does not exist yet this is a local toggle
+            applied when autosave creates the note; otherwise it is a PATCH. */}
         <TouchableOpacity
           onPress={handleTogglePin}
           disabled={isReadOnly}
@@ -1757,18 +1783,19 @@ export default function NoteEditorScreen() {
           <Pin size={22} color={isReadOnly ? disabledBarIconColor : (pinned ? colors.primary : barIconColor)} fill={pinned ? colors.primary : 'none'} />
         </TouchableOpacity>
 
-        {/* Archive / Unarchive. Save-first, like Pin. */}
+        {/* Archive / Unarchive. Save-first: an unsaved note with content is
+            created before archiving. Disabled on a blank new note. */}
         <TouchableOpacity
           onPress={handleToggleArchive}
-          disabled={isReadOnly}
+          disabled={isReadOnly || isBlankNewNote}
           style={styles.toolbarBtn}
           testID="toolbar-archive-btn"
           accessibilityLabel={archived ? t('note.unarchive') : t('note.archive')}
-          accessibilityState={{ disabled: isReadOnly }}
+          accessibilityState={{ disabled: isReadOnly || isBlankNewNote }}
         >
           <Archive
             size={22}
-            color={isReadOnly ? disabledBarIconColor : (archived ? colors.primary : barIconColor)}
+            color={isReadOnly || isBlankNewNote ? disabledBarIconColor : (archived ? colors.primary : barIconColor)}
           />
         </TouchableOpacity>
 

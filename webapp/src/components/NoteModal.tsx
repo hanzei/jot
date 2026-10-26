@@ -222,30 +222,32 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     };
   }, []);
 
-  const buildCreateRequest = (): CreateNoteRequest => (noteType === 'list'
-    ? {
-        note_type: 'list',
-        title,
-        color,
-        // The bulk create path is positional: it reconstructs parent_id by
-        // attaching each indented item to the nearest preceding top-level
-        // one. items is kept in normalized order (a parent precedes its
-        // children), so deriving indent_level from parentId is sufficient.
-        items: items.map((item, idx) => ({
-          id: item.id,
-          text: item.text,
-          position: idx,
-          completed: item.completed,
-          indent_level: indentOf(item),
-        })),
-        labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
-      }
-    : {
-        note_type: 'text',
-        content,
-        color,
-        labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
-      });
+  const buildCreateRequest = (): CreateNoteRequest => {
+    const metadata = {
+      color,
+      labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
+      // Pin toggled before the note existed (see handlePinToggle).
+      pinned: pinned || undefined,
+    };
+    return noteType === 'list'
+      ? {
+          note_type: 'list',
+          title,
+          // The bulk create path is positional: it reconstructs parent_id by
+          // attaching each indented item to the nearest preceding top-level
+          // one. items is kept in normalized order (a parent precedes its
+          // children), so deriving indent_level from parentId is sufficient.
+          items: items.map((item, idx) => ({
+            id: item.id,
+            text: item.text,
+            position: idx,
+            completed: item.completed,
+            indent_level: indentOf(item),
+          })),
+          ...metadata,
+        }
+      : { note_type: 'text', content, ...metadata };
+  };
 
   // Images picked on a note that doesn't exist yet. Uploads need a note id,
   // so the note is created first — even when it is otherwise empty, which is
@@ -1537,7 +1539,14 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
   };
 
   const handlePinToggle = async () => {
-    if (!note || isReadOnly) return;
+    if (isReadOnly) return;
+    if (!note) {
+      // A new note does not exist yet: pin is a local toggle, like colour, and
+      // the create request carries it. On its own it is not an unsaved change
+      // (hasUnsavedChanges), so closing a blank pinned note creates nothing.
+      setPinned(!pinned);
+      return;
+    }
 
     const newPinnedState = !pinned;
     setPinned(newPinnedState);
@@ -1709,16 +1718,22 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     if (e.defaultPrevented) return;
 
     if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
-    if (!note || isReadOnly || isEditableElementFocused()) return;
+    if (isReadOnly || isEditableElementFocused()) return;
 
     const key = e.key === 'Backspace' ? 'backspace' : e.key === 'Delete' ? 'delete' : e.key.toLowerCase();
+
+    // Pin works on a new note too, like its button (handlePinToggle); every
+    // other shortcut acts on a note that exists.
+    if (key === 'p') {
+      e.preventDefault();
+      handlePinToggle();
+      return;
+    }
+    if (!note) return;
 
     if (key === 'a') {
       e.preventDefault();
       handleArchiveToggle();
-    } else if (key === 'p') {
-      e.preventDefault();
-      handlePinToggle();
     } else if (key === 'd') {
       e.preventDefault();
       if (!onDuplicate) return;
@@ -2523,20 +2538,23 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                   </>
                 )}
 
+                {/* Pin also works on a new note: a local toggle the create
+                    request carries (handlePinToggle). */}
+                <button
+                  onClick={handlePinToggle}
+                  disabled={isReadOnly}
+                  className={`p-1 rounded-full transition-colors ${isReadOnly ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-200 dark:hover:bg-slate-700'}`}
+                  title={pinned ? t('note.unpinNote') : t('note.pinNote')}
+                  aria-label={pinned ? t('note.unpinNote') : t('note.pinNote')}
+                >
+                  <Pin
+                    className={pinned ? 'h-5 w-5 text-blue-500' : 'h-5 w-5 text-gray-600 dark:text-gray-300'}
+                    fill={pinned ? 'currentColor' : 'none'}
+                  />
+                </button>
+
                 {note && (
                   <>
-                    <button
-                      onClick={handlePinToggle}
-                      disabled={isReadOnly}
-                      className={`p-1 rounded-full transition-colors ${isReadOnly ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-200 dark:hover:bg-slate-700'}`}
-                      title={pinned ? t('note.unpinNote') : t('note.pinNote')}
-                      aria-label={pinned ? t('note.unpinNote') : t('note.pinNote')}
-                    >
-                      <Pin
-                        className={pinned ? 'h-5 w-5 text-blue-500' : 'h-5 w-5 text-gray-600 dark:text-gray-300'}
-                        fill={pinned ? 'currentColor' : 'none'}
-                      />
-                    </button>
                     <button
                       onClick={handleArchiveToggle}
                       disabled={isReadOnly}

@@ -372,20 +372,31 @@ func (s *noteStore) handlePinStatusChangeTx(ctx context.Context, tx *sql.Tx, id,
 	return s.handleUnpinningTx(ctx, tx, id, ownerID, currentNote)
 }
 
-// handlePinningTx stores the current position as unpinned_position and moves the note to the end of the pinned list.
-func (s *noteStore) handlePinningTx(ctx context.Context, tx *sql.Tx, id, userID string, currentNote *Note) error {
-	var maxPosition int
-	posQuery := s.d.RewritePlaceholders(`SELECT COALESCE(MAX(nus.position), -1)
+// nextPinnedPositionTx returns the position at the end of userID's pinned list,
+// not counting note id itself. Pinning an existing note (handlePinningTx) and
+// creating a pinned note (CreateWithItems) both place the note there.
+func (s *noteStore) nextPinnedPositionTx(ctx context.Context, tx *sql.Tx, id, userID string) (int, error) {
+	var position int
+	posQuery := s.d.RewritePlaceholders(`SELECT COALESCE(MAX(nus.position), -1) + 1
 	             FROM note_user_state nus
 	             INNER JOIN notes n ON nus.note_id = n.id AND n.deleted_at IS NULL
 	             WHERE nus.user_id = ? AND nus.pinned = TRUE AND nus.archived = FALSE AND nus.note_id != ?`)
-	if err := tx.QueryRowContext(ctx, posQuery, userID, id).Scan(&maxPosition); err != nil {
-		return fmt.Errorf("failed to get max position: %w", err)
+	if err := tx.QueryRowContext(ctx, posQuery, userID, id).Scan(&position); err != nil {
+		return 0, fmt.Errorf("failed to get max pinned position: %w", err)
+	}
+	return position, nil
+}
+
+// handlePinningTx stores the current position as unpinned_position and moves the note to the end of the pinned list.
+func (s *noteStore) handlePinningTx(ctx context.Context, tx *sql.Tx, id, userID string, currentNote *Note) error {
+	position, err := s.nextPinnedPositionTx(ctx, tx, id, userID)
+	if err != nil {
+		return fmt.Errorf("pin note: %w", err)
 	}
 
 	if _, err := tx.ExecContext(ctx,
 		s.d.RewritePlaceholders(`UPDATE note_user_state SET position = ?, unpinned_position = ? WHERE note_id = ? AND user_id = ?`),
-		maxPosition+1, currentNote.Position, id, userID,
+		position, currentNote.Position, id, userID,
 	); err != nil {
 		return fmt.Errorf("failed to update position: %w", err)
 	}

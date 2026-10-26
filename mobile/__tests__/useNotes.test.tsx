@@ -37,6 +37,7 @@ jest.mock('../src/db/noteQueries', () => ({
   markNotePendingCreate: jest.fn().mockResolvedValue(undefined),
   isNotePendingCreate: jest.fn().mockResolvedValue(false),
   getLocalNotePositions: jest.fn().mockResolvedValue(new Map()),
+  getNextLocalPinnedPosition: jest.fn().mockResolvedValue(0),
   createLocalItem: jest.fn().mockResolvedValue(undefined),
   patchLocalItem: jest.fn().mockResolvedValue(undefined),
   deleteLocalItem: jest.fn().mockResolvedValue(undefined),
@@ -262,6 +263,29 @@ describe('useNotes hooks', () => {
         }),
       );
       expect(result.current.data?.id).toBe('ClientNoteId000000000A');
+    });
+
+    it('creates a pinned note locally and carries pinned in the queued create', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      mockNoteQueries.getNextLocalPinnedPosition.mockResolvedValueOnce(3);
+
+      const { result } = await renderHook(() => useCreateNote(), { wrapper: createWrapper() });
+
+      const created = await result.current.mutateAsync({ content: 'Pinned offline', note_type: 'text', pinned: true });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      // The local row is pinned straight away, at the end of the pinned section
+      // like the server places it, and the replayed POST asks the server to
+      // create it pinned.
+      expect(created.pinned).toBe(true);
+      expect(created.position).toBe(3);
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operation: 'create',
+          body: expect.objectContaining({ content: 'Pinned offline', pinned: true }),
+        }),
+      );
     });
   });
 

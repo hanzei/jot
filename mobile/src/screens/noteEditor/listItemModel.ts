@@ -6,6 +6,7 @@ import {
   normalizeItemOrder,
   type ListItem,
   type NoteItem,
+  type NoteType,
 } from '@jot/shared';
 
 // Captured as a module-level number so the worklet form of indentLevelFromDrag
@@ -45,6 +46,14 @@ export function serializeItems(items: LocalItem[]) {
     indent_level: item.parentId ? 1 : 0,
     assigned_to: item.assigned_to,
   }));
+}
+
+// isBlankDraft reports whether a not-yet-created note has nothing worth saving:
+// flushSave declines to create it, and the toolbar disables Archive on it.
+// Colour and pin alone do not count; they ride along once content triggers the
+// create.
+export function isBlankDraft(noteType: NoteType, title: string, content: string, items: readonly LocalItem[]): boolean {
+  return noteType === 'list' ? !title && items.length === 0 : !content;
 }
 
 // The per-item save baseline lives in @jot/shared (`itemDiff.ts`) with the rest
