@@ -67,9 +67,10 @@ export interface NoteEditorSync {
   setSyncToast: React.Dispatch<React.SetStateAction<string | null>>;
 
   /**
-   * Persists pending edits now. Resolves false when the save failed. A
-   * not-yet-created note that is still empty is skipped unless `createIfEmpty`
-   * is set (adding an image to a blank note needs it to exist server-side).
+   * Persists pending edits now, after any save already in flight. Resolves
+   * false when the save failed. A not-yet-created note that is still empty is
+   * skipped (noteId stays null) unless `createIfEmpty` is set (adding an image
+   * to a blank note needs it to exist server-side).
    */
   flushSave: (unmounting?: boolean, options?: FlushOptions) => Promise<boolean>;
   /** Cancels the debounced save, then flushes. */
@@ -360,7 +361,14 @@ export function useNoteEditorSync({
 
   const flushSave = useCallback(async (unmounting = false, { createIfEmpty = false }: FlushOptions = {}): Promise<boolean> => {
     const mustCreate = createIfEmpty && !noteIdRef.current;
-    if (!hasPendingChangesRef.current && !mustCreate) return true;
+    if (!hasPendingChangesRef.current && !mustCreate) {
+      // Nothing new to persist, but an earlier save (a create, most
+      // importantly) may still be landing: settle it first, so a caller acting
+      // on the note sees its outcome and id rather than a note that seems not
+      // to exist yet.
+      const inFlight = saveInFlightRef.current;
+      return inFlight ? inFlight.then(() => true, () => false) : true;
+    }
     // If an existing note has local edits flagged but hasn't hydrated yet,
     // treat this as a failed flush so callers can retry after hydration.
     if (requiresHydrationRef.current && noteIdRef.current && !isInitializedRef.current) return false;

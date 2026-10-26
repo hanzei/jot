@@ -1,4 +1,5 @@
 import type React from 'react';
+import type LabelPicker from '../../src/components/LabelPicker';
 
 /**
  * Shared `jest.mock()` wiring for tests that render `NoteEditorScreen`.
@@ -44,7 +45,7 @@ export const mockDeleteCompletedItemsMutateAsync = jest.fn().mockResolvedValue([
 export const mockUploadImageMutateAsync = jest.fn();
 export const mockUseOfflineNote = jest.fn();
 export const mockShowToast = jest.fn();
-export const mockLabelPicker = jest.fn((_props: { visible: boolean }): React.ReactNode => null);
+export const mockLabelPicker = jest.fn((_props: React.ComponentProps<typeof LabelPicker>): React.ReactNode => null);
 export const mockUseUsers = jest.fn().mockReturnValue({ usersById: new Map() });
 export const mockUseServerConfig = jest.fn().mockReturnValue({
   registration_enabled: true,
@@ -144,7 +145,7 @@ jest.mock('../../src/store/SSEContext', () => ({
 
 jest.mock('../../src/components/LabelPicker', () => ({
   __esModule: true,
-  default: (props: { visible: boolean }) => mockLabelPicker(props),
+  default: (props: React.ComponentProps<typeof LabelPicker>) => mockLabelPicker(props),
 }));
 
 jest.mock('react-i18next', () => ({

@@ -146,6 +146,10 @@ export default function NoteEditorScreen() {
 
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
+  // Send shares the note's text, so the menu hides it while there is none.
+  // Decided when the menu opens (nothing can be typed while it is up) rather
+  // than formatting the whole note on every keystroke.
+  const [menuCanSend, setMenuCanSend] = useState(false);
   const [labelPickerVisible, setLabelPickerVisible] = useState(false);
   const [assigneePickerVisible, setAssigneePickerVisible] = useState(false);
   const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
@@ -762,29 +766,24 @@ export default function NoteEditorScreen() {
   // Save-first wrapper for note-level actions. A new/unsaved note is created by
   // flushing before the action runs, so bar actions no longer have to be hidden
   // until the first autosave. flushSave no-ops (and leaves noteId null) only for
-  // a genuinely empty note, in which case the action is skipped — unless
-  // `createIfEmpty` asks for the empty note to be created anyway.
-  const withSavedNote = useCallback(async (action: (id: string) => void | Promise<void>, options?: FlushOptions) => {
+  // a genuinely empty note, in which case `ifNotCreated` runs instead (or the
+  // action is skipped) — unless `createIfEmpty` asks for the empty note to be
+  // created anyway.
+  const withSavedNote = useCallback(async (
+    action: (id: string) => void | Promise<void>,
+    { ifNotCreated, ...options }: FlushOptions & { ifNotCreated?: () => void } = {},
+  ) => {
     await withPendingIndicator(async () => {
       const saved = await flushPendingChanges(options);
       if (!saved) return; // save failed — error already surfaced by flushSave
       const id = noteIdRef.current;
-      if (!id) return; // empty note, nothing to act on
+      if (!id) {
+        ifNotCreated?.();
+        return;
+      }
       await action(id);
     });
   }, [flushPendingChanges, noteIdRef, withPendingIndicator]);
-
-  // Latest-value form of isBlankNewNote (below), for handlers that must not
-  // act on a stale render: a brand-new note flushSave would decline to create.
-  // A create still in flight (text typed, then cleared before it landed) does
-  // not count: the note is about to exist, and a local-only edit made now would
-  // be overwritten when the created note hydrates.
-  const isBlankNewNoteNow = useCallback(
-    () => noteIdRef.current === null
-      && saveInFlightRef.current === null
-      && isBlankDraft(noteTypeRef.current, titleRef.current, contentRef.current, itemsRef.current),
-    [contentRef, itemsRef, noteIdRef, noteTypeRef, saveInFlightRef, titleRef],
-  );
 
   // Entry point for the add-image action sheet. Uploads need a server-backed
   // note, so a still-blank new note is created (empty) first — but only once
@@ -870,10 +869,14 @@ export default function NoteEditorScreen() {
     return (existingNote?.shared_with && existingNote.shared_with.length > 0) || existingNote?.is_shared;
   }, [existingNote?.shared_with, existingNote?.is_shared]);
 
+  const getShareText = useCallback(
+    () => formatEditorStateForShare(noteTypeRef.current, titleRef.current, contentRef.current, itemsRef.current),
+    [contentRef, itemsRef, noteTypeRef, titleRef],
+  );
   const handleNativeShare = useCallback(() => {
-    const text = formatEditorStateForShare(noteTypeRef.current, titleRef.current, contentRef.current, itemsRef.current);
+    const text = getShareText();
     if (text.trim()) void Share.share({ message: text });
-  }, [contentRef, itemsRef, noteTypeRef, titleRef]);
+  }, [getShareText]);
 
   const handleDelete = useCallback(async () => {
     if (!noteId) {
@@ -1115,14 +1118,8 @@ export default function NoteEditorScreen() {
   // it's confirmed first; text -> list just reflows lines and runs directly
   // (mirrors the webapp's NoteModal). The note is reloaded via a screen replace
   // afterward, since the editor's baseline/ref state is keyed to the note's
-  // pre-conversion type and shape. A blank new note has nothing to convert and
-  // would not be created by the flush, so it just switches type locally, like
-  // the Text/List toggle.
+  // pre-conversion type and shape.
   const handleConvertNoteType = useCallback(async () => {
-    if (isBlankNewNoteNow()) {
-      handleToggleNoteType();
-      return;
-    }
     cancelScheduledSave();
 
     const saveSucceeded = await withPendingIndicator(() => flushSave());
@@ -1132,6 +1129,9 @@ export default function NoteEditorScreen() {
 
     const currentNoteId = noteIdRef.current;
     if (!currentNoteId) {
+      // A blank new note, which the flush declined to create: there is nothing
+      // to convert, so just switch type locally, like the Text/List toggle.
+      handleToggleNoteType();
       return;
     }
 
@@ -1166,7 +1166,7 @@ export default function NoteEditorScreen() {
         Alert.alert(t('common.error'), t('note.failedConvert'));
       }
     }
-  }, [cancelScheduledSave, confirm, convertMutation, flushSave, handleToggleNoteType, intentionalExitRef, isBlankNewNoteNow, itemsRef, navigation, noteIdRef, noteTypeRef, showToast, t, withPendingIndicator]);
+  }, [cancelScheduledSave, confirm, convertMutation, flushSave, handleToggleNoteType, intentionalExitRef, itemsRef, navigation, noteIdRef, noteTypeRef, showToast, t, withPendingIndicator]);
 
   // Disable inputs while waiting for existing note to hydrate
   const isHydrating = initialNoteId !== null && !existingNote;
@@ -1178,11 +1178,6 @@ export default function NoteEditorScreen() {
   // and archiving would create an empty note just to hide it. For the same
   // reason the overflow menu hides Collaborators and Duplicate.
   const isBlankNewNote = noteId === null && isBlankDraft(noteType, title, content, items);
-  // Send shares the note's text, so it is hidden while there is none.
-  const hasShareableText = useMemo(
-    () => formatEditorStateForShare(noteType, title, content, items).trim() !== '',
-    [content, items, noteType, title],
-  );
 
   // Share, Labels, and Add-image all act on a note that exists on the server.
   // A brand-new note (noteId === null) no longer has to wait for the first
@@ -1216,12 +1211,9 @@ export default function NoteEditorScreen() {
   // leaves an empty note behind): the picker edits the labels locally and the
   // create request carries them once the note has content, as on the webapp.
   const openLabelPicker = useCallback(() => {
-    if (isBlankNewNoteNow()) {
-      setLabelPickerVisible(true);
-      return;
-    }
-    void withSavedNote(() => setLabelPickerVisible(true));
-  }, [isBlankNewNoteNow, withSavedNote]);
+    const open = () => setLabelPickerVisible(true);
+    void withSavedNote(open, { ifNotCreated: open });
+  }, [withSavedNote]);
   const openShareScreen = useCallback(() => {
     void withSavedNote((id) => navigation.navigate('Share', { noteId: id }));
   }, [withSavedNote, navigation]);
@@ -1843,7 +1835,10 @@ export default function NoteEditorScreen() {
             Disabled while a previous menu action is still pending so a second
             tap can't fire a concurrent action (#697). */}
         <TouchableOpacity
-          onPress={() => setMenuVisible(true)}
+          onPress={() => {
+            setMenuCanSend(getShareText().trim() !== '');
+            setMenuVisible(true);
+          }}
           disabled={isMenuActionPending}
           style={styles.toolbarBtn}
           testID="toolbar-menu-btn"
@@ -1860,7 +1855,7 @@ export default function NoteEditorScreen() {
         trashed={isReadOnly}
         title={noteType === 'list' ? title : undefined}
         noteType={noteType}
-        onSend={hasShareableText ? handleNativeShare : undefined}
+        onSend={menuCanSend ? handleNativeShare : undefined}
         onShare={canOpenSharing && !isBlankNewNote ? openShareScreen : undefined}
         shareIsReadOnly={!ownsNote}
         onDuplicate={isBlankNewNote ? undefined : handleDuplicate}

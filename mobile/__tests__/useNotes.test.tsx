@@ -309,8 +309,7 @@ describe('useNotes hooks', () => {
     it('attaches the named labels to the local row, queueing unknown ones ahead of the note', async () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
       const work = { id: 'label-work', user_id: 'test-user-id', name: 'Work', created_at: '', updated_at: '' };
-      // Read once per label name.
-      mockNoteQueries.getStoredLabels.mockResolvedValueOnce([work]).mockResolvedValueOnce([work]);
+      mockNoteQueries.getStoredLabels.mockImplementation(async () => [work]);
 
       const { result } = await renderHook(() => useCreateNote(), { wrapper: createWrapper() });
 
@@ -336,6 +335,7 @@ describe('useNotes hooks', () => {
           body: expect.objectContaining({ content: 'Labelled offline', labels: ['work', 'Errands'] }),
         }),
       ]);
+      mockNoteQueries.getStoredLabels.mockImplementation(async () => []);
     });
   });
 

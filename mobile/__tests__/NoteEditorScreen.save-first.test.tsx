@@ -291,18 +291,13 @@ describe('NoteEditorScreen overflow menu on a blank new note', () => {
     mockCreateMutateAsync.mockResolvedValue({ id: 'note-new', note_type: 'text', content: 'Later' });
     // Stand-in picker: shows the note id it was given and a button that picks
     // the "Work" label locally.
-    mockLabelPicker.mockImplementation((props: { visible: boolean }) => {
-      const { visible, noteId, onLocalLabelsChange } = props as {
-        visible: boolean;
-        noteId: string | null;
-        onLocalLabelsChange?: (labels: Label[]) => void;
-      };
-      return visible ? (
+    mockLabelPicker.mockImplementation(({ visible, noteId, onLocalLabelsChange }) => (
+      visible ? (
         <Text testID="label-picker-open" onPress={() => onLocalLabelsChange?.([workLabel])}>
           {noteId ?? 'local'}
         </Text>
-      ) : null;
-    });
+      ) : null
+    ));
   });
 
   afterEach(() => {
@@ -322,6 +317,8 @@ describe('NoteEditorScreen overflow menu on a blank new note', () => {
     expect(getByTestId('editor-menu-trash')).toBeTruthy();
 
     await fireEvent.changeText(getByTestId('note-content-input'), 'Later');
+    // Send is decided when the menu opens, so reopen it.
+    await fireEvent.press(getByTestId('toolbar-menu-btn'));
     expect(getByTestId('editor-menu-share')).toBeTruthy();
     expect(getByTestId('editor-menu-duplicate')).toBeTruthy();
     expect(getByTestId('editor-menu-send')).toBeTruthy();
@@ -397,6 +394,30 @@ describe('NoteEditorScreen overflow menu on a blank new note', () => {
     await waitFor(() => {
       expect(getByText('note-new')).toBeTruthy();
     });
+  });
+
+  it('waits for an in-flight create with no newer edits instead of skipping the action', async () => {
+    jest.useFakeTimers();
+    let resolveCreate!: (note: unknown) => void;
+    mockCreateMutateAsync.mockReturnValue(new Promise((res) => { resolveCreate = res; }));
+    const { getByTestId } = await render(<NoteEditorScreen />);
+
+    await act(async () => {
+      await fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
+    });
+    await act(async () => { jest.advanceTimersByTime(VALIDATION.AUTO_SAVE_TIMEOUT_MS); });
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
+
+    // Nothing is pending, but the note does not have its id yet.
+    await act(async () => { await fireEvent.press(getByTestId('toolbar-menu-btn')); });
+    await act(async () => { await fireEvent.press(getByTestId('editor-menu-share')); });
+    expect(mockNavigate).not.toHaveBeenCalled();
+    await act(async () => { resolveCreate({ id: 'note-new', note_type: 'text', content: 'Hello' }); });
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('Share', { noteId: 'note-new' });
+    });
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
   });
 
   it('switches a blank note\'s type locally on Convert', async () => {
