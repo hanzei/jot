@@ -3,7 +3,7 @@ import * as Sharing from 'expo-sharing';
 import ExportSection from '../src/screens/settings/ExportSection';
 import { useNetworkStatus } from '../src/hooks/useNetworkStatus';
 import { markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
-import { downloadExportBundle, EXPORT_STALL_TIMEOUT_MS } from '../src/api/export';
+import { downloadExportBundle, EXPORT_BUNDLE_RETENTION_MS, EXPORT_STALL_TIMEOUT_MS } from '../src/api/export';
 import { silenceConsole } from './helpers/consoleGuard';
 
 jest.mock('expo-sharing', () => ({
@@ -199,13 +199,19 @@ describe('downloadExportBundle', () => {
     jest.useRealTimers();
   });
 
-  it('clears bundles left behind by an earlier export', async () => {
+  it('clears expired and unrecognized bundles but keeps a recently shared one', async () => {
+    const now = Date.now();
+    const name = (ageMs: number) =>
+      `${EXPORT_DIR}/jot-export-${new Date(now - ageMs).toISOString().replace(/[:.]/g, '-')}.zip`;
+    const recent = name(EXPORT_BUNDLE_RETENTION_MS - 60_000);
     globalThis.mockFileSystem.dirs.add(EXPORT_DIR);
-    globalThis.mockFileSystem.files.set(`${EXPORT_DIR}/jot-export-old.zip`, 'stale');
+    globalThis.mockFileSystem.files.set(recent, 'shared a minute before expiry');
+    globalThis.mockFileSystem.files.set(name(EXPORT_BUNDLE_RETENTION_MS + 60_000), 'expired');
+    globalThis.mockFileSystem.files.set(`${EXPORT_DIR}/something-else.zip`, 'unrecognized');
 
     const uri = await downloadExportBundle();
 
-    expect(exportFiles()).toEqual([uri]);
+    expect(exportFiles().sort()).toEqual([recent, uri].sort());
   });
 
   it('aborts a download that stalls, but not one that keeps making progress', async () => {

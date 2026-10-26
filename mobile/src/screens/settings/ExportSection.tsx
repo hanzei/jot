@@ -52,7 +52,7 @@ export default function ExportSection() {
         UTI: 'public.zip-archive',
         dialogTitle: t('export.shareTitle'),
       });
-      // Kept for the receiving app; see clearExportCache.
+      // Kept for the receiving app; see EXPORT_BUNDLE_RETENTION_MS.
     } catch {
       if (bundleUri) deleteFileIfExists(bundleUri);
       if (controller.signal.aborted) return;
