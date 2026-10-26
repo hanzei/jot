@@ -776,9 +776,14 @@ export default function NoteEditorScreen() {
 
   // Latest-value form of isBlankNewNote (below), for handlers that must not
   // act on a stale render: a brand-new note flushSave would decline to create.
+  // A create still in flight (text typed, then cleared before it landed) does
+  // not count: the note is about to exist, and a local-only edit made now would
+  // be overwritten when the created note hydrates.
   const isBlankNewNoteNow = useCallback(
-    () => noteIdRef.current === null && isBlankDraft(noteTypeRef.current, titleRef.current, contentRef.current, itemsRef.current),
-    [contentRef, itemsRef, noteIdRef, noteTypeRef, titleRef],
+    () => noteIdRef.current === null
+      && saveInFlightRef.current === null
+      && isBlankDraft(noteTypeRef.current, titleRef.current, contentRef.current, itemsRef.current),
+    [contentRef, itemsRef, noteIdRef, noteTypeRef, saveInFlightRef, titleRef],
   );
 
   // Entry point for the add-image action sheet. Uploads need a server-backed
@@ -1115,7 +1120,7 @@ export default function NoteEditorScreen() {
   // the Text/List toggle.
   const handleConvertNoteType = useCallback(async () => {
     if (isBlankNewNoteNow()) {
-      setNoteType((prev) => (prev === 'text' ? 'list' : 'text'));
+      handleToggleNoteType();
       return;
     }
     cancelScheduledSave();
@@ -1161,7 +1166,7 @@ export default function NoteEditorScreen() {
         Alert.alert(t('common.error'), t('note.failedConvert'));
       }
     }
-  }, [cancelScheduledSave, confirm, convertMutation, flushSave, intentionalExitRef, isBlankNewNoteNow, itemsRef, navigation, noteIdRef, noteTypeRef, setNoteType, showToast, t, withPendingIndicator]);
+  }, [cancelScheduledSave, confirm, convertMutation, flushSave, handleToggleNoteType, intentionalExitRef, isBlankNewNoteNow, itemsRef, navigation, noteIdRef, noteTypeRef, showToast, t, withPendingIndicator]);
 
   // Disable inputs while waiting for existing note to hydrate
   const isHydrating = initialNoteId !== null && !existingNote;

@@ -369,6 +369,36 @@ describe('NoteEditorScreen overflow menu on a blank new note', () => {
     expect(mockCreateMutateAsync.mock.calls[0]![0]).not.toHaveProperty('labels', expect.anything());
   });
 
+  it('waits for an in-flight create instead of labelling locally', async () => {
+    jest.useFakeTimers();
+    let resolveCreate!: (note: unknown) => void;
+    mockCreateMutateAsync.mockReturnValue(new Promise((res) => { resolveCreate = res; }));
+    const { getByTestId, getByText, queryByTestId } = await render(<NoteEditorScreen />);
+
+    // Typing starts the autosave create; clearing the text before it lands
+    // makes the draft blank again while the note is about to exist.
+    await act(async () => {
+      await fireEvent.changeText(getByTestId('note-content-input'), 'x');
+    });
+    await act(async () => { jest.advanceTimersByTime(VALIDATION.AUTO_SAVE_TIMEOUT_MS); });
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await fireEvent.changeText(getByTestId('note-content-input'), '');
+    });
+
+    await act(async () => { await fireEvent.press(getByTestId('toolbar-menu-btn')); });
+    await act(async () => { await fireEvent.press(getByTestId('editor-menu-label')); });
+    // Not opened in local mode: a label picked there would be dropped when the
+    // created note hydrates.
+    expect(queryByTestId('label-picker-open')).toBeNull();
+    await act(async () => { resolveCreate({ id: 'note-new', note_type: 'text', content: 'x' }); });
+
+    // Once the create lands, the picker opens against the created note.
+    await waitFor(() => {
+      expect(getByText('note-new')).toBeTruthy();
+    });
+  });
+
   it('switches a blank note\'s type locally on Convert', async () => {
     const { getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
 
