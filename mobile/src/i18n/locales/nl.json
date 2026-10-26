@@ -210,8 +210,6 @@
     "aboutSection": "Over",
     "aboutButton": "Over Jot",
     "importSection": "Importeren",
-    "importDescription": "Importeer notities uit Google Keep-exports.",
-    "importButton": "Importeren uit Google Keep",
     "noServerConfigured": "Geen server geconfigureerd",
     "patsSection": "Persoonlijke toegangstokens",
     "patsDescription": "Tokens voor API-toegang vanuit scripts en externe tools.",
@@ -468,6 +466,14 @@
     "loadError": "Kon niet-gesynchroniseerde wijzigingen niet laden."
   },
   "import": {
+    "formatLabel": "Formaat",
+    "formatGoogleKeep": "Google Keep",
+    "formatJot": "Jot-back-up",
+    "description": "Upload een Google Keep-exportbestand. Exporteer je notities via Google Takeout en upload het .zip-archief of een individueel .json-notitiebestand.",
+    "descriptionJot": "Upload een Jot-back-up (.zip) om je notities en hun afbeeldingen te herstellen. .json-exports van oudere Jot-versies worden niet ondersteund.",
+    "fileTypesJot": ".zip-bestanden",
+    "invalidFileTypeJot": "Ongeldig bestandstype. Selecteer een .zip-bestand.",
+    "selectFile": "Bestand kiezen",
     "fileTypes": ".zip- of .json-bestanden",
     "invalidFileType": "Ongeldig bestandstype. Selecteer een .json- of .zip-bestand.",
     "importedNotes_one": "{{count}} notitie geïmporteerd",

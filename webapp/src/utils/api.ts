@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, NoteItem, CreateNoteRequest, UpdateNoteRequest, ConvertNoteTypeRequest, CreateNoteItemRequest, PatchNoteItemRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, SetUserPasswordRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest, NoteImage, LabelCountsResponse, NoteListResponse, NoteShareListResponse, LabelListResponse, UserSearchResponse, SessionListResponse, PATListResponse } from '@jot/shared';
+import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, NoteItem, CreateNoteRequest, UpdateNoteRequest, ConvertNoteTypeRequest, CreateNoteItemRequest, PatchNoteItemRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, FileImportType, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, SetUserPasswordRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest, NoteImage, LabelCountsResponse, NoteListResponse, NoteShareListResponse, LabelListResponse, UserSearchResponse, SessionListResponse, PATListResponse } from '@jot/shared';
 import { removeUser } from '@/utils/auth';
 import { authPathWithRedirect, currentRedirectTarget } from '@/utils/authRedirect';
 import { recordFailedRequest } from '@/utils/diagnostics';
@@ -121,7 +121,7 @@ export const notes = {
 
   importNotes: (
     payload:
-      | { file: File; importType: 'jot_json' | 'google_keep' }
+      | { file: File; importType: FileImportType }
       | { importType: 'usememos'; url: string; token: string },
   ): Promise<ImportResponse> => {
     const formData = new FormData();

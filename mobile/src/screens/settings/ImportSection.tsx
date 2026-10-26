@@ -5,7 +5,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '../../theme/ThemeContext';
-import { importKeepFile, getNotes } from '../../api/notes';
+import { importFile, getNotes } from '../../api/notes';
 import { getLabels } from '../../api/labels';
 import { saveServerLabels, saveServerNotes } from '../../db/syncQueue';
 import {
@@ -15,8 +15,22 @@ import {
   notesLocalQueryScopeKey,
 } from '../../hooks/queryKeys';
 import { displayMessage, extractApiError } from '../../i18n/utils';
-import type { ImportResponse } from '@jot/shared';
+import type { FileImportType, ImportResponse } from '@jot/shared';
 import { styles } from './styles';
+
+const ZIP_MIME_TYPES = ['application/zip', 'application/x-zip-compressed'];
+
+// A Jot backup is always a .zip bundle; a Keep export is a Takeout .zip or a
+// single note's .json.
+const ACCEPTED_MIME_TYPES: Record<FileImportType, string[]> = {
+  google_keep: ['application/json', ...ZIP_MIME_TYPES],
+  jot_json: ZIP_MIME_TYPES,
+};
+
+const FORMAT_OPTIONS: { value: FileImportType; labelKey: string }[] = [
+  { value: 'google_keep', labelKey: 'import.formatGoogleKeep' },
+  { value: 'jot_json', labelKey: 'import.formatJot' },
+];
 
 export default function ImportSection() {
   const { colors } = useTheme();
@@ -24,15 +38,23 @@ export default function ImportSection() {
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
 
+  const [importType, setImportType] = useState<FileImportType>('google_keep');
   const [selectedImportFile, setSelectedImportFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState('');
   const [importResult, setImportResult] = useState<ImportResponse | null>(null);
 
+  const handleFormatChange = useCallback((type: FileImportType) => {
+    setImportType(type);
+    setSelectedImportFile(null);
+    setImportResult(null);
+    setImportError('');
+  }, []);
+
   const handleSelectImportFile = useCallback(async () => {
     setImportError('');
     const result = await DocumentPicker.getDocumentAsync({
-      type: ['application/json', 'application/zip', 'application/x-zip-compressed'],
+      type: ACCEPTED_MIME_TYPES[importType],
       multiple: false,
       copyToCacheDirectory: true,
     });
@@ -42,21 +64,20 @@ export default function ImportSection() {
     const fileName = file.name.toLowerCase();
     const mimeType = file.mimeType?.toLowerCase() ?? '';
     const isJson = fileName.endsWith('.json') || mimeType === 'application/json';
-    const isZip = fileName.endsWith('.zip')
-      || mimeType === 'application/zip'
-      || mimeType === 'application/x-zip-compressed';
+    const isZip = fileName.endsWith('.zip') || ZIP_MIME_TYPES.includes(mimeType);
+    const isValid = importType === 'jot_json' ? isZip : isJson || isZip;
 
-    if (!isJson && !isZip) {
+    if (!isValid) {
       setSelectedImportFile(null);
       setImportResult(null);
-      setImportError('import.invalidFileType');
+      setImportError(importType === 'jot_json' ? 'import.invalidFileTypeJot' : 'import.invalidFileType');
       return;
     }
 
     setSelectedImportFile(file);
     setImportResult(null);
     setImportError('');
-  }, []);
+  }, [importType]);
 
   const handleImportNotes = useCallback(async () => {
     if (!selectedImportFile) return;
@@ -64,11 +85,11 @@ export default function ImportSection() {
     setImportError('');
     setImportResult(null);
     try {
-      const response = await importKeepFile({
+      const response = await importFile({
         uri: selectedImportFile.uri,
         name: selectedImportFile.name,
         mimeType: selectedImportFile.mimeType,
-      });
+      }, importType);
       setImportResult(response);
       setSelectedImportFile(null);
       try {
@@ -92,27 +113,54 @@ export default function ImportSection() {
     } finally {
       setImporting(false);
     }
-  }, [db, queryClient, selectedImportFile]);
+  }, [db, importType, queryClient, selectedImportFile]);
 
   return (
     <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('settings.importSection')}</Text>
+      <Text style={[styles.importFormatLabel, { color: colors.text }]}>{t('import.formatLabel')}</Text>
+      <View style={styles.importFormatRow} accessibilityRole="radiogroup">
+        {FORMAT_OPTIONS.map(option => {
+          const isSelected = importType === option.value;
+          return (
+            <TouchableOpacity
+              key={option.value}
+              style={[
+                styles.importFormatOption,
+                { borderColor: isSelected ? colors.primary : colors.border },
+                isSelected && { backgroundColor: colors.primary },
+              ]}
+              onPress={() => handleFormatChange(option.value)}
+              disabled={importing}
+              testID={`settings-import-format-${option.value}`}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: isSelected, disabled: importing }}
+            >
+              <Text style={[styles.importFormatOptionText, { color: isSelected ? '#fff' : colors.text }]}>
+                {t(option.labelKey)}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
       <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>
-        {t('settings.importDescription')}
+        {t(importType === 'jot_json' ? 'import.descriptionJot' : 'import.description')}
       </Text>
       <TouchableOpacity
         style={[styles.primaryButton, styles.importSelectButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
         onPress={handleSelectImportFile}
         disabled={importing}
         testID="settings-import-select-file"
-        accessibilityLabel={t('settings.importButton')}
+        accessibilityLabel={t('import.selectFile')}
         accessibilityRole="button"
       >
         <Text style={[styles.importSelectButtonText, { color: colors.text }]}>
-          {t('settings.importButton')}
+          {t('import.selectFile')}
         </Text>
       </TouchableOpacity>
-      <Text style={[styles.importFileTypesText, { color: colors.textMuted }]}>{t('import.fileTypes')}</Text>
+      <Text style={[styles.importFileTypesText, { color: colors.textMuted }]}>
+        {t(importType === 'jot_json' ? 'import.fileTypesJot' : 'import.fileTypes')}
+      </Text>
       {selectedImportFile && (
         <Text style={[styles.importFileName, { color: colors.text }]} numberOfLines={1}>
           {selectedImportFile.name}

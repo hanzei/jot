@@ -2,7 +2,7 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import SettingsScreen from '../src/screens/SettingsScreen';
 import { useAuth } from '../src/store/AuthContext';
 import { listSessions } from '../src/api/settings';
-import { importKeepFile, getNotes } from '../src/api/notes';
+import { importFile, getNotes } from '../src/api/notes';
 import { getLabels } from '../src/api/labels';
 import * as DocumentPicker from 'expo-document-picker';
 import i18n from '../src/i18n';
@@ -30,7 +30,7 @@ jest.mock('../src/api/settings', () => ({
 }));
 
 jest.mock('../src/api/notes', () => ({
-  importKeepFile: jest.fn(),
+  importFile: jest.fn(),
   getNotes: jest.fn(),
 }));
 
@@ -91,7 +91,7 @@ jest.mock('../src/hooks/useServerConfig', () => ({
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const mockListSessions = listSessions as jest.MockedFunction<typeof listSessions>;
-const mockImportKeepFile = importKeepFile as jest.MockedFunction<typeof importKeepFile>;
+const mockImportFile = importFile as jest.MockedFunction<typeof importFile>;
 const mockGetNotes = getNotes as jest.MockedFunction<typeof getNotes>;
 const mockGetLabels = getLabels as jest.MockedFunction<typeof getLabels>;
 const mockGetDocumentAsync = DocumentPicker.getDocumentAsync as jest.MockedFunction<typeof DocumentPicker.getDocumentAsync>;
@@ -149,7 +149,7 @@ describe('SettingsScreen import section', () => {
       canceled: false,
       assets: [{ uri: 'file:///tmp/export.zip', name: 'export.zip', mimeType: 'application/zip' }],
     } as DocumentPicker.DocumentPickerResult);
-    mockImportKeepFile.mockResolvedValue({ imported: 2, skipped: 1 });
+    mockImportFile.mockResolvedValue({ imported: 2, skipped: 1 });
 
     const { getByTestId, getByText } = await render(<SettingsScreen />);
 
@@ -164,11 +164,11 @@ describe('SettingsScreen import section', () => {
     await fireEvent.press(getByTestId('settings-import-submit'));
 
     await waitFor(() => {
-      expect(mockImportKeepFile).toHaveBeenCalledWith({
+      expect(mockImportFile).toHaveBeenCalledWith({
         uri: 'file:///tmp/export.zip',
         name: 'export.zip',
         mimeType: 'application/zip',
-      });
+      }, 'google_keep');
     });
     await waitFor(() => {
       expect(mockGetNotes).toHaveBeenCalled();
@@ -190,6 +190,83 @@ describe('SettingsScreen import section', () => {
     expect(getByText(/\(1 skipped\)/i)).toBeTruthy();
   }, SETTINGS_IMPORT_TEST_TIMEOUT_MS);
 
+  it('imports a Jot backup when the Jot format is chosen', async () => {
+    mockGetDocumentAsync.mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: 'file:///tmp/jot-export.zip', name: 'jot-export.zip', mimeType: 'application/zip' }],
+    } as DocumentPicker.DocumentPickerResult);
+    mockImportFile.mockResolvedValue({ imported: 3, skipped: 0 });
+
+    const { getByTestId, getByText } = await render(<SettingsScreen />);
+
+    await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
+
+    await fireEvent.press(getByTestId('settings-import-format-jot_json'));
+    expect(getByTestId('settings-import-format-jot_json').props.accessibilityState).toMatchObject({ checked: true });
+    expect(getByText('.zip files')).toBeTruthy();
+
+    await fireEvent.press(getByTestId('settings-import-select-file'));
+    expect(mockGetDocumentAsync).toHaveBeenCalledWith(expect.objectContaining({
+      type: ['application/zip', 'application/x-zip-compressed'],
+    }));
+    await waitFor(() => {
+      expect(getByText('jot-export.zip')).toBeTruthy();
+    });
+
+    await fireEvent.press(getByTestId('settings-import-submit'));
+
+    await waitFor(() => {
+      expect(mockImportFile).toHaveBeenCalledWith({
+        uri: 'file:///tmp/jot-export.zip',
+        name: 'jot-export.zip',
+        mimeType: 'application/zip',
+      }, 'jot_json');
+    });
+    await waitFor(() => {
+      expect(getByText(/Imported 3 notes/i)).toBeTruthy();
+    });
+  }, SETTINGS_IMPORT_TEST_TIMEOUT_MS);
+
+  it('rejects a .json file for the Jot format', async () => {
+    mockGetDocumentAsync.mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: 'file:///tmp/export.json', name: 'export.json', mimeType: 'application/json' }],
+    } as DocumentPicker.DocumentPickerResult);
+
+    const { getByTestId, getByText, queryByText } = await render(<SettingsScreen />);
+
+    await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
+    await fireEvent.press(getByTestId('settings-import-format-jot_json'));
+    await fireEvent.press(getByTestId('settings-import-select-file'));
+
+    await waitFor(() => {
+      expect(getByText('Invalid file type. Please select a .zip file.')).toBeTruthy();
+    });
+    expect(queryByText('export.json')).toBeNull();
+    expect(mockImportFile).not.toHaveBeenCalled();
+  });
+
+  it('clears the selected file when the format changes', async () => {
+    mockGetDocumentAsync.mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: 'file:///tmp/export.zip', name: 'export.zip', mimeType: 'application/zip' }],
+    } as DocumentPicker.DocumentPickerResult);
+
+    const { getByTestId, getByText, queryByText } = await render(<SettingsScreen />);
+
+    await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
+    await fireEvent.press(getByTestId('settings-import-select-file'));
+    await waitFor(() => {
+      expect(getByText('export.zip')).toBeTruthy();
+    });
+
+    await fireEvent.press(getByTestId('settings-import-format-jot_json'));
+
+    expect(queryByText('export.zip')).toBeNull();
+    await fireEvent.press(getByTestId('settings-import-submit'));
+    expect(mockImportFile).not.toHaveBeenCalled();
+  });
+
   it('rejects unsupported files with a validation error', async () => {
     mockGetDocumentAsync.mockResolvedValue({
       canceled: false,
@@ -206,7 +283,7 @@ describe('SettingsScreen import section', () => {
       expect(getByText(/Invalid file type/i)).toBeTruthy();
     });
     expect(queryByText('notes.txt')).toBeNull();
-    expect(mockImportKeepFile).not.toHaveBeenCalled();
+    expect(mockImportFile).not.toHaveBeenCalled();
   });
 
   it('shows API error when import fails', async () => {
@@ -214,7 +291,7 @@ describe('SettingsScreen import section', () => {
       canceled: false,
       assets: [{ uri: 'file:///tmp/export.json', name: 'export.json', mimeType: 'application/json' }],
     } as DocumentPicker.DocumentPickerResult);
-    mockImportKeepFile.mockRejectedValue({ response: { status: 400, data: apiErrorBody('invalid_import_file', 'invalid JSON file') } });
+    mockImportFile.mockRejectedValue({ response: { status: 400, data: apiErrorBody('invalid_import_file', 'invalid JSON file') } });
 
     const { getByTestId, getByText } = await render(<SettingsScreen />);
 
@@ -237,7 +314,7 @@ describe('SettingsScreen import section', () => {
       canceled: false,
       assets: [{ uri: 'file:///tmp/export.json', name: 'export.json', mimeType: 'application/json' }],
     } as DocumentPicker.DocumentPickerResult);
-    mockImportKeepFile.mockRejectedValue(new Error('network error'));
+    mockImportFile.mockRejectedValue(new Error('network error'));
 
     const { getByTestId, getByText } = await render(<SettingsScreen />);
 
@@ -259,7 +336,7 @@ describe('SettingsScreen import section', () => {
       canceled: false,
       assets: [{ uri: 'file:///tmp/export.json', name: 'export.json', mimeType: 'application/json' }],
     } as DocumentPicker.DocumentPickerResult);
-    mockImportKeepFile.mockResolvedValue({
+    mockImportFile.mockResolvedValue({
       imported: 1,
       skipped: 0,
       errors: ['failed to import "bad note": invalid json'],
