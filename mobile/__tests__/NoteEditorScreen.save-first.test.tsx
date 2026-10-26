@@ -9,6 +9,7 @@ import {
   mockUpdateMutateAsync,
   mockUseOfflineNote,
   mockLabelPicker,
+  mockUploadImageMutateAsync,
 } from './helpers/noteEditorScreenTestSetup';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 import { VALIDATION } from '@jot/shared';
@@ -21,13 +22,19 @@ import { VALIDATION } from '@jot/shared';
 // is disabled while the new note is still blank.
 
 // Render a detectable marker only while the sheet is visible so the tests can
-// assert the save-first flow actually opened it.
+// assert the save-first flow actually opened it, plus a button standing in for
+// picking a photo.
+const mockPickedFile = { uri: 'file:///photo.jpg', name: 'photo.jpg', mimeType: 'image/jpeg', sizeBytes: 1024 };
 jest.mock('../src/components/AddImageActionSheet', () => {
-  const { Text: RNText } = jest.requireActual('react-native');
+  const { Text: RNText, TouchableOpacity } = jest.requireActual('react-native');
   return {
     __esModule: true,
-    default: ({ visible }: { visible: boolean }) =>
-      visible ? <RNText testID="add-image-sheet-open" /> : null,
+    default: ({ visible, onPick }: { visible: boolean; onPick: (files: unknown[]) => void }) =>
+      visible ? (
+        <TouchableOpacity testID="add-image-sheet-open" onPress={() => onPick([mockPickedFile])}>
+          <RNText>pick</RNText>
+        </TouchableOpacity>
+      ) : null,
   };
 });
 
@@ -191,7 +198,7 @@ describe('NoteEditorScreen save-first server actions on a brand-new note', () =>
   it('enables Add image and offers Share + Labels before the first save', async () => {
     const { getByTestId } = await render(<NoteEditorScreen />);
 
-    // Add-image is enabled on an unsaved note (save-first will create it on tap).
+    // Add-image is enabled on an unsaved note (picking an image creates it).
     expect(getByTestId('toolbar-add-image-btn').props.accessibilityState).toMatchObject({ disabled: false });
 
     await fireEvent.press(getByTestId('toolbar-menu-btn'));
@@ -213,6 +220,42 @@ describe('NoteEditorScreen save-first server actions on a brand-new note', () =>
       expect(mockCreateMutateAsync).toHaveBeenCalled();
       expect(getByTestId('add-image-sheet-open')).toBeTruthy();
     });
+  });
+
+  it('opens the image sheet on a blank note without creating it', async () => {
+    const { getByTestId } = await render(<NoteEditorScreen />);
+
+    await act(async () => {
+      await fireEvent.press(getByTestId('toolbar-add-image-btn'));
+    });
+
+    // Cancelling the picker from here must leave nothing behind, so the note
+    // isn't created until an image is actually picked.
+    await waitFor(() => {
+      expect(getByTestId('add-image-sheet-open')).toBeTruthy();
+    });
+    expect(mockCreateMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('creates an empty note and uploads to it when an image is picked on a blank note', async () => {
+    mockCreateMutateAsync.mockResolvedValue({ id: 'note-new', note_type: 'text', content: '' });
+    mockUploadImageMutateAsync.mockResolvedValue({ status: 'uploaded' });
+    const { getByTestId } = await render(<NoteEditorScreen />);
+
+    await act(async () => {
+      await fireEvent.press(getByTestId('toolbar-add-image-btn'));
+    });
+    await act(async () => {
+      await fireEvent.press(getByTestId('add-image-sheet-open'));
+    });
+
+    await waitFor(() => {
+      expect(mockCreateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ note_type: 'text', content: '' }));
+      expect(mockUploadImageMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ noteId: 'note-new', file: mockPickedFile }),
+      );
+    });
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
   });
 
   it('flushes a create then navigates to Share when Share is tapped', async () => {

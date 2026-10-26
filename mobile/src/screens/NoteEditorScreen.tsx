@@ -84,7 +84,7 @@ import { animateListReflow, isReduceMotionEnabledSync } from '../utils/layoutAni
 import ActiveListRow from './noteEditor/ActiveListRow';
 import { useEditorDoc } from './noteEditor/useEditorDoc';
 import { useCardRectRegistry } from './notesList/cardRectRegistry';
-import { useNoteEditorSync } from './noteEditor/useNoteEditorSync';
+import { useNoteEditorSync, type FlushOptions } from './noteEditor/useNoteEditorSync';
 import { useListItemEditing } from './noteEditor/useListItemEditing';
 import { usePendingActionIndicator } from './noteEditor/usePendingActionIndicator';
 import type { EditorNavProp, EditorRouteProp } from './noteEditor/types';
@@ -529,12 +529,10 @@ export default function NoteEditorScreen() {
     retryPendingImageUploadMutation.mutate(uploadId);
   }, [retryPendingImageUploadMutation, runImageUpload]);
 
-  // Entry point for the add-image action sheet. Validates each file and
-  // enforces the per-note image cap client-side (the server enforces it
-  // authoritatively) before starting an upload per valid file.
-  const queueImageFiles = useCallback((files: ImageUploadFile[]) => {
-    if (files.length === 0) return;
-
+  // Validates each picked file and enforces the per-note image cap
+  // client-side (the server enforces it authoritatively), toasting the
+  // rejections and returning the files to upload.
+  const selectUploadableImageFiles = useCallback((files: ImageUploadFile[]): ImageUploadFile[] => {
     const noteImages = existingNote?.images ?? [];
     let remainingSlots = IMAGE_MAX_PER_NOTE
       - noteImages.length
@@ -543,6 +541,7 @@ export default function NoteEditorScreen() {
     // Collect distinct error messages across the whole batch instead of
     // showing (and immediately overwriting) one per invalid file.
     const errors = new Set<string>();
+    const accepted: ImageUploadFile[] = [];
     for (const file of files) {
       const validationError = validateImageFile(file);
       if (validationError) {
@@ -554,10 +553,19 @@ export default function NoteEditorScreen() {
         break;
       }
       remainingSlots -= 1;
-      startImageUpload(file);
+      accepted.push(file);
     }
     if (errors.size > 0) showToast(Array.from(errors).join(' '), 'error');
-  }, [existingNote?.images, showToast, startImageUpload, t, validateImageFile]);
+    return accepted;
+  }, [existingNote?.images, showToast, t, validateImageFile]);
+
+  // Opens the add-image sheet after flushing pending edits. Unlike
+  // withSavedNote this doesn't require the note to exist yet: a blank new note
+  // may become an image-only note once the user actually picks a file.
+  const openAddImageSheet = useCallback(async () => {
+    // A failed save has already surfaced its error via flushSave.
+    if (await withPendingIndicator(() => flushPendingChanges())) setAddImageSheetVisible(true);
+  }, [flushPendingChanges, withPendingIndicator]);
 
   const handleImagePermissionDenied = useCallback((source: 'camera' | 'library') => {
     showToast(source === 'camera' ? t('images.cameraPermissionDenied') : t('images.libraryPermissionDenied'), 'error');
@@ -753,16 +761,26 @@ export default function NoteEditorScreen() {
   // Save-first wrapper for note-level actions. A new/unsaved note is created by
   // flushing before the action runs, so bar actions no longer have to be hidden
   // until the first autosave. flushSave no-ops (and leaves noteId null) only for
-  // a genuinely empty note, in which case the action is skipped.
-  const withSavedNote = useCallback(async (action: (id: string) => void | Promise<void>) => {
+  // a genuinely empty note, in which case the action is skipped — unless
+  // `createIfEmpty` asks for the empty note to be created anyway.
+  const withSavedNote = useCallback(async (action: (id: string) => void | Promise<void>, options?: FlushOptions) => {
     await withPendingIndicator(async () => {
-      const saved = await flushPendingChanges();
+      const saved = await flushPendingChanges(options);
       if (!saved) return; // save failed — error already surfaced by flushSave
       const id = noteIdRef.current;
       if (!id) return; // empty note, nothing to act on
       await action(id);
     });
   }, [flushPendingChanges, noteIdRef, withPendingIndicator]);
+
+  // Entry point for the add-image action sheet. Uploads need a server-backed
+  // note, so a still-blank new note is created (empty) first — but only once
+  // a valid file was picked, and never as a draft/orphan upload (spec §15.6).
+  const handlePickedImageFiles = useCallback(async (files: ImageUploadFile[]) => {
+    const accepted = selectUploadableImageFiles(files);
+    if (accepted.length === 0) return;
+    await withSavedNote(() => accepted.forEach(startImageUpload), { createIfEmpty: true });
+  }, [selectUploadableImageFiles, startImageUpload, withSavedNote]);
 
   const handleTitleChange = useCallback(
     (newTitle: string) => {
@@ -1736,13 +1754,13 @@ export default function NoteEditorScreen() {
           <Palette size={22} color={isReadOnly ? disabledBarIconColor : barIconColor} />
         </TouchableOpacity>
 
-        {/* Add image. Needs a server-backed note, so a brand-new note is saved
-            first via withSavedNote before the picker opens — no draft/orphan
-            upload is ever created (spec §15.6). Only read-only (trashed) notes
-            disable it. Offline uploads are queued and flushed on reconnect
-            (#618). */}
+        {/* Add image. Pending edits are flushed before the picker opens; a
+            still-blank new note is only created once images are actually
+            picked (see handlePickedImageFiles), so cancelling leaves nothing
+            behind. Only read-only (trashed) notes disable it. Offline uploads
+            are queued and flushed on reconnect (#618). */}
         <TouchableOpacity
-          onPress={() => withSavedNote(() => setAddImageSheetVisible(true))}
+          onPress={openAddImageSheet}
           disabled={isReadOnly}
           style={styles.toolbarBtn}
           testID="toolbar-add-image-btn"
@@ -1828,7 +1846,7 @@ export default function NoteEditorScreen() {
       <AddImageActionSheet
         visible={addImageSheetVisible}
         onClose={() => setAddImageSheetVisible(false)}
-        onPick={queueImageFiles}
+        onPick={handlePickedImageFiles}
         onPermissionDenied={handleImagePermissionDenied}
         remainingSlots={Math.max(
           IMAGE_MAX_PER_NOTE - displayedImages.length - displayedImageUploads.filter((u) => u.status !== 'error').length,

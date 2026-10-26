@@ -374,6 +374,7 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
   }, []);
 
   const isSaving = useCallback((): boolean => savingRef.current, []);
+  const isMounted = useCallback((): boolean => mountedRef.current, []);
 
   // Asks the in-flight autosave loop for one more pass once it finishes. Used
   // when the modal closes mid-save: the loop keeps running after unmount (its
@@ -431,5 +432,6 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
     reportSaveFailure,
     autoSaveNote, scheduleAutoSave, cancelPendingSave, flushSave,
     beginExclusiveSave, endExclusiveSave, isSaving, requestAnotherSavePass,
+    isMounted,
   };
 }

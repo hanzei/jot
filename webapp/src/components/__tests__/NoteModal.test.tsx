@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, within, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import NoteModal, { ROW_REVEAL_CLASSES } from '../NoteModal';
 import { ToastProvider } from '../Toast';
 import { VALIDATION, type Note, type NoteItem, type NoteImage } from '@jot/shared';
@@ -399,9 +399,64 @@ describe('NoteModal', () => {
       await flushMicrotasks();
     };
 
-    it('does not render the add-image button for a brand-new (unsaved) note', () => {
+    it('does not render the add-image button for an unsaved note when the caller cannot adopt a created note', () => {
       renderNoteModal(defaultProps);
       expect(screen.queryByRole('button', { name: 'Add image' })).not.toBeInTheDocument();
+    });
+
+    describe('on a brand-new (unsaved) note', () => {
+      // Stands in for Dashboard: passes the note the modal created back in.
+      const onCreated = vi.fn();
+      function NewNoteHarness() {
+        const [note, setNote] = useState<Note | null>(null);
+        return (
+          <ToastProvider>
+            <NoteModal {...defaultProps} note={note} onCreated={(created) => { onCreated(created); setNote(created); }} />
+          </ToastProvider>
+        );
+      }
+
+      it('creates an empty note and uploads the picked image to it', async () => {
+        const created = createMockNote({ id: 'new1', content: '', images: [] });
+        mockNotesCreate.mockResolvedValueOnce(created);
+        render(<NewNoteHarness />);
+
+        expect(screen.getByRole('button', { name: 'Add image' })).toBeInTheDocument();
+        const file = makeImageFile();
+        await uploadViaPicker(file);
+        await flushMicrotasks();
+
+        expect(mockNotesCreate).toHaveBeenCalledWith(expect.objectContaining({ note_type: 'text', content: '' }));
+        expect(onCreated).toHaveBeenCalledWith(created);
+        expect(mockImagesUpload).toHaveBeenCalledWith('new1', file, expect.any(Function));
+        expect(defaultProps.onSave).not.toHaveBeenCalled();
+      });
+
+      it('still uploads to the created note when the modal closes mid-create', async () => {
+        const created = createMockNote({ id: 'new2', content: '', images: [] });
+        let resolveCreate: (note: Note) => void = () => {};
+        mockNotesCreate.mockReturnValueOnce(new Promise<Note>(resolve => { resolveCreate = resolve; }));
+        const { unmount } = render(<NewNoteHarness />);
+
+        const file = makeImageFile();
+        await uploadViaPicker(file);
+        unmount();
+        await act(async () => { resolveCreate(created); });
+
+        expect(mockImagesUpload).toHaveBeenCalledWith('new2', file, expect.any(Function));
+        expect(onCreated).not.toHaveBeenCalled();
+        expect(defaultProps.onRefresh).toHaveBeenCalled();
+      });
+
+      it('does not create a note when every picked file is rejected', async () => {
+        render(<NewNoteHarness />);
+
+        await uploadViaPicker(new File(['x'], 'doc.pdf', { type: 'application/pdf' }));
+
+        expect(mockNotesCreate).not.toHaveBeenCalled();
+        expect(mockImagesUpload).not.toHaveBeenCalled();
+        expect(screen.getByText('Only images can be attached.')).toBeInTheDocument();
+      });
     });
 
     it('uploads a file selected via the toolbar picker and shows an uploading tile', async () => {

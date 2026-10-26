@@ -41,6 +41,7 @@ export const mockReorderItemsMutateAsync = jest.fn();
 export const mockToggleItemCompletedMutateAsync = jest.fn().mockResolvedValue([]);
 export const mockUncheckAllItemsMutateAsync = jest.fn().mockResolvedValue([]);
 export const mockDeleteCompletedItemsMutateAsync = jest.fn().mockResolvedValue([]);
+export const mockUploadImageMutateAsync = jest.fn();
 export const mockUseOfflineNote = jest.fn();
 export const mockShowToast = jest.fn();
 export const mockLabelPicker = jest.fn((_props: { visible: boolean }): React.ReactNode => null);
@@ -119,7 +120,7 @@ jest.mock('../../src/hooks/useNotes', () => ({
 
 jest.mock('../../src/hooks/useNoteImages', () => ({
   __esModule: true,
-  useUploadNoteImage: () => ({ mutateAsync: jest.fn() }),
+  useUploadNoteImage: () => ({ mutateAsync: mockUploadImageMutateAsync }),
   useDeleteNoteImage: () => ({ mutateAsync: jest.fn() }),
 }));
 

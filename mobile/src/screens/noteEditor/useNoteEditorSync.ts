@@ -53,6 +53,11 @@ export interface UseNoteEditorSyncParams {
   showToast: (message: string, type?: ToastType) => void;
 }
 
+export interface FlushOptions {
+  /** Create a not-yet-created note even when it is still empty. */
+  createIfEmpty?: boolean;
+}
+
 export interface NoteEditorSync {
   /** Translation key for the in-editor save-failure banner, or null. */
   saveError: string | null;
@@ -61,10 +66,14 @@ export interface NoteEditorSync {
   syncToast: string | null;
   setSyncToast: React.Dispatch<React.SetStateAction<string | null>>;
 
-  /** Persists pending edits now. Resolves false when the save failed. */
-  flushSave: (unmounting?: boolean) => Promise<boolean>;
+  /**
+   * Persists pending edits now. Resolves false when the save failed. A
+   * not-yet-created note that is still empty is skipped unless `createIfEmpty`
+   * is set (adding an image to a blank note needs it to exist server-side).
+   */
+  flushSave: (unmounting?: boolean, options?: FlushOptions) => Promise<boolean>;
   /** Cancels the debounced save, then flushes. */
-  flushPendingChanges: () => Promise<boolean>;
+  flushPendingChanges: (options?: FlushOptions) => Promise<boolean>;
   /** Drops any debounced save without flushing it. */
   cancelScheduledSave: () => void;
   /** Flags the editor dirty and (re)arms the debounced save. */
@@ -348,8 +357,9 @@ export function useNoteEditorSync({
     savedOrderRef.current = currentItems.map((it) => it.id);
   }, []);
 
-  const flushSave = useCallback(async (unmounting = false): Promise<boolean> => {
-    if (!hasPendingChangesRef.current) return true;
+  const flushSave = useCallback(async (unmounting = false, { createIfEmpty = false }: FlushOptions = {}): Promise<boolean> => {
+    const mustCreate = createIfEmpty && !noteIdRef.current;
+    if (!hasPendingChangesRef.current && !mustCreate) return true;
     // If an existing note has local edits flagged but hasn't hydrated yet,
     // treat this as a failed flush so callers can retry after hydration.
     if (requiresHydrationRef.current && noteIdRef.current && !isInitializedRef.current) return false;
@@ -397,7 +407,7 @@ export function useNoteEditorSync({
       };
 
       if (!currentNoteId) {
-        if (isBlankDraft(currentNoteType, currentTitle, currentContent, currentItems)) {
+        if (isBlankDraft(currentNoteType, currentTitle, currentContent, currentItems) && !createIfEmpty) {
           hasPendingChangesRef.current = false;
           return true;
         }
@@ -491,9 +501,9 @@ export function useNoteEditorSync({
     }
   }, []);
 
-  const flushPendingChanges = useCallback(async (): Promise<boolean> => {
+  const flushPendingChanges = useCallback(async (options?: FlushOptions): Promise<boolean> => {
     cancelScheduledSave();
-    return flushSave();
+    return flushSave(false, options);
   }, [cancelScheduledSave, flushSave]);
 
   // Metadata actions (pin/archive/color) flush pending item edits first, then

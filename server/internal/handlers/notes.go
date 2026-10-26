@@ -141,10 +141,8 @@ type EmptyTrashResponse struct {
 }
 
 func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
-	if req.Title == "" && req.Content == "" && len(req.Items) == 0 {
-		return http.StatusBadRequest, errors.New("note must have a title, content, or items")
-	}
-
+	// An empty note is allowed: clients create one when the first thing added
+	// to a new note is an image, which needs a note id to attach to.
 	if err := models.ValidateNoteTitle(req.Title); err != nil {
 		return http.StatusBadRequest, err
 	}
