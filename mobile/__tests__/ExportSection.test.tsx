@@ -31,10 +31,32 @@ function exportFiles(): string[] {
   return [...globalThis.mockFileSystem.files.keys()].filter((uri) => uri.startsWith(`${EXPORT_DIR}/`));
 }
 
+/**
+ * Make the next download hang, writing a partial file, until its signal aborts.
+ * Returns the options the download was called with once it has started.
+ */
+function mockHangingDownload(): { options: () => { signal: AbortSignal; onProgress: () => void } | undefined } {
+  let captured: { signal: AbortSignal; onProgress: () => void } | undefined;
+  mockDownload.mockImplementationOnce((_url: string, destination: { uri: string }, options: {
+    signal: AbortSignal;
+    onProgress: () => void;
+  }) => {
+    captured = options;
+    globalThis.mockFileSystem.files.set(destination.uri, 'partial');
+    return new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(new Error('AbortError')));
+    });
+  });
+  return { options: () => captured };
+}
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  globalThis.mockFileSystem.reset();
+});
+
 describe('ExportSection', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    globalThis.mockFileSystem.reset();
     mockUseNetworkStatus.mockReturnValue({ isConnected: true });
     markServerReachable();
     mockIsAvailableAsync.mockResolvedValue(true);
@@ -139,33 +161,27 @@ describe('ExportSection', () => {
   });
 
   it('cancels the download without an error or share when the section unmounts', async () => {
-    let signal: AbortSignal | undefined;
-    mockDownload.mockImplementationOnce((_url: string, destination: { uri: string }, options: { signal: AbortSignal }) => {
-      signal = options.signal;
-      globalThis.mockFileSystem.files.set(destination.uri, 'partial');
-      return new Promise((_resolve, reject) => {
-        options.signal.addEventListener('abort', () => reject(new Error('AbortError')));
-      });
-    });
+    const download = mockHangingDownload();
 
     const { getByTestId, unmount } = await render(<ExportSection />);
     const pressed = fireEvent.press(getByTestId('settings-export-submit'));
-    await waitFor(() => expect(signal).toBeDefined());
+    await waitFor(() => expect(download.options()).toBeDefined());
 
     await unmount();
     await act(async () => {
       await pressed;
     });
 
-    expect(signal!.aborted).toBe(true);
+    expect(download.options()!.signal.aborted).toBe(true);
     expect(mockShareAsync).not.toHaveBeenCalled();
     expect(exportFiles()).toEqual([]);
   });
 
-  it('re-enables once the server becomes reachable again', async () => {
+  it('is disabled while the server is unreachable and re-enables once it is reachable', async () => {
     markServerUnreachable();
 
     const { getByTestId, queryByTestId } = await render(<ExportSection />);
+    expect(getByTestId('settings-export-offline')).toBeTruthy();
     expect(getByTestId('settings-export-submit').props.accessibilityState).toMatchObject({ disabled: true });
 
     await act(async () => {
@@ -176,22 +192,9 @@ describe('ExportSection', () => {
     expect(getByTestId('settings-export-submit').props.accessibilityState).toMatchObject({ disabled: false });
   });
 
-  it('is disabled while the server is unreachable', async () => {
-    markServerUnreachable();
-
-    const { getByTestId } = await render(<ExportSection />);
-
-    expect(getByTestId('settings-export-offline')).toBeTruthy();
-    expect(getByTestId('settings-export-submit').props.accessibilityState).toMatchObject({ disabled: true });
-  });
 });
 
 describe('downloadExportBundle', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    globalThis.mockFileSystem.reset();
-  });
-
   afterEach(() => {
     jest.useRealTimers();
   });
@@ -207,32 +210,22 @@ describe('downloadExportBundle', () => {
 
   it('aborts a download that stalls, but not one that keeps making progress', async () => {
     jest.useFakeTimers();
-    let signal: AbortSignal | undefined;
-    let onProgress: () => void = () => {};
-    mockDownload.mockImplementationOnce((_url: string, _destination: unknown, options: {
-      signal: AbortSignal;
-      onProgress: () => void;
-    }) => {
-      signal = options.signal;
-      onProgress = options.onProgress;
-      return new Promise((_resolve, reject) => {
-        options.signal.addEventListener('abort', () => reject(new Error('AbortError')));
-      });
-    });
+    const download = mockHangingDownload();
 
     const pending = downloadExportBundle();
     const settled = pending.catch((err: unknown) => err);
-    await waitFor(() => expect(signal).toBeDefined());
+    await waitFor(() => expect(download.options()).toBeDefined());
+    const { signal, onProgress } = download.options()!;
 
     // Progress keeps resetting the stall timer.
     for (let i = 0; i < 3; i++) {
       jest.advanceTimersByTime(EXPORT_STALL_TIMEOUT_MS - 1000);
       onProgress();
     }
-    expect(signal!.aborted).toBe(false);
+    expect(signal.aborted).toBe(false);
 
     jest.advanceTimersByTime(EXPORT_STALL_TIMEOUT_MS);
-    expect(signal!.aborted).toBe(true);
+    expect(signal.aborted).toBe(true);
     expect(await settled).toEqual(new Error('AbortError'));
     expect(exportFiles()).toEqual([]);
   });

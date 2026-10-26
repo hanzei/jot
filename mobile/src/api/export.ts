@@ -4,14 +4,9 @@ import { cachePath, deleteFileIfExists, downloadFile, ensureDirExists, listFileN
 const EXPORT_DIR = cachePath('exports');
 
 /**
- * How long the export download may go without receiving a byte. The server
- * gathers every note before the first byte, and a bundle can run to hundreds
- * of MB, so a fixed total budget either cuts off a big export on a slow link or
- * leaves a dead connection hanging for many minutes. A stall timer covers both.
- *
- * This is an upper bound, not a guarantee: on Android, expo-file-system's
- * downloader uses a default OkHttp client, whose own 10 s read timeout fails a
- * gap longer than that first.
+ * How long the export may go without receiving a byte. A stall timer, rather
+ * than a total budget, lets a large bundle finish on a slow link. On Android
+ * the native downloader's own 10 s read timeout fails a long gap first.
  */
 export const EXPORT_STALL_TIMEOUT_MS = 60_000;
 
@@ -19,9 +14,10 @@ export const EXPORT_STALL_TIMEOUT_MS = 60_000;
 export const EXPORT_TOTAL_TIMEOUT_MS = 30 * 60_000;
 
 /**
- * Remove bundles a previous export left behind: a shared bundle is kept until
- * the next export, since the receiving app may still be reading it after the
- * share sheet closes (see ExportSection), and a killed app leaves one too.
+ * Remove bundles a previous export left behind. A shared bundle is kept until
+ * the next export because on Android shareAsync resolves when the chooser
+ * returns, possibly before the picked app (Drive uploading in the background,
+ * say) has read the file; a killed app leaves one too.
  */
 export function clearExportCache(): void {
   for (const name of listFileNames(EXPORT_DIR)) {
@@ -31,8 +27,9 @@ export function clearExportCache(): void {
 
 /**
  * Download the `GET /notes/export` bundle into the cache directory and return
- * its file URI. Any earlier bundle is cleared first. Rejects on a non-2xx response, a transport error, a timeout, or
- * an abort of `signal`, leaving no partial file behind.
+ * its file URI. Any earlier bundle is cleared first. Rejects on a non-2xx
+ * response, a transport error, a timeout, or an abort of `signal`, leaving no
+ * partial file behind.
  */
 export async function downloadExportBundle(signal?: AbortSignal): Promise<string> {
   clearExportCache();
