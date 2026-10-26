@@ -493,7 +493,11 @@
     "exportFailed": "Esportazione non riuscita. Riprova.",
     "shareFailed": "Impossibile aprire il menu di condivisione. Riprova.",
     "shareUnavailable": "La condivisione di file non è disponibile su questo dispositivo.",
-    "shareTitle": "Salva backup di Jot"
+    "shareTitle": "Salva backup di Jot",
+    "shareTitleMarkdown": "Salva esportazione Markdown",
+    "formatLabel": "Formato di esportazione",
+    "formatJot": "Backup di Jot (.zip)",
+    "formatMarkdown": "Markdown, compatibile con Obsidian (.zip)"
   },
   "upgrade": {
     "settingsSectionTitle": "Connetti a un server",

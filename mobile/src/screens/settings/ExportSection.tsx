@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef, useSyncExternalStore } from '
 import { View, Text, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import * as Sharing from 'expo-sharing';
+import type { ExportFormat } from '@jot/shared';
 import { useTheme } from '../../theme/ThemeContext';
 import { downloadExportBundle } from '../../api/export';
 import { isOnlineWriteAllowed, isServerReachable, subscribeToServerReachability } from '../../api/serverReachability';
@@ -9,12 +10,18 @@ import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { deleteFileIfExists } from '../../utils/fs';
 import { styles } from './styles';
 
+const FORMAT_OPTIONS: { value: ExportFormat; labelKey: string }[] = [
+  { value: 'jot', labelKey: 'export.formatJot' },
+  { value: 'markdown', labelKey: 'export.formatMarkdown' },
+];
+
 export default function ExportSection() {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const { isConnected } = useNetworkStatus();
 
   const [exporting, setExporting] = useState(false);
+  const [format, setFormat] = useState<ExportFormat>('jot');
   const [exportError, setExportError] = useState('');
 
   // Subscribed only to re-render when reachability flips; isOnlineWriteAllowed
@@ -42,7 +49,7 @@ export default function ExportSection() {
         setExportError('export.shareUnavailable');
         return;
       }
-      bundleUri = await downloadExportBundle(controller.signal);
+      bundleUri = await downloadExportBundle(format, controller.signal);
       if (controller.signal.aborted) {
         deleteFileIfExists(bundleUri);
         return;
@@ -50,7 +57,7 @@ export default function ExportSection() {
       await Sharing.shareAsync(bundleUri, {
         mimeType: 'application/zip',
         UTI: 'public.zip-archive',
-        dialogTitle: t('export.shareTitle'),
+        dialogTitle: t(format === 'markdown' ? 'export.shareTitleMarkdown' : 'export.shareTitle'),
       });
       // Kept for the receiving app; see EXPORT_BUNDLE_RETENTION_MS.
     } catch {
@@ -69,7 +76,7 @@ export default function ExportSection() {
       abortRef.current = null;
       setExporting(false);
     }
-  }, [t]);
+  }, [format, t]);
 
   const disabled = exporting || !online;
 
@@ -79,6 +86,31 @@ export default function ExportSection() {
       <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>
         {t('export.description')}
       </Text>
+      <Text style={[styles.importFormatLabel, { color: colors.text }]}>{t('export.formatLabel')}</Text>
+      <View style={styles.importFormatRow} accessibilityRole="radiogroup">
+        {FORMAT_OPTIONS.map(option => {
+          const isSelected = format === option.value;
+          return (
+            <TouchableOpacity
+              key={option.value}
+              style={[
+                styles.importFormatOption,
+                { borderColor: isSelected ? colors.primary : colors.border },
+                isSelected && { backgroundColor: colors.primary },
+              ]}
+              onPress={() => setFormat(option.value)}
+              disabled={exporting}
+              testID={`settings-export-format-${option.value}`}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: isSelected, disabled: exporting }}
+            >
+              <Text style={[styles.importFormatOptionText, { color: isSelected ? '#fff' : colors.text }]}>
+                {t(option.labelKey)}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
       {!online && (
         <Text style={[styles.sectionDescription, { color: colors.textMuted }]} testID="settings-export-offline">
           {t('export.offline')}

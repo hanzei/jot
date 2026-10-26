@@ -76,7 +76,7 @@ describe('ExportSection', () => {
 
     await waitFor(() => expect(mockShareAsync).toHaveBeenCalledTimes(1));
     expect(mockDownload).toHaveBeenCalledWith(
-      'http://localhost:8080/api/v1/notes/export',
+      'http://localhost:8080/api/v1/notes/export?format=jot',
       expect.objectContaining({ uri: sharedUri }),
       expect.objectContaining({ idempotent: true, headers: { Cookie: 'jot_session=session-token' } }),
     );
@@ -85,6 +85,25 @@ describe('ExportSection', () => {
     // Kept: the picked app may still be reading it; the next export clears it.
     expect(exportFiles()).toEqual([sharedUri]);
     expect(queryByTestId('settings-export-error')).toBeNull();
+  });
+
+  it('downloads the Markdown format when it is picked', async () => {
+    const { getByTestId } = await render(<ExportSection />);
+    expect(getByTestId('settings-export-format-jot').props.accessibilityState).toMatchObject({ checked: true });
+
+    await fireEvent.press(getByTestId('settings-export-format-markdown'));
+    expect(getByTestId('settings-export-format-markdown').props.accessibilityState).toMatchObject({ checked: true });
+    await fireEvent.press(getByTestId('settings-export-submit'));
+
+    await waitFor(() => expect(mockShareAsync).toHaveBeenCalledTimes(1));
+    expect(mockDownload).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/notes/export?format=markdown',
+      expect.anything(),
+      expect.anything(),
+    );
+    const sharedUri = mockShareAsync.mock.calls[0]![0];
+    expect(sharedUri).toMatch(/^file:\/\/\/cache\/exports\/jot-markdown-export-.*\.zip$/);
+    expect(mockShareAsync).toHaveBeenCalledWith(sharedUri, expect.objectContaining({ dialogTitle: 'Save Markdown export' }));
   });
 
   it('shows a pending state while the download runs', async () => {

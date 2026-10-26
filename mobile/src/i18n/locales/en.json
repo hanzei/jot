@@ -493,7 +493,11 @@
     "exportFailed": "Export failed. Please try again.",
     "shareFailed": "Could not open the share sheet. Please try again.",
     "shareUnavailable": "Sharing files is not available on this device.",
-    "shareTitle": "Save Jot backup"
+    "shareTitle": "Save Jot backup",
+    "shareTitleMarkdown": "Save Markdown export",
+    "formatLabel": "Export format",
+    "formatJot": "Jot backup (.zip)",
+    "formatMarkdown": "Markdown, Obsidian-compatible (.zip)"
   },
   "upgrade": {
     "settingsSectionTitle": "Connect to a server",

@@ -458,6 +458,12 @@ export interface ShareNoteRequest {
 /** The `import_type` values `POST /notes/import` accepts with an uploaded file. */
 export type FileImportType = 'google_keep' | 'jot_json';
 
+/**
+ * `GET /notes/export?format=`: `jot` is the backup bundle Jot imports back,
+ * `markdown` a folder of Markdown files that opens as an Obsidian vault.
+ */
+export type ExportFormat = 'jot' | 'markdown';
+
 export interface ImportResponse {
   imported: number;
   skipped: number;

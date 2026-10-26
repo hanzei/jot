@@ -493,7 +493,11 @@
     "exportFailed": "Exporteren mislukt. Probeer het opnieuw.",
     "shareFailed": "Het deelmenu kon niet worden geopend. Probeer het opnieuw.",
     "shareUnavailable": "Bestanden delen is niet beschikbaar op dit apparaat.",
-    "shareTitle": "Jot-back-up opslaan"
+    "shareTitle": "Jot-back-up opslaan",
+    "shareTitleMarkdown": "Markdown-export opslaan",
+    "formatLabel": "Exportformaat",
+    "formatJot": "Jot-back-up (.zip)",
+    "formatMarkdown": "Markdown, compatibel met Obsidian (.zip)"
   },
   "upgrade": {
     "settingsSectionTitle": "Verbinden met een server",

@@ -1,3 +1,4 @@
+import type { ExportFormat } from '@jot/shared';
 import { getBaseUrl, getStoredSession } from './client';
 import { cachePath, deleteFileIfExists, downloadFile, ensureDirExists, listFileNames } from '../utils/fs';
 
@@ -21,14 +22,19 @@ export const EXPORT_TOTAL_TIMEOUT_MS = 30 * 60_000;
  */
 export const EXPORT_BUNDLE_RETENTION_MS = 60 * 60_000;
 
-/** A bundle's name carries its creation time: `jot-export-<ISO with : and . as ->.zip`. */
-function bundleName(createdAt: Date): string {
-  return `jot-export-${createdAt.toISOString().replace(/[:.]/g, '-')}.zip`;
+/**
+ * A bundle's name carries its format and creation time:
+ * `jot-export-<ISO with : and . as ->.zip`, or `jot-markdown-export-…` for a
+ * Markdown export.
+ */
+function bundleName(format: ExportFormat, createdAt: Date): string {
+  const prefix = format === 'markdown' ? 'jot-markdown-export' : 'jot-export';
+  return `${prefix}-${createdAt.toISOString().replace(/[:.]/g, '-')}.zip`;
 }
 
 /** The creation time encoded by {@link bundleName}, or null for any other name. */
 function bundleCreatedAt(name: string): number | null {
-  const m = /^jot-export-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z\.zip$/.exec(name);
+  const m = /^jot-(?:markdown-)?export-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z\.zip$/.exec(name);
   if (!m) return null;
   const time = Date.parse(`${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z`);
   return Number.isNaN(time) ? null : time;
@@ -49,16 +55,16 @@ export function clearExportCache(now: number = Date.now()): void {
 }
 
 /**
- * Download the `GET /notes/export` bundle into the cache directory and return
+ * Download the `GET /notes/export` bundle in `format` into the cache directory and return
  * its file URI. Expired bundles are cleared first. Rejects on a non-2xx
  * response, a transport error, a timeout, or an abort of `signal`, leaving no
  * partial file behind.
  */
-export async function downloadExportBundle(signal?: AbortSignal): Promise<string> {
+export async function downloadExportBundle(format: ExportFormat = 'jot', signal?: AbortSignal): Promise<string> {
   const now = new Date();
   clearExportCache(now.getTime());
   ensureDirExists(EXPORT_DIR);
-  const destUri = `${EXPORT_DIR}/${bundleName(now)}`;
+  const destUri = `${EXPORT_DIR}/${bundleName(format, now)}`;
 
   const token = await getStoredSession();
   const headers: Record<string, string> = token ? { Cookie: `jot_session=${token}` } : {};
@@ -76,7 +82,7 @@ export async function downloadExportBundle(signal?: AbortSignal): Promise<string
   armStallTimer();
 
   try {
-    await downloadFile(`${getBaseUrl()}/api/v1/notes/export`, destUri, {
+    await downloadFile(`${getBaseUrl()}/api/v1/notes/export?format=${format}`, destUri, {
       headers,
       signal: controller.signal,
       onProgress: armStallTimer,

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { parseTextLineAsListItem, textToListNote, listToText, listToPlainText, checkConvertToListCaps } from '../noteConversion';
 import { VALIDATION } from '../constants';
 import type { NoteItem } from '../types';
+import listToMarkdownCases from '../listToMarkdownCases.json';
 
 /** Items only, for the many assertions that do not care about the title. */
 function textToListItems(content: string) {
@@ -318,6 +319,17 @@ describe('checkConvertToListCaps', () => {
       max: VALIDATION.ITEM_MAX_COUNT,
     });
   });
+});
+
+// The same fixture pins the server's Markdown export (listToMarkdown in
+// server/internal/handlers/export_markdown.go), so a list note converts to the
+// same Markdown in the client and in an export.
+describe('listToText shared fixture', () => {
+  for (const c of listToMarkdownCases) {
+    it(`${c.id}: ${c.description}`, () => {
+      expect(listToText(c.title, c.items)).toBe(c.markdown);
+    });
+  }
 });
 
 describe('listToText', () => {

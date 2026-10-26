@@ -21,6 +21,11 @@ import (
 // reference by entry name. Images are stored rather than deflated — they're
 // already compressed, so deflating would only cost CPU.
 const (
+	// exportFormatJot and exportFormatMarkdown are the values of
+	// GET /notes/export?format=; an absent format means exportFormatJot.
+	exportFormatJot      = "jot"
+	exportFormatMarkdown = "markdown"
+
 	jotBundleManifest = "notes.json"
 	jotBundleImageDir = "images/"
 
@@ -80,12 +85,16 @@ type jotExportEnvelope struct {
 
 // ExportNotes godoc
 //
-//	@Summary		Export notes as a Jot backup bundle
-//	@Description	A zip file holding notes.json (the notes, format jot_export version 2) and an images/ folder with every image attached to the exported notes. Each note carries its created_at and updated_at, which import restores. Covers the notes the user owns, including images collaborators added to them.
+//	@Summary		Export notes as a zip
+//	@Description	format=jot (the default) is a Jot backup bundle: a zip file holding notes.json (the notes, format jot_export version 2) and an images/ folder with every image attached to the exported notes. Each note carries its created_at and updated_at, which import restores.
+//	@Description	format=markdown is a plain-Markdown folder that opens as an Obsidian vault: one notes/<slug>.md per note, with labels, color, pinned, archived, note type and timestamps in YAML front-matter, list notes written as task lists, and images in a shared images/ folder linked as ../images/<sha256>.<ext>. Jot cannot import it back.
+//	@Description	Either format covers the notes the user owns, including images collaborators added to them.
 //	@Tags			notes
 //	@Security		CookieAuth
+//	@Param			format	query	string	false	"Export format"	Enums(jot, markdown)	default(jot)
 //	@Produce		application/zip
-//	@Success		200	{file}		binary					"Jot export bundle (zip) attachment"
+//	@Success		200	{file}		binary					"Export (zip) attachment"
+//	@Failure		400	{object}	apierr.ErrorResponse	"unknown format"
 //	@Failure		401	{object}	apierr.ErrorResponse	"unauthorized"
 //	@Failure		500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router			/notes/export [get]
@@ -95,12 +104,26 @@ func (h *NotesHandler) ExportNotes(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusUnauthorized, nil, authErr
 	}
 
+	format := r.URL.Query().Get("format")
+	switch format {
+	case "", exportFormatJot, exportFormatMarkdown:
+	default:
+		return http.StatusBadRequest, nil, fmt.Errorf("unknown export format %q: use %q or %q", format, exportFormatJot, exportFormatMarkdown)
+	}
+
 	notes, err := h.noteStore.GetOwnedNotesForExport(r.Context(), user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("export notes: %w", err)
 	}
 
 	now := models.Now()
+
+	if format == exportFormatMarkdown {
+		h.streamExport(w, r, "jot-markdown-export-"+now.Format("2006-01-02T15-04-05Z")+".zip", func(ctx context.Context, w io.Writer) error {
+			return h.writeMarkdownBundle(ctx, w, notes, now)
+		})
+		return 0, nil, nil
+	}
 
 	exportNotes := make([]jotExportNote, 0, len(notes))
 	for _, n := range notes {
@@ -147,7 +170,15 @@ func (h *NotesHandler) ExportNotes(w http.ResponseWriter, r *http.Request) (int,
 		exportNotes = append(exportNotes, exportNote)
 	}
 
-	filename := "jot-export-" + now.Format("2006-01-02T15-04-05Z") + ".zip"
+	h.streamExport(w, r, "jot-export-"+now.Format("2006-01-02T15-04-05Z")+".zip", func(ctx context.Context, w io.Writer) error {
+		return h.writeExportBundle(ctx, w, notes, exportNotes, now)
+	})
+	return 0, nil, nil
+}
+
+// streamExport sends the zip that write produces as an attachment named
+// filename.
+func (h *NotesHandler) streamExport(w http.ResponseWriter, r *http.Request, filename string, write func(context.Context, io.Writer) error) {
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filename}))
 
@@ -159,7 +190,7 @@ func (h *NotesHandler) ExportNotes(w http.ResponseWriter, r *http.Request) (int,
 	}
 	w.WriteHeader(http.StatusOK)
 
-	if err := h.writeExportBundle(r.Context(), w, notes, exportNotes, now); err != nil {
+	if err := write(r.Context(), w); err != nil {
 		// The 200 and part of the zip are already on the wire, so there's no
 		// status left to report this with. Abort the connection instead of
 		// ending the response normally: the client then sees a failed
@@ -167,46 +198,21 @@ func (h *NotesHandler) ExportNotes(w http.ResponseWriter, r *http.Request) (int,
 		logutil.FromContext(r.Context()).WithError(err).Error("Failed to write export bundle")
 		panic(http.ErrAbortHandler)
 	}
-
-	return 0, nil, nil
 }
 
 // writeExportBundle writes the export zip to w: each distinct image once,
 // then the manifest, whose notes reference the images by entry name.
 // exportNotes[i] is the export form of notes[i]; its Images are filled in
-// here. An image whose blob is missing from disk (e.g. after restoring a
-// database and upload directory backed up at different times) is left out
-// and logged rather than failing the whole export.
+// here.
 func (h *NotesHandler) writeExportBundle(ctx context.Context, w io.Writer, notes []*models.Note, exportNotes []jotExportNote, now time.Time) error {
 	zw := zip.NewWriter(w)
 
-	written := make(map[string]string) // sha256 -> entry name
-	missing := make(map[string]bool)   // sha256 -> blob not on disk
-	for i, n := range notes {
-		for _, img := range n.Images {
-			if missing[img.SHA256] {
-				continue
-			}
-			file, ok := written[img.SHA256]
-			if !ok {
-				file = jotBundleImageDir + img.SHA256 + jotBundleImageExt[img.ContentType]
-				copied, err := h.copyImageToBundle(ctx, zw, file, img, now)
-				if err != nil {
-					return err
-				}
-				if !copied {
-					missing[img.SHA256] = true
-					continue
-				}
-				written[img.SHA256] = file
-			}
-			exportNotes[i].Images = append(exportNotes[i].Images, jotExportImage{
-				File:        file,
-				Filename:    img.Filename,
-				ContentType: img.ContentType,
-				CreatedAt:   img.CreatedAt,
-			})
-		}
+	images, err := h.writeBundleImages(ctx, zw, notes, now)
+	if err != nil {
+		return err
+	}
+	for i := range exportNotes {
+		exportNotes[i].Images = images[i]
 	}
 
 	mw, err := zw.CreateHeader(&zip.FileHeader{Name: jotBundleManifest, Method: zip.Deflate, Modified: now})
@@ -223,6 +229,44 @@ func (h *NotesHandler) writeExportBundle(ctx context.Context, w io.Writer, notes
 		return fmt.Errorf("write manifest: %w", err)
 	}
 	return zw.Close()
+}
+
+// writeBundleImages writes each distinct image of notes into zw once, under
+// jotBundleImageDir, and returns the entries notes[i] references as
+// images[i]. An image whose blob is missing from disk (e.g. after restoring a
+// database and upload directory backed up at different times) is left out
+// and logged rather than failing the whole export.
+func (h *NotesHandler) writeBundleImages(ctx context.Context, zw *zip.Writer, notes []*models.Note, now time.Time) ([][]jotExportImage, error) {
+	images := make([][]jotExportImage, len(notes))
+	written := make(map[string]string) // sha256 -> entry name
+	missing := make(map[string]bool)   // sha256 -> blob not on disk
+	for i, n := range notes {
+		for _, img := range n.Images {
+			if missing[img.SHA256] {
+				continue
+			}
+			file, ok := written[img.SHA256]
+			if !ok {
+				file = jotBundleImageDir + img.SHA256 + jotBundleImageExt[img.ContentType]
+				copied, err := h.copyImageToBundle(ctx, zw, file, img, now)
+				if err != nil {
+					return nil, err
+				}
+				if !copied {
+					missing[img.SHA256] = true
+					continue
+				}
+				written[img.SHA256] = file
+			}
+			images[i] = append(images[i], jotExportImage{
+				File:        file,
+				Filename:    img.Filename,
+				ContentType: img.ContentType,
+				CreatedAt:   img.CreatedAt,
+			})
+		}
+	}
+	return images, nil
 }
 
 // copyImageToBundle copies img's blob into the bundle as entry file. It

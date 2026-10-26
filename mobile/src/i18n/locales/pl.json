@@ -493,7 +493,11 @@
     "exportFailed": "Eksport nie powiódł się. Spróbuj ponownie.",
     "shareFailed": "Nie udało się otworzyć menu udostępniania. Spróbuj ponownie.",
     "shareUnavailable": "Udostępnianie plików nie jest dostępne na tym urządzeniu.",
-    "shareTitle": "Zapisz kopię zapasową Jot"
+    "shareTitle": "Zapisz kopię zapasową Jot",
+    "shareTitleMarkdown": "Zapisz eksport Markdown",
+    "formatLabel": "Format eksportu",
+    "formatJot": "Kopia zapasowa Jot (.zip)",
+    "formatMarkdown": "Markdown, zgodny z Obsidian (.zip)"
   },
   "upgrade": {
     "settingsSectionTitle": "Połącz z serwerem",
