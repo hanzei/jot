@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/hanzei/jot/server/internal/apierr"
@@ -34,6 +35,10 @@ type keepNote struct {
 	IsTrashed   bool            `json:"isTrashed"`
 	IsArchived  bool            `json:"isArchived"`
 	IsPinned    bool            `json:"isPinned"`
+	// CreatedUsec and EditedUsec are Unix microseconds; Takeout reports 0
+	// (or leaves them out) when it doesn't know.
+	CreatedUsec int64 `json:"createdTimestampUsec"`
+	EditedUsec  int64 `json:"userEditedTimestampUsec"`
 }
 
 func (kn keepNote) isEmpty() bool {
@@ -121,15 +126,26 @@ func keepNoteToImport(kn keepNote) (models.JotImportNote, error) {
 	}
 
 	return models.JotImportNote{
-		Title:    title,
-		Content:  content,
-		NoteType: noteType,
-		Color:    keepColorToHex(kn.Color),
-		Pinned:   kn.IsPinned,
-		Archived: kn.IsArchived,
-		Labels:   normalizeLabels(labelNames),
-		Items:    items,
+		Title:     title,
+		Content:   content,
+		NoteType:  noteType,
+		Color:     keepColorToHex(kn.Color),
+		Pinned:    kn.IsPinned,
+		Archived:  kn.IsArchived,
+		Labels:    normalizeLabels(labelNames),
+		Items:     items,
+		CreatedAt: keepTimestamp(kn.CreatedUsec),
+		UpdatedAt: keepTimestamp(kn.EditedUsec),
 	}, nil
+}
+
+// keepTimestamp converts a Takeout timestamp to a time, or the zero time
+// (which the store replaces with the import time) when Takeout left it unset.
+func keepTimestamp(usec int64) time.Time {
+	if usec <= 0 {
+		return time.Time{}
+	}
+	return time.UnixMicro(usec).UTC()
 }
 
 const (

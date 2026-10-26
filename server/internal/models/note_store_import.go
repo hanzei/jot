@@ -83,7 +83,7 @@ type JotImportNote struct {
 	Labels                []string
 	Items                 []JotImportNoteItem
 	Images                []JotImportImage
-	// CreatedAt and UpdatedAt are restored from the export so the notes keep
+	// CreatedAt and UpdatedAt are restored from the source so the notes keep
 	// their dates and their order under the created_at/updated_at sorts. A
 	// value restoredTimestamp can't use falls back to the import time.
 	CreatedAt time.Time

@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hanzei/jot/server/client"
 	"github.com/stretchr/testify/assert"
@@ -1013,6 +1014,64 @@ func TestImportUsememosArchivedFetchedSeparately(t *testing.T) {
 
 // failNoteItemInserts installs a trigger that aborts any note_items insert whose
 // text is "boom", simulating a database failure partway through a list note.
+func TestImportKeepTimestamps(t *testing.T) {
+	t.Parallel()
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "keeptimestamps", "password123", false)
+
+	before := time.Now().Add(-time.Minute)
+	files := map[string][]byte{
+		"Takeout/Keep/dated.json":   []byte(`{"title":"","textContent":"dated","createdTimestampUsec":1583298367123456,"userEditedTimestampUsec":1628503872000000}`),
+		"Takeout/Keep/undated.json": []byte(`{"title":"","textContent":"undated"}`),
+	}
+	result, err := user.Client.ImportNotes(t.Context(), "google_keep", "takeout.zip", bytes.NewReader(buildZip(t, files)))
+	require.NoError(t, err)
+	assert.Equal(t, 2, result.Imported)
+
+	byContent := map[string]client.Note{}
+	for _, n := range allNotes(t, user) {
+		byContent[n.Content] = n
+	}
+	dated := byContent["dated"]
+	assert.True(t, time.Date(2020, 3, 4, 5, 6, 7, 123456000, time.UTC).Equal(dated.CreatedAt), "created_at %v", dated.CreatedAt)
+	assert.True(t, time.Date(2021, 8, 9, 10, 11, 12, 0, time.UTC).Equal(dated.UpdatedAt), "updated_at %v", dated.UpdatedAt)
+	undated := byContent["undated"]
+	assert.True(t, undated.CreatedAt.After(before), "created_at %v", undated.CreatedAt)
+	assert.True(t, undated.UpdatedAt.Equal(undated.CreatedAt), "updated_at %v", undated.UpdatedAt)
+}
+
+func TestImportUsememosTimestamps(t *testing.T) {
+	t.Parallel()
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "usememostimestamps", "password123", false)
+
+	before := time.Now().Add(-time.Minute)
+	memos := []map[string]any{
+		{"name": "memos/1", "content": "v1 fields", "createTime": "2020-03-04T05:06:07.123456Z", "updateTime": "2021-08-09T12:11:12+02:00"},
+		{"name": "memos/2", "content": "older fields", "createdTs": 1583298367, "updatedTs": 1628503872},
+		{"name": "memos/3", "content": "unparsable", "createTime": "yesterday"},
+	}
+	mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
+	defer mockSrv.Close()
+
+	result, err := user.Client.ImportUsememos(t.Context(), mockSrv.URL, "testtoken")
+	require.NoError(t, err)
+	assert.Equal(t, 3, result.Imported)
+
+	byContent := map[string]client.Note{}
+	for _, n := range allNotes(t, user) {
+		byContent[n.Content] = n
+	}
+	v1 := byContent["v1 fields"]
+	assert.True(t, time.Date(2020, 3, 4, 5, 6, 7, 123456000, time.UTC).Equal(v1.CreatedAt), "created_at %v", v1.CreatedAt)
+	assert.True(t, time.Date(2021, 8, 9, 10, 11, 12, 0, time.UTC).Equal(v1.UpdatedAt), "updated_at %v", v1.UpdatedAt)
+	older := byContent["older fields"]
+	assert.True(t, time.Date(2020, 3, 4, 5, 6, 7, 0, time.UTC).Equal(older.CreatedAt), "created_at %v", older.CreatedAt)
+	assert.True(t, time.Date(2021, 8, 9, 10, 11, 12, 0, time.UTC).Equal(older.UpdatedAt), "updated_at %v", older.UpdatedAt)
+	unparsable := byContent["unparsable"]
+	assert.True(t, unparsable.CreatedAt.After(before), "created_at %v", unparsable.CreatedAt)
+}
+
 func failNoteItemInserts(t *testing.T, ts *TestServer) {
 	t.Helper()
 	_, err := ts.Server.GetDB().ExecContext(t.Context(), `CREATE TRIGGER fail_boom_item BEFORE INSERT ON note_items
