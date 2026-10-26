@@ -97,7 +97,7 @@ jest.mock('expo-document-picker', () => ({
 }));
 
 jest.mock('../src/api/notes', () => ({
-  importKeepFile: jest.fn(),
+  importFile: jest.fn(),
   getNotes: jest.fn(),
 }));
 

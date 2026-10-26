@@ -10,6 +10,7 @@ import type {
   CreateNoteItemRequest,
   PatchNoteItemRequest,
   EmptyTrashResponse,
+  FileImportType,
   ImportResponse,
   NoteListResponse,
 } from '@jot/shared';
@@ -126,8 +127,9 @@ function inferMimeType(filename: string): string {
   return 'application/json';
 }
 
-export async function importKeepFile(file: ImportFile): Promise<ImportResponse> {
+export async function importFile(file: ImportFile, importType: FileImportType): Promise<ImportResponse> {
   const formData = new FormData();
+  formData.append('import_type', importType);
   formData.append('file', {
     uri: Platform.OS === 'ios' ? file.uri.replace('file://', '') : file.uri,
     name: file.name,

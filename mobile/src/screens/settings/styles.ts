@@ -59,6 +59,27 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 20,
   },
+  importFormatLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  importFormatRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  importFormatOption: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  importFormatOptionText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
   importSelectButton: {
     marginTop: 0,
     borderWidth: 1,

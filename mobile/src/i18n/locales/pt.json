@@ -210,8 +210,6 @@
     "aboutSection": "Sobre",
     "aboutButton": "Sobre o Jot",
     "importSection": "Importar",
-    "importDescription": "Importe notas de exportações do Google Keep.",
-    "importButton": "Importar do Google Keep",
     "noServerConfigured": "Nenhum servidor configurado",
     "patsSection": "Tokens de Acesso Pessoal",
     "patsDescription": "Tokens para acesso à API por scripts e ferramentas externas.",
@@ -468,6 +466,14 @@
     "loadError": "Não foi possível carregar as alterações não sincronizadas."
   },
   "import": {
+    "formatLabel": "Formato",
+    "formatGoogleKeep": "Google Keep",
+    "formatJot": "Backup do Jot",
+    "description": "Envie um arquivo de exportação do Google Keep. Exporte suas notas pelo Google Takeout e envie o arquivo .zip ou um arquivo .json individual.",
+    "descriptionJot": "Envie um backup do Jot (.zip) para restaurar suas notas e as imagens delas. Exportações .json de versões anteriores do Jot não são compatíveis.",
+    "fileTypesJot": "Arquivos .zip",
+    "invalidFileTypeJot": "Tipo de arquivo inválido. Selecione um arquivo .zip.",
+    "selectFile": "Escolher arquivo",
     "fileTypes": "Arquivos .zip ou .json",
     "invalidFileType": "Tipo de arquivo inválido. Selecione um arquivo .json ou .zip.",
     "importedNotes_one": "{{count}} nota importada",
