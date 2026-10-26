@@ -17,6 +17,26 @@ on:
 jobs:
   test:
     runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - name: Install Task
+        uses: ./.github/actions/setup-task
+
+      - name: Run tests
+        run: task test-server
+
+  # Every server test that can run on Postgres, the HTTP integration suite
+  # included. Same task a contributor runs locally; with TEST_POSTGRES_DSN set
+  # it uses this service instead of starting its own server.
+  test-postgres:
+    runs-on: ubuntu-26.04
     services:
       postgres:
         image: postgres:18-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5 # 18-alpine
@@ -48,8 +68,8 @@ jobs:
       - name: Install Task
         uses: ./.github/actions/setup-task
 
-      - name: Run tests
-        run: task test-server
+      - name: Run tests against Postgres
+        run: task test-server-postgres
 
   lint:
     runs-on: ubuntu-26.04

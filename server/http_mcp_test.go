@@ -524,8 +524,7 @@ func TestMCPNoteValidation(t *testing.T) {
 	t.Run("a text note's title is stripped from the result", func(t *testing.T) {
 		// A text note can still carry a title in the database, e.g. one created
 		// over MCP before its writes were validated. Plant one directly.
-		_, err := ts.Server.GetDB().ExecContext(t.Context(), `UPDATE notes SET title = ? WHERE id = ?`, "legacy title", textNote.ID)
-		require.NoError(t, err)
+		ts.exec(t, `UPDATE notes SET title = ? WHERE id = ?`, "legacy title", textNote.ID)
 
 		var fetched client.Note
 		callTool(t, sess, "get_note", map[string]any{"id": textNote.ID}, &fetched)

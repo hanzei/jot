@@ -669,8 +669,7 @@ func TestOIDCUnlinkForbiddenWhenLocalLoginDisabled(t *testing.T) {
 
 	// Give the account a password, as one carried over from mixed mode would
 	// have, so the store's strand guard alone would let the unlink through.
-	_, err := ts.Server.GetDB().Exec("UPDATE users SET password_hash = ? WHERE id = ?", "legacy-hash", me.User.ID)
-	require.NoError(t, err)
+	ts.exec(t, "UPDATE users SET password_hash = ? WHERE id = ?", "legacy-hash", me.User.ID)
 
 	unlinkResp := ts.postForm(t, c, "/api/v1/auth/oidc/unlink")
 	unlinkBody, err := io.ReadAll(unlinkResp.Body)

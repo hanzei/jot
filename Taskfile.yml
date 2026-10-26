@@ -89,6 +89,10 @@ tasks:
     dir: server
     cmd: go test {{.CLI_ARGS}} ./...
 
+  test-server-postgres:
+    desc: Run server tests, including the HTTP integration suite, against Postgres (see scripts/test-postgres.sh)
+    cmd: ./scripts/test-postgres.sh {{.CLI_ARGS}}
+
   test-webapp:
     desc: Run webapp tests
     dir: webapp
