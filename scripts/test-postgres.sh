@@ -35,7 +35,9 @@ die() {
 cleanup_cmds=()
 cleanup() {
   local cmd
-  for cmd in "${cleanup_cmds[@]}"; do
+  # The +-guard keeps an empty array legal under `set -u` on bash < 4.4
+  # (macOS's /bin/bash), where nothing was started.
+  for cmd in ${cleanup_cmds[@]+"${cleanup_cmds[@]}"}; do
     eval "$cmd" || true
   done
 }
@@ -62,31 +64,39 @@ pg_bin_dir() {
     dirname "$(command -v initdb)"
     return
   fi
+  # Newest version first; a version dir may hold only the client tools (a
+  # newer postgresql-client next to an older server), so check each.
   local dir
-  dir="$(ls -d /usr/lib/postgresql/*/bin 2>/dev/null | sort -V | tail -n1)"
-  if [ -n "$dir" ] && [ -x "$dir/initdb" ] && [ -x "$dir/pg_ctl" ]; then
-    echo "$dir"
-  fi
+  for dir in $(ls -d /usr/lib/postgresql/*/bin 2>/dev/null | sort -rV); do
+    if [ -x "$dir/initdb" ] && [ -x "$dir/pg_ctl" ]; then
+      echo "$dir"
+      return
+    fi
+  done
 }
 
 start_local_cluster() {
-  local bin_dir="$1" port data_dir run_as=()
+  local bin_dir="$1" port data_dir run_as=() user="" tmp_base="${TMPDIR:-/tmp}"
   port="$(free_port)"
-  data_dir="$(mktemp -d "${TMPDIR:-/tmp}/jot-test-postgres.XXXXXX")"
-  cleanup_cmds+=("rm -rf '$data_dir'")
 
   # initdb refuses to run as root, which is how containers (including Claude
-  # cloud sessions) usually run, so drop to an unprivileged user there.
+  # cloud sessions) usually run, so drop to an unprivileged user there. That
+  # user must be able to traverse to the data dir, which a root-only TMPDIR
+  # (mode 0700) does not allow, so root always uses /tmp.
   if [ "$(id -u)" = "0" ]; then
-    local user=postgres
+    user=postgres
     id "$user" >/dev/null 2>&1 || user=nobody
-    chown "$user" "$data_dir"
     run_as=(runuser -u "$user" --)
+    tmp_base=/tmp
   fi
+
+  data_dir="$(mktemp -d "$tmp_base/jot-test-postgres.XXXXXX")"
+  cleanup_cmds+=("rm -rf '$data_dir'")
+  [ -n "$user" ] && chown "$user" "$data_dir"
 
   log "starting a throwaway cluster with $bin_dir on port $port"
   ${run_as[@]+"${run_as[@]}"} "$bin_dir/initdb" -D "$data_dir/data" -U jot --auth=trust \
-    --encoding=UTF8 --no-locale >/dev/null
+    --encoding=UTF8 --no-locale >/dev/null || die "initdb failed to create the cluster in $data_dir"
   # Registered before starting, so a start that fails after the server came up
   # still stops it. Prepended: the server must stop before its dir is removed.
   cleanup_cmds=("${run_as[*]-} '$bin_dir/pg_ctl' -D '$data_dir/data' -m immediate stop >/dev/null 2>&1" "${cleanup_cmds[@]}")
