@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/hanzei/jot/server/client"
+	"github.com/hanzei/jot/server/internal/database/dialect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1015,10 +1016,19 @@ func TestImportUsememosArchivedFetchedSeparately(t *testing.T) {
 // text is "boom", simulating a database failure partway through a list note.
 func failNoteItemInserts(t *testing.T, ts *TestServer) {
 	t.Helper()
-	_, err := ts.Server.GetDB().ExecContext(t.Context(), `CREATE TRIGGER fail_boom_item BEFORE INSERT ON note_items
+	if ts.dialect.Driver == dialect.DriverPostgres {
+		ts.exec(t, `CREATE FUNCTION fail_boom_item() RETURNS trigger LANGUAGE plpgsql AS $$
+			BEGIN
+				IF NEW.text = 'boom' THEN RAISE EXCEPTION 'injected item failure'; END IF;
+				RETURN NEW;
+			END $$;
+			CREATE TRIGGER fail_boom_item BEFORE INSERT ON note_items
+				FOR EACH ROW EXECUTE FUNCTION fail_boom_item()`)
+		return
+	}
+	ts.exec(t, `CREATE TRIGGER fail_boom_item BEFORE INSERT ON note_items
 		WHEN NEW.text = 'boom'
 		BEGIN SELECT RAISE(ABORT, 'injected item failure'); END`)
-	require.NoError(t, err)
 }
 
 // allNotes returns the user's active and archived notes.

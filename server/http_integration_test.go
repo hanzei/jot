@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"image"
 	"image/color"
@@ -22,6 +23,8 @@ import (
 
 	"github.com/hanzei/jot/server/client"
 	"github.com/hanzei/jot/server/internal/config"
+	"github.com/hanzei/jot/server/internal/database/dialect"
+	"github.com/hanzei/jot/server/internal/database/dsntest"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/server"
 	"github.com/sirupsen/logrus"
@@ -71,15 +74,60 @@ type TestUser struct {
 type TestServer struct {
 	Server     *server.Server
 	HTTPServer *httptest.Server
+	// Rewrites the ? placeholders of raw SQL in tests for the suite's driver.
+	dialect *dialect.Dialect
 	// The only client that can reach HTTPServer's in-memory listener.
 	httpClient *http.Client
 }
 
-func defaultTestConfig(tmpDir string) *config.Config {
+// envTestDBDriver selects the database the integration suite runs against:
+// unset or "sqlite" (the default) for a SQLite file in each test's temp dir,
+// "postgres" for a fresh database per test on the server TEST_POSTGRES_DSN
+// points at. `task test-server-postgres` sets both.
+const envTestDBDriver = "JOT_TEST_DB_DRIVER"
+
+// testDBDriver returns the driver selected by envTestDBDriver.
+func testDBDriver(t *testing.T) string {
+	t.Helper()
+
+	switch driver := os.Getenv(envTestDBDriver); driver {
+	case "", "sqlite":
+		return "sqlite"
+	case "postgres":
+		// Fail rather than let dsntest skip: a suite that silently skips every
+		// test would read as green.
+		if os.Getenv(dsntest.EnvPostgresDSN) == "" {
+			t.Fatalf("%s=postgres requires %s", envTestDBDriver, dsntest.EnvPostgresDSN)
+		}
+		return driver
+	default:
+		t.Fatalf("%s=%q: want sqlite or postgres", envTestDBDriver, driver)
+		return ""
+	}
+}
+
+// requireSQLite skips a test that exercises SQLite-only behavior when the
+// suite runs against another driver.
+func requireSQLite(t *testing.T) {
+	t.Helper()
+
+	if driver := testDBDriver(t); driver != "sqlite" {
+		t.Skipf("tests SQLite-only behavior; suite is running against %s", driver)
+	}
+}
+
+func defaultTestConfig(t *testing.T, tmpDir string) *config.Config {
+	t.Helper()
+
+	driver := testDBDriver(t)
+	dsn := tmpDir + "/test.db"
+	if driver != "sqlite" {
+		dsn = dsntest.IsolatedDSN(t, driver)
+	}
 	return &config.Config{
 		Port:                0,
-		DBDriver:            "sqlite",
-		DBDSN:               tmpDir + "/test.db",
+		DBDriver:            driver,
+		DBDSN:               dsn,
 		StaticDir:           tmpDir,
 		UploadDir:           tmpDir + "/uploads",
 		UploadMaxBytes:      25 << 20,
@@ -114,7 +162,7 @@ func setupTestServerWithConfig(t *testing.T, customize func(*config.Config)) *Te
 	tmpDir := t.TempDir()
 	require.NoError(t, os.WriteFile(tmpDir+"/index.html", []byte("<html><body>jot test app</body></html>"), 0o600))
 
-	cfg := defaultTestConfig(tmpDir)
+	cfg := defaultTestConfig(t, tmpDir)
 	if customize != nil {
 		customize(cfg)
 	}
@@ -130,6 +178,7 @@ func setupTestServerWithConfig(t *testing.T, customize func(*config.Config)) *Te
 	ts := &TestServer{
 		Server:     s,
 		HTTPServer: httpServer,
+		dialect:    &dialect.Dialect{Driver: cfg.DBDriver},
 		httpClient: httpServer.Client(),
 	}
 
@@ -140,6 +189,22 @@ func setupTestServerWithConfig(t *testing.T, customize func(*config.Config)) *Te
 	})
 
 	return ts
+}
+
+// exec runs a statement directly against the test server's database. Write
+// placeholders as ?; they are rewritten for the driver the suite runs against.
+func (ts *TestServer) exec(t *testing.T, query string, args ...any) {
+	t.Helper()
+
+	_, err := ts.Server.GetDB().ExecContext(t.Context(), ts.dialect.RewritePlaceholders(query), args...)
+	require.NoError(t, err)
+}
+
+// queryRow is exec for a query returning a single row.
+func (ts *TestServer) queryRow(t *testing.T, query string, args ...any) *sql.Row {
+	t.Helper()
+
+	return ts.Server.GetDB().QueryRowContext(t.Context(), ts.dialect.RewritePlaceholders(query), args...)
 }
 
 // newClient creates a new [client.Client] on the test server's in-memory
@@ -177,8 +242,7 @@ func (ts *TestServer) createTestUser(t *testing.T, username, password string, is
 	require.NoError(t, err)
 
 	if isAdmin {
-		_, err = ts.Server.GetDB().Exec("UPDATE users SET role = ? WHERE id = ?", models.RoleAdmin, auth.User.ID)
-		require.NoError(t, err)
+		ts.exec(t, "UPDATE users SET role = ? WHERE id = ?", models.RoleAdmin, auth.User.ID)
 		auth.User.Role = client.RoleAdmin
 	}
 
@@ -401,19 +465,16 @@ func TestRegisterDisabled(t *testing.T) {
 	})
 
 	t.Run("admin can still create users", func(t *testing.T) {
-		db := ts.Server.GetDB()
-
 		// Deliberately DefaultCost, not the MinCost the suite otherwise runs at
 		// (see models.passwordHashCost): this seeds the one hash in the suite
 		// written at the production cost, so the login below proves a server
 		// running at MinCost still verifies production-cost hashes.
 		hash, err := bcrypt.GenerateFromPassword([]byte("adminpass"), bcrypt.DefaultCost)
 		require.NoError(t, err)
-		_, err = db.Exec(
+		ts.exec(t,
 			"INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)",
 			"admin-test-id", "seedadmin", string(hash), "admin",
 		)
-		require.NoError(t, err)
 
 		adminClient := ts.newClient()
 		_, err = adminClient.Login(t.Context(), "seedadmin", "adminpass")
@@ -755,10 +816,12 @@ func TestAdminStatsEndpoint(t *testing.T) {
 		assert.Equal(t, int64(1), stats.ListItems.Completed)
 		assert.Equal(t, int64(2), stats.ListItems.Assigned)
 
-		fileInfo, err := os.Stat(dbPath)
-		require.NoError(t, err)
-		assert.Equal(t, fileInfo.Size(), stats.Storage.DatabaseSizeBytes)
 		assert.Positive(t, stats.Storage.DatabaseSizeBytes)
+		if testDBDriver(t) == "sqlite" {
+			fileInfo, err := os.Stat(dbPath)
+			require.NoError(t, err)
+			assert.Equal(t, fileInfo.Size(), stats.Storage.DatabaseSizeBytes)
+		}
 
 		assert.Equal(t, int64(2), stats.Storage.ImageCount)
 		assert.Equal(t, int64(len(uniqueImageData)+len(dupImageData)), stats.Storage.ImagesSizeBytes)
@@ -774,7 +837,7 @@ func TestAdminStatsEndpoint(t *testing.T) {
 		require.NoError(t, err)
 		rt := stats.Runtime
 
-		assert.Equal(t, "sqlite", rt.DatabaseBackend)
+		assert.Equal(t, testDBDriver(t), rt.DatabaseBackend)
 		assert.Positive(t, rt.MigrationVersion)
 		assert.False(t, rt.MigrationDirty)
 		assert.False(t, rt.StartedAt.Before(before), "started_at %s is before the server was created", rt.StartedAt)
@@ -804,6 +867,7 @@ func TestAdminStatsEndpoint(t *testing.T) {
 // still be the database file's, not zero from stat-ing the raw DSN.
 func TestAdminStatsDatabaseSizeWithURIDSN(t *testing.T) {
 	t.Parallel()
+	requireSQLite(t)
 	var dbPath string
 	ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
 		dbPath = cfg.DBDSN

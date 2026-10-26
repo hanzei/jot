@@ -97,12 +97,11 @@ func TestSessionRenewedWhenLessThanSevenDaysLeft(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "renewuser", "password123", false)
 
-	token, err := getSessionTokenHashByUserID(ts, user.User.ID)
+	token, err := getSessionTokenHashByUserID(t, ts, user.User.ID)
 	require.NoError(t, err)
 
 	nearExpiry := time.Now().Add(6 * 24 * time.Hour)
-	_, err = ts.Server.GetDB().Exec("UPDATE sessions SET expires_at = ? WHERE token_hash = ?", nearExpiry, token)
-	require.NoError(t, err)
+	ts.exec(t, "UPDATE sessions SET expires_at = ? WHERE token_hash = ?", models.Timestamp(nearExpiry), token)
 
 	// Make an API call so the middleware can renew the session
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
@@ -111,7 +110,7 @@ func TestSessionRenewedWhenLessThanSevenDaysLeft(t *testing.T) {
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	renewedExpiry, err := getSessionExpiryByTokenHash(ts, token)
+	renewedExpiry, err := getSessionExpiryByTokenHash(t, ts, token)
 	require.NoError(t, err)
 	assert.True(t, renewedExpiry.After(time.Now().Add(29*24*time.Hour)))
 
@@ -126,12 +125,11 @@ func TestSessionNotRenewedWhenAtLeastSevenDaysLeft(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "noreneweuser", "password123", false)
 
-	token, err := getSessionTokenHashByUserID(ts, user.User.ID)
+	token, err := getSessionTokenHashByUserID(t, ts, user.User.ID)
 	require.NoError(t, err)
 
 	farExpiry := time.Now().Add(8 * 24 * time.Hour)
-	_, err = ts.Server.GetDB().Exec("UPDATE sessions SET expires_at = ? WHERE token_hash = ?", farExpiry, token)
-	require.NoError(t, err)
+	ts.exec(t, "UPDATE sessions SET expires_at = ? WHERE token_hash = ?", models.Timestamp(farExpiry), token)
 
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
 	resp, err := user.Client.HTTPClient().Do(req)
@@ -139,7 +137,7 @@ func TestSessionNotRenewedWhenAtLeastSevenDaysLeft(t *testing.T) {
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	expiryAfterRequest, err := getSessionExpiryByTokenHash(ts, token)
+	expiryAfterRequest, err := getSessionExpiryByTokenHash(t, ts, token)
 	require.NoError(t, err)
 	assert.Equal(t, farExpiry.Unix(), expiryAfterRequest.Unix())
 	assert.Nil(t, findCookie(resp, "jot_session"))
@@ -150,12 +148,11 @@ func TestSessionNotRenewedWhenSlightlyAboveSevenDaysLeft(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "seven-days-user", "password123", false)
 
-	token, err := getSessionTokenHashByUserID(ts, user.User.ID)
+	token, err := getSessionTokenHashByUserID(t, ts, user.User.ID)
 	require.NoError(t, err)
 
 	justAboveThreshold := time.Now().Add(models.SessionRenewWindow + time.Minute)
-	_, err = ts.Server.GetDB().Exec("UPDATE sessions SET expires_at = ? WHERE token_hash = ?", justAboveThreshold, token)
-	require.NoError(t, err)
+	ts.exec(t, "UPDATE sessions SET expires_at = ? WHERE token_hash = ?", models.Timestamp(justAboveThreshold), token)
 
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
 	resp, err := user.Client.HTTPClient().Do(req)
@@ -163,7 +160,7 @@ func TestSessionNotRenewedWhenSlightlyAboveSevenDaysLeft(t *testing.T) {
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	expiryAfterRequest, err := getSessionExpiryByTokenHash(ts, token)
+	expiryAfterRequest, err := getSessionExpiryByTokenHash(t, ts, token)
 	require.NoError(t, err)
 	assert.Equal(t, justAboveThreshold.Unix(), expiryAfterRequest.Unix())
 	assert.Nil(t, findCookie(resp, "jot_session"))
@@ -189,27 +186,29 @@ func TestSessionTokensStoredHashed(t *testing.T) {
 	require.NotNil(t, cookie)
 	require.NotEmpty(t, cookie.Value)
 
-	db := ts.Server.GetDB()
-
 	// The raw token from the cookie must not be stored anywhere.
 	var count int
-	require.NoError(t, db.QueryRow("SELECT COUNT(*) FROM sessions WHERE token_hash = ?", cookie.Value).Scan(&count))
+	require.NoError(t, ts.queryRow(t, "SELECT COUNT(*) FROM sessions WHERE token_hash = ?", cookie.Value).Scan(&count))
 	assert.Zero(t, count, "raw session token must not be stored in the database")
 
 	// Its SHA-256 hash is what identifies the session.
-	require.NoError(t, db.QueryRow("SELECT COUNT(*) FROM sessions WHERE token_hash = ?", models.HashSessionToken(cookie.Value)).Scan(&count))
+	require.NoError(t, ts.queryRow(t, "SELECT COUNT(*) FROM sessions WHERE token_hash = ?", models.HashSessionToken(cookie.Value)).Scan(&count))
 	assert.Equal(t, 1, count, "session must be stored under the token's SHA-256 hash")
 }
 
-func getSessionTokenHashByUserID(ts *TestServer, userID string) (string, error) {
+func getSessionTokenHashByUserID(t *testing.T, ts *TestServer, userID string) (string, error) {
+	t.Helper()
+
 	var token string
-	err := ts.Server.GetDB().QueryRow("SELECT token_hash FROM sessions WHERE user_id = ?", userID).Scan(&token)
+	err := ts.queryRow(t, "SELECT token_hash FROM sessions WHERE user_id = ?", userID).Scan(&token)
 	return token, err
 }
 
-func getSessionExpiryByTokenHash(ts *TestServer, token string) (time.Time, error) {
+func getSessionExpiryByTokenHash(t *testing.T, ts *TestServer, token string) (time.Time, error) {
+	t.Helper()
+
 	var expiresAt time.Time
-	err := ts.Server.GetDB().QueryRow("SELECT expires_at FROM sessions WHERE token_hash = ?", token).Scan(&expiresAt)
+	err := ts.queryRow(t, "SELECT expires_at FROM sessions WHERE token_hash = ?", token).Scan(&expiresAt)
 	return expiresAt, err
 }
 
