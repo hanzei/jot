@@ -42,6 +42,7 @@ export function buildCreateRequestFromNote(note: Note): CreateNoteRequest {
       title: note.title,
       color: note.color,
       labels,
+      pinned: note.pinned || undefined,
       items: (note.items ?? []).map((item, index) => ({
         text: item.text,
         position: index,
@@ -57,6 +58,7 @@ export function buildCreateRequestFromNote(note: Note): CreateNoteRequest {
     content: note.content,
     color: note.color,
     labels,
+    pinned: note.pinned || undefined,
   };
 }
 

@@ -104,6 +104,9 @@ type CreateNoteRequest struct {
 	Color    string           `json:"color,omitempty"`
 	Items    []CreateNoteItem `json:"items,omitempty"`
 	Labels   []string         `json:"labels,omitempty"`
+	// Pinned creates the note already pinned for the creating user, so a client
+	// that let the user pin a note before it existed needs no follow-up PATCH.
+	Pinned bool `json:"pinned,omitempty"`
 }
 
 type CreateNoteItem struct {
@@ -378,6 +381,7 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 		Content: req.Content,
 		Type:    req.NoteType,
 		Color:   req.Color,
+		Pinned:  req.Pinned,
 	}, items)
 	if err != nil {
 		return storeError(err, "create note")

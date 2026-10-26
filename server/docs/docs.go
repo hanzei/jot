@@ -3866,6 +3866,10 @@ const docTemplate = `{
                 "note_type": {
                     "$ref": "#/definitions/models.NoteType"
                 },
+                "pinned": {
+                    "description": "Pinned creates the note already pinned for the creating user, so a client\nthat let the user pin a note before it existed needs no follow-up PATCH.",
+                    "type": "boolean"
+                },
                 "title": {
                     "type": "string"
                 }
