@@ -486,7 +486,7 @@
     "importButton": "Importeren"
   },
   "export": {
-    "description": "Download een Jot-back-up (.zip) van al je notities en hun afbeeldingen en bewaar of verstuur deze via het deelmenu van je apparaat.",
+    "description": "Download al je notities en hun afbeeldingen als Jot-back-up of als Markdown-bestanden voor Obsidian (.zip) en bewaar of verstuur deze via het deelmenu van je apparaat.",
     "exportButton": "Notities exporteren",
     "exporting": "Bezig met exporteren...",
     "offline": "Exporteren vereist een verbinding met je server.",

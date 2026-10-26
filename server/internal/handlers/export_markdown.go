@@ -42,7 +42,7 @@ func (h *NotesHandler) writeMarkdownBundle(ctx context.Context, w io.Writer, not
 
 	images, err := h.writeBundleImages(ctx, zw, notes, now)
 	if err != nil {
-		return err
+		return fmt.Errorf("write images: %w", err)
 	}
 
 	used := make(map[string]bool)
@@ -56,7 +56,10 @@ func (h *NotesHandler) writeMarkdownBundle(ctx context.Context, w io.Writer, not
 			return fmt.Errorf("write note entry: %w", err)
 		}
 	}
-	return zw.Close()
+	if err := zw.Close(); err != nil {
+		return fmt.Errorf("close zip: %w", err)
+	}
+	return nil
 }
 
 // markdownNoteFile renders one note as a Markdown file: YAML front-matter,
@@ -147,18 +150,40 @@ func markdownItemLine(item models.NoteItem, depth int) string {
 	return strings.Repeat("  ", depth) + "- " + box + " " + item.Text
 }
 
-// markdownTags turns label names into Obsidian tags, which cannot contain
-// whitespace: runs of it become a hyphen. Labels that end up equal are
-// written once.
+// markdownTags turns label names into Obsidian tags. Labels that end up
+// equal are written once; Obsidian compares tags case-insensitively, so the
+// comparison here does too.
 func markdownTags(labels []models.Label) []string {
 	tags := make([]string, 0, len(labels))
 	for _, l := range labels {
-		tag := strings.Join(strings.Fields(strings.TrimLeft(l.Name, "#")), "-")
-		if tag != "" && !slices.Contains(tags, tag) {
+		tag := markdownTag(l.Name)
+		if tag != "" && !slices.ContainsFunc(tags, func(t string) bool { return strings.EqualFold(t, tag) }) {
 			tags = append(tags, tag)
 		}
 	}
 	return tags
+}
+
+// markdownTag keeps the characters an Obsidian tag may hold (letters, digits,
+// marks, symbols such as emoji, `_`, `-` and `/`) and joins the runs between
+// them with single hyphens, so whitespace or punctuation in a label does not
+// cut the tag short or make Obsidian ignore it.
+func markdownTag(name string) string {
+	var b strings.Builder
+	pendingHyphen := false
+	for _, r := range strings.TrimLeft(name, "#") {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && !unicode.IsMark(r) && !unicode.Is(unicode.So, r) &&
+			r != '_' && r != '-' && r != '/' {
+			pendingHyphen = b.Len() > 0
+			continue
+		}
+		if pendingHyphen {
+			b.WriteByte('-')
+			pendingHyphen = false
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // yamlString quotes s as a YAML double-quoted scalar. Every escape
@@ -168,9 +193,12 @@ func yamlString(s string) string {
 	return strconv.Quote(s)
 }
 
+// markdownAltEscaper escapes what would end an image's alt text early.
+var markdownAltEscaper = strings.NewReplacer(`\`, `\\`, `[`, `\[`, `]`, `\]`, "\n", " ", "\r", " ")
+
 // markdownEscapeAlt escapes what would end an image's alt text early.
 func markdownEscapeAlt(s string) string {
-	return strings.NewReplacer(`\`, `\\`, `[`, `\[`, `]`, `\]`, "\n", " ", "\r", " ").Replace(s)
+	return markdownAltEscaper.Replace(s)
 }
 
 // markdownNoteSlug is the filename a note is exported under, before
@@ -183,7 +211,7 @@ func markdownNoteSlug(n *models.Note) string {
 		candidates = append(candidates, n.Title)
 		var first *models.NoteItem
 		for i, item := range n.Items {
-			if item.ParentID == nil && (first == nil || item.Position < first.Position) {
+			if (item.ParentID == nil || *item.ParentID == "") && (first == nil || item.Position < first.Position) {
 				first = &n.Items[i]
 			}
 		}
@@ -219,7 +247,11 @@ func markdownSlug(s string) string {
 			pendingHyphen = b.Len() > 0
 			continue
 		}
-		if runes >= markdownSlugMaxRunes {
+		need := 1
+		if pendingHyphen {
+			need = 2
+		}
+		if runes+need > markdownSlugMaxRunes {
 			break
 		}
 		if pendingHyphen {

@@ -486,7 +486,7 @@
     "importButton": "Importuj"
   },
   "export": {
-    "description": "Pobierz kopię zapasową Jot (.zip) wszystkich notatek wraz z obrazami, a następnie zapisz ją lub wyślij za pomocą menu udostępniania urządzenia.",
+    "description": "Pobierz wszystkie notatki wraz z obrazami jako kopię zapasową Jot lub jako pliki Markdown dla Obsidian (.zip), a następnie zapisz je lub wyślij za pomocą menu udostępniania urządzenia.",
     "exportButton": "Eksportuj notatki",
     "exporting": "Eksportowanie...",
     "offline": "Eksport wymaga połączenia z serwerem.",

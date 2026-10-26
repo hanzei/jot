@@ -209,7 +209,7 @@ func (h *NotesHandler) writeExportBundle(ctx context.Context, w io.Writer, notes
 
 	images, err := h.writeBundleImages(ctx, zw, notes, now)
 	if err != nil {
-		return err
+		return fmt.Errorf("write images: %w", err)
 	}
 	for i := range exportNotes {
 		exportNotes[i].Images = images[i]

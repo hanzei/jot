@@ -486,7 +486,7 @@
     "importButton": "Importa"
   },
   "export": {
-    "description": "Scarica un backup di Jot (.zip) di tutte le tue note e delle relative immagini, poi salvalo o invialo con il menu di condivisione del dispositivo.",
+    "description": "Scarica tutte le tue note e le relative immagini come backup di Jot o come file Markdown per Obsidian (.zip), poi salvalo o invialo con il menu di condivisione del dispositivo.",
     "exportButton": "Esporta note",
     "exporting": "Esportazione...",
     "offline": "L'esportazione richiede una connessione al tuo server.",

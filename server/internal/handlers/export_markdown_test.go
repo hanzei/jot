@@ -4,6 +4,7 @@ import (
 	"encoding/json/v2"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,6 +53,7 @@ func TestMarkdownSlug(t *testing.T) {
 		{"collapses punctuation runs", "--Hello,   World!--", "hello-world"},
 		{"keeps non-latin letters", "Café Über 日本", "café-über-日本"},
 		{"empty when nothing is left", "?!.", ""},
+		{"a separator never pushes it past the cap", strings.Repeat("a", 59) + " b", strings.Repeat("a", 59)},
 		{"caps the length", "aaaaaaaaaa bbbbbbbbbb cccccccccc dddddddddd eeeeeeeeee ffffffffff gggg", "aaaaaaaaaa-bbbbbbbbbb-cccccccccc-dddddddddd-eeeeeeeeee-fffff"},
 	}
 	for _, tt := range tests {
@@ -94,6 +96,22 @@ func TestMarkdownNoteSlug(t *testing.T) {
 	}
 }
 
+func TestMarkdownTags(t *testing.T) {
+	t.Parallel()
+
+	labels := []models.Label{
+		{Name: "Work stuff"},
+		{Name: "#urgent"},
+		{Name: "work  stuff"},
+		{Name: `a"b: c`},
+		{Name: "Projects/Jot"},
+		{Name: "C++"},
+		{Name: "日本 語"},
+		{Name: "?!"},
+	}
+	assert.Equal(t, []string{"Work-stuff", "urgent", "a-b-c", "Projects/Jot", "C", "日本-語"}, markdownTags(labels))
+}
+
 func TestUniqueMarkdownSlug(t *testing.T) {
 	t.Parallel()
 
@@ -130,7 +148,6 @@ func TestMarkdownNoteFile(t *testing.T) {
 tags:
   - "Work-stuff"
   - "urgent"
-  - "work-stuff"
 color: "#fbbc04"
 pinned: true
 archived: false
@@ -180,7 +197,7 @@ updated: 2026-02-03T04:05:06Z
 
 	t.Run("front-matter values are quoted", func(t *testing.T) {
 		t.Parallel()
-		n := &models.Note{NoteType: models.NoteTypeText, Labels: []models.Label{{Name: "a\"b: c"}}, CreatedAt: created, UpdatedAt: updated}
-		assert.Contains(t, markdownNoteFile(n, nil), "  - \"a\\\"b:-c\"\n")
+		n := &models.Note{NoteType: models.NoteTypeText, Color: "a\"b: c", CreatedAt: created, UpdatedAt: updated}
+		assert.Contains(t, markdownNoteFile(n, nil), "color: \"a\\\"b: c\"\n")
 	})
 }

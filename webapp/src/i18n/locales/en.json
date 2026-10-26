@@ -163,7 +163,7 @@
     "passwordSet": "Password set.",
     "failedSetPassword": "Failed to set password.",
     "importSection": "Backup & Restore",
-    "importDescription": "Export all your notes and their images as a Jot backup (.zip), or import notes from a Jot backup or Google Keep export.",
+    "importDescription": "Export all your notes and their images as a Jot backup or as Markdown files for Obsidian (.zip), or import notes from a Jot backup or Google Keep export.",
     "exportButton": "Export Notes",
     "exporting": "Exporting...",
     "exportFailed": "Export failed. Please try again.",

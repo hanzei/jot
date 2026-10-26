@@ -163,7 +163,7 @@
     "passwordSet": "Senha definida.",
     "failedSetPassword": "Falha ao definir a senha.",
     "importSection": "Backup e restauração",
-    "importDescription": "Exporte todas as suas notas e as imagens delas como um backup do Jot (.zip) ou importe notas de um backup do Jot ou de uma exportação do Google Keep.",
+    "importDescription": "Exporte todas as suas notas e as imagens delas como um backup do Jot ou como arquivos Markdown para o Obsidian (.zip), ou importe notas de um backup do Jot ou de uma exportação do Google Keep.",
     "exportButton": "Exportar notas",
     "exporting": "Exportando...",
     "exportFailed": "Falha na exportação. Tente novamente.",

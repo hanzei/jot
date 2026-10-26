@@ -163,7 +163,7 @@
     "passwordSet": "Password impostata.",
     "failedSetPassword": "Impossibile impostare la password.",
     "importSection": "Backup e ripristino",
-    "importDescription": "Esporta tutte le tue note e le loro immagini come backup Jot (.zip) o importa note da un backup Jot o da un'esportazione di Google Keep.",
+    "importDescription": "Esporta tutte le tue note e le loro immagini come backup Jot o come file Markdown per Obsidian (.zip), oppure importa note da un backup Jot o da un'esportazione di Google Keep.",
     "exportButton": "Esporta note",
     "exporting": "Esportazione in corso...",
     "exportFailed": "Esportazione non riuscita. Riprova.",

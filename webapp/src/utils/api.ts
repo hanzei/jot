@@ -139,7 +139,7 @@ export const notes = {
     api.get('/notes/export', { params: { format }, responseType: 'blob' }).then(res => {
       const disposition = res.headers['content-disposition'] as string | undefined;
       const match = disposition?.match(/filename="?([^";\r\n]+)"?/);
-      const filename = match?.[1] ?? 'jot-export.zip';
+      const filename = match?.[1] ?? (format === 'markdown' ? 'jot-markdown-export.zip' : 'jot-export.zip');
       return { blob: res.data as Blob, filename };
     }),
 

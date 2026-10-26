@@ -163,7 +163,7 @@
     "passwordSet": "Passwort festgelegt.",
     "failedSetPassword": "Passwort konnte nicht festgelegt werden.",
     "importSection": "Sichern & Wiederherstellen",
-    "importDescription": "Exportiere alle deine Notizen samt Bildern als Jot-Sicherung (.zip) oder importiere Notizen aus einer Jot-Sicherung oder einem Google Keep-Export.",
+    "importDescription": "Exportiere alle deine Notizen samt Bildern als Jot-Sicherung oder als Markdown-Dateien für Obsidian (.zip) oder importiere Notizen aus einer Jot-Sicherung oder einem Google Keep-Export.",
     "exportButton": "Notizen exportieren",
     "exporting": "Exportieren...",
     "exportFailed": "Export fehlgeschlagen. Bitte erneut versuchen.",

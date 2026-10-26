@@ -375,8 +375,5 @@ func (c *Client) ExportNotes(ctx context.Context) (*JotExportBundle, error) {
 // and the images they link to. It returns the zip as served.
 func (c *Client) ExportNotesMarkdown(ctx context.Context) ([]byte, error) {
 	data, _, err := c.doGetBytes(ctx, "/api/v1/notes/export?format=markdown")
-	if err != nil {
-		return nil, err
-	}
-	return data, nil
+	return data, err
 }
