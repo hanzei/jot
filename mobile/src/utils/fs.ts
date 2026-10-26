@@ -134,12 +134,7 @@ export async function downloadFile(
     onProgress?: () => void;
   } = {},
 ): Promise<void> {
-  await File.downloadFileAsync(url, new File(destUri), {
-    idempotent: true,
-    ...(options.headers ? { headers: options.headers } : {}),
-    ...(options.signal ? { signal: options.signal } : {}),
-    ...(options.onProgress ? { onProgress: options.onProgress } : {}),
-  });
+  await File.downloadFileAsync(url, new File(destUri), { idempotent: true, ...options });
 }
 
 /** Read a whole file as text, or `null` when it is missing or unreadable. */

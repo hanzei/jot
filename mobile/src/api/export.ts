@@ -8,6 +8,10 @@ const EXPORT_DIR = cachePath('exports');
  * gathers every note before the first byte, and a bundle can run to hundreds
  * of MB, so a fixed total budget either cuts off a big export on a slow link or
  * leaves a dead connection hanging for many minutes. A stall timer covers both.
+ *
+ * This is an upper bound, not a guarantee: on Android, expo-file-system's
+ * downloader uses a default OkHttp client, whose own 10 s read timeout fails a
+ * gap longer than that first.
  */
 export const EXPORT_STALL_TIMEOUT_MS = 60_000;
 
@@ -15,9 +19,9 @@ export const EXPORT_STALL_TIMEOUT_MS = 60_000;
 export const EXPORT_TOTAL_TIMEOUT_MS = 30 * 60_000;
 
 /**
- * Remove bundles a previous export left behind (the app was killed while the
- * share sheet was open, say). They are large, so they shouldn't wait for the OS
- * to purge the cache.
+ * Remove bundles a previous export left behind: a shared bundle is kept until
+ * the next export, since the receiving app may still be reading it after the
+ * share sheet closes (see ExportSection), and a killed app leaves one too.
  */
 export function clearExportCache(): void {
   for (const name of listFileNames(EXPORT_DIR)) {
@@ -27,11 +31,10 @@ export function clearExportCache(): void {
 
 /**
  * Download the `GET /notes/export` bundle into the cache directory and return
- * its file URI. The caller owns the file and must delete it once it has been
- * handed off. Rejects on a non-2xx response, a transport error, or a timeout,
- * leaving no partial file behind.
+ * its file URI. Any earlier bundle is cleared first. Rejects on a non-2xx response, a transport error, a timeout, or
+ * an abort of `signal`, leaving no partial file behind.
  */
-export async function downloadExportBundle(): Promise<string> {
+export async function downloadExportBundle(signal?: AbortSignal): Promise<string> {
   clearExportCache();
   ensureDirExists(EXPORT_DIR);
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -41,12 +44,15 @@ export async function downloadExportBundle(): Promise<string> {
   const headers: Record<string, string> = token ? { Cookie: `jot_session=${token}` } : {};
 
   const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (signal?.aborted) abort();
+  signal?.addEventListener('abort', abort, { once: true });
   let stallTimer: ReturnType<typeof setTimeout> | undefined;
   const armStallTimer = () => {
     clearTimeout(stallTimer);
-    stallTimer = setTimeout(() => controller.abort(), EXPORT_STALL_TIMEOUT_MS);
+    stallTimer = setTimeout(abort, EXPORT_STALL_TIMEOUT_MS);
   };
-  const totalTimer = setTimeout(() => controller.abort(), EXPORT_TOTAL_TIMEOUT_MS);
+  const totalTimer = setTimeout(abort, EXPORT_TOTAL_TIMEOUT_MS);
   armStallTimer();
 
   try {
@@ -62,5 +68,6 @@ export async function downloadExportBundle(): Promise<string> {
   } finally {
     clearTimeout(stallTimer);
     clearTimeout(totalTimer);
+    signal?.removeEventListener('abort', abort);
   }
 }

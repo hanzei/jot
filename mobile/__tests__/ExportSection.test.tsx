@@ -41,7 +41,7 @@ describe('ExportSection', () => {
     mockShareAsync.mockResolvedValue(undefined);
   });
 
-  it('downloads the bundle with the session cookie, shares it, then deletes it', async () => {
+  it('downloads the bundle with the session cookie and shares it, keeping it for the receiving app', async () => {
     let sharedUri = '';
     mockShareAsync.mockImplementation(async (uri) => {
       sharedUri = uri;
@@ -60,7 +60,8 @@ describe('ExportSection', () => {
     );
     expect(sharedUri).toMatch(/^file:\/\/\/cache\/exports\/jot-export-.*\.zip$/);
     expect(mockShareAsync).toHaveBeenCalledWith(sharedUri, expect.objectContaining({ mimeType: 'application/zip' }));
-    await waitFor(() => expect(exportFiles()).toEqual([]));
+    // Kept: the picked app may still be reading it; the next export clears it.
+    expect(exportFiles()).toEqual([sharedUri]);
     expect(queryByTestId('settings-export-error')).toBeNull();
   });
 
@@ -135,6 +136,44 @@ describe('ExportSection', () => {
     expect(getByTestId('settings-export-submit').props.accessibilityState).toMatchObject({ disabled: true });
     await fireEvent.press(getByTestId('settings-export-submit'));
     expect(mockDownload).not.toHaveBeenCalled();
+  });
+
+  it('cancels the download without an error or share when the section unmounts', async () => {
+    let signal: AbortSignal | undefined;
+    mockDownload.mockImplementationOnce((_url: string, destination: { uri: string }, options: { signal: AbortSignal }) => {
+      signal = options.signal;
+      globalThis.mockFileSystem.files.set(destination.uri, 'partial');
+      return new Promise((_resolve, reject) => {
+        options.signal.addEventListener('abort', () => reject(new Error('AbortError')));
+      });
+    });
+
+    const { getByTestId, unmount } = await render(<ExportSection />);
+    const pressed = fireEvent.press(getByTestId('settings-export-submit'));
+    await waitFor(() => expect(signal).toBeDefined());
+
+    await unmount();
+    await act(async () => {
+      await pressed;
+    });
+
+    expect(signal!.aborted).toBe(true);
+    expect(mockShareAsync).not.toHaveBeenCalled();
+    expect(exportFiles()).toEqual([]);
+  });
+
+  it('re-enables once the server becomes reachable again', async () => {
+    markServerUnreachable();
+
+    const { getByTestId, queryByTestId } = await render(<ExportSection />);
+    expect(getByTestId('settings-export-submit').props.accessibilityState).toMatchObject({ disabled: true });
+
+    await act(async () => {
+      markServerReachable();
+    });
+
+    expect(queryByTestId('settings-export-offline')).toBeNull();
+    expect(getByTestId('settings-export-submit').props.accessibilityState).toMatchObject({ disabled: false });
   });
 
   it('is disabled while the server is unreachable', async () => {
