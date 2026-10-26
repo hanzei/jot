@@ -166,7 +166,7 @@ func TestNoteUnreadState(t *testing.T) {
 		require.Equal(t, NoteUnreadUpdated, unreadFor(t, store, note.ID, viewerID))
 		staleWriters := map[string]func(tx *sql.Tx) error{
 			"touchNoteTx": func(tx *sql.Tx) error {
-				return touchNoteTx(ctx, tx, store.d, note.ID, ownerID, stale)
+				return touchNoteTx(ctx, tx, store.d, pendingRevision{}, note.ID, ownerID, stale)
 			},
 			"changeNoteContentTx": func(tx *sql.Tx) error {
 				return store.changeNoteContentTx(ctx, tx, note.ID, ownerID, "stale title", "stale content", nil, stale)

@@ -225,6 +225,11 @@ func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID, actorID
 
 	now := Timestamp(Now())
 
+	rev, err := captureRevisionTx(ctx, tx, s.d, noteID, actorID, now)
+	if err != nil {
+		return nil, err
+	}
+
 	if err = validateParentRefTx(ctx, tx, s.d, noteID, itemID, parentID); err != nil {
 		return nil, err
 	}
@@ -244,7 +249,7 @@ func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID, actorID
 	if err != nil {
 		return nil, err
 	}
-	if err = touchNoteTx(ctx, tx, s.d, noteID, actorID, now); err != nil {
+	if err = touchNoteTx(ctx, tx, s.d, rev, noteID, actorID, now); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -277,6 +282,11 @@ func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, actorID, itemI
 	defer func() { _ = tx.Rollback() }()
 
 	now := Timestamp(Now())
+
+	rev, err := captureRevisionTx(ctx, tx, s.d, noteID, actorID, now)
+	if err != nil {
+		return nil, err
+	}
 
 	var exists int
 	if err = tx.QueryRowContext(ctx,
@@ -319,7 +329,7 @@ func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, actorID, itemI
 	if err != nil {
 		return nil, err
 	}
-	if err = touchNoteTx(ctx, tx, s.d, noteID, actorID, now); err != nil {
+	if err = touchNoteTx(ctx, tx, s.d, rev, noteID, actorID, now); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -352,6 +362,11 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, actorID, itemID strin
 	defer func() { _ = tx.Rollback() }()
 
 	now := Timestamp(Now())
+
+	rev, err := captureRevisionTx(ctx, tx, s.d, noteID, actorID, now)
+	if err != nil {
+		return nil, err
+	}
 
 	var current NoteItem
 	var assignedTo, currentParent sql.NullString
@@ -421,7 +436,7 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, actorID, itemID strin
 		item.Position = positions[itemID]
 	}
 
-	if err = touchNoteIfChangedTx(ctx, tx, s.d, changed, noteID, actorID, now); err != nil {
+	if err = touchNoteIfChangedTx(ctx, tx, s.d, changed, rev, noteID, actorID, now); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -456,6 +471,11 @@ func (s *noteStore) DeleteItemFromNote(ctx context.Context, noteID, actorID, ite
 
 	now := Timestamp(Now())
 
+	rev, err := captureRevisionTx(ctx, tx, s.d, noteID, actorID, now)
+	if err != nil {
+		return err
+	}
+
 	result, err := tx.ExecContext(ctx,
 		s.d.RewritePlaceholders(`DELETE FROM note_items WHERE id = ? AND note_id = ?`),
 		itemID, noteID,
@@ -471,7 +491,7 @@ func (s *noteStore) DeleteItemFromNote(ctx context.Context, noteID, actorID, ite
 		return ErrNoteItemNotFound
 	}
 
-	if err = touchNoteTx(ctx, tx, s.d, noteID, actorID, now); err != nil {
+	if err = touchNoteTx(ctx, tx, s.d, rev, noteID, actorID, now); err != nil {
 		return err
 	}
 	if err = tx.Commit(); err != nil {
@@ -492,6 +512,11 @@ func (s *noteStore) ReorderItems(ctx context.Context, noteID, actorID string, it
 	defer func() { _ = tx.Rollback() }()
 
 	now := Timestamp(Now())
+
+	rev, err := captureRevisionTx(ctx, tx, s.d, noteID, actorID, now)
+	if err != nil {
+		return err
+	}
 
 	changed := false
 	for i, itemID := range itemIDs {
@@ -522,7 +547,7 @@ func (s *noteStore) ReorderItems(ctx context.Context, noteID, actorID string, it
 	if _, err = normalizeItemOrderTx(ctx, tx, s.d, noteID, now); err != nil {
 		return err
 	}
-	if err = touchNoteIfChangedTx(ctx, tx, s.d, changed, noteID, actorID, now); err != nil {
+	if err = touchNoteIfChangedTx(ctx, tx, s.d, changed, rev, noteID, actorID, now); err != nil {
 		return err
 	}
 	if err = tx.Commit(); err != nil {
@@ -586,6 +611,11 @@ func (s *noteStore) ToggleItemCompleted(ctx context.Context, noteID, actorID, it
 
 	now := Timestamp(Now())
 
+	rev, err := captureRevisionTx(ctx, tx, s.d, noteID, actorID, now)
+	if err != nil {
+		return nil, err
+	}
+
 	var parentID sql.NullString
 	err = tx.QueryRowContext(ctx,
 		s.d.RewritePlaceholders(`SELECT parent_id FROM note_items WHERE id = ? AND note_id = ?`),
@@ -612,7 +642,7 @@ func (s *noteStore) ToggleItemCompleted(ctx context.Context, noteID, actorID, it
 		return nil, err
 	}
 
-	if err = touchNoteIfChangedTx(ctx, tx, s.d, itemChanged || cascadeChanged, noteID, actorID, now); err != nil {
+	if err = touchNoteIfChangedTx(ctx, tx, s.d, itemChanged || cascadeChanged, rev, noteID, actorID, now); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -640,6 +670,11 @@ func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID, actorID strin
 	defer func() { _ = tx.Rollback() }()
 
 	now := Timestamp(Now())
+
+	rev, err := captureRevisionTx(ctx, tx, s.d, noteID, actorID, now)
+	if err != nil {
+		return nil, err
+	}
 
 	var changed int64
 	for _, itemID := range itemIDs {
@@ -679,10 +714,8 @@ func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID, actorID strin
 
 	// Only bump the note when something actually changed, so a no-op call does
 	// not spuriously reorder the dashboard or emit an update to collaborators.
-	if changed > 0 {
-		if err = touchNoteTx(ctx, tx, s.d, noteID, actorID, now); err != nil {
-			return nil, err
-		}
+	if err = touchNoteIfChangedTx(ctx, tx, s.d, changed > 0, rev, noteID, actorID, now); err != nil {
+		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit set items completed: %w", err)
@@ -706,6 +739,11 @@ func (s *noteStore) DeleteItems(ctx context.Context, noteID, actorID string, ite
 	defer func() { _ = tx.Rollback() }()
 
 	now := Timestamp(Now())
+
+	rev, err := captureRevisionTx(ctx, tx, s.d, noteID, actorID, now)
+	if err != nil {
+		return nil, err
+	}
 
 	var deleted int64
 	for _, itemID := range itemIDs {
@@ -735,7 +773,7 @@ func (s *noteStore) DeleteItems(ctx context.Context, noteID, actorID string, ite
 		}
 
 		// Only bump the note when something was actually deleted.
-		if err = touchNoteTx(ctx, tx, s.d, noteID, actorID, now); err != nil {
+		if err = touchNoteTx(ctx, tx, s.d, rev, noteID, actorID, now); err != nil {
 			return nil, err
 		}
 	}

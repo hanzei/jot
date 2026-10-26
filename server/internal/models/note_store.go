@@ -34,4 +34,7 @@ type NewNoteItem struct {
 	Position  int
 	Completed bool
 	ParentID  string
+	// AssignedTo is the item's assignee, or "" for none. Only restoring a
+	// revision sets it; the caller checks the assignee can access the note.
+	AssignedTo string
 }

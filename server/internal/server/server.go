@@ -224,6 +224,10 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (_ *Server, err error
 		}
 		return nil
 	}, "purge old trashed notes")
+	s.startPeriodicTask(ctx, "revision-prune", time.Hour, false, func(ctx context.Context) error {
+		_, err := noteStore.PruneRevisions(ctx)
+		return err
+	}, "prune note revisions")
 	s.startPeriodicTask(ctx, "image-orphan-sweep", 24*time.Hour, true, func(ctx context.Context) error {
 		report, err := blobstore.Sweep(ctx, noteStore, imageStore, imageOrphanSweepGrace)
 		logImageSweepReport(log, report)
@@ -460,6 +464,9 @@ func (s *Server) setupRoutes() error {
 			r.Delete("/notes/{id}", s.wrapHandler(s.notesHandler.DeleteNote))
 			r.Post("/notes/{id}/duplicate", s.wrapHandler(s.notesHandler.DuplicateNote))
 			r.Post("/notes/{id}/convert", s.wrapHandler(s.notesHandler.ConvertNoteType))
+			r.Get("/notes/{id}/revisions", s.wrapHandler(s.notesHandler.ListNoteRevisions))
+			r.Get("/notes/{id}/revisions/{revision_id}", s.wrapHandler(s.notesHandler.GetNoteRevision))
+			r.Post("/notes/{id}/revisions/{revision_id}/restore", s.wrapHandler(s.notesHandler.RestoreNoteRevision))
 
 			r.With(expensiveLimit).Post("/notes/{id}/images", s.wrapHandler(s.notesHandler.UploadNoteImage))
 			r.Get("/images/{id}", s.wrapHandler(s.notesHandler.GetNoteImage))

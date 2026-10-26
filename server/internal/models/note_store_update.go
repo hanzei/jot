@@ -120,12 +120,19 @@ func (s *noteStore) getNoteRowForUpdateTx(ctx context.Context, tx *sql.Tx, id, u
 }
 
 // changeNoteContentTx writes userID's title/content change, which records it
-// for unread tracking, and marks the note viewed by userID. An idempotent
-// replay wrote nothing, so it is not this user's change (mirrors ConvertType's
-// alreadyApplied check).
+// for unread tracking, keeps the replaced content as a revision, and marks the
+// note viewed by userID. An idempotent replay wrote nothing, so it is not this
+// user's change (mirrors ConvertType's alreadyApplied check).
 func (s *noteStore) changeNoteContentTx(ctx context.Context, tx *sql.Tx, id, userID, title, content string, baseVersion *int, now string) error {
+	rev, err := captureRevisionTx(ctx, tx, s.d, id, userID, now)
+	if err != nil {
+		return err
+	}
 	applied, err := s.updateNoteContentTx(ctx, tx, id, userID, title, content, baseVersion, now)
 	if err != nil || !applied {
+		return err
+	}
+	if err = rev.saveTx(ctx, tx, s.d); err != nil {
 		return err
 	}
 	return markViewedTx(ctx, tx, s.d, id, userID, now)
@@ -185,6 +192,12 @@ func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, act
 // title is cleared and the item delete is a no-op in that direction); existing
 // items are deleted regardless of direction.
 func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetType NoteType, title, content string, targetItems []NewNoteItem, baseVersion *int) (*Note, error) {
+	return s.convertType(ctx, id, userID, targetType, title, content, targetItems, baseVersion, true)
+}
+
+// convertType is ConvertType, with the replaced content's revision coalescing
+// (see captureRevisionTx) only when coalesceRevision is set.
+func (s *noteStore) convertType(ctx context.Context, id, userID string, targetType NoteType, title, content string, targetItems []NewNoteItem, baseVersion *int, coalesceRevision bool) (*Note, error) {
 	if !targetType.Valid() {
 		return nil, ErrInvalidNoteType
 	}
@@ -205,12 +218,20 @@ func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetTy
 
 	now := Timestamp(Now())
 
+	rev, err := snapshotNoteTx(ctx, tx, s.d, id, userID, now, coalesceRevision)
+	if err != nil {
+		return nil, err
+	}
+
 	alreadyApplied, err := s.convertNoteRowTx(ctx, tx, id, userID, targetType, title, content, targetItems, baseVersion, now)
 	if err != nil {
 		return nil, err
 	}
 
 	if !alreadyApplied {
+		if err = rev.saveTx(ctx, tx, s.d); err != nil {
+			return nil, err
+		}
 		if _, err = tx.ExecContext(ctx, s.d.RewritePlaceholders(`DELETE FROM note_items WHERE note_id = ?`), id); err != nil {
 			return nil, fmt.Errorf("delete note items for conversion: %w", err)
 		}
