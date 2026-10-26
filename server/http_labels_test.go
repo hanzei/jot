@@ -579,7 +579,7 @@ func TestDeleteLabel(t *testing.T) {
 		labelID := labels[0].ID
 
 		var beforeAssociations int
-		err = ts.Server.GetDB().QueryRow("SELECT COUNT(*) FROM note_labels WHERE label_id = ?", labelID).Scan(&beforeAssociations)
+		err = ts.queryRow(t, "SELECT COUNT(*) FROM note_labels WHERE label_id = ?", labelID).Scan(&beforeAssociations)
 		require.NoError(t, err)
 		assert.Equal(t, 2, beforeAssociations)
 
@@ -587,17 +587,17 @@ func TestDeleteLabel(t *testing.T) {
 		require.NoError(t, err)
 
 		var remainingAssociations int
-		err = ts.Server.GetDB().QueryRow("SELECT COUNT(*) FROM note_labels WHERE label_id = ?", labelID).Scan(&remainingAssociations)
+		err = ts.queryRow(t, "SELECT COUNT(*) FROM note_labels WHERE label_id = ?", labelID).Scan(&remainingAssociations)
 		require.NoError(t, err)
 		assert.Equal(t, 0, remainingAssociations)
 
 		var remainingLabelRows int
-		err = ts.Server.GetDB().QueryRow("SELECT COUNT(*) FROM labels WHERE id = ?", labelID).Scan(&remainingLabelRows)
+		err = ts.queryRow(t, "SELECT COUNT(*) FROM labels WHERE id = ?", labelID).Scan(&remainingLabelRows)
 		require.NoError(t, err)
 		assert.Equal(t, 0, remainingLabelRows)
 
 		var remainingNotes int
-		err = ts.Server.GetDB().QueryRow("SELECT COUNT(*) FROM notes WHERE id IN (?, ?)", firstNote.ID, secondNote.ID).Scan(&remainingNotes)
+		err = ts.queryRow(t, "SELECT COUNT(*) FROM notes WHERE id IN (?, ?)", firstNote.ID, secondNote.ID).Scan(&remainingNotes)
 		require.NoError(t, err)
 		assert.Equal(t, 2, remainingNotes)
 
@@ -680,10 +680,9 @@ func TestLabelNameMaxLength(t *testing.T) {
 	t.Run("an existing overlong label can still be attached", func(t *testing.T) {
 		// A label created before the limit existed, or by an import.
 		legacy := strings.Repeat("ö", 120)
-		_, err := ts.Server.GetDB().ExecContext(t.Context(),
+		ts.exec(t,
 			`INSERT INTO labels (id, user_id, name, name_folded, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
 			"labl00000000000legacy", user.User.ID, legacy, labelfold.Fold(legacy), "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z")
-		require.NoError(t, err)
 
 		withLabel, err := user.Client.AddLabel(t.Context(), note.ID, legacy)
 		require.NoError(t, err)
