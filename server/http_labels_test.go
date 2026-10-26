@@ -9,6 +9,7 @@ import (
 
 	"github.com/hanzei/jot/server/client"
 	"github.com/hanzei/jot/server/internal/labelfold"
+	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/sse"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -680,9 +681,10 @@ func TestLabelNameMaxLength(t *testing.T) {
 	t.Run("an existing overlong label can still be attached", func(t *testing.T) {
 		// A label created before the limit existed, or by an import.
 		legacy := strings.Repeat("ö", 120)
+		legacyAt := models.Timestamp(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 		ts.exec(t,
 			`INSERT INTO labels (id, user_id, name, name_folded, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
-			"labl00000000000legacy", user.User.ID, legacy, labelfold.Fold(legacy), "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z")
+			"labl00000000000legacy", user.User.ID, legacy, labelfold.Fold(legacy), legacyAt, legacyAt)
 
 		withLabel, err := user.Client.AddLabel(t.Context(), note.ID, legacy)
 		require.NoError(t, err)
