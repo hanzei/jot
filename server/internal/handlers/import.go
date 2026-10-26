@@ -97,7 +97,7 @@ type jotImportNote struct {
 	Items                 []jotImportNoteItem `json:"items"`
 	Images                []jotImportImage    `json:"images"`
 	// CreatedAt and UpdatedAt are absent from bundles exported before they
-	// were added; the zero value makes the store fall back to the import time.
+	// were added.
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

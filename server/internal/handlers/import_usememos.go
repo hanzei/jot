@@ -50,14 +50,13 @@ type usememosAPIMemo struct {
 }
 
 // memoTimestamp returns a memo's timestamp from whichever API version's
-// field carries it, or the zero time (which the store replaces with the
-// import time) when neither does.
+// field carries it, or the zero time when neither does.
 func memoTimestamp(rfc3339 string, unixSeconds int64) time.Time {
 	if t, err := time.Parse(time.RFC3339Nano, rfc3339); err == nil {
-		return t.UTC()
+		return t
 	}
 	if unixSeconds > 0 {
-		return time.Unix(unixSeconds, 0).UTC()
+		return time.Unix(unixSeconds, 0)
 	}
 	return time.Time{}
 }

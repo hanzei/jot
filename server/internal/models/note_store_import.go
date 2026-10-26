@@ -151,17 +151,16 @@ func (s *noteStore) ImportJotNotes(ctx context.Context, userID string, notes []J
 
 // insertImportedNoteTx inserts a single note, its list items, and its labels
 // into the database within the provided transaction. It returns the new note ID.
-func insertImportedNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, userID string, n JotImportNote, nowTime time.Time) (string, error) {
+func insertImportedNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, userID string, n JotImportNote, now time.Time) (string, error) {
 	noteID, err := generateID()
 	if err != nil {
 		return "", fmt.Errorf("generate note ID: %w", err)
 	}
-	now := Timestamp(nowTime)
+	nowTS := Timestamp(now)
 
-	createdAt := restoredTimestamp(n.CreatedAt, nowTime)
-	updatedAt := restoredTimestamp(n.UpdatedAt, nowTime)
-	// Only a bundle carrying updated_at without a usable created_at gets
-	// here; don't leave the note modified before it was created.
+	createdAt := restoredTimestamp(n.CreatedAt, now)
+	updatedAt := restoredTimestamp(n.UpdatedAt, now)
+	// Don't leave the note modified before it was created.
 	if updatedAt.Before(createdAt) {
 		updatedAt = createdAt
 	}
@@ -177,35 +176,32 @@ func insertImportedNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, u
 	if _, err = tx.ExecContext(ctx,
 		d.RewritePlaceholders(`INSERT INTO note_user_state (note_id, user_id, color, pinned, archived, position, unpinned_position, checked_items_collapsed, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?)`),
-		noteID, userID, n.Color, n.Pinned, n.Archived, n.CheckedItemsCollapsed, now, now,
+		noteID, userID, n.Color, n.Pinned, n.Archived, n.CheckedItemsCollapsed, nowTS, nowTS,
 	); err != nil {
 		return "", fmt.Errorf("create note user state: %w", err)
 	}
 
-	if err = insertImportedItemsTx(ctx, tx, d, noteID, n.Items, now); err != nil {
+	if err = insertImportedItemsTx(ctx, tx, d, noteID, n.Items, nowTS); err != nil {
 		return "", err
 	}
 
-	if err = insertImportedLabelsTx(ctx, tx, d, userID, noteID, n.Labels, now); err != nil {
+	if err = insertImportedLabelsTx(ctx, tx, d, userID, noteID, n.Labels, nowTS); err != nil {
 		return "", err
 	}
 
-	if err = insertImportedImagesTx(ctx, tx, d, userID, noteID, n.Images, nowTime); err != nil {
+	if err = insertImportedImagesTx(ctx, tx, d, userID, noteID, n.Images, now); err != nil {
 		return "", err
 	}
 
 	return noteID, nil
 }
 
-// restoredTimestamp returns t, a timestamp carried over from an export, or
-// now when t can't be used: zero (a bundle that predates the field), before
-// year 1 or after now. The first two fallbacks also keep the year within the
-// four digits timestampLayout holds and both backends accept. A future
-// value, from a wrong clock or a hand-edited bundle, would pin the row above
-// everything edited after the import, and the next real edit would move its
-// updated_at backwards.
+// restoredTimestamp returns t, a timestamp carried over from the import
+// source, or now when t is unset, before year 1 or in the future. That keeps
+// the year within timestampLayout's four digits, and keeps a wrong clock from
+// pinning the row above everything edited after the import.
 func restoredTimestamp(t, now time.Time) time.Time {
-	if t.IsZero() || t.Before(time.Time{}) || t.After(now) {
+	if !t.After(time.Time{}) || t.After(now) {
 		return now
 	}
 	return t

@@ -139,13 +139,13 @@ func keepNoteToImport(kn keepNote) (models.JotImportNote, error) {
 	}, nil
 }
 
-// keepTimestamp converts a Takeout timestamp to a time, or the zero time
-// (which the store replaces with the import time) when Takeout left it unset.
+// keepTimestamp converts a Takeout timestamp, or returns the zero time when
+// Takeout left it unset.
 func keepTimestamp(usec int64) time.Time {
 	if usec <= 0 {
 		return time.Time{}
 	}
-	return time.UnixMicro(usec).UTC()
+	return time.UnixMicro(usec)
 }
 
 const (

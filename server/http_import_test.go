@@ -26,6 +26,9 @@ type keepNoteJSON struct {
 	IsTrashed   bool               `json:"isTrashed"`
 	IsPinned    bool               `json:"isPinned"`
 	IsArchived  bool               `json:"isArchived"`
+	// Unix microseconds; zero leaves the field out, as Takeout may.
+	CreatedTimestampUsec    int64 `json:"createdTimestampUsec,omitempty"`
+	UserEditedTimestampUsec int64 `json:"userEditedTimestampUsec,omitempty"`
 }
 
 type keepNoteItemJSON struct {
@@ -1013,32 +1016,26 @@ func TestImportUsememosArchivedFetchedSeparately(t *testing.T) {
 	assert.True(t, foundArchived, "archived memo should be imported with archived=true")
 }
 
-// failNoteItemInserts installs a trigger that aborts any note_items insert whose
-// text is "boom", simulating a database failure partway through a list note.
 func TestImportKeepTimestamps(t *testing.T) {
 	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "keeptimestamps", "password123", false)
 
-	before := time.Now().Add(-time.Minute)
 	files := map[string][]byte{
-		"Takeout/Keep/dated.json":   []byte(`{"title":"","textContent":"dated","createdTimestampUsec":1583298367123456,"userEditedTimestampUsec":1628503872000000}`),
-		"Takeout/Keep/undated.json": []byte(`{"title":"","textContent":"undated"}`),
+		"Takeout/Keep/dated.json": marshalKeepNote(t, keepNoteJSON{
+			TextContent:             "dated",
+			CreatedTimestampUsec:    1583298367123456,
+			UserEditedTimestampUsec: 1628503872000000,
+		}),
+		"Takeout/Keep/undated.json": marshalKeepNote(t, keepNoteJSON{TextContent: "undated"}),
 	}
 	result, err := user.Client.ImportNotes(t.Context(), "google_keep", "takeout.zip", bytes.NewReader(buildZip(t, files)))
 	require.NoError(t, err)
 	assert.Equal(t, 2, result.Imported)
 
-	byContent := map[string]client.Note{}
-	for _, n := range allNotes(t, user) {
-		byContent[n.Content] = n
-	}
-	dated := byContent["dated"]
-	assert.True(t, time.Date(2020, 3, 4, 5, 6, 7, 123456000, time.UTC).Equal(dated.CreatedAt), "created_at %v", dated.CreatedAt)
-	assert.True(t, time.Date(2021, 8, 9, 10, 11, 12, 0, time.UTC).Equal(dated.UpdatedAt), "updated_at %v", dated.UpdatedAt)
-	undated := byContent["undated"]
-	assert.True(t, undated.CreatedAt.After(before), "created_at %v", undated.CreatedAt)
-	assert.True(t, undated.UpdatedAt.Equal(undated.CreatedAt), "updated_at %v", undated.UpdatedAt)
+	notes := notesByContent(t, user)
+	assertNoteTimes(t, notes["dated"], time.Date(2020, 3, 4, 5, 6, 7, 123456000, time.UTC), time.Date(2021, 8, 9, 10, 11, 12, 0, time.UTC))
+	assertNoteTimes(t, notes["undated"], time.Time{}, time.Time{})
 }
 
 func TestImportUsememosTimestamps(t *testing.T) {
@@ -1046,11 +1043,10 @@ func TestImportUsememosTimestamps(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "usememostimestamps", "password123", false)
 
-	before := time.Now().Add(-time.Minute)
 	memos := []map[string]any{
 		{"name": "memos/1", "content": "v1 fields", "createTime": "2020-03-04T05:06:07.123456Z", "updateTime": "2021-08-09T12:11:12+02:00"},
 		{"name": "memos/2", "content": "older fields", "createdTs": 1583298367, "updatedTs": 1628503872},
-		{"name": "memos/3", "content": "unparsable", "createTime": "yesterday"},
+		{"name": "memos/3", "content": "unparsable", "createTime": "yesterday", "updateTime": "tomorrow"},
 	}
 	mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
 	defer mockSrv.Close()
@@ -1059,20 +1055,14 @@ func TestImportUsememosTimestamps(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 3, result.Imported)
 
-	byContent := map[string]client.Note{}
-	for _, n := range allNotes(t, user) {
-		byContent[n.Content] = n
-	}
-	v1 := byContent["v1 fields"]
-	assert.True(t, time.Date(2020, 3, 4, 5, 6, 7, 123456000, time.UTC).Equal(v1.CreatedAt), "created_at %v", v1.CreatedAt)
-	assert.True(t, time.Date(2021, 8, 9, 10, 11, 12, 0, time.UTC).Equal(v1.UpdatedAt), "updated_at %v", v1.UpdatedAt)
-	older := byContent["older fields"]
-	assert.True(t, time.Date(2020, 3, 4, 5, 6, 7, 0, time.UTC).Equal(older.CreatedAt), "created_at %v", older.CreatedAt)
-	assert.True(t, time.Date(2021, 8, 9, 10, 11, 12, 0, time.UTC).Equal(older.UpdatedAt), "updated_at %v", older.UpdatedAt)
-	unparsable := byContent["unparsable"]
-	assert.True(t, unparsable.CreatedAt.After(before), "created_at %v", unparsable.CreatedAt)
+	notes := notesByContent(t, user)
+	assertNoteTimes(t, notes["v1 fields"], time.Date(2020, 3, 4, 5, 6, 7, 123456000, time.UTC), time.Date(2021, 8, 9, 10, 11, 12, 0, time.UTC))
+	assertNoteTimes(t, notes["older fields"], time.Date(2020, 3, 4, 5, 6, 7, 0, time.UTC), time.Date(2021, 8, 9, 10, 11, 12, 0, time.UTC))
+	assertNoteTimes(t, notes["unparsable"], time.Time{}, time.Time{})
 }
 
+// failNoteItemInserts installs a trigger that aborts any note_items insert whose
+// text is "boom", simulating a database failure partway through a list note.
 func failNoteItemInserts(t *testing.T, ts *TestServer) {
 	t.Helper()
 	if ts.dialect.Driver == dialect.DriverPostgres {
@@ -1098,6 +1088,31 @@ func allNotes(t *testing.T, user *TestUser) []client.Note {
 	archived, err := user.Client.ListNotes(t.Context(), &client.ListNotesOptions{Archived: true})
 	require.NoError(t, err)
 	return append(active, archived...)
+}
+
+// notesByContent returns all of user's notes, active and archived, by content.
+func notesByContent(t *testing.T, user *TestUser) map[string]client.Note {
+	t.Helper()
+	byContent := map[string]client.Note{}
+	for _, n := range allNotes(t, user) {
+		byContent[n.Content] = n
+	}
+	return byContent
+}
+
+// assertNoteTimes checks n's created_at and updated_at against wantCreated and
+// wantUpdated, where a zero want means the import time: within a minute of now.
+func assertNoteTimes(t *testing.T, n client.Note, wantCreated, wantUpdated time.Time) {
+	t.Helper()
+	check := func(field string, got, want time.Time) {
+		if want.IsZero() {
+			assert.WithinDuration(t, time.Now(), got, time.Minute, "%s should be the import time", field)
+			return
+		}
+		assert.True(t, want.Equal(got), "%s is %v, want %v", field, got, want)
+	}
+	check("created_at", n.CreatedAt, wantCreated)
+	check("updated_at", n.UpdatedAt, wantUpdated)
 }
 
 func labelNames(labels []client.Label) []string {
