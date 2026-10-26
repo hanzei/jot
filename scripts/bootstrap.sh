@@ -13,13 +13,15 @@
 #     node_modules is already stamped up to date with its package-lock.json
 #   * installs the Chromium build the pinned `@playwright/test` expects, so
 #     `task test-e2e` works without a separate manual step
+#   * checks that `task test-server-postgres` has a Postgres to start (the
+#     server binaries or a running Docker daemon), and warns if not
 #   * warms the Go build cache so the first `task lint-server` is seconds
 #     rather than minutes
 #   * warns — loudly, without changing anything — when Node or Go is older than
 #     what the repo expects
 #
 # What it deliberately does NOT do:
-#   * install or switch Node/Go versions. Pulling in nvm/mise and reshaping the
+#   * install or switch Node/Go versions, or install PostgreSQL. Pulling in nvm/mise and reshaping the
 #     shell environment is too invasive to do silently.
 #
 # Environment variables:
@@ -260,6 +262,29 @@ install_playwright_browser() {
 }
 
 # ---------------------------------------------------------------------------
+# Postgres — `task test-server-postgres` starts a throwaway server from the
+# PostgreSQL binaries or Docker (see scripts/test-postgres.sh, which owns the
+# lookup this mirrors). Only a warning: SQLite is the default, and installing a
+# database server is not something setup should do silently.
+# ---------------------------------------------------------------------------
+
+check_postgres() {
+  [ -n "${TEST_POSTGRES_DSN:-}" ] && return
+  if command -v initdb >/dev/null 2>&1 && command -v pg_ctl >/dev/null 2>&1; then
+    return
+  fi
+  local dir
+  for dir in /usr/lib/postgresql/*/bin; do
+    [ -x "$dir/initdb" ] && [ -x "$dir/pg_ctl" ] && return
+  done
+  command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 && return
+
+  warnings+=("No Postgres for 'task test-server-postgres': neither the PostgreSQL server binaries" \
+    "(initdb, pg_ctl) nor a running Docker daemon was found. Install one (e.g. apt install postgresql)" \
+    "or set TEST_POSTGRES_DSN. Everything else, including 'task test-server', works without it.")
+}
+
+# ---------------------------------------------------------------------------
 # Go build cache — golangci-lint type-checks every package, so on a cold cache
 # the first `task lint-server` spends ~2.5 minutes compiling before it reports
 # anything (it is ~1s warm). That cost lands wherever the first lint happens,
@@ -289,6 +314,7 @@ check_go
 install_task
 install_npm_deps
 install_playwright_browser
+check_postgres
 warm_go_cache
 
 if [ "$failures" -gt 0 ]; then

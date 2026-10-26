@@ -187,7 +187,8 @@ Two trees, `migrations/sqlite/` and `migrations/postgres/`. **Every schema chang
 needs a file with the same name in both**; a change only one backend needs still
 gets an explanatory placeholder in the other so numbering stays aligned. Postgres
 tests skip locally unless `TEST_POSTGRES_DSN` is set, so a sqlite-only migration
-passes `task test-server` and fails only in CI. Aim for equivalent behavior, not
+passes `task test-server` and fails only in CI — run `task test-server-postgres`
+after any schema or query change. Aim for equivalent behavior, not
 identical SQL, and enforce the same invariants on both. Check whether
 `internal/database/dialect` needs a matching query-time change.
 
@@ -202,7 +203,12 @@ identical SQL, and enforce the same invariants on both. Check whether
 - Subtests share their parent's server; only parallelize them when they touch
   disjoint data.
 - Store and migration tests also run against Postgres when `TEST_POSTGRES_DSN`
-  is set (`internal/database/dsntest`, `dbtest`); see the README for setup.
+  is set (`internal/database/dsntest`, `dbtest`); the integration suite does
+  when `JOT_TEST_DB_DRIVER=postgres`. `task test-server-postgres` sets both and
+  starts a throwaway server if needed; see the README.
+- Raw SQL in an integration test goes through `ts.exec`/`ts.queryRow`, which
+  rewrite `?` placeholders for Postgres; a SQLite-only test calls
+  `requireSQLite(t)`.
 
 ## Webapp E2E
 

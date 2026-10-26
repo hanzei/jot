@@ -162,7 +162,7 @@ the Postgres path — those tests are skipped by default and are exactly the one
 bump breaks:
 
 ```bash
-TEST_POSTGRES_DSN='postgres://...' task test-server
+task test-server-postgres
 ```
 
 ## 6. Commit and describe
