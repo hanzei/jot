@@ -83,6 +83,11 @@ type JotImportNote struct {
 	Labels                []string
 	Items                 []JotImportNoteItem
 	Images                []JotImportImage
+	// CreatedAt and UpdatedAt are restored from the source so the notes keep
+	// their dates and their order under the created_at/updated_at sorts. A
+	// value restoredTimestamp can't use falls back to the import time.
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // JotImportImage is an image of an imported note whose blob the caller has
@@ -96,8 +101,8 @@ type JotImportImage struct {
 	Height      int
 	// CreatedAt is restored from the export rather than set to the import
 	// time: note images are ordered by created_at, so this is what keeps the
-	// gallery in its original order. A zero value falls back to the import
-	// time.
+	// gallery in its original order. A value restoredTimestamp can't use
+	// falls back to the import time.
 	CreatedAt time.Time
 }
 
@@ -123,7 +128,7 @@ func (s *noteStore) ImportJotNotes(ctx context.Context, userID string, notes []J
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	now := Timestamp(Now())
+	now := Now()
 
 	imported := make([]importedNote, 0, len(notes))
 	for _, n := range notes {
@@ -146,15 +151,23 @@ func (s *noteStore) ImportJotNotes(ctx context.Context, userID string, notes []J
 
 // insertImportedNoteTx inserts a single note, its list items, and its labels
 // into the database within the provided transaction. It returns the new note ID.
-func insertImportedNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, userID string, n JotImportNote, now string) (string, error) {
+func insertImportedNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, userID string, n JotImportNote, now time.Time) (string, error) {
 	noteID, err := generateID()
 	if err != nil {
 		return "", fmt.Errorf("generate note ID: %w", err)
 	}
+	nowTS := Timestamp(now)
+
+	createdAt := restoredTimestamp(n.CreatedAt, now)
+	updatedAt := restoredTimestamp(n.UpdatedAt, now)
+	// Don't leave the note modified before it was created.
+	if updatedAt.Before(createdAt) {
+		updatedAt = createdAt
+	}
 
 	if _, err = tx.ExecContext(ctx,
 		d.RewritePlaceholders(`INSERT INTO notes (id, user_id, title, content, note_type, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`),
-		noteID, userID, n.Title, n.Content, n.NoteType, now, now,
+		noteID, userID, n.Title, n.Content, n.NoteType, Timestamp(createdAt), Timestamp(updatedAt),
 	); err != nil {
 		return "", fmt.Errorf("create note: %w", err)
 	}
@@ -163,16 +176,16 @@ func insertImportedNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, u
 	if _, err = tx.ExecContext(ctx,
 		d.RewritePlaceholders(`INSERT INTO note_user_state (note_id, user_id, color, pinned, archived, position, unpinned_position, checked_items_collapsed, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?)`),
-		noteID, userID, n.Color, n.Pinned, n.Archived, n.CheckedItemsCollapsed, now, now,
+		noteID, userID, n.Color, n.Pinned, n.Archived, n.CheckedItemsCollapsed, nowTS, nowTS,
 	); err != nil {
 		return "", fmt.Errorf("create note user state: %w", err)
 	}
 
-	if err = insertImportedItemsTx(ctx, tx, d, noteID, n.Items, now); err != nil {
+	if err = insertImportedItemsTx(ctx, tx, d, noteID, n.Items, nowTS); err != nil {
 		return "", err
 	}
 
-	if err = insertImportedLabelsTx(ctx, tx, d, userID, noteID, n.Labels, now); err != nil {
+	if err = insertImportedLabelsTx(ctx, tx, d, userID, noteID, n.Labels, nowTS); err != nil {
 		return "", err
 	}
 
@@ -181,6 +194,17 @@ func insertImportedNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, u
 	}
 
 	return noteID, nil
+}
+
+// restoredTimestamp returns t, a timestamp carried over from the import
+// source, or now when t is unset, before year 1 or in the future. That keeps
+// the year within timestampLayout's four digits, and keeps a wrong clock from
+// pinning the row above everything edited after the import.
+func restoredTimestamp(t, now time.Time) time.Time {
+	if !t.After(time.Time{}) || t.After(now) {
+		return now
+	}
+	return t
 }
 
 func insertImportedItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, items []JotImportNoteItem, now string) error {
@@ -214,16 +238,13 @@ func insertImportedItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, 
 	return nil
 }
 
-func insertImportedImagesTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, userID, noteID string, images []JotImportImage, now string) error {
+func insertImportedImagesTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, userID, noteID string, images []JotImportImage, now time.Time) error {
 	for _, img := range images {
 		imageID, err := generateID()
 		if err != nil {
 			return fmt.Errorf("generate note image ID: %w", err)
 		}
-		createdAt := now
-		if !img.CreatedAt.IsZero() {
-			createdAt = Timestamp(img.CreatedAt)
-		}
+		createdAt := Timestamp(restoredTimestamp(img.CreatedAt, now))
 		if _, err = tx.ExecContext(ctx,
 			d.RewritePlaceholders(`INSERT INTO note_images (id, note_id, uploader_id, filename, content_type, size_bytes, sha256, width, height, created_at)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),

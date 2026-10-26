@@ -67,6 +67,8 @@ type jotExportNote struct {
 	Labels                []string            `json:"labels"`
 	Items                 []jotExportNoteItem `json:"items,omitempty"`
 	Images                []jotExportImage    `json:"images,omitempty"`
+	CreatedAt             time.Time           `json:"created_at"`
+	UpdatedAt             time.Time           `json:"updated_at"`
 }
 
 type jotExportEnvelope struct {
@@ -79,7 +81,7 @@ type jotExportEnvelope struct {
 // ExportNotes godoc
 //
 //	@Summary		Export notes as a Jot backup bundle
-//	@Description	A zip file holding notes.json (the notes, format jot_export version 2) and an images/ folder with every image attached to the exported notes. Covers the notes the user owns, including images collaborators added to them.
+//	@Description	A zip file holding notes.json (the notes, format jot_export version 2) and an images/ folder with every image attached to the exported notes. Each note carries its created_at and updated_at, which import restores. Covers the notes the user owns, including images collaborators added to them.
 //	@Tags			notes
 //	@Security		CookieAuth
 //	@Produce		application/zip
@@ -110,6 +112,8 @@ func (h *NotesHandler) ExportNotes(w http.ResponseWriter, r *http.Request) (int,
 			Position:         n.Position,
 			UnpinnedPosition: n.UnpinnedPosition,
 			Labels:           make([]string, 0, len(n.Labels)),
+			CreatedAt:        n.CreatedAt,
+			UpdatedAt:        n.UpdatedAt,
 		}
 		// Populate only the fields that belong to this note type so that
 		// re-importing the export does not carry mismatched data.
