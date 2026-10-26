@@ -57,6 +57,9 @@ integration. **Anything testable in Jest belongs in Jest.**
   `runFlow`), which `run.sh` never runs on their own.
 - The SSO flows drive the mock IdP's page inside a Chrome Custom Tab; match
   its visible text (`"Username"`, `"Approve"`), since it has no `testID`s.
+- The import flow drives Android's system file picker the same way
+  (`flows/helpers/pick-download.yaml`); `run.sh` pushes the files it picks into
+  `/sdcard/Download`.
 - Maestro cannot shell out mid-flow, so `adb` steps (airplane mode, force-stop,
   intents) are sequenced in `run.sh` between flows.
 - No drag-and-drop flows (Maestro has no press-hold-then-move) and no quick

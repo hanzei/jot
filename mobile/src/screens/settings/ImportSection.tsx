@@ -167,11 +167,16 @@ export default function ImportSection() {
         </Text>
       )}
       {importError !== '' && (
-        <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, importError)}</Text>
+        <Text style={[styles.errorText, { color: colors.error }]} testID="settings-import-error">
+          {displayMessage(t, importError)}
+        </Text>
       )}
       {importResult && (
         <>
-          <Text style={[styles.successText, styles.importResultText, { color: colors.success }]}>
+          <Text
+            style={[styles.successText, styles.importResultText, { color: colors.success }]}
+            testID="settings-import-result"
+          >
             {t('import.importedNotes', { count: importResult.imported })}
             {importResult.skipped > 0 ? ` ${t('import.skipped', { count: importResult.skipped })}` : ''}
             {importResult.errors?.length ? `, ${t('import.failed', { count: importResult.errors.length })}` : ''}.

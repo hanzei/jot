@@ -1,0 +1,112 @@
+# Import from Settings (#1134): a Google Keep Takeout zip, then a Jot backup,
+# each through Android's real file picker and against the real server.
+#
+# This is a device flow rather than Jest because the bug it guards against was a
+# request the server rejected: mobile left out import_type, and a mocked client
+# accepted it. Only a real upload proves the client and the server agree on the
+# multipart request — the field names, the file part the picker produces, and
+# the server's format checks.
+#
+# run.sh built both files before the SSO flows (the Jot backup is a real export
+# of the local account, with MAESTRO_JOT_JOT_IMPORT_NOTE in it; the Keep zip holds
+# one note whose text is MAESTRO_JOT_KEEP_IMPORT_NOTE) and pushed them into the device's
+# Downloads folder. Continues the session flow 16 signed in, so the notes are
+# imported into that account.
+appId: com.jot.app
+---
+- launchApp
+
+- extendedWaitUntil:
+    visible:
+      id: "drawer-toggle"
+    timeout: 20000
+- tapOn:
+    id: "drawer-toggle"
+- tapOn:
+    id: "drawer-settings"
+- extendedWaitUntil:
+    visible:
+      id: "settings-screen"
+    timeout: 20000
+
+# Google Keep is the default format, but choose it explicitly so the flow does
+# not depend on that default.
+- scrollUntilVisible:
+    element:
+      id: "settings-import-format-google_keep"
+    timeout: 20000
+- tapOn:
+    id: "settings-import-format-google_keep"
+- tapOn:
+    id: "settings-import-select-file"
+- runFlow:
+    file: helpers/pick-download.yaml
+    env:
+      FILE_NAME: "${MAESTRO_JOT_KEEP_IMPORT_FILE}"
+- scrollUntilVisible:
+    element:
+      id: "settings-import-submit"
+    timeout: 20000
+- assertVisible: "${MAESTRO_JOT_KEEP_IMPORT_FILE}"
+- tapOn:
+    id: "settings-import-submit"
+- extendedWaitUntil:
+    visible:
+      id: "settings-import-result"
+    timeout: 30000
+- assertNotVisible:
+    id: "settings-import-error"
+- takeScreenshot: import-17-keep-imported
+
+- scrollUntilVisible:
+    element:
+      id: "settings-import-format-jot_json"
+    direction: UP
+    timeout: 20000
+- tapOn:
+    id: "settings-import-format-jot_json"
+- tapOn:
+    id: "settings-import-select-file"
+- runFlow:
+    file: helpers/pick-download.yaml
+    env:
+      FILE_NAME: "${MAESTRO_JOT_JOT_IMPORT_FILE}"
+- scrollUntilVisible:
+    element:
+      id: "settings-import-submit"
+    timeout: 20000
+- assertVisible: "${MAESTRO_JOT_JOT_IMPORT_FILE}"
+- tapOn:
+    id: "settings-import-submit"
+- extendedWaitUntil:
+    visible:
+      id: "settings-import-result"
+    timeout: 30000
+- assertNotVisible:
+    id: "settings-import-error"
+- takeScreenshot: import-17-jot-imported
+
+# The section re-pulls notes from the server after an import, so both notes
+# reaching the list shows the server stored them, not only that it answered.
+# Note cards match by their content text (their testID embeds the note id). Where
+# the two land in the list is not fixed, so each search starts from the top: a
+# relaunch resets the scroll before the second.
+- tapOn:
+    id: "settings-back"
+- extendedWaitUntil:
+    visible:
+      id: "drawer-toggle"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "${MAESTRO_JOT_KEEP_IMPORT_NOTE}"
+    timeout: 30000
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "drawer-toggle"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "${MAESTRO_JOT_JOT_IMPORT_NOTE}"
+    timeout: 30000

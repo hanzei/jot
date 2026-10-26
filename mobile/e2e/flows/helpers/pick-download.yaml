@@ -1,0 +1,28 @@
+# Shared by the import flow (17): pick FILE_NAME (passed in env) from the
+# Downloads folder in Android's system file picker, which the app has just
+# opened. Not a flow of its own — run.sh never runs it directly.
+#
+# The picker is DocumentsUI, not Jot, so there are no testIDs: match its visible
+# text and accessibility labels. run.sh pushed the file into /sdcard/Download
+# (the Downloads view lists that folder).
+#
+# Where the picker opens varies: on Recent the first time, then usually in the
+# folder it last returned from. So tap the file directly when it is already on
+# screen, and go through the roots drawer to Downloads only when it is not.
+appId: com.jot.app
+---
+# "Show roots" is the content description of the picker's navigation button,
+# present in every folder view — the signal that the picker is up.
+- extendedWaitUntil:
+    visible: "Show roots"
+    timeout: 20000
+- runFlow:
+    when:
+      notVisible: "${FILE_NAME}"
+    commands:
+      - tapOn: "Show roots"
+      - tapOn: "Downloads"
+      - extendedWaitUntil:
+          visible: "${FILE_NAME}"
+          timeout: 10000
+- tapOn: "${FILE_NAME}"
