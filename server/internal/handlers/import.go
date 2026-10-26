@@ -96,6 +96,10 @@ type jotImportNote struct {
 	Labels                []string            `json:"labels"`
 	Items                 []jotImportNoteItem `json:"items"`
 	Images                []jotImportImage    `json:"images"`
+	// CreatedAt and UpdatedAt are absent from bundles exported before they
+	// were added; the zero value makes the store fall back to the import time.
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type jotImportImage struct {
@@ -419,6 +423,8 @@ func validateJotImportNote(idx int, n jotImportNote) (models.JotImportNote, erro
 		CheckedItemsCollapsed: n.CheckedItemsCollapsed,
 		Labels:                normalizeLabels(n.Labels),
 		Items:                 importItems,
+		CreatedAt:             n.CreatedAt,
+		UpdatedAt:             n.UpdatedAt,
 	}, nil
 }
 

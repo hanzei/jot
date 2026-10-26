@@ -1401,7 +1401,7 @@ const docTemplate = `{
         },
         "/notes/export": {
             "get": {
-                "description": "A zip file holding notes.json (the notes, format jot_export version 2) and an images/ folder with every image attached to the exported notes. Covers the notes the user owns, including images collaborators added to them.",
+                "description": "A zip file holding notes.json (the notes, format jot_export version 2) and an images/ folder with every image attached to the exported notes. Each note carries its created_at and updated_at, which import restores. Covers the notes the user owns, including images collaborators added to them.",
                 "produces": [
                     "application/zip"
                 ],

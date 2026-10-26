@@ -293,6 +293,8 @@ type JotExportNote struct {
 	Labels                []string            `json:"labels"`
 	Items                 []JotExportNoteItem `json:"items,omitempty"`
 	Images                []JotExportImage    `json:"images,omitempty"`
+	CreatedAt             time.Time           `json:"created_at"`
+	UpdatedAt             time.Time           `json:"updated_at"`
 }
 
 // JotExportImage references an image of an exported note. File is the zip

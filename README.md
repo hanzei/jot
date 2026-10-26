@@ -465,7 +465,9 @@ than the upload directory permanently removes the newer images. Images whose
 files are missing are logged as warnings.
 
 Separately, each user can export their own notes, images included, as a `.zip`
-bundle from Settings and import it into any Jot server. An import of up to
+bundle from Settings and import it into any Jot server. Notes keep their
+creation and last-modified dates; bundles exported before those were included
+import with the import time instead. An import of up to
 1 GiB is spooled to the system temp directory (`TMPDIR`, `/tmp` by default)
 while it is processed, so leave room there. Plain `.json` exports from Jot
 versions before image export was added can no longer be imported.
