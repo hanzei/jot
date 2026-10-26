@@ -140,6 +140,7 @@ export default function NoteEditorScreen() {
     setPinned,
     setArchived,
     setColor,
+    setLabels,
     setHasCreated,
   } = editor.handle;
 
@@ -773,6 +774,13 @@ export default function NoteEditorScreen() {
     });
   }, [flushPendingChanges, noteIdRef, withPendingIndicator]);
 
+  // Latest-value form of isBlankNewNote (below), for handlers that must not
+  // act on a stale render: a brand-new note flushSave would decline to create.
+  const isBlankNewNoteNow = useCallback(
+    () => noteIdRef.current === null && isBlankDraft(noteTypeRef.current, titleRef.current, contentRef.current, itemsRef.current),
+    [contentRef, itemsRef, noteIdRef, noteTypeRef, titleRef],
+  );
+
   // Entry point for the add-image action sheet. Uploads need a server-backed
   // note, so a still-blank new note is created (empty) first — but only once
   // a valid file was picked, and never as a draft/orphan upload (spec §15.6).
@@ -1102,8 +1110,14 @@ export default function NoteEditorScreen() {
   // it's confirmed first; text -> list just reflows lines and runs directly
   // (mirrors the webapp's NoteModal). The note is reloaded via a screen replace
   // afterward, since the editor's baseline/ref state is keyed to the note's
-  // pre-conversion type and shape.
+  // pre-conversion type and shape. A blank new note has nothing to convert and
+  // would not be created by the flush, so it just switches type locally, like
+  // the Text/List toggle.
   const handleConvertNoteType = useCallback(async () => {
+    if (isBlankNewNoteNow()) {
+      setNoteType((prev) => (prev === 'text' ? 'list' : 'text'));
+      return;
+    }
     cancelScheduledSave();
 
     const saveSucceeded = await withPendingIndicator(() => flushSave());
@@ -1147,7 +1161,7 @@ export default function NoteEditorScreen() {
         Alert.alert(t('common.error'), t('note.failedConvert'));
       }
     }
-  }, [cancelScheduledSave, confirm, convertMutation, flushSave, intentionalExitRef, itemsRef, navigation, noteIdRef, noteTypeRef, showToast, t, withPendingIndicator]);
+  }, [cancelScheduledSave, confirm, convertMutation, flushSave, intentionalExitRef, isBlankNewNoteNow, itemsRef, navigation, noteIdRef, noteTypeRef, setNoteType, showToast, t, withPendingIndicator]);
 
   // Disable inputs while waiting for existing note to hydrate
   const isHydrating = initialNoteId !== null && !existingNote;
@@ -1156,15 +1170,24 @@ export default function NoteEditorScreen() {
 
   // A brand-new note with nothing in it yet (isBlankDraft), which flushSave
   // declines to create. Archive is disabled here: there is nothing to archive,
-  // and archiving would create an empty note just to hide it.
+  // and archiving would create an empty note just to hide it. For the same
+  // reason the overflow menu hides Collaborators and Duplicate.
   const isBlankNewNote = noteId === null && isBlankDraft(noteType, title, content, items);
+  // Send shares the note's text, so it is hidden while there is none.
+  const hasShareableText = useMemo(
+    () => formatEditorStateForShare(noteType, title, content, items).trim() !== '',
+    [content, items, noteType, title],
+  );
 
   // Share, Labels, and Add-image all act on a note that exists on the server.
   // A brand-new note (noteId === null) no longer has to wait for the first
   // autosave: tapping one of these runs it through withSavedNote, which flushes
   // a create first (save-first) and then performs the action against the
   // resulting id. Offline-created notes carry a server-valid id up front and
-  // queue the op for replay, so the same path works offline (issue #652).
+  // queue the op for replay, so the same path works offline (issue #652). A
+  // still-blank new note is the exception: flushSave won't create it, so
+  // Share is hidden, Labels are kept locally and Add image creates it only
+  // once a file is picked.
   //
   // Sharing additionally requires a central server and ownership. A brand-new
   // note is always owned by the current user; an existing one must be owned by
@@ -1183,9 +1206,17 @@ export default function NoteEditorScreen() {
   // through withSavedNote: a brand-new note is created first so the picker /
   // share screen has an id to act on. The pending bar no longer flashes for the
   // common fast case — withPendingIndicator now only surfaces it after a delay.
+  //
+  // A blank new note is not created for labels (like pin, labelling alone never
+  // leaves an empty note behind): the picker edits the labels locally and the
+  // create request carries them once the note has content, as on the webapp.
   const openLabelPicker = useCallback(() => {
+    if (isBlankNewNoteNow()) {
+      setLabelPickerVisible(true);
+      return;
+    }
     void withSavedNote(() => setLabelPickerVisible(true));
-  }, [withSavedNote]);
+  }, [isBlankNewNoteNow, withSavedNote]);
   const openShareScreen = useCallback(() => {
     void withSavedNote((id) => navigation.navigate('Share', { noteId: id }));
   }, [withSavedNote, navigation]);
@@ -1649,7 +1680,8 @@ export default function NoteEditorScreen() {
             Tapping a collaborator avatar opens the share screen; tapping a
             label chip opens the label picker — the same targets as the overflow
             menu's Share / Labels actions. Shown only for shared and/or labelled
-            notes; labels are added on an empty note via the overflow menu.
+            notes; labels are added on an empty note via the overflow menu
+            (kept locally until the note is created).
             Read-only (trashed) notes render it as plain, non-interactive
             display, matching the menu hiding those actions. */}
         {(displayCollaborators.length > 0 || labels.length > 0) && (
@@ -1823,10 +1855,10 @@ export default function NoteEditorScreen() {
         trashed={isReadOnly}
         title={noteType === 'list' ? title : undefined}
         noteType={noteType}
-        onSend={handleNativeShare}
-        onShare={canOpenSharing ? openShareScreen : undefined}
+        onSend={hasShareableText ? handleNativeShare : undefined}
+        onShare={canOpenSharing && !isBlankNewNote ? openShareScreen : undefined}
         shareIsReadOnly={!ownsNote}
-        onDuplicate={handleDuplicate}
+        onDuplicate={isBlankNewNote ? undefined : handleDuplicate}
         onConvert={handleConvertNoteType}
         onManageLabels={openLabelPicker}
         onUncheckAllItems={noteType === 'list' && checkedItems.length > 0 ? handleUncheckAllItems : undefined}
@@ -1854,14 +1886,13 @@ export default function NoteEditorScreen() {
         )}
       />
 
-      {noteId && (
-        <LabelPicker
-          visible={labelPickerVisible}
-          noteId={noteId}
-          noteLabels={labels}
-          onClose={() => setLabelPickerVisible(false)}
-        />
-      )}
+      <LabelPicker
+        visible={labelPickerVisible}
+        noteId={noteId}
+        noteLabels={labels}
+        onClose={() => setLabelPickerVisible(false)}
+        onLocalLabelsChange={setLabels}
+      />
 
       <AssigneePicker
         visible={assigneePickerVisible}

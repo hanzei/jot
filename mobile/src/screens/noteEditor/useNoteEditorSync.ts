@@ -138,6 +138,7 @@ export function useNoteEditorSync({
     pinnedRef,
     archivedRef,
     colorRef,
+    labelsRef,
   } = doc;
 
   // saveError and syncToast hold a translation key, not a translated string, so
@@ -411,10 +412,13 @@ export function useNoteEditorSync({
           hasPendingChangesRef.current = false;
           return true;
         }
+        const labelNames = labelsRef.current.map((l) => l.name);
         const metadata = {
           color: !isWhiteHexColor(currentColor) ? currentColor : undefined,
-          // Pin toggled before the note existed (see handleTogglePin).
+          // Pin toggled and labels picked before the note existed (see
+          // handleTogglePin and openLabelPicker).
           pinned: currentPinned || undefined,
+          labels: labelNames.length > 0 ? labelNames : undefined,
         };
         const req: CreateNoteRequest = currentNoteType === 'list'
           ? { note_type: 'list', title: currentTitle, items: serializeItems(currentItems), ...metadata }
@@ -474,7 +478,7 @@ export function useNoteEditorSync({
         saveInFlightRef.current = null;
       }
     }
-  }, [doc, persistItemDiff, noteIdRef, noteTypeRef, titleRef, contentRef, itemsRef, checkedItemsCollapsedRef, pinnedRef, archivedRef, colorRef]);
+  }, [doc, persistItemDiff, noteIdRef, noteTypeRef, titleRef, contentRef, itemsRef, checkedItemsCollapsedRef, pinnedRef, archivedRef, colorRef, labelsRef]);
 
   const scheduleUpdate = useCallback(() => {
     if (debounceRef.current) {

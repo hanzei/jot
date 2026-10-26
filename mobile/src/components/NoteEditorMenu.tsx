@@ -27,7 +27,7 @@ interface NoteEditorMenuProps {
   noteType?: NoteType;
   // Editable-note actions. Callbacks left undefined are hidden based on the
   // editor's current ownership/state.
-  onSend?: () => void;
+  onSend?: (() => void) | undefined;
   onShare?: (() => void) | undefined;
   /**
    * When the current user is a collaborator rather than the note's owner, the
@@ -35,7 +35,7 @@ interface NoteEditorMenuProps {
    * a neutral icon instead of add-person. The label is "Collaborators" either way.
    */
   shareIsReadOnly?: boolean;
-  onDuplicate?: () => void;
+  onDuplicate?: (() => void) | undefined;
   onConvert?: () => void;
   onManageLabels?: () => void;
   /** Shown only when the list has completed items (list notes only). */
