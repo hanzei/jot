@@ -30,6 +30,7 @@ export interface EditorDocHandle {
   pinnedRef: React.RefObject<boolean>;
   archivedRef: React.RefObject<boolean>;
   colorRef: React.RefObject<string>;
+  labelsRef: React.RefObject<Label[]>;
   // Setters. Stable across renders, so the handle itself can be memoized once
   // and used as a dependency without recreating anything that depends on it.
   setNoteId: React.Dispatch<React.SetStateAction<string | null>>;
@@ -101,6 +102,7 @@ export function useEditorDoc({
   const pinnedRef = useRef(pinned);
   const archivedRef = useRef(archived);
   const colorRef = useRef(color);
+  const labelsRef = useRef(labels);
 
   /* eslint-disable react-hooks/refs -- render-time mirrors; see the doc comment above. Pre-existing, tracked in #777. */
   noteIdRef.current = noteId;
@@ -112,6 +114,7 @@ export function useEditorDoc({
   pinnedRef.current = pinned;
   archivedRef.current = archived;
   colorRef.current = color;
+  labelsRef.current = labels;
   /* eslint-enable react-hooks/refs */
 
   // Every member is a ref or a useState setter, so the handle never needs to
@@ -127,6 +130,7 @@ export function useEditorDoc({
       pinnedRef,
       archivedRef,
       colorRef,
+      labelsRef,
       setNoteId,
       setNoteType,
       setTitle,

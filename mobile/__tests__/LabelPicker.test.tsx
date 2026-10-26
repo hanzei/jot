@@ -37,6 +37,9 @@ jest.mock('../src/hooks/useLabels', () => {
     useLabels: () => mockUseLabels(),
     useAddLabelToNote: () => useTrackedMutation(mockAddLabelMutateAsync),
     useRemoveLabelFromNote: () => useTrackedMutation(mockRemoveLabelMutateAsync),
+    buildLocalLabel: (name: string, userId: string) => ({
+      id: `local-${name}`, user_id: userId, name, created_at: '', updated_at: '',
+    }),
   };
 });
 
@@ -248,5 +251,59 @@ describe('LabelPicker', () => {
       expect(alertSpy).toHaveBeenCalledWith('common.error', 'labels.failedUpdate');
     });
     expect(queryByTestId('label-item-label-1-spinner')).toBeNull();
+  });
+});
+
+// Issue #1126: a new note that does not exist yet has no id to send label
+// writes to, so the picker edits the labels locally and the editor's create
+// request carries them.
+describe('LabelPicker on a note that does not exist yet', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockUseLabels.mockReturnValue({ data: labels, isLoading: false });
+  });
+
+  it('toggles labels locally without calling the server', async () => {
+    const onLocalLabelsChange = jest.fn();
+    const { getByTestId, rerender } = await render(
+      <LabelPicker visible noteId={null} noteLabels={[]} onClose={jest.fn()} onLocalLabelsChange={onLocalLabelsChange} />,
+    );
+
+    await fireEvent.press(getByTestId('label-item-label-1'));
+    expect(onLocalLabelsChange).toHaveBeenLastCalledWith([labels[0]]);
+
+    await rerender(
+      <LabelPicker visible noteId={null} noteLabels={[labels[0]!]} onClose={jest.fn()} onLocalLabelsChange={onLocalLabelsChange} />,
+    );
+    expect(getByTestId('label-item-label-1').props.accessibilityState).toMatchObject({ checked: true });
+    await fireEvent.press(getByTestId('label-item-label-1'));
+    expect(onLocalLabelsChange).toHaveBeenLastCalledWith([]);
+
+    expect(mockAddLabelMutateAsync).not.toHaveBeenCalled();
+    expect(mockRemoveLabelMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('adds a new label name as a local placeholder and lists it', async () => {
+    const onLocalLabelsChange = jest.fn();
+    const { getByTestId, queryByTestId, rerender } = await render(
+      <LabelPicker visible noteId={null} noteLabels={[]} onClose={jest.fn()} onLocalLabelsChange={onLocalLabelsChange} />,
+    );
+
+    await fireEvent.changeText(getByTestId('label-search-input'), 'Errands');
+    await fireEvent.press(getByTestId('label-create-option'));
+
+    expect(onLocalLabelsChange).toHaveBeenLastCalledWith([expect.objectContaining({ name: 'Errands' })]);
+    expect(mockAddLabelMutateAsync).not.toHaveBeenCalled();
+    expect(getByTestId('label-search-input').props.value).toBe('');
+
+    // The placeholder is listed (and checked) like a stored label, so it can
+    // be unchecked again and isn't offered for creation a second time.
+    const placeholder = onLocalLabelsChange.mock.calls[0]![0][0] as Label;
+    await rerender(
+      <LabelPicker visible noteId={null} noteLabels={[placeholder]} onClose={jest.fn()} onLocalLabelsChange={onLocalLabelsChange} />,
+    );
+    expect(getByTestId(`label-item-${placeholder.id}`).props.accessibilityState).toMatchObject({ checked: true });
+    await fireEvent.changeText(getByTestId('label-search-input'), 'errands');
+    expect(queryByTestId('label-create-option')).toBeNull();
   });
 });

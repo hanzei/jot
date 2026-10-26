@@ -18,15 +18,21 @@ import { Plus, Square, SquareCheck } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, canCreateLabelFromQuery, filterLabelsByQuery, type Label } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
-import { useLabels, useAddLabelToNote, useRemoveLabelFromNote } from '../hooks/useLabels';
+import { useLabels, useAddLabelToNote, useRemoveLabelFromNote, buildLocalLabel } from '../hooks/useLabels';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 
 interface LabelPickerProps {
   visible: boolean;
-  noteId: string;
+  /**
+   * The note whose labels are edited on the server. Null for a new note that
+   * does not exist yet: the picker then edits `noteLabels` locally through
+   * `onLocalLabelsChange`, and the note's create request carries the names.
+   */
+  noteId: string | null;
   noteLabels: Label[];
   onClose: () => void;
   onLabelsChanged?: () => void;
+  onLocalLabelsChange?: (labels: Label[]) => void;
 }
 
 export default function LabelPicker({
@@ -35,6 +41,7 @@ export default function LabelPicker({
   noteLabels,
   onClose,
   onLabelsChanged,
+  onLocalLabelsChange,
 }: LabelPickerProps) {
   // One field both filters the list and names a new label, as on the webapp.
   const [query, setQuery] = useState('');
@@ -58,13 +65,28 @@ export default function LabelPicker({
   const noteLabelIds = new Set(noteLabels.map((l) => l.id));
   const isMutating = addLabel.isPending || removeLabel.isPending;
   const trimmedQuery = query.trim();
-  const filteredLabels = useMemo(() => filterLabelsByQuery(allLabels ?? [], trimmedQuery), [allLabels, trimmedQuery]);
+  // On a not-yet-created note, a label named in the picker exists only as the
+  // editor's placeholder, so list it alongside the stored ones to keep it
+  // uncheckable and out of the create row.
+  const listedLabels = useMemo(() => {
+    const stored = allLabels ?? [];
+    if (noteId !== null) return stored;
+    const storedIds = new Set(stored.map((l) => l.id));
+    return [...stored, ...noteLabels.filter((l) => !storedIds.has(l.id))];
+  }, [allLabels, noteId, noteLabels]);
+  const filteredLabels = useMemo(() => filterLabelsByQuery(listedLabels, trimmedQuery), [listedLabels, trimmedQuery]);
   // Until the label list is loaded we cannot tell whether the query names an
   // existing label, so the create row stays hidden.
   const showCreate = !isLoading && canCreateLabelFromQuery(filteredLabels, trimmedQuery);
 
   const handleToggleLabel = async (label: Label) => {
     if (isMutating) return;
+    if (noteId === null) {
+      onLocalLabelsChange?.(noteLabelIds.has(label.id)
+        ? noteLabels.filter((l) => l.id !== label.id)
+        : [...noteLabels, label]);
+      return;
+    }
     setTogglingLabelId(label.id);
     try {
       if (noteLabelIds.has(label.id)) {
@@ -82,6 +104,13 @@ export default function LabelPicker({
 
   const handleCreateLabel = async () => {
     if (!showCreate || isMutating) return;
+    if (noteId === null) {
+      // Only a placeholder for the editor's chips: the create sends the name,
+      // and the server (or the offline create) makes the real label.
+      onLocalLabelsChange?.([...noteLabels, buildLocalLabel(trimmedQuery, '')]);
+      setQuery('');
+      return;
+    }
     setIsCreatingLabel(true);
     try {
       await addLabel.mutateAsync({ noteId, name: trimmedQuery });

@@ -189,7 +189,7 @@ export function useLabelCounts() {
 }
 
 /** Build an optimistic, locally-created label for the offline / transient-failure path. */
-function buildLocalLabel(name: string, userId: string): Label {
+export function buildLocalLabel(name: string, userId: string): Label {
   const now = new Date().toISOString();
   return {
     id: generateClientLabelId(),
@@ -198,6 +198,28 @@ function buildLocalLabel(name: string, userId: string): Label {
     created_at: now,
     updated_at: now,
   };
+}
+
+/**
+ * Resolves a label name for an offline write that attaches it to a note: the
+ * locally-known label with that name, or a newly-minted one whose create is
+ * queued (and stored, so the drawer shows it) so any later op referencing it
+ * reconciles to the server id. Matches case-insensitively to mirror the
+ * server's GetOrCreateLabel lookup. `name` must already be trimmed.
+ */
+export async function resolveLocalLabel(db: SQLiteDatabase, name: string, userId: string): Promise<Label> {
+  const normalized = name.toLowerCase();
+  const known = (await getStoredLabels(db)).find((l) => l.name.toLowerCase() === normalized);
+  if (known) return known;
+  const label = buildLocalLabel(name, userId);
+  await enqueueOperation(db, {
+    operation: 'createLabel',
+    endpoint: '/labels',
+    method: 'POST',
+    body: { id: label.id, name },
+  });
+  await upsertLabel(db, label);
+  return label;
 }
 
 export function useCreateLabel() {
@@ -287,24 +309,7 @@ export function useAddLabelToNote() {
       const note = await getLocalNote(db, noteId);
       if (!note) throw new Error(`Note ${noteId} not found in local cache`);
 
-      // Reuse an existing label with the same name if known locally; otherwise
-      // mint a local label and queue its create so any later op referencing it
-      // (e.g. removing it again while still offline) reconciles to the server id.
-      // Match case-insensitively to mirror the server's GetOrCreateLabel lookup.
-      const normalized = trimmed.toLowerCase();
-      const known = (await getStoredLabels(db)).find((l) => l.name.toLowerCase() === normalized);
-      const label = known ?? buildLocalLabel(trimmed, user?.id ?? '');
-      if (!known) {
-        await enqueueOperation(db, {
-          operation: 'createLabel',
-          endpoint: '/labels',
-          method: 'POST',
-          body: { id: label.id, name: trimmed },
-        });
-        // Persist the newly-minted label so it appears in the drawer immediately.
-        await upsertLabel(db, label);
-      }
-
+      const label = await resolveLocalLabel(db, trimmed, user?.id ?? '');
       await addLabelToLocalNote(db, noteId, label);
       await enqueueOperation(db, {
         operation: 'addLabelToNote',
