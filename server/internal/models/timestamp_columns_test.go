@@ -28,6 +28,7 @@ var timestampColumnsByTable = map[string][]string{
 	"note_images":            {"created_at"},
 	"note_items":             {"created_at", "updated_at"},
 	"note_labels":            {"created_at"},
+	"note_revisions":         {"created_at", "edited_at"},
 	"note_shares":            {"created_at", "updated_at"},
 	"note_user_state":        {"created_at", "updated_at"},
 	"notes":                  {"created_at", "updated_at"},

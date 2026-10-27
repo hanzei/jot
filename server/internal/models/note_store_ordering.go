@@ -11,10 +11,14 @@ import (
 )
 
 // touchNoteTx bumps a note's updated_at so item-level changes are reflected in
-// note ordering (updated_at sort) and client freshness checks, and records the
-// change by actorID for unread tracking (see markViewedTx). Callers invoke it
+// note ordering (updated_at sort) and client freshness checks, records the
+// change by actorID for unread tracking (see markViewedTx), and stores rev, the
+// note as it was before the change (see captureRevisionTx). Callers invoke it
 // only when an item actually changed.
-func touchNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, actorID, now string) error {
+func touchNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, rev pendingRevision, noteID, actorID, now string) error {
+	if err := rev.saveTx(ctx, tx, d, noteID, actorID, now); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx,
 		d.RewritePlaceholders(`UPDATE notes SET updated_at = ?, `+contentChangedSet+` WHERE id = ?`),
 		append(appendContentChangedArgs([]any{now}, now, actorID), noteID)...,
@@ -27,11 +31,11 @@ func touchNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, ac
 // touchNoteIfChangedTx is touchNoteTx for item writes that may turn out to be
 // no-ops (e.g. an offline replay of an already-applied change): it touches the
 // note only when changed is true.
-func touchNoteIfChangedTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, changed bool, noteID, actorID, now string) error {
+func touchNoteIfChangedTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, changed bool, rev pendingRevision, noteID, actorID, now string) error {
 	if !changed {
 		return nil
 	}
-	return touchNoteTx(ctx, tx, d, noteID, actorID, now)
+	return touchNoteTx(ctx, tx, d, rev, noteID, actorID, now)
 }
 
 func (s *noteStore) ReorderNotes(ctx context.Context, userID string, noteIDs []string) error {

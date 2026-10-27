@@ -197,6 +197,13 @@ type UpdateListNoteRequest struct {
 	BaseVersion *int `json:"base_version,omitzero"`
 }
 
+// RestoreNoteRevisionRequest is the body for
+// POST /api/v1/notes/{id}/revisions/{revision_id}/restore.
+type RestoreNoteRevisionRequest struct {
+	// BaseVersion enables optimistic concurrency; see UpdateTextNoteRequest.
+	BaseVersion *int `json:"base_version,omitzero"`
+}
+
 // ConvertNoteTypeRequest is the body for POST /api/v1/notes/{id}/convert,
 // which changes a note's type in place. The caller must precompute the
 // transform (splitting text into list items, or rendering a list back into

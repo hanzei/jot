@@ -354,6 +354,53 @@ export interface ConvertNoteTypeRequest extends BaseUpdateNoteRequest {
   items?: CreateNoteItemRequest[];
 }
 
+/** A list item as stored in a note revision. */
+export type NoteRevisionItem = Omit<NoteItem, 'note_id' | 'created_at' | 'updated_at'>;
+
+/**
+ * A note revision's metadata, as listed by `GET /notes/{id}/revisions`. A
+ * revision is the note's shared content (type, title, content, items) as it was
+ * just before a write replaced it. Writes from one user and client within 10
+ * minutes coalesce into one revision; images are not part of a revision.
+ */
+export interface NoteRevisionSummary {
+  id: string;
+  note_id: string;
+  note_type: NoteType;
+  /** Always '' for a text note. */
+  title: string;
+  /**
+   * Who last edited the snapshotted content, or `null` when that is unknown
+   * (content never edited since the note was created, or written before edits
+   * were attributed). May name a user who has since been deleted.
+   */
+  actor_id: string | null;
+  /** When the snapshotted content was last edited. Show this one. */
+  edited_at: string;
+  /** When a write replaced this content. */
+  created_at: string;
+}
+
+/** `GET /notes/{id}/revisions/{revision_id}`. */
+export interface NoteRevision extends NoteRevisionSummary {
+  /** Set for a text note, '' for a list. */
+  content: string;
+  /** Set for a list note, `[]` for text. */
+  items: NoteRevisionItem[];
+}
+
+/** `GET /notes/{id}/revisions`, newest first. */
+export interface NoteRevisionListResponse {
+  revisions: NoteRevisionSummary[];
+}
+
+/**
+ * Request body for `POST /notes/{id}/revisions/{revision_id}/restore`, which
+ * responds with the restored `Note`. The restore records the content it
+ * replaces as a new revision, so it can be undone the same way.
+ */
+export type RestoreNoteRevisionRequest = BaseUpdateNoteRequest;
+
 export interface CreateUserRequest {
   username: string;
   password: string;

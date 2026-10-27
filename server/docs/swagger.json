@@ -2743,6 +2743,211 @@
                 ]
             }
         },
+        "/notes/{id}/revisions": {
+            "get": {
+                "description": "Metadata only, newest first. A revision is the note's shared content (type, title, content, items) as it was just before a write replaced it; writes from one user and client within 10 minutes coalesce into one revision. Images are not part of a revision. A note keeps at most 50 revisions, for at most 90 days.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notes"
+                ],
+                "summary": "List a note's revisions",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Note ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.NoteRevisionListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/notes/{id}/revisions/{revision_id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notes"
+                ],
+                "summary": "Get one revision of a note",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Note ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Revision ID",
+                        "name": "revision_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.NoteRevision"
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/notes/{id}/revisions/{revision_id}/restore": {
+            "post": {
+                "description": "An ordinary content write: it replaces the note's shared content with the revision's, converting the note back when the revision has another type, and records the content it replaces as a new revision, so a restore can itself be undone. Restored list items keep their IDs; an item's assignee is restored only if they can still access the note.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notes"
+                ],
+                "summary": "Restore a revision of a note",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Note ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Revision ID",
+                        "name": "revision_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Version the restore is based on",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.RestoreNoteRevisionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Note"
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "version conflict: note changed since base_version",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
+            }
+        },
         "/notes/{id}/share": {
             "post": {
                 "consumes": [
@@ -4037,6 +4242,17 @@
                 }
             }
         },
+        "handlers.NoteRevisionListResponse": {
+            "type": "object",
+            "properties": {
+                "revisions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.NoteRevisionSummary"
+                    }
+                }
+            }
+        },
         "handlers.NoteShareListResponse": {
             "type": "object",
             "properties": {
@@ -4119,6 +4335,15 @@
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "handlers.RestoreNoteRevisionRequest": {
+            "type": "object",
+            "properties": {
+                "base_version": {
+                    "description": "BaseVersion enables optimistic concurrency, matching UpdateNoteRequest:\nwhen set, the restore is rejected with 409 unless the note's current\nversion still matches it.",
+                    "type": "integer"
                 }
             }
         },
@@ -4673,6 +4898,96 @@
                     "type": "string"
                 },
                 "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.NoteRevision": {
+            "type": "object",
+            "properties": {
+                "actor_id": {
+                    "description": "ActorID is who last edited the snapshotted content, or null when that is\nunknown (content written before edits were attributed). It may name a\nuser who has since been deleted.",
+                    "type": "string"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "description": "CreatedAt is when the snapshot was recorded: the moment a write replaced\nthis content.",
+                    "type": "string"
+                },
+                "edited_at": {
+                    "description": "EditedAt is when the snapshotted content was last edited.",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.NoteRevisionItem"
+                    }
+                },
+                "note_id": {
+                    "type": "string"
+                },
+                "note_type": {
+                    "$ref": "#/definitions/models.NoteType"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.NoteRevisionItem": {
+            "type": "object",
+            "properties": {
+                "assigned_to": {
+                    "type": "string"
+                },
+                "completed": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "parent_id": {
+                    "type": "string"
+                },
+                "position": {
+                    "type": "integer"
+                },
+                "text": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.NoteRevisionSummary": {
+            "type": "object",
+            "properties": {
+                "actor_id": {
+                    "description": "ActorID is who last edited the snapshotted content, or null when that is\nunknown (content written before edits were attributed). It may name a\nuser who has since been deleted.",
+                    "type": "string"
+                },
+                "created_at": {
+                    "description": "CreatedAt is when the snapshot was recorded: the moment a write replaced\nthis content.",
+                    "type": "string"
+                },
+                "edited_at": {
+                    "description": "EditedAt is when the snapshotted content was last edited.",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "note_id": {
+                    "type": "string"
+                },
+                "note_type": {
+                    "$ref": "#/definitions/models.NoteType"
+                },
+                "title": {
                     "type": "string"
                 }
             }

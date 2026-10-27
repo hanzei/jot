@@ -366,3 +366,33 @@ func (s *NoteStore) ImportJotNotes(ctx context.Context, userID string, notes []J
 	defer end()
 	return s.inner.ImportJotNotes(ctx, userID, notes)
 }
+
+func (s *NoteStore) ListRevisions(ctx context.Context, noteID, userID string) (_ []NoteRevisionSummary, err error) {
+	ctx, end := startSpan(ctx, s.instr, "NoteStore.ListRevisions", &err,
+		attribute.String("note.id", noteID),
+	)
+	defer end()
+	return s.inner.ListRevisions(ctx, noteID, userID)
+}
+
+func (s *NoteStore) GetRevision(ctx context.Context, noteID, revisionID, userID string) (_ *NoteRevision, err error) {
+	ctx, end := startSpan(ctx, s.instr, "NoteStore.GetRevision", &err,
+		attribute.String("note.id", noteID),
+	)
+	defer end()
+	return s.inner.GetRevision(ctx, noteID, revisionID, userID)
+}
+
+func (s *NoteStore) RestoreRevision(ctx context.Context, noteID, revisionID, userID string, baseVersion *int) (_ *Note, err error) {
+	ctx, end := startSpan(ctx, s.instr, "NoteStore.RestoreRevision", &err,
+		attribute.String("note.id", noteID),
+	)
+	defer end()
+	return s.inner.RestoreRevision(ctx, noteID, revisionID, userID, baseVersion)
+}
+
+func (s *NoteStore) PruneRevisions(ctx context.Context) (_ int64, err error) {
+	ctx, end := startSpan(ctx, s.instr, "NoteStore.PruneRevisions", &err)
+	defer end()
+	return s.inner.PruneRevisions(ctx)
+}
