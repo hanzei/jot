@@ -16,7 +16,8 @@ the recording and the transcript as read-only text.
 2. They press **Record**. While recording they see the elapsed time and a level
    meter, and can **Pause** and **Resume** as often as they like. Pausing does
    not end the recording; everything until Stop becomes one file.
-3. They press **Stop**. The recording is uploaded and is then fixed: there is no
+3. They press **Stop**. The recording is uploaded, and the client keeps its copy
+   until the server has accepted it (§7.1, §7.2). After that it is fixed: there is no
    re-recording, appending or trimming in v1. **Discard** before Stop throws the
    recording away and leaves the note empty.
 4. The note shows a player straight away and "Transcribing…" until the
@@ -225,10 +226,12 @@ offline playback, like `useNoteImageCache`.
 
 - **Size:** `JOT_UPLOAD_MAX_BYTES` (default 25 MB) applies, as for images.
   The upload is streamed to a temp file while hashing, not read into memory.
-- **Duration:** `JOT_AUDIO_MAX_DURATION` (default `10m`, range `1m`–`60m`). The
+- **Duration:** `JOT_AUDIO_MAX_DURATION` (default `10m`, range `1m`–`60m`) is a
+  **recording limit enforced by the clients**, not a server-side guarantee. The
   client stops recording automatically at the cap and says so. The server cannot
   measure duration without decoding, so it trusts the client's `duration_ms`
-  only for display and relies on the byte cap for protection.
+  only for display. The byte cap is what protects the server; a longer upload
+  that fits under it is accepted.
 
   The 10-minute default keeps a typical transcript under the 10,000-character
   text-note cap (roughly 1,500–1,700 spoken words). AAC at 64 kbps is about
@@ -262,13 +265,22 @@ Jot is normal.
 ```text
 POST {JOT_TRANSCRIPTION_URL}
 Content-Type: multipart/form-data
-  file             = <the stored blob, original filename + content type>
+  file             = <the stored blob>, filename "recording.<ext>", Content-Type = note_audio.content_type
   model            = {JOT_TRANSCRIPTION_MODEL}   (omitted when empty)
   response_format  = json
 ```
 
+The client's filename is not stored, so the worker derives one from the stored
+`content_type`: `audio/mp4` → `recording.m4a`, `audio/webm` →
+`recording.webm`, `audio/ogg` → `recording.ogg`. Some services pick a decoder
+from the extension, so it must match the container.
+
 Jot reads `text` from the JSON response, and `language` and `duration` if they
-are present. No language hint is sent in v1, so the service auto-detects; see §9.
+are present. As in OpenAI's response format, `duration` is a number of
+**seconds** (fractional); Jot stores `round(duration × 1000)` in
+`note_audio.duration_ms` and ignores a value that is missing, not a number, or
+not positive. No language hint is sent in v1, so the service auto-detects; see
+§9.
 
 ### 5.3 Worker
 
@@ -309,8 +321,11 @@ database is the queue, so nothing is lost on restart:
     The third transient failure is final: `failed`, "The transcription service
     is unavailable."
   - Any other 4xx, or a response without `text`, is **permanent**: `failed` at
-    once, with a short message. The full response goes to the server log, not
-    to the user.
+    once, with a short message.
+  - The server log gets the note and audio IDs, the HTTP status, and at most
+    the first 512 bytes of an error body. It never gets a successful
+    response's transcript, the audio, or the API key. The user sees only the
+    short message.
 - **Empty transcript:** `done` with empty content; the UI shows "No speech
   detected."
 - **Events:** every status change publishes the note through
@@ -341,7 +356,10 @@ part of the documented setup. Jot does not filter transcripts.
 
 ## 6. API
 
-All under `/api/v1`. Swagger annotations on every handler; `task gen-docs`.
+All under `/api/v1`. This table is design intent for the implementation, not an
+API reference: once the endpoints exist, the generated Swagger spec
+(`server/docs/`, `task gen-docs`) is the reference, and this table is not kept
+in sync with it.
 
 | Method & path | Behavior |
 |---|---|
@@ -393,6 +411,18 @@ Jot"); it ships before the server starts creating audio notes.
   | `done` | Transcript text, selectable, with Copy; "No speech detected" if empty |
   | `failed` | `transcript_error` and Retry |
   | `none` | Nothing if transcription is disabled; a "Transcribe" button if it has since been enabled |
+
+- **Upload failure:** the recording stays in memory as a `Blob` until
+  `POST /notes/{id}/audio` returns 201; leaving the page while it is unsent
+  asks for confirmation, as during recording.
+  - Network errors, timeouts, 5xx and 429 are transient. The note shows
+    "Upload failed" with **Retry**, and the recording is kept.
+  - 400 (format), 409 (already has a recording) and 413 (too large) are final.
+    The note shows the reason. For 400 and 413 it offers **Download** so the
+    recording is not lost, then **Discard**. For 409 the existing recording
+    wins and the local copy is dropped.
+  - The web does not persist an unsent recording across a reload or a closed
+    tab; that is what the confirmation is for. Mobile keeps it on disk (§7.2).
 
 - **Card:** title, or the first line of the transcript; a microphone icon and
   the duration; "Transcribing…" while pending.
