@@ -3405,5 +3405,38 @@ describe('NoteModal', () => {
       expect(screen.getByDisplayValue('Milk')).toBeInTheDocument();
       expect(onRefresh).toHaveBeenCalled();
     });
+
+    it('falls back to the known version when the refetch fails', async () => {
+      const note = createMockNote({ note_type: 'text', content: 'Current text', version: 3 });
+      mockNotesGetById.mockRejectedValueOnce(new Error('timeout'));
+      mockListRevisions.mockResolvedValueOnce([revision]);
+      mockGetRevision.mockResolvedValueOnce({ ...revision, content: 'Older text', items: [] });
+      mockRestoreRevision.mockResolvedValueOnce(createMockNote({ note_type: 'text', content: 'Older text', version: 4 }));
+
+      renderNoteModal({ ...defaultProps, note });
+      fireEvent.click(screen.getByTestId('note-history'));
+      await act(async () => { await vi.runAllTimersAsync(); });
+      fireEvent.click(screen.getByTestId('note-history-restore'));
+      await act(async () => { await vi.runAllTimersAsync(); });
+
+      expect(mockRestoreRevision).toHaveBeenCalledWith('1', 'rev1', { base_version: 3 });
+    });
+
+    it('closes the panel instead of restoring when flushing local edits conflicts', async () => {
+      const note = createMockNote({ note_type: 'list', title: 'Groceries', version: 3 });
+      mockNotesUpdate.mockRejectedValueOnce({ response: { status: 409 } });
+      mockListRevisions.mockResolvedValueOnce([{ ...revision, note_type: 'list', title: 'Older' }]);
+      mockGetRevision.mockResolvedValueOnce({ ...revision, note_type: 'list', title: 'Older', content: '', items: [] });
+
+      renderNoteModal({ ...defaultProps, note });
+      fireEvent.change(screen.getByDisplayValue('Groceries'), { target: { value: 'Shopping' } });
+      fireEvent.click(screen.getByTestId('note-history'));
+      await act(async () => { await vi.runAllTimersAsync(); });
+      fireEvent.click(screen.getByTestId('note-history-restore'));
+      await act(async () => { await vi.runAllTimersAsync(); });
+
+      expect(mockRestoreRevision).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('note-history-dialog')).not.toBeInTheDocument();
+    });
   });
 });

@@ -17,7 +17,7 @@ import NoteHistoryDialog from '@/components/NoteHistoryDialog';
 import { useToast } from '@/hooks/useToast';
 import { useNoteImages } from '@/hooks/useNoteImages';
 import { useCompletedItems } from '@/hooks/useCompletedItems';
-import { useNoteDraft, type AutoSaveDraft } from '@/hooks/useNoteDraft';
+import { useNoteDraft, NoteConflictError, type AutoSaveDraft } from '@/hooks/useNoteDraft';
 import { useSizeTransition } from '@/hooks/useSizeTransition';
 import { applyTextareaEdit } from '@/utils/textareaEdit';
 import { getCaretLine, getOffsetAtLine } from '@/utils/textareaCaret';
@@ -1524,7 +1524,14 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     setLoading(true);
     try {
       await persistExistingNote();
-      const baseVersion = (await notes.getById(note.id)).version;
+      // Refetch the version for the same reason performConvert does, falling
+      // back the same way when the refetch fails.
+      let baseVersion = note.version;
+      try {
+        baseVersion = (await notes.getById(note.id)).version;
+      } catch (error) {
+        console.error('Failed to refetch note version before restore:', error);
+      }
       const restored = await notes.restoreRevision(note.id, revision.id, { base_version: baseVersion });
       cancelPendingSave();
       adoptNote(restored);
@@ -1532,6 +1539,13 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
       showToast(t('history.restored'), 'success');
       onRefresh?.();
     } catch (error) {
+      if (error instanceof NoteConflictError) {
+        // Flushing local edits hit a conflict, and the conflict banner (Reload
+        // or Overwrite) sits under the panel: close it so the user can resolve
+        // that first. Retrying the restore would only conflict again.
+        setShowHistory(false);
+        return;
+      }
       console.error('Failed to restore note revision:', error);
       throw error;
     } finally {

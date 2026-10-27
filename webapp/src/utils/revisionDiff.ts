@@ -60,7 +60,9 @@ export function compareItems(revisionItems: ListItem[], currentItems: ListItem[]
     } else if (op.kind === 'delete') {
       changes.push({ kind: 'removed', text: baseline.get(op.itemId)?.text ?? '' });
     } else if (op.kind === 'reorder') {
-      changes.push({ kind: 'reordered' });
+      // diffItems also reorders whenever the item count changes; only items on
+      // both sides changing their relative order counts as a reorder here.
+      continue;
     } else {
       const before = baseline.get(op.itemId)?.text ?? '';
       const text = op.snapshot.text;
@@ -70,6 +72,10 @@ export function compareItems(revisionItems: ListItem[], currentItems: ListItem[]
       if (op.patch.assigned_to !== undefined) changes.push({ kind: 'reassigned', text });
     }
   }
+  const currentIds = new Set(currentItems.map(item => item.id));
+  const keptBefore = revisionItems.map(item => item.id).filter(id => currentIds.has(id));
+  const keptAfter = currentItems.map(item => item.id).filter(id => baseline.has(id));
+  if (keptBefore.some((id, index) => keptAfter[index] !== id)) changes.push({ kind: 'reordered' });
   return changes;
 }
 

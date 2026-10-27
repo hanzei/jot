@@ -2,10 +2,10 @@ import { useSyncExternalStore } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import type { Note } from '@jot/shared';
-import { getNoteRevision, getNoteRevisions, restoreNoteRevision } from '../api/notes';
+import { getNote, getNoteRevision, getNoteRevisions, restoreNoteRevision } from '../api/notes';
 import { isOnlineWriteAllowed, isServerReachable, subscribeToServerReachability } from '../api/serverReachability';
 import { assertSwitchWriteAllowed } from '../api/client';
-import { getLocalNote, isNotePendingCreate, saveNote } from '../db/noteQueries';
+import { isNotePendingCreate, saveNote } from '../db/noteQueries';
 import { getProtectedNoteIds } from '../db/syncQueue';
 import { useNetworkStatus } from './useNetworkStatus';
 import {
@@ -48,6 +48,11 @@ export async function readNoteHistorySyncState(db: SQLiteDatabase, noteId: strin
   return protectedIds.has(noteId) ? 'unsynced' : 'synced';
 }
 
+// How often an open History screen re-reads a note's sync state while its
+// changes are still queued. The queue has no drain event to subscribe to, and
+// the read is a local SQLite query, so a short poll is cheap.
+const UNSYNCED_RECHECK_MS = 2000;
+
 export function useNoteHistorySyncState(noteId: string) {
   const db = useSQLiteContext();
   return useQuery({
@@ -55,6 +60,8 @@ export function useNoteHistorySyncState(noteId: string) {
     queryFn: () => readNoteHistorySyncState(db, noteId),
     staleTime: 0,
     gcTime: 0,
+    // Re-enable Restore once the queued changes reach the server.
+    refetchInterval: (query) => (query.state.data === 'unsynced' ? UNSYNCED_RECHECK_MS : false),
   });
 }
 
@@ -107,11 +114,12 @@ export function useRestoreNoteRevision() {
       if (await readNoteHistorySyncState(db, noteId) !== 'synced') {
         throw new UnsyncedNoteError();
       }
-      const local = await getLocalNote(db, noteId);
-      if (!local) {
-        throw new Error(`Note ${noteId} not found in local DB`);
-      }
-      const restored = await restoreNoteRevision(noteId, revisionId, { base_version: local.version });
+      // Base the restore on the server's current version, not the local
+      // copy's: with nothing queued the restore replaces whatever the server
+      // holds, and a local copy that has not caught up with another device's
+      // edit would otherwise make every attempt conflict.
+      const current = await getNote(noteId);
+      const restored = await restoreNoteRevision(noteId, revisionId, { base_version: current.version });
       await saveNote(db, restored);
       return restored;
     },

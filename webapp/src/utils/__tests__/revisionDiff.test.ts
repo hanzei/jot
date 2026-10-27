@@ -51,8 +51,12 @@ describe('compareItems', () => {
       { kind: 'checked', text: 'eggs' },
       { kind: 'added', text: 'butter' },
       { kind: 'removed', text: 'bread' },
-      { kind: 'reordered' },
     ]);
+  });
+
+  it('does not report an append as a reorder', () => {
+    const after = [...before, listItem('d', 'butter', 3)];
+    expect(compareItems(before, after)).toEqual([{ kind: 'added', text: 'butter' }]);
   });
 
   it('reports a pure reorder once', () => {

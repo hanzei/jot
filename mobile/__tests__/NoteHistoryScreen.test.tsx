@@ -9,7 +9,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import type { Note, NoteRevision, NoteRevisionSummary, User } from '@jot/shared';
 import NoteHistoryScreen from '../src/screens/NoteHistoryScreen';
-import { getNoteRevision, getNoteRevisions, restoreNoteRevision } from '../src/api/notes';
+import { getNote, getNoteRevision, getNoteRevisions, restoreNoteRevision } from '../src/api/notes';
 import { useNetworkStatus } from '../src/hooks/useNetworkStatus';
 import { useConfirm } from '../src/hooks/useConfirm';
 import { useToast } from '../src/hooks/useToast';
@@ -23,9 +23,17 @@ import { makeListNote, makeNoteItem, makeTextNote } from './helpers/fixtures';
 import { silenceConsole } from './helpers/consoleGuard';
 
 const mockGoBack = jest.fn();
+type BeforeRemoveListener = (e: { preventDefault: () => void }) => void;
+const mockBeforeRemove: { current: BeforeRemoveListener | null } = { current: null };
+const mockAddListener = jest.fn((_event: string, listener: BeforeRemoveListener) => {
+  mockBeforeRemove.current = listener;
+  return () => {
+    if (mockBeforeRemove.current === listener) mockBeforeRemove.current = null;
+  };
+});
 
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ goBack: mockGoBack }),
+  useNavigation: () => ({ goBack: mockGoBack, addListener: mockAddListener }),
   useRoute: () => ({ params: { noteId: 'note-1' } }),
 }));
 
@@ -39,6 +47,7 @@ jest.mock('react-native-safe-area-context', () => {
 });
 
 jest.mock('../src/api/notes', () => ({
+  getNote: jest.fn(),
   getNoteRevisions: jest.fn(),
   getNoteRevision: jest.fn(),
   restoreNoteRevision: jest.fn(),
@@ -63,6 +72,7 @@ jest.mock('../src/hooks/useOfflineNotes', () => ({ useOfflineNote: jest.fn() }))
 const mockGetRevisions = getNoteRevisions as jest.MockedFunction<typeof getNoteRevisions>;
 const mockGetRevision = getNoteRevision as jest.MockedFunction<typeof getNoteRevision>;
 const mockRestore = restoreNoteRevision as jest.MockedFunction<typeof restoreNoteRevision>;
+const mockGetNote = getNote as jest.MockedFunction<typeof getNote>;
 const mockUseNetworkStatus = useNetworkStatus as jest.MockedFunction<typeof useNetworkStatus>;
 const mockUseConfirm = useConfirm as jest.MockedFunction<typeof useConfirm>;
 const mockUseToast = useToast as jest.MockedFunction<typeof useToast>;
@@ -130,6 +140,8 @@ function conflictError(): AxiosError {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockBeforeRemove.current = null;
+  mockGetNote.mockResolvedValue(currentNote);
   markServerReachable();
   mockUseNetworkStatus.mockReturnValue({ isConnected: true });
   mockConfirm.mockResolvedValue(true);
@@ -217,6 +229,7 @@ describe('NoteHistoryScreen', () => {
     }));
     expect(mockRestore).toHaveBeenCalledWith('note-1', 'rev-1', { base_version: 3 });
     expect(mockShowToast).toHaveBeenCalledWith('Version restored', 'success');
+    expect(mockBeforeRemove.current).toBeNull();
     const local = await getLocalNote(globalThis.testDb, 'note-1');
     expect(local).toMatchObject({ note_type: 'text', content: 'older text', version: 4 });
   });
@@ -256,6 +269,63 @@ describe('NoteHistoryScreen', () => {
     const local = await getLocalNote(globalThis.testDb, 'note-1');
     expect(local?.note_type).toBe('list');
     expect(local?.note_type === 'list' ? local.items?.map((i) => i.text) : []).toEqual(['Milk', 'Eggs']);
+  });
+
+  it("bases the restore on the server's version when the local copy is behind", async () => {
+    await seedNote();
+    mockGetNote.mockResolvedValue({ ...currentNote, content: 'edited on another device', version: 7 });
+    mockGetRevisions.mockResolvedValue([summary({ id: 'rev-1' })]);
+    mockGetRevision.mockResolvedValue(revision({ id: 'rev-1', content: 'older text' }));
+    mockRestore.mockResolvedValue(makeTextNote({ id: 'note-1', content: 'older text', version: 8 }));
+    await renderScreen();
+
+    await fireEvent.press(await screen.findByTestId('history-revision-rev-1'));
+    await screen.findByText('older text');
+    await fireEvent.press(screen.getByTestId('history-restore'));
+
+    await waitFor(() => expect(mockGoBack).toHaveBeenCalled());
+    expect(mockRestore).toHaveBeenCalledWith('note-1', 'rev-1', { base_version: 7 });
+  });
+
+  it('steps back from a preview to the list on a hardware back or swipe', async () => {
+    await seedNote();
+    mockGetRevisions.mockResolvedValue([summary({ id: 'rev-1' })]);
+    mockGetRevision.mockResolvedValue(revision({ id: 'rev-1', content: 'older text' }));
+    await renderScreen();
+
+    expect(mockBeforeRemove.current).toBeNull();
+    await fireEvent.press(await screen.findByTestId('history-revision-rev-1'));
+    await screen.findByText('older text');
+    const preventDefault = jest.fn();
+    await act(async () => {
+      mockBeforeRemove.current?.({ preventDefault });
+    });
+
+    expect(preventDefault).toHaveBeenCalled();
+    expect(await screen.findByTestId('history-revision-rev-1')).toBeTruthy();
+    expect(screen.queryByText('older text')).toBeNull();
+    expect(mockBeforeRemove.current).toBeNull();
+  });
+
+  it('enables Restore once the queued changes have synced', async () => {
+    await seedNote();
+    await enqueueOperation(globalThis.testDb, {
+      operation: 'update',
+      endpoint: '/notes/note-1',
+      method: 'PATCH',
+      body: { content: 'queued edit' },
+    });
+    mockGetRevisions.mockResolvedValue([summary({ id: 'rev-1' })]);
+    mockGetRevision.mockResolvedValue(revision({ id: 'rev-1', content: 'older text' }));
+    await renderScreen();
+
+    await fireEvent.press(await screen.findByTestId('history-revision-rev-1'));
+    await screen.findByText('older text');
+    expect(screen.getByTestId('history-restore')).toBeDisabled();
+
+    await globalThis.testDb.runAsync('DELETE FROM sync_queue');
+    await waitFor(() => expect(screen.getByTestId('history-restore')).toBeEnabled(), { timeout: 5000 });
+    expect(screen.queryByTestId('history-restore-hint')).toBeNull();
   });
 
   it('blocks a restore while the note has unsynced local changes', async () => {

@@ -1,4 +1,4 @@
-import { useCallback, useContext, useMemo, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -96,6 +96,20 @@ export default function NoteHistoryScreen() {
     }
     navigation.goBack();
   }, [navigation, selectedId]);
+
+  // The hardware back button and the modal swipe-down step back from a
+  // preview to the list too, like the header arrow. Leaving after a restore
+  // happens with the preview still open, so that one is let through.
+  const restorePending = restore.isPending;
+  const restoreSucceeded = restore.isSuccess;
+  useEffect(() => {
+    if (!selectedId || restorePending || restoreSucceeded) return undefined;
+    return navigation.addListener('beforeRemove', (e) => {
+      e.preventDefault();
+      setSelectedId(null);
+      setRestoreError(null);
+    });
+  }, [navigation, restorePending, restoreSucceeded, selectedId]);
 
   const handleRestore = useCallback(async (rev: NoteRevision) => {
     let message = t('history.restoreConfirmMessage');
