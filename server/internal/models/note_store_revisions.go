@@ -166,6 +166,11 @@ func snapshotNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID,
 			return pendingRevision{}, err
 		}
 	}
+	// A blank note (typically one just created) has nothing worth restoring,
+	// and would otherwise open every note's history.
+	if rev.title == "" && rev.content == "" && len(items) == 0 {
+		return pendingRevision{}, nil
+	}
 	itemsJSON, err := json.Marshal(items)
 	if err != nil {
 		return pendingRevision{}, fmt.Errorf("encode revision items: %w", err)
@@ -240,6 +245,17 @@ func (p pendingRevision) saveTx(ctx context.Context, tx *sql.Tx, d *dialect.Dial
 		id, p.noteID, p.now, p.editedAt, p.actorID, p.noteType, p.title, p.content, p.itemsJSON, p.replacedBy, p.replacedByClient,
 	); err != nil {
 		return fmt.Errorf("insert note revision: %w", err)
+	}
+	// Enforce the per-note cap here rather than in the periodic prune, so
+	// writers that never coalesce (collaborators taking turns, a sync loop
+	// between two clients) cannot pile up revisions between prunes.
+	if _, err = tx.ExecContext(ctx,
+		d.RewritePlaceholders(`DELETE FROM note_revisions WHERE note_id = ? AND id NOT IN (
+			SELECT id FROM note_revisions WHERE note_id = ? ORDER BY created_at DESC, id DESC LIMIT ?
+		)`),
+		p.noteID, p.noteID, NoteRevisionsMaxPerNote,
+	); err != nil {
+		return fmt.Errorf("trim note revisions: %w", err)
 	}
 	return nil
 }
@@ -334,78 +350,105 @@ func (s *noteStore) requireAccess(ctx context.Context, noteID, userID string) er
 // ordinary content write through ConvertType, whatever the two types: it is
 // gated on baseVersion like any other, converts the note back when the
 // revision has another type, and always snapshots the content it replaces,
-// even within the coalescing window, so a restore can itself be undone.
+// even within the coalescing window, so a restore can itself be undone. A
+// revision that matches the note as it is writes nothing, so restoring it does
+// not bump the version or flag the note updated for collaborators.
 //
-// Restored items keep their IDs. An item's assignee is restored only if they
-// can still access the note; otherwise the item comes back unassigned.
+// Restored items keep their IDs. An item's assignee is restored only if the
+// note is still shared and they can still access it (see convertType);
+// otherwise the item comes back unassigned.
 func (s *noteStore) RestoreRevision(ctx context.Context, noteID, revisionID, userID string, baseVersion *int) (*Note, error) {
 	rev, err := s.GetRevision(ctx, noteID, revisionID, userID)
 	if err != nil {
 		return nil, err
 	}
+	current, err := s.GetByID(ctx, noteID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if revisionMatchesNote(rev, current) {
+		return current, nil
+	}
 
 	var items []NewNoteItem
 	if rev.NoteType == NoteTypeList {
-		audience, err := s.GetNoteAudienceIDs(ctx, noteID)
-		if err != nil {
-			return nil, fmt.Errorf("get note audience: %w", err)
-		}
 		items = make([]NewNoteItem, 0, len(rev.Items))
 		for _, item := range rev.Items {
-			restored := NewNoteItem{
-				ID:        item.ID,
-				Text:      item.Text,
-				Position:  item.Position,
-				Completed: item.Completed,
-				ParentID:  deref(item.ParentID, ""),
-			}
-			if slices.Contains(audience, item.AssignedTo) {
-				restored.AssignedTo = item.AssignedTo
-			}
-			items = append(items, restored)
+			items = append(items, NewNoteItem{
+				ID:         item.ID,
+				Text:       item.Text,
+				Position:   item.Position,
+				Completed:  item.Completed,
+				ParentID:   deref(item.ParentID, ""),
+				AssignedTo: item.AssignedTo,
+			})
 		}
 	}
 	return s.convertType(ctx, noteID, userID, rev.NoteType, rev.Title, rev.Content, items, baseVersion, false)
 }
 
-// PruneRevisions deletes revisions older than NoteRevisionsMaxAge and, per
-// note, all but the newest NoteRevisionsMaxPerNote. It returns how many it
-// deleted. Revisions of a deleted note go with it through the cascade.
-func (s *noteStore) PruneRevisions(ctx context.Context) (int64, error) {
-	cutoff := Timestamp(Now().Add(-NoteRevisionsMaxAge))
+// revisionMatchesNote reports whether restoring rev would leave note as it is.
+func revisionMatchesNote(rev *NoteRevision, note *Note) bool {
+	if rev.NoteType != note.NoteType || rev.Title != note.Title || rev.Content != note.Content || len(rev.Items) != len(note.Items) {
+		return false
+	}
+	for i, item := range rev.Items {
+		current := note.Items[i]
+		if item.Text != current.Text || item.Completed != current.Completed ||
+			deref(item.ParentID, "") != deref(current.ParentID, "") || item.AssignedTo != current.AssignedTo {
+			return false
+		}
+	}
+	return true
+}
 
-	tx, err := s.db.BeginTx(ctx, nil)
+// dropUnassignableTx clears the assignee of every item in items that cannot be
+// assigned on note noteID as it is inside tx: mirroring the item endpoints, an
+// assignee must be the owner or a collaborator, and nobody can be assigned on
+// a note that is not shared.
+func dropUnassignableTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, items []NewNoteItem) ([]NewNoteItem, error) {
+	if !slices.ContainsFunc(items, func(item NewNoteItem) bool { return item.AssignedTo != "" }) {
+		return items, nil
+	}
+	rows, err := tx.QueryContext(ctx,
+		d.RewritePlaceholders(`SELECT user_id FROM notes WHERE id = ?
+			UNION SELECT shared_with_user_id FROM note_shares WHERE note_id = ?`),
+		noteID, noteID,
+	)
 	if err != nil {
-		return 0, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("query note audience: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
-
-	var deleted int64
-	for _, q := range []struct {
-		query string
-		args  []any
-	}{
-		{`DELETE FROM note_revisions WHERE created_at < ?`, []any{cutoff}},
-		{`DELETE FROM note_revisions WHERE id IN (
-			SELECT id FROM (
-				SELECT id, ROW_NUMBER() OVER (PARTITION BY note_id ORDER BY created_at DESC, id DESC) AS rn
-				FROM note_revisions
-			) ranked WHERE rn > ?
-		)`, []any{NoteRevisionsMaxPerNote}},
-	} {
-		result, execErr := tx.ExecContext(ctx, s.d.RewritePlaceholders(q.query), q.args...)
-		if execErr != nil {
-			return 0, fmt.Errorf("prune note revisions: %w", execErr)
-		}
-		n, raErr := result.RowsAffected()
-		if raErr != nil {
-			return 0, fmt.Errorf("failed to get rows affected: %w", raErr)
-		}
-		deleted += n
+	audience, err := collectRows(rows, scanString)
+	if err != nil {
+		return nil, fmt.Errorf("scan note audience: %w", err)
 	}
+	// The owner is always in the audience, so one member means no shares.
+	shared := len(audience) > 1
 
-	if err = tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit prune note revisions: %w", err)
+	filtered := slices.Clone(items)
+	for i := range filtered {
+		if !shared || !slices.Contains(audience, filtered[i].AssignedTo) {
+			filtered[i].AssignedTo = ""
+		}
+	}
+	return filtered, nil
+}
+
+// PruneRevisions deletes revisions older than NoteRevisionsMaxAge and returns
+// how many it deleted. The per-note count cap is enforced as each revision is
+// stored (see saveTx), and a deleted note's revisions go with it through the
+// cascade.
+func (s *noteStore) PruneRevisions(ctx context.Context) (int64, error) {
+	result, err := s.db.ExecContext(ctx,
+		s.d.RewritePlaceholders(`DELETE FROM note_revisions WHERE created_at < ?`),
+		Timestamp(Now().Add(-NoteRevisionsMaxAge)),
+	)
+	if err != nil {
+		return 0, fmt.Errorf("prune note revisions: %w", err)
+	}
+	deleted, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get rows affected: %w", err)
 	}
 	return deleted, nil
 }

@@ -229,18 +229,7 @@ func (s *noteStore) convertType(ctx context.Context, id, userID string, targetTy
 	}
 
 	if !alreadyApplied {
-		if err = rev.saveTx(ctx, tx, s.d); err != nil {
-			return nil, err
-		}
-		if _, err = tx.ExecContext(ctx, s.d.RewritePlaceholders(`DELETE FROM note_items WHERE note_id = ?`), id); err != nil {
-			return nil, fmt.Errorf("delete note items for conversion: %w", err)
-		}
-		if targetType == NoteTypeList {
-			if err = insertNewNoteItemsTx(ctx, tx, s.d, id, targetItems, now); err != nil {
-				return nil, fmt.Errorf("insert converted items: %w", err)
-			}
-		}
-		if err = markViewedTx(ctx, tx, s.d, id, userID, now); err != nil {
+		if err = s.replaceConvertedContentTx(ctx, tx, rev, id, userID, targetType, targetItems, now); err != nil {
 			return nil, err
 		}
 	}
@@ -254,6 +243,30 @@ func (s *noteStore) convertType(ctx context.Context, id, userID string, targetTy
 		return nil, fmt.Errorf("failed to load converted note: %w", err)
 	}
 	return converted, nil
+}
+
+// replaceConvertedContentTx finishes a conversion whose notes row convertNoteRowTx
+// updated: it stores rev, the content the conversion replaced, swaps the note's
+// items for targetItems, and marks the note viewed by userID.
+func (s *noteStore) replaceConvertedContentTx(ctx context.Context, tx *sql.Tx, rev pendingRevision, id, userID string, targetType NoteType, targetItems []NewNoteItem, now string) error {
+	if err := rev.saveTx(ctx, tx, s.d); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(`DELETE FROM note_items WHERE note_id = ?`), id); err != nil {
+		return fmt.Errorf("delete note items for conversion: %w", err)
+	}
+	if targetType == NoteTypeList {
+		// Only a restore carries assignees; check them against the note's
+		// access inside this transaction, not before it.
+		items, err := dropUnassignableTx(ctx, tx, s.d, id, targetItems)
+		if err != nil {
+			return err
+		}
+		if err = insertNewNoteItemsTx(ctx, tx, s.d, id, items, now); err != nil {
+			return fmt.Errorf("insert converted items: %w", err)
+		}
+	}
+	return markViewedTx(ctx, tx, s.d, id, userID, now)
 }
 
 // convertNoteRowTx updates the notes row's title/content/note_type/version for

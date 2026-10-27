@@ -352,6 +352,45 @@ func TestNoteRevisionRestore(t *testing.T) {
 			assert.Empty(t, restored.Items[0].AssignedTo)
 		})
 
+		t.Run("nobody, not even the owner, is assigned on a note no longer shared", func(t *testing.T) {
+			note := createRevisionListNote(t, store)
+			milk := itemIDByText(t, store, note.ID, "milk")
+			assignee := revisionOwnerID
+			_, err := store.PatchItem(t.Context(), note.ID, revisionOwnerID, milk, NoteItemPatch{AssignedTo: &assignee})
+			require.NoError(t, err)
+			ageRevisions(t, store, note.ID)
+			text := "oat milk"
+			_, err = store.PatchItem(t.Context(), note.ID, revisionOwnerID, milk, NoteItemPatch{Text: &text})
+			require.NoError(t, err)
+			rev := latestRevision(t, store, note.ID)
+			require.Equal(t, revisionOwnerID, rev.Items[0].AssignedTo)
+
+			require.NoError(t, store.UnshareNote(t.Context(), note.ID, revisionCollabID))
+			restored, err := store.RestoreRevision(t.Context(), note.ID, rev.ID, revisionOwnerID, nil)
+			require.NoError(t, err)
+			assert.Equal(t, "milk", restored.Items[0].Text)
+			assert.Empty(t, restored.Items[0].AssignedTo)
+		})
+
+		t.Run("restoring a revision that matches the note writes nothing", func(t *testing.T) {
+			note := createRevisionTextNote(t, store, "original")
+			content := "edited"
+			_, err := store.Update(t.Context(), note.ID, revisionOwnerID, NoteUpdate{Content: &content})
+			require.NoError(t, err)
+			ageRevisions(t, store, note.ID)
+			content = "original"
+			current, err := store.Update(t.Context(), note.ID, revisionOwnerID, NoteUpdate{Content: &content})
+			require.NoError(t, err)
+			revisions := listRevisions(t, store, note.ID)
+			require.Len(t, revisions, 2)
+
+			original := revisions[1]
+			restored, err := store.RestoreRevision(t.Context(), note.ID, original.ID, revisionOwnerID, &current.Version)
+			require.NoError(t, err)
+			assert.Equal(t, current.Version, restored.Version)
+			assert.Len(t, listRevisions(t, store, note.ID), 2)
+		})
+
 		t.Run("a stale base_version conflicts", func(t *testing.T) {
 			note := createRevisionTextNote(t, store, "original")
 			content := "edited"
@@ -404,24 +443,41 @@ func TestNoteRevisionRetention(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		t.Run("pruning enforces the count and age caps", func(t *testing.T) {
-			busy := createRevisionTextNote(t, store, "busy")
-			stale := createRevisionTextNote(t, store, "stale")
+		t.Run("storing a revision trims the note to the count cap", func(t *testing.T) {
+			note := createRevisionTextNote(t, store, "busy")
 			now := Now()
 			for i := range NoteRevisionsMaxPerNote + 5 {
-				insertRevision(t, busy.ID, now.Add(-time.Duration(i)*time.Hour))
+				insertRevision(t, note.ID, now.Add(-time.Duration(i+1)*time.Hour))
 			}
-			insertRevision(t, stale.ID, now.Add(-NoteRevisionsMaxAge-time.Hour))
-			insertRevision(t, stale.ID, now.Add(-time.Hour))
+			content := "busy v2"
+			_, err := store.Update(t.Context(), note.ID, revisionOwnerID, NoteUpdate{Content: &content})
+			require.NoError(t, err)
+
+			revisions := listRevisions(t, store, note.ID)
+			require.Len(t, revisions, NoteRevisionsMaxPerNote)
+			assert.Equal(t, "busy", latestRevision(t, store, note.ID).Content, "the new revision is kept")
+			assert.WithinDuration(t, now.Add(-time.Duration(NoteRevisionsMaxPerNote-1)*time.Hour), revisions[len(revisions)-1].CreatedAt, time.Second,
+				"the oldest revisions are dropped")
+		})
+
+		t.Run("pruning enforces the age cap", func(t *testing.T) {
+			note := createRevisionTextNote(t, store, "stale")
+			now := Now()
+			insertRevision(t, note.ID, now.Add(-NoteRevisionsMaxAge-time.Hour))
+			insertRevision(t, note.ID, now.Add(-time.Hour))
 
 			deleted, err := store.PruneRevisions(t.Context())
 			require.NoError(t, err)
-			assert.EqualValues(t, 6, deleted)
+			assert.EqualValues(t, 1, deleted)
+			assert.Len(t, listRevisions(t, store, note.ID), 1)
+		})
 
-			busyRevisions := listRevisions(t, store, busy.ID)
-			require.Len(t, busyRevisions, NoteRevisionsMaxPerNote)
-			assert.WithinDuration(t, now, busyRevisions[0].CreatedAt, time.Second, "the newest revisions are kept")
-			assert.Len(t, listRevisions(t, store, stale.ID), 1)
+		t.Run("a blank note's content is not kept", func(t *testing.T) {
+			note := createRevisionTextNote(t, store, "")
+			content := "first words"
+			_, err := store.Update(t.Context(), note.ID, revisionOwnerID, NoteUpdate{Content: &content})
+			require.NoError(t, err)
+			assert.Empty(t, listRevisions(t, store, note.ID))
 		})
 
 		t.Run("purging a trashed note removes its revisions", func(t *testing.T) {
