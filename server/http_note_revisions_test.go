@@ -19,15 +19,9 @@ func patchNoteAsClient(t *testing.T, ts *TestServer, user *TestUser, noteID, cli
 
 	encoded, err := json.Marshal(map[string]string{"content": content})
 	require.NoError(t, err)
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPatch, ts.HTTPServer.URL+"/api/v1/notes/"+noteID, bytes.NewReader(encoded))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Client-Id", clientID)
-
-	resp, err := user.Client.HTTPClient().Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	require.Equal(t, http.StatusOK, resp.StatusCode)
+	status, _, body := rawRequest(t, user.Client.HTTPClient(), http.MethodPatch, ts.HTTPServer.URL+"/api/v1/notes/"+noteID,
+		bytes.NewReader(encoded), http.Header{"Content-Type": {"application/json"}, "X-Client-Id": {clientID}})
+	require.Equal(t, http.StatusOK, status, "body: %s", body)
 }
 
 func TestNoteRevisionsEndpoints(t *testing.T) {
@@ -67,14 +61,10 @@ func TestNoteRevisionsEndpoints(t *testing.T) {
 		assert.NotNil(t, rev.Items)
 
 		// The list body carries no content.
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, ts.HTTPServer.URL+"/api/v1/notes/"+note.ID+"/revisions", nil)
-		require.NoError(t, err)
-		resp, err := owner.Client.HTTPClient().Do(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-		require.Equal(t, http.StatusOK, resp.StatusCode)
+		status, _, body := rawRequest(t, owner.Client.HTTPClient(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/notes/"+note.ID+"/revisions", nil, nil)
+		require.Equal(t, http.StatusOK, status)
 		var raw map[string][]map[string]any
-		require.NoError(t, json.NewDecoder(resp.Body).Decode(&raw))
+		require.NoError(t, json.Unmarshal(body, &raw))
 		require.NotEmpty(t, raw["revisions"])
 		assert.NotContains(t, raw["revisions"][0], "content")
 		assert.NotContains(t, raw["revisions"][0], "items")

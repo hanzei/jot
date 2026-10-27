@@ -16,7 +16,7 @@ import (
 // note as it was before the change (see captureRevisionTx). Callers invoke it
 // only when an item actually changed.
 func touchNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, rev pendingRevision, noteID, actorID, now string) error {
-	if err := rev.saveTx(ctx, tx, d); err != nil {
+	if err := rev.saveTx(ctx, tx, d, noteID, actorID, now); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx,

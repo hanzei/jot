@@ -355,14 +355,7 @@ export interface ConvertNoteTypeRequest extends BaseUpdateNoteRequest {
 }
 
 /** A list item as stored in a note revision. */
-export interface NoteRevisionItem {
-  id: string;
-  text: string;
-  completed: boolean;
-  position: number;
-  parent_id: string | null;
-  assigned_to: string;
-}
+export type NoteRevisionItem = Omit<NoteItem, 'note_id' | 'created_at' | 'updated_at'>;
 
 /**
  * A note revision's metadata, as listed by `GET /notes/{id}/revisions`. A

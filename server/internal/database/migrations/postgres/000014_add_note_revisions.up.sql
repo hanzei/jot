@@ -32,5 +32,5 @@ CREATE TABLE note_revisions (
     replaced_by_client TEXT      NOT NULL DEFAULT ''
 );
 
-CREATE INDEX idx_note_revisions_note_id    ON note_revisions(note_id, created_at);
+CREATE INDEX idx_note_revisions_note_id    ON note_revisions(note_id, created_at, id);
 CREATE INDEX idx_note_revisions_created_at ON note_revisions(created_at);

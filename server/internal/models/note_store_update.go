@@ -132,7 +132,7 @@ func (s *noteStore) changeNoteContentTx(ctx context.Context, tx *sql.Tx, id, use
 	if err != nil || !applied {
 		return err
 	}
-	if err = rev.saveTx(ctx, tx, s.d); err != nil {
+	if err = rev.saveTx(ctx, tx, s.d, id, userID, now); err != nil {
 		return err
 	}
 	return markViewedTx(ctx, tx, s.d, id, userID, now)
@@ -249,7 +249,7 @@ func (s *noteStore) convertType(ctx context.Context, id, userID string, targetTy
 // updated: it stores rev, the content the conversion replaced, swaps the note's
 // items for targetItems, and marks the note viewed by userID.
 func (s *noteStore) replaceConvertedContentTx(ctx context.Context, tx *sql.Tx, rev pendingRevision, id, userID string, targetType NoteType, targetItems []NewNoteItem, now string) error {
-	if err := rev.saveTx(ctx, tx, s.d); err != nil {
+	if err := rev.saveTx(ctx, tx, s.d, id, userID, now); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(`DELETE FROM note_items WHERE note_id = ?`), id); err != nil {
@@ -258,7 +258,7 @@ func (s *noteStore) replaceConvertedContentTx(ctx context.Context, tx *sql.Tx, r
 	if targetType == NoteTypeList {
 		// Only a restore carries assignees; check them against the note's
 		// access inside this transaction, not before it.
-		items, err := dropUnassignableTx(ctx, tx, s.d, id, targetItems)
+		items, err := s.dropUnassignableTx(ctx, tx, id, targetItems)
 		if err != nil {
 			return err
 		}

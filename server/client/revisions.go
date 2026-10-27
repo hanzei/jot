@@ -65,9 +65,7 @@ func (c *Client) GetNoteRevision(ctx context.Context, noteID, revisionID string)
 // returns the updated note. When baseVersion is non-nil the restore is
 // rejected with 409 unless the note is still at that version.
 func (c *Client) RestoreNoteRevision(ctx context.Context, noteID, revisionID string, baseVersion *int) (*Note, error) {
-	body := struct {
-		BaseVersion *int `json:"base_version,omitempty"`
-	}{BaseVersion: baseVersion}
+	body := &RestoreNoteRevisionRequest{BaseVersion: baseVersion}
 	var note Note
 	if err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/revisions/%s/restore", noteID, revisionID), body, &note); err != nil {
 		return nil, err

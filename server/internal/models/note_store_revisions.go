@@ -94,17 +94,13 @@ func writeClientFromContext(ctx context.Context) string {
 // turns out to change something. The zero value captured nothing (the write
 // coalesces into the latest revision, or the note is gone) and saves nothing.
 type pendingRevision struct {
-	captured         bool
-	noteID           string
-	noteType         NoteType
-	title            string
-	content          string
-	itemsJSON        string
-	actorID          sql.NullString
-	editedAt         string
-	replacedBy       string
-	replacedByClient string
-	now              string
+	captured  bool
+	noteType  NoteType
+	title     string
+	content   string
+	itemsJSON string
+	actorID   sql.NullString
+	editedAt  string
 }
 
 // captureRevisionTx snapshots note noteID's shared content inside tx, ahead of
@@ -125,13 +121,7 @@ func captureRevisionTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, note
 // Restoring a revision snapshots unconditionally, so the content a restore
 // replaces is always in history and the restore can be undone.
 func snapshotNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, actorID, now string, coalesce bool) (pendingRevision, error) {
-	rev := pendingRevision{
-		captured:         true,
-		noteID:           noteID,
-		replacedBy:       actorID,
-		replacedByClient: writeClientFromContext(ctx),
-		now:              now,
-	}
+	rev := pendingRevision{captured: true}
 
 	var changedAt *time.Time
 	var updatedAt time.Time
@@ -151,7 +141,7 @@ func snapshotNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID,
 	rev.editedAt = Timestamp(deref(changedAt, updatedAt))
 
 	if coalesce {
-		coalesced, coalesceErr := revisionCoalescesTx(ctx, tx, d, noteID, rev.replacedBy, rev.replacedByClient, now)
+		coalesced, coalesceErr := revisionCoalescesTx(ctx, tx, d, noteID, actorID, writeClientFromContext(ctx), now)
 		if coalesceErr != nil {
 			return pendingRevision{}, coalesceErr
 		}
@@ -160,7 +150,7 @@ func snapshotNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID,
 		}
 	}
 
-	items := []NoteRevisionItem{}
+	var items []NoteRevisionItem
 	if rev.noteType == NoteTypeList {
 		if items, err = revisionItemsTx(ctx, tx, d, noteID); err != nil {
 			return pendingRevision{}, err
@@ -224,14 +214,12 @@ func revisionItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID
 	if err != nil {
 		return nil, fmt.Errorf("scan note items for revision: %w", err)
 	}
-	if items == nil {
-		items = []NoteRevisionItem{}
-	}
 	return items, nil
 }
 
-// saveTx stores the captured snapshot, if any, inside tx.
-func (p pendingRevision) saveTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect) error {
+// saveTx stores the captured snapshot of note noteID, if any, inside tx, as
+// replaced by actorID's write at now from the client named in ctx.
+func (p pendingRevision) saveTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, actorID, now string) error {
 	if !p.captured {
 		return nil
 	}
@@ -242,7 +230,7 @@ func (p pendingRevision) saveTx(ctx context.Context, tx *sql.Tx, d *dialect.Dial
 	if _, err = tx.ExecContext(ctx,
 		d.RewritePlaceholders(`INSERT INTO note_revisions (id, note_id, created_at, edited_at, actor_id, note_type, title, content, items_json, replaced_by, replaced_by_client)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
-		id, p.noteID, p.now, p.editedAt, p.actorID, p.noteType, p.title, p.content, p.itemsJSON, p.replacedBy, p.replacedByClient,
+		id, noteID, now, p.editedAt, p.actorID, p.noteType, p.title, p.content, p.itemsJSON, actorID, writeClientFromContext(ctx),
 	); err != nil {
 		return fmt.Errorf("insert note revision: %w", err)
 	}
@@ -253,30 +241,11 @@ func (p pendingRevision) saveTx(ctx context.Context, tx *sql.Tx, d *dialect.Dial
 		d.RewritePlaceholders(`DELETE FROM note_revisions WHERE note_id = ? AND id NOT IN (
 			SELECT id FROM note_revisions WHERE note_id = ? ORDER BY created_at DESC, id DESC LIMIT ?
 		)`),
-		p.noteID, p.noteID, NoteRevisionsMaxPerNote,
+		noteID, noteID, NoteRevisionsMaxPerNote,
 	); err != nil {
 		return fmt.Errorf("trim note revisions: %w", err)
 	}
 	return nil
-}
-
-// revisionColumns are the columns scanned by scanNoteRevision, in order.
-const revisionColumns = `id, note_id, note_type, title, actor_id, edited_at, created_at, content, items_json`
-
-func scanNoteRevision(rows *sql.Rows) (NoteRevision, error) {
-	var rev NoteRevision
-	var itemsJSON string
-	if err := rows.Scan(&rev.ID, &rev.NoteID, &rev.NoteType, &rev.Title, &rev.ActorID,
-		&rev.EditedAt, &rev.CreatedAt, &rev.Content, &itemsJSON); err != nil {
-		return rev, err
-	}
-	if err := json.Unmarshal([]byte(itemsJSON), &rev.Items); err != nil {
-		return rev, fmt.Errorf("decode revision items: %w", err)
-	}
-	if rev.Items == nil {
-		rev.Items = []NoteRevisionItem{}
-	}
-	return rev, nil
 }
 
 // ListRevisions returns note noteID's revisions, newest first, as userID sees
@@ -315,21 +284,31 @@ func (s *noteStore) GetRevision(ctx context.Context, noteID, revisionID, userID 
 	if err := s.requireAccess(ctx, noteID, userID); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx,
-		s.d.RewritePlaceholders(`SELECT `+revisionColumns+` FROM note_revisions WHERE id = ? AND note_id = ?`),
+	return s.getRevision(ctx, noteID, revisionID)
+}
+
+// getRevision is GetRevision without the access check.
+func (s *noteStore) getRevision(ctx context.Context, noteID, revisionID string) (*NoteRevision, error) {
+	var rev NoteRevision
+	var itemsJSON string
+	err := s.db.QueryRowContext(ctx,
+		s.d.RewritePlaceholders(`SELECT id, note_id, note_type, title, actor_id, edited_at, created_at, content, items_json
+			FROM note_revisions WHERE id = ? AND note_id = ?`),
 		revisionID, noteID,
-	)
+	).Scan(&rev.ID, &rev.NoteID, &rev.NoteType, &rev.Title, &rev.ActorID, &rev.EditedAt, &rev.CreatedAt, &rev.Content, &itemsJSON)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNoteRevisionNotFound
+		}
 		return nil, fmt.Errorf("get note revision: %w", err)
 	}
-	revisions, err := collectRows(rows, scanNoteRevision)
-	if err != nil {
-		return nil, fmt.Errorf("scan note revision: %w", err)
+	if err = json.Unmarshal([]byte(itemsJSON), &rev.Items); err != nil {
+		return nil, fmt.Errorf("decode revision items: %w", err)
 	}
-	if len(revisions) == 0 {
-		return nil, ErrNoteRevisionNotFound
+	if rev.Items == nil {
+		rev.Items = []NoteRevisionItem{}
 	}
-	return &revisions[0], nil
+	return &rev, nil
 }
 
 // requireAccess returns ErrNoteNotFound unless userID can access the active
@@ -358,11 +337,12 @@ func (s *noteStore) requireAccess(ctx context.Context, noteID, userID string) er
 // note is still shared and they can still access it (see convertType);
 // otherwise the item comes back unassigned.
 func (s *noteStore) RestoreRevision(ctx context.Context, noteID, revisionID, userID string, baseVersion *int) (*Note, error) {
-	rev, err := s.GetRevision(ctx, noteID, revisionID, userID)
+	// GetByID doubles as the access check.
+	current, err := s.GetByID(ctx, noteID, userID)
 	if err != nil {
 		return nil, err
 	}
-	current, err := s.GetByID(ctx, noteID, userID)
+	rev, err := s.getRevision(ctx, noteID, revisionID)
 	if err != nil {
 		return nil, err
 	}
@@ -406,22 +386,15 @@ func revisionMatchesNote(rev *NoteRevision, note *Note) bool {
 // assigned on note noteID as it is inside tx: mirroring the item endpoints, an
 // assignee must be the owner or a collaborator, and nobody can be assigned on
 // a note that is not shared.
-func dropUnassignableTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, items []NewNoteItem) ([]NewNoteItem, error) {
+func (s *noteStore) dropUnassignableTx(ctx context.Context, tx *sql.Tx, noteID string, items []NewNoteItem) ([]NewNoteItem, error) {
 	if !slices.ContainsFunc(items, func(item NewNoteItem) bool { return item.AssignedTo != "" }) {
 		return items, nil
 	}
-	rows, err := tx.QueryContext(ctx,
-		d.RewritePlaceholders(`SELECT user_id FROM notes WHERE id = ?
-			UNION SELECT shared_with_user_id FROM note_shares WHERE note_id = ?`),
-		noteID, noteID,
-	)
+	audiences, err := s.getNoteAudiencesTx(ctx, tx, []string{noteID})
 	if err != nil {
-		return nil, fmt.Errorf("query note audience: %w", err)
+		return nil, err
 	}
-	audience, err := collectRows(rows, scanString)
-	if err != nil {
-		return nil, fmt.Errorf("scan note audience: %w", err)
-	}
+	audience := audiences[noteID]
 	// The owner is always in the audience, so one member means no shares.
 	shared := len(audience) > 1
 
