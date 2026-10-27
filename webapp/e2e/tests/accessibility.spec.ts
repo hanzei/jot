@@ -163,6 +163,29 @@ for (const theme of THEMES) {
       await expectNoViolations(page);
     });
 
+    test('note history panel has no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage, noteHistoryDialog }) => {
+      void authenticatedUser;
+      // A write from page.request (no X-Client-Id) keeps the text it replaces
+      // as a revision, so the panel has a version to preview and compare.
+      const created = await page.request.post('/api/v1/notes', { data: { note_type: 'text', content: 'A11y history\nkept line\nold line' } });
+      expect(created.ok()).toBeTruthy();
+      const { id } = (await created.json()) as { id: string };
+      const patched = await page.request.patch(`/api/v1/notes/${id}`, { data: { content: 'A11y history now\nkept line\nnew line' } });
+      expect(patched.ok()).toBeTruthy();
+
+      await dashboardPage.goto();
+      await dashboardPage.openTextNote('A11y history now');
+      await noteHistoryDialog.open();
+      await expect(noteHistoryDialog.preview()).toBeVisible();
+      await expectTheme(page, theme);
+      await expectNoViolations(page);
+
+      // The comparison carries its own removed/added colours, so it needs a
+      // scan of its own in each theme.
+      await noteHistoryDialog.showComparison();
+      await expectNoViolations(page);
+    });
+
     test('note modal has no WCAG A/AA violations in any note colour', async ({ page, authenticatedUser, dashboardPage }) => {
       void authenticatedUser;
       // Ten colours × two save states = twenty scans, plus a two-second settle

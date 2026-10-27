@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, NoteItem, CreateNoteRequest, UpdateNoteRequest, ConvertNoteTypeRequest, CreateNoteItemRequest, PatchNoteItemRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, FileImportType, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, SetUserPasswordRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest, NoteImage, LabelCountsResponse, NoteListResponse, NoteShareListResponse, LabelListResponse, UserSearchResponse, SessionListResponse, PATListResponse } from '@jot/shared';
+import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, NoteItem, CreateNoteRequest, UpdateNoteRequest, ConvertNoteTypeRequest, CreateNoteItemRequest, PatchNoteItemRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, FileImportType, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, SetUserPasswordRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest, NoteImage, LabelCountsResponse, NoteListResponse, NoteShareListResponse, LabelListResponse, UserSearchResponse, SessionListResponse, PATListResponse, NoteRevision, NoteRevisionSummary, NoteRevisionListResponse, RestoreNoteRevisionRequest } from '@jot/shared';
 import { removeUser } from '@/utils/auth';
 import { authPathWithRedirect, currentRedirectTarget } from '@/utils/authRedirect';
 import { recordFailedRequest } from '@/utils/diagnostics';
@@ -106,6 +106,15 @@ export const notes = {
 
   convert: (id: string, data: ConvertNoteTypeRequest): Promise<Note> =>
     api.post(`/notes/${id}/convert`, data).then(res => res.data),
+
+  listRevisions: (id: string): Promise<NoteRevisionSummary[]> =>
+    api.get<NoteRevisionListResponse>(`/notes/${id}/revisions`).then(res => res.data.revisions),
+
+  getRevision: (id: string, revisionId: string): Promise<NoteRevision> =>
+    api.get<NoteRevision>(`/notes/${id}/revisions/${revisionId}`).then(res => res.data),
+
+  restoreRevision: (id: string, revisionId: string, data: RestoreNoteRevisionRequest): Promise<Note> =>
+    api.post<Note>(`/notes/${id}/revisions/${revisionId}/restore`, data).then(res => res.data),
 
   share: (id: string, data: ShareNoteRequest): Promise<void> =>
     api.post(`/notes/${id}/share`, data).then(() => undefined),

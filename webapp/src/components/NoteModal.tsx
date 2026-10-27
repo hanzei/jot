@@ -1,9 +1,9 @@
 import { useState, useEffect, useEffectEvent, useMemo, useRef, useCallback, useId, type ReactElement, type ReactNode } from 'react';
-import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Users, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, Pin, EllipsisVertical, Square, Undo2 } from 'lucide-react';
+import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Users, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, Pin, EllipsisVertical, Square, Undo2, History } from 'lucide-react';
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator, type NoteRevisionSummary } from '@jot/shared';
 import { notes } from '@/utils/api';
 import { renderMarkdown, inlineMarkdownToText } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -13,6 +13,7 @@ import SortableItem from '@/components/SortableItem';
 import InlineMarkdown from '@/components/InlineMarkdown';
 import MarkdownToolbar, { type MarkdownToolbarAction } from '@/components/MarkdownToolbar';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import NoteHistoryDialog from '@/components/NoteHistoryDialog';
 import { useToast } from '@/hooks/useToast';
 import { useNoteImages } from '@/hooks/useNoteImages';
 import { useCompletedItems } from '@/hooks/useCompletedItems';
@@ -173,6 +174,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showConvertConfirm, setShowConvertConfirm] = useState(false);
   const [showPermanentDeleteConfirm, setShowPermanentDeleteConfirm] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   // A note in the bin opens view-only: every editing affordance is disabled
   // and the overflow menu offers only Restore / Delete forever, matching the
   // mobile app's trashed-note editor.
@@ -1512,6 +1514,38 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     }
   };
 
+  // History panel's Restore. Local edits are flushed first, so they are what
+  // the restore replaces and land in history themselves, and the version is
+  // refetched for the same reason as in performConvert. Rejects (with the API
+  // error, for a 409) to keep the panel open; the panel reports it.
+  const handleRestoreRevision = async (revision: NoteRevisionSummary) => {
+    if (!note) return;
+    if (!beginExclusiveSave()) throw new Error('A save is already in progress');
+    setLoading(true);
+    try {
+      await persistExistingNote();
+      const baseVersion = (await notes.getById(note.id)).version;
+      const restored = await notes.restoreRevision(note.id, revision.id, { base_version: baseVersion });
+      cancelPendingSave();
+      adoptNote(restored);
+      setShowHistory(false);
+      showToast(t('history.restored'), 'success');
+      onRefresh?.();
+    } catch (error) {
+      console.error('Failed to restore note revision:', error);
+      throw error;
+    } finally {
+      endExclusiveSave();
+      setLoading(false);
+    }
+  };
+
+  // The editor's current content, compared against a revision in the panel.
+  const historyCurrent = useMemo(
+    () => ({ noteType, title, content, items }),
+    [noteType, title, content, items],
+  );
+
   const handleDuplicate = async () => {
     if (!note || !onDuplicate || loading || isSaving() || isReadOnly) return;
 
@@ -1718,7 +1752,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     if (e.defaultPrevented) return;
 
     if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
-    if (isReadOnly || isEditableElementFocused()) return;
+    if (isReadOnly || showHistory || isEditableElementFocused()) return;
 
     const key = e.key === 'Backspace' ? 'backspace' : e.key === 'Delete' ? 'delete' : e.key.toLowerCase();
 
@@ -2626,6 +2660,16 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                               </>
                             ) : (
                               <>
+                            <MenuItem>
+                              <button
+                                onClick={() => setShowHistory(true)}
+                                className={OVERFLOW_ITEM}
+                                data-testid="note-history"
+                              >
+                                <History className="h-4 w-4 mr-2" />
+                                {t('history.menuItem')}
+                              </button>
+                            </MenuItem>
                             {onConvert && (
                               <MenuItem>
                                 <button
@@ -2764,6 +2808,16 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
         onConfirm={confirmPermanentlyDelete}
         onCancel={() => setShowPermanentDeleteConfirm(false)}
       />
+
+      {note && !isReadOnly && showHistory && (
+        <NoteHistoryDialog
+          noteId={note.id}
+          current={historyCurrent}
+          usersById={usersById}
+          onClose={() => setShowHistory(false)}
+          onRestore={handleRestoreRevision}
+        />
+      )}
 
       <ConfirmDialog
         open={showConvertConfirm}
