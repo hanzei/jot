@@ -115,15 +115,18 @@ func TestMarkdownTags(t *testing.T) {
 func TestUniqueMarkdownSlug(t *testing.T) {
 	t.Parallel()
 
-	used := make(map[string]bool)
-	assert.Equal(t, "notes", uniqueMarkdownSlug("notes", used))
-	assert.Equal(t, "notes-2", uniqueMarkdownSlug("notes", used))
-	assert.Equal(t, "notes-3", uniqueMarkdownSlug("notes", used))
+	slugs := newMarkdownSlugs()
+	assert.Equal(t, "notes", slugs.unique("notes"))
+	assert.Equal(t, "notes-2", slugs.unique("notes"))
+	assert.Equal(t, "notes-3", slugs.unique("notes"))
 	// A slug that happens to look like a suffixed one still gets its own name.
-	assert.Equal(t, "notes-2-2", uniqueMarkdownSlug("notes-2", used))
-	assert.Equal(t, "con-note", uniqueMarkdownSlug("con", used))
-	assert.Equal(t, "lpt1-note", uniqueMarkdownSlug("lpt1", used))
-	assert.Equal(t, "con-note-2", uniqueMarkdownSlug("con", used))
+	assert.Equal(t, "notes-2-2", slugs.unique("notes-2"))
+	assert.Equal(t, "con-note", slugs.unique("con"))
+	assert.Equal(t, "lpt1-note", slugs.unique("lpt1"))
+	assert.Equal(t, "con-note-2", slugs.unique("con"))
+	// A name taken in between is skipped when probing resumes.
+	assert.Equal(t, "notes-4", slugs.unique("notes-4"))
+	assert.Equal(t, "notes-5", slugs.unique("notes"))
 }
 
 func TestMarkdownNoteFile(t *testing.T) {

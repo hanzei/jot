@@ -32,9 +32,13 @@ function bundleName(format: ExportFormat, createdAt: Date): string {
   return `${prefix}-${createdAt.toISOString().replace(/[:.]/g, '-')}.zip`;
 }
 
-/** The creation time encoded by {@link bundleName}, or null for any other name. */
+/**
+ * The creation time encoded by {@link bundleName}, or null for any other name.
+ * Only the timestamp suffix is read, so a bundle of any format is kept for its
+ * retention window.
+ */
 function bundleCreatedAt(name: string): number | null {
-  const m = /^jot-(?:markdown-)?export-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z\.zip$/.exec(name);
+  const m = /^jot-[a-z-]*export-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z\.zip$/.exec(name);
   if (!m) return null;
   const time = Date.parse(`${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z`);
   return Number.isNaN(time) ? null : time;

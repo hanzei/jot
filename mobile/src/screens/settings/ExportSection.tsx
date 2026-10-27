@@ -8,9 +8,10 @@ import { downloadExportBundle } from '../../api/export';
 import { isOnlineWriteAllowed, isServerReachable, subscribeToServerReachability } from '../../api/serverReachability';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { deleteFileIfExists } from '../../utils/fs';
+import FormatRadioGroup, { type FormatOption } from './FormatRadioGroup';
 import { styles } from './styles';
 
-const FORMAT_OPTIONS: { value: ExportFormat; labelKey: string }[] = [
+const FORMAT_OPTIONS: FormatOption<ExportFormat>[] = [
   { value: 'jot', labelKey: 'export.formatJot' },
   { value: 'markdown', labelKey: 'export.formatMarkdown' },
 ];
@@ -86,31 +87,14 @@ export default function ExportSection() {
       <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>
         {t('export.description')}
       </Text>
-      <Text style={[styles.importFormatLabel, { color: colors.text }]}>{t('export.formatLabel')}</Text>
-      <View style={styles.importFormatRow} accessibilityRole="radiogroup">
-        {FORMAT_OPTIONS.map(option => {
-          const isSelected = format === option.value;
-          return (
-            <TouchableOpacity
-              key={option.value}
-              style={[
-                styles.importFormatOption,
-                { borderColor: isSelected ? colors.primary : colors.border },
-                isSelected && { backgroundColor: colors.primary },
-              ]}
-              onPress={() => setFormat(option.value)}
-              disabled={exporting}
-              testID={`settings-export-format-${option.value}`}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: isSelected, disabled: exporting }}
-            >
-              <Text style={[styles.importFormatOptionText, { color: isSelected ? '#fff' : colors.text }]}>
-                {t(option.labelKey)}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      <FormatRadioGroup
+        labelKey="export.formatLabel"
+        options={FORMAT_OPTIONS}
+        value={format}
+        onChange={setFormat}
+        disabled={exporting}
+        testIDPrefix="settings-export-format"
+      />
       {!online && (
         <Text style={[styles.sectionDescription, { color: colors.textMuted }]} testID="settings-export-offline">
           {t('export.offline')}

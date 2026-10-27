@@ -104,9 +104,19 @@ func (h *NotesHandler) ExportNotes(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusUnauthorized, nil, authErr
 	}
 
-	format := r.URL.Query().Get("format")
-	switch format {
-	case "", exportFormatJot, exportFormatMarkdown:
+	// notes is fetched after the format is validated; the write closures
+	// read it once the response starts.
+	var notes []*models.Note
+	now := models.Now()
+	var prefix string
+	var write func(context.Context, io.Writer) error
+	switch format := r.URL.Query().Get("format"); format {
+	case "", exportFormatJot:
+		prefix = "jot-export"
+		write = func(ctx context.Context, w io.Writer) error { return h.writeExportBundle(ctx, w, notes, now) }
+	case exportFormatMarkdown:
+		prefix = "jot-markdown-export"
+		write = func(ctx context.Context, w io.Writer) error { return h.writeMarkdownBundle(ctx, w, notes, now) }
 	default:
 		return http.StatusBadRequest, nil, fmt.Errorf("unknown export format %q: use %q or %q", format, exportFormatJot, exportFormatMarkdown)
 	}
@@ -116,15 +126,13 @@ func (h *NotesHandler) ExportNotes(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusInternalServerError, nil, fmt.Errorf("export notes: %w", err)
 	}
 
-	now := models.Now()
+	h.streamExport(w, r, prefix+"-"+now.Format("2006-01-02T15-04-05Z")+".zip", write)
+	return 0, nil, nil
+}
 
-	if format == exportFormatMarkdown {
-		h.streamExport(w, r, "jot-markdown-export-"+now.Format("2006-01-02T15-04-05Z")+".zip", func(ctx context.Context, w io.Writer) error {
-			return h.writeMarkdownBundle(ctx, w, notes, now)
-		})
-		return 0, nil, nil
-	}
-
+// jotExportNotes converts notes to their form in the Jot bundle manifest,
+// without images, which writeExportBundle fills in.
+func jotExportNotes(ctx context.Context, notes []*models.Note) []jotExportNote {
 	exportNotes := make([]jotExportNote, 0, len(notes))
 	for _, n := range notes {
 		exportNote := jotExportNote{
@@ -162,18 +170,14 @@ func (h *NotesHandler) ExportNotes(w http.ResponseWriter, r *http.Request) (int,
 		case models.NoteTypeText:
 			exportNote.Content = n.Content
 		default:
-			logutil.FromContext(r.Context()).Warnf("ExportNotes: unknown note type %q for note %s", n.NoteType, n.ID)
+			logutil.FromContext(ctx).Warnf("ExportNotes: unknown note type %q for note %s", n.NoteType, n.ID)
 		}
 		for _, l := range n.Labels {
 			exportNote.Labels = append(exportNote.Labels, l.Name)
 		}
 		exportNotes = append(exportNotes, exportNote)
 	}
-
-	h.streamExport(w, r, "jot-export-"+now.Format("2006-01-02T15-04-05Z")+".zip", func(ctx context.Context, w io.Writer) error {
-		return h.writeExportBundle(ctx, w, notes, exportNotes, now)
-	})
-	return 0, nil, nil
+	return exportNotes
 }
 
 // streamExport sends the zip that write produces as an attachment named
@@ -202,10 +206,9 @@ func (h *NotesHandler) streamExport(w http.ResponseWriter, r *http.Request, file
 
 // writeExportBundle writes the export zip to w: each distinct image once,
 // then the manifest, whose notes reference the images by entry name.
-// exportNotes[i] is the export form of notes[i]; its Images are filled in
-// here.
-func (h *NotesHandler) writeExportBundle(ctx context.Context, w io.Writer, notes []*models.Note, exportNotes []jotExportNote, now time.Time) error {
+func (h *NotesHandler) writeExportBundle(ctx context.Context, w io.Writer, notes []*models.Note, now time.Time) error {
 	zw := zip.NewWriter(w)
+	exportNotes := jotExportNotes(ctx, notes)
 
 	images, err := h.writeBundleImages(ctx, zw, notes, now)
 	if err != nil {

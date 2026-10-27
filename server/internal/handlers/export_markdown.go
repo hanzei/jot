@@ -45,9 +45,9 @@ func (h *NotesHandler) writeMarkdownBundle(ctx context.Context, w io.Writer, not
 		return fmt.Errorf("write images: %w", err)
 	}
 
-	used := make(map[string]bool)
+	slugs := newMarkdownSlugs()
 	for i, n := range notes {
-		name := markdownNoteDir + uniqueMarkdownSlug(markdownNoteSlug(n), used) + ".md"
+		name := markdownNoteDir + slugs.unique(markdownNoteSlug(n)) + ".md"
 		fw, err := zw.CreateHeader(&zip.FileHeader{Name: name, Method: zip.Deflate, Modified: n.UpdatedAt})
 		if err != nil {
 			return fmt.Errorf("create note entry: %w", err)
@@ -100,7 +100,7 @@ func markdownNoteFile(n *models.Note, images []jotExportImage) string {
 		b.WriteString("\n")
 		for _, img := range images {
 			// The note sits one folder down from the shared image folder.
-			b.WriteString("![" + markdownEscapeAlt(img.Filename) + "](../" + img.File + ")\n")
+			b.WriteString("![" + markdownAltEscaper.Replace(img.Filename) + "](../" + img.File + ")\n")
 		}
 	}
 	return b.String()
@@ -117,29 +117,35 @@ func listToMarkdown(title string, items []models.NoteItem) string {
 		lines = append(lines, "# "+trimmed, "")
 	}
 
-	byPosition := func(a, b models.NoteItem) int { return cmp.Compare(a.Position, b.Position) }
-	var topLevel []models.NoteItem
-	children := make(map[string][]models.NoteItem)
+	// A child whose parent is not a top-level item here is dropped, as in
+	// listToText.
+	topLevel, children := groupListItems(items)
+	for _, parent := range topLevel {
+		lines = append(lines, markdownItemLine(parent, 0))
+		for _, child := range children[parent.ID] {
+			lines = append(lines, markdownItemLine(child, 1))
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// groupListItems splits items into the top-level ones and the children of
+// each (by parent ID), every group in position order.
+func groupListItems(items []models.NoteItem) (topLevel []models.NoteItem, children map[string][]models.NoteItem) {
+	children = make(map[string][]models.NoteItem)
 	for _, item := range items {
-		if item.ParentID == nil || *item.ParentID == "" {
+		if item.ParentID == nil {
 			topLevel = append(topLevel, item)
 		} else {
 			children[*item.ParentID] = append(children[*item.ParentID], item)
 		}
 	}
+	byPosition := func(a, b models.NoteItem) int { return cmp.Compare(a.Position, b.Position) }
 	slices.SortStableFunc(topLevel, byPosition)
-
-	// A child whose parent is not a top-level item here is dropped, as in
-	// listToText.
-	for _, parent := range topLevel {
-		lines = append(lines, markdownItemLine(parent, 0))
-		kids := children[parent.ID]
+	for _, kids := range children {
 		slices.SortStableFunc(kids, byPosition)
-		for _, child := range kids {
-			lines = append(lines, markdownItemLine(child, 1))
-		}
 	}
-	return strings.Join(lines, "\n")
+	return topLevel, children
 }
 
 func markdownItemLine(item models.NoteItem, depth int) string {
@@ -169,11 +175,20 @@ func markdownTags(labels []models.Label) []string {
 // them with single hyphens, so whitespace or punctuation in a label does not
 // cut the tag short or make Obsidian ignore it.
 func markdownTag(name string) string {
+	return hyphenateRuns(strings.TrimLeft(name, "#"), func(r rune) bool {
+		return unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsMark(r) || unicode.Is(unicode.So, r) ||
+			r == '_' || r == '-' || r == '/'
+	})
+}
+
+// hyphenateRuns keeps the runes of s that keep accepts and replaces each run
+// of the others between them with a single hyphen; leading and trailing runs
+// are dropped.
+func hyphenateRuns(s string, keep func(rune) bool) string {
 	var b strings.Builder
 	pendingHyphen := false
-	for _, r := range strings.TrimLeft(name, "#") {
-		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && !unicode.IsMark(r) && !unicode.Is(unicode.So, r) &&
-			r != '_' && r != '-' && r != '/' {
+	for _, r := range s {
+		if !keep(r) {
 			pendingHyphen = b.Len() > 0
 			continue
 		}
@@ -196,11 +211,6 @@ func yamlString(s string) string {
 // markdownAltEscaper escapes what would end an image's alt text early.
 var markdownAltEscaper = strings.NewReplacer(`\`, `\\`, `[`, `\[`, `]`, `\]`, "\n", " ", "\r", " ")
 
-// markdownEscapeAlt escapes what would end an image's alt text early.
-func markdownEscapeAlt(s string) string {
-	return markdownAltEscaper.Replace(s)
-}
-
 // markdownNoteSlug is the filename a note is exported under, before
 // collisions are resolved. A list note is named after its title, a text note
 // (which has no title) after its first non-blank line with any heading
@@ -209,14 +219,8 @@ func markdownNoteSlug(n *models.Note) string {
 	var candidates []string
 	if n.NoteType == models.NoteTypeList {
 		candidates = append(candidates, n.Title)
-		var first *models.NoteItem
-		for i, item := range n.Items {
-			if (item.ParentID == nil || *item.ParentID == "") && (first == nil || item.Position < first.Position) {
-				first = &n.Items[i]
-			}
-		}
-		if first != nil {
-			candidates = append(candidates, first.Text)
+		if topLevel, _ := groupListItems(n.Items); len(topLevel) > 0 {
+			candidates = append(candidates, topLevel[0].Text)
 		}
 	} else {
 		for line := range strings.Lines(n.Content) {
@@ -235,34 +239,13 @@ func markdownNoteSlug(n *models.Note) string {
 }
 
 // markdownSlug lower-cases s and keeps only its letters and digits, joining
-// the runs between them with single hyphens. That leaves nothing Windows,
-// macOS or Linux rejects in a filename (no `:`, `?`, `/`, trailing dot or
-// space); Windows' reserved device names are handled by uniqueMarkdownSlug.
+// the runs between them with single hyphens, capped at markdownSlugMaxRunes.
+// That leaves nothing Windows, macOS or Linux rejects in a filename (no `:`,
+// `?`, `/`, trailing dot or space); Windows' reserved device names are
+// handled by markdownSlugs.
 func markdownSlug(s string) string {
-	var b strings.Builder
-	runes := 0
-	pendingHyphen := false
-	for _, r := range strings.ToLower(s) {
-		if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
-			pendingHyphen = b.Len() > 0
-			continue
-		}
-		need := 1
-		if pendingHyphen {
-			need = 2
-		}
-		if runes+need > markdownSlugMaxRunes {
-			break
-		}
-		if pendingHyphen {
-			b.WriteByte('-')
-			runes++
-			pendingHyphen = false
-		}
-		b.WriteRune(r)
-		runes++
-	}
-	return b.String()
+	slug := hyphenateRuns(strings.ToLower(s), func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) })
+	return strings.TrimRight(truncateRunes(slug, markdownSlugMaxRunes), "-")
 }
 
 // windowsReservedNames are device names Windows refuses as a file's base
@@ -275,18 +258,32 @@ var windowsReservedNames = map[string]bool{
 	"lpt5": true, "lpt6": true, "lpt7": true, "lpt8": true, "lpt9": true,
 }
 
-// uniqueMarkdownSlug returns slug, or slug-2, slug-3, ... if an earlier note
-// already took it, and records the result in used. A Windows reserved name
-// gets a "-note" suffix first. Slugs are lower case, so this also keeps names
-// apart on case-insensitive filesystems.
-func uniqueMarkdownSlug(slug string, used map[string]bool) string {
+// markdownSlugs hands out the filenames of one export, keeping them unique.
+type markdownSlugs struct {
+	used map[string]bool
+	// next is the suffix to try first for a base slug, so thousands of
+	// "untitled" notes do not each re-probe -2, -3, ... from the start.
+	next map[string]int
+}
+
+func newMarkdownSlugs() *markdownSlugs {
+	return &markdownSlugs{used: make(map[string]bool), next: make(map[string]int)}
+}
+
+// unique returns slug, or slug-2, slug-3, ... if an earlier note already
+// took it. A Windows reserved name gets a "-note" suffix first. Slugs are
+// lower case, so this also keeps names apart on case-insensitive filesystems.
+func (s *markdownSlugs) unique(slug string) string {
 	if windowsReservedNames[slug] {
 		slug += "-note"
 	}
 	candidate := slug
-	for n := 2; used[candidate]; n++ {
+	n := max(s.next[slug], 2)
+	for s.used[candidate] {
 		candidate = slug + "-" + strconv.Itoa(n)
+		n++
 	}
-	used[candidate] = true
+	s.next[slug] = n
+	s.used[candidate] = true
 	return candidate
 }
