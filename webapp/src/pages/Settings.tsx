@@ -13,7 +13,7 @@ import AboutModal from '@/components/AboutModal';
 import NewPATModal from '@/components/NewPATModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
-import { isPasswordTooShort, type ActiveSession, type PersonalAccessToken, type SSOConfig } from '@jot/shared';
+import { isPasswordTooShort, type ActiveSession, type ExportFormat, type PersonalAccessToken, type SSOConfig } from '@jot/shared';
 import { IdentitySecurityColumn, PreferencesInfoColumn } from './settings/SettingsSections';
 import { passwordFormKeys } from './settings/passwordFormKeys';
 import SsoSettingsSection from './settings/SsoSettingsSection';
@@ -46,6 +46,7 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
   const [passwordError, setPasswordError] = useState('');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('jot');
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
   const [hasProfileIcon, setHasProfileIcon] = useState(currentUser?.has_profile_icon ?? false);
   const [ssoLinked, setSsoLinked] = useState(currentUser?.has_sso_linked ?? false);
@@ -350,7 +351,7 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      const { blob, filename } = await notesApi.exportNotes();
+      const { blob, filename } = await notesApi.exportNotes(exportFormat);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -458,6 +459,8 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
             onOpenImportModal={() => setIsImportModalOpen(true)}
             onOpenAboutModal={() => setIsAboutModalOpen(true)}
             onExport={handleExport}
+            exportFormat={exportFormat}
+            onExportFormatChange={setExportFormat}
             isExporting={isExporting}
           />
         </div>
