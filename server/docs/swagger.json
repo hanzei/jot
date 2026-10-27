@@ -1394,19 +1394,38 @@
         },
         "/notes/export": {
             "get": {
-                "description": "A zip file holding notes.json (the notes, format jot_export version 2) and an images/ folder with every image attached to the exported notes. Each note carries its created_at and updated_at, which import restores. Covers the notes the user owns, including images collaborators added to them.",
+                "description": "format=jot (the default) is a Jot backup bundle: a zip file holding notes.json (the notes, format jot_export version 2) and an images/ folder with every image attached to the exported notes. Each note carries its created_at and updated_at, which import restores.\nformat=markdown is a plain-Markdown folder that opens as an Obsidian vault: one notes/\u003cslug\u003e.md per note, with labels, color, pinned, archived, note type and timestamps in YAML front-matter, list notes written as task lists, and images in a shared images/ folder linked as ../images/\u003csha256\u003e.\u003cext\u003e. Jot cannot import it back.\nEither format covers the notes the user owns, including images collaborators added to them.",
                 "produces": [
                     "application/zip"
                 ],
                 "tags": [
                     "notes"
                 ],
-                "summary": "Export notes as a Jot backup bundle",
+                "summary": "Export notes as a zip",
+                "parameters": [
+                    {
+                        "enum": [
+                            "jot",
+                            "markdown"
+                        ],
+                        "type": "string",
+                        "default": "jot",
+                        "description": "Export format",
+                        "name": "format",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
-                        "description": "Jot export bundle (zip) attachment",
+                        "description": "Export (zip) attachment",
                         "schema": {
                             "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "unknown format",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {

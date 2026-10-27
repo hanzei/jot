@@ -1,0 +1,86 @@
+[
+  {
+    "id": "empty",
+    "description": "No title and no items render as nothing",
+    "title": "",
+    "items": [],
+    "markdown": ""
+  },
+  {
+    "id": "title-only",
+    "description": "A title becomes an h1 line followed by a blank line",
+    "title": "Groceries",
+    "items": [],
+    "markdown": "# Groceries\n"
+  },
+  {
+    "id": "title-trimmed",
+    "description": "Whitespace around the title is dropped",
+    "title": "  Groceries  ",
+    "items": [],
+    "markdown": "# Groceries\n"
+  },
+  {
+    "id": "blank-title",
+    "description": "A whitespace-only title writes no heading",
+    "title": "   ",
+    "items": [
+      { "id": "a", "text": "Milk", "completed": false, "position": 0, "parent_id": null }
+    ],
+    "markdown": "- [ ] Milk"
+  },
+  {
+    "id": "checked-and-unchecked",
+    "description": "Completed items are [x], open ones [ ]",
+    "title": "Groceries",
+    "items": [
+      { "id": "a", "text": "Milk", "completed": false, "position": 0, "parent_id": null },
+      { "id": "b", "text": "Eggs", "completed": true, "position": 1, "parent_id": null }
+    ],
+    "markdown": "# Groceries\n\n- [ ] Milk\n- [x] Eggs"
+  },
+  {
+    "id": "position-order",
+    "description": "Items are written in position order, not input order",
+    "title": "",
+    "items": [
+      { "id": "c", "text": "Third", "completed": false, "position": 2, "parent_id": null },
+      { "id": "a", "text": "First", "completed": false, "position": 0, "parent_id": null },
+      { "id": "b", "text": "Second", "completed": false, "position": 1, "parent_id": null }
+    ],
+    "markdown": "- [ ] First\n- [ ] Second\n- [ ] Third"
+  },
+  {
+    "id": "nested-children",
+    "description": "Children follow their parent, indented one level and in position order",
+    "title": "Trip",
+    "items": [
+      { "id": "p1", "text": "Pack", "completed": false, "position": 0, "parent_id": null },
+      { "id": "p2", "text": "Book", "completed": false, "position": 1, "parent_id": null },
+      { "id": "c2", "text": "Socks", "completed": true, "position": 1, "parent_id": "p1" },
+      { "id": "c1", "text": "Shirts", "completed": false, "position": 0, "parent_id": "p1" },
+      { "id": "c3", "text": "Hotel", "completed": false, "position": 0, "parent_id": "p2" }
+    ],
+    "markdown": "# Trip\n\n- [ ] Pack\n  - [ ] Shirts\n  - [x] Socks\n- [ ] Book\n  - [ ] Hotel"
+  },
+  {
+    "id": "orphan-child-dropped",
+    "description": "A child whose parent is not among the top-level items is left out",
+    "title": "",
+    "items": [
+      { "id": "a", "text": "Kept", "completed": false, "position": 0, "parent_id": null },
+      { "id": "b", "text": "Orphan", "completed": false, "position": 0, "parent_id": "missing" }
+    ],
+    "markdown": "- [ ] Kept"
+  },
+  {
+    "id": "inline-markdown-verbatim",
+    "description": "Item text is written verbatim, inline and block syntax included",
+    "title": "Notes",
+    "items": [
+      { "id": "a", "text": "**Buy** [milk](https://example.com)", "completed": false, "position": 0, "parent_id": null },
+      { "id": "b", "text": "# not a heading", "completed": false, "position": 1, "parent_id": null }
+    ],
+    "markdown": "# Notes\n\n- [ ] **Buy** [milk](https://example.com)\n- [ ] # not a heading"
+  }
+]

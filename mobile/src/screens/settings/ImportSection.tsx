@@ -16,6 +16,7 @@ import {
 } from '../../hooks/queryKeys';
 import { displayMessage, extractApiError } from '../../i18n/utils';
 import type { FileImportType, ImportResponse } from '@jot/shared';
+import FormatRadioGroup, { type FormatOption } from './FormatRadioGroup';
 import { styles } from './styles';
 
 const ZIP_MIME_TYPES = ['application/zip', 'application/x-zip-compressed'];
@@ -27,7 +28,7 @@ const ACCEPTED_MIME_TYPES: Record<FileImportType, string[]> = {
   jot_json: ZIP_MIME_TYPES,
 };
 
-const FORMAT_OPTIONS: { value: FileImportType; labelKey: string }[] = [
+const FORMAT_OPTIONS: FormatOption<FileImportType>[] = [
   { value: 'google_keep', labelKey: 'import.formatGoogleKeep' },
   { value: 'jot_json', labelKey: 'import.formatJot' },
 ];
@@ -118,31 +119,14 @@ export default function ImportSection() {
   return (
     <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('settings.importSection')}</Text>
-      <Text style={[styles.importFormatLabel, { color: colors.text }]}>{t('import.formatLabel')}</Text>
-      <View style={styles.importFormatRow} accessibilityRole="radiogroup">
-        {FORMAT_OPTIONS.map(option => {
-          const isSelected = importType === option.value;
-          return (
-            <TouchableOpacity
-              key={option.value}
-              style={[
-                styles.importFormatOption,
-                { borderColor: isSelected ? colors.primary : colors.border },
-                isSelected && { backgroundColor: colors.primary },
-              ]}
-              onPress={() => handleFormatChange(option.value)}
-              disabled={importing}
-              testID={`settings-import-format-${option.value}`}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: isSelected, disabled: importing }}
-            >
-              <Text style={[styles.importFormatOptionText, { color: isSelected ? '#fff' : colors.text }]}>
-                {t(option.labelKey)}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      <FormatRadioGroup
+        labelKey="import.formatLabel"
+        options={FORMAT_OPTIONS}
+        value={importType}
+        onChange={handleFormatChange}
+        disabled={importing}
+        testIDPrefix="settings-import-format"
+      />
       <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>
         {t(importType === 'jot_json' ? 'import.descriptionJot' : 'import.description')}
       </Text>

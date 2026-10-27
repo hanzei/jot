@@ -26,7 +26,8 @@ compiled web app, while SQLite keeps the default deployment small and portable.
   note are kept for 90 days; images are not part of the history.
 - **Import and export**: Import from a Jot export, Google Keep, or usememos,
   keeping each note's creation and last-modified dates, and export your Jot
-  notes, with their images, as a `.zip` bundle.
+  notes, with their images, as a `.zip` bundle — either a Jot backup that
+  imports back, or plain Markdown files that open as an Obsidian vault.
 
 ### Collaboration
 

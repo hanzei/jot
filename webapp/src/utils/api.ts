@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, NoteItem, CreateNoteRequest, UpdateNoteRequest, ConvertNoteTypeRequest, CreateNoteItemRequest, PatchNoteItemRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, FileImportType, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, SetUserPasswordRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest, NoteImage, LabelCountsResponse, NoteListResponse, NoteShareListResponse, LabelListResponse, UserSearchResponse, SessionListResponse, PATListResponse, NoteRevision, NoteRevisionSummary, NoteRevisionListResponse, RestoreNoteRevisionRequest } from '@jot/shared';
+import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, NoteItem, CreateNoteRequest, UpdateNoteRequest, ConvertNoteTypeRequest, CreateNoteItemRequest, PatchNoteItemRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, FileImportType, ExportFormat, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, SetUserPasswordRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest, NoteImage, LabelCountsResponse, NoteListResponse, NoteShareListResponse, LabelListResponse, UserSearchResponse, SessionListResponse, PATListResponse, NoteRevision, NoteRevisionSummary, NoteRevisionListResponse, RestoreNoteRevisionRequest } from '@jot/shared';
 import { removeUser } from '@/utils/auth';
 import { authPathWithRedirect, currentRedirectTarget } from '@/utils/authRedirect';
 import { recordFailedRequest } from '@/utils/diagnostics';
@@ -144,11 +144,11 @@ export const notes = {
     return api.post('/notes/import', formData).then(res => res.data);
   },
 
-  exportNotes: (): Promise<{ blob: Blob; filename: string }> =>
-    api.get('/notes/export', { responseType: 'blob' }).then(res => {
+  exportNotes: (format: ExportFormat): Promise<{ blob: Blob; filename: string }> =>
+    api.get('/notes/export', { params: { format }, responseType: 'blob' }).then(res => {
       const disposition = res.headers['content-disposition'] as string | undefined;
       const match = disposition?.match(/filename="?([^";\r\n]+)"?/);
-      const filename = match?.[1] ?? 'jot-export.zip';
+      const filename = match?.[1] ?? (format === 'markdown' ? 'jot-markdown-export.zip' : 'jot-export.zip');
       return { blob: res.data as Blob, filename };
     }),
 

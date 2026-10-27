@@ -512,14 +512,18 @@
     "importButton": "Importuj"
   },
   "export": {
-    "description": "Pobierz kopię zapasową Jot (.zip) wszystkich notatek wraz z obrazami, a następnie zapisz ją lub wyślij za pomocą menu udostępniania urządzenia.",
+    "description": "Pobierz wszystkie notatki wraz z obrazami jako kopię zapasową Jot lub jako pliki Markdown dla Obsidian (.zip), a następnie zapisz je lub wyślij za pomocą menu udostępniania urządzenia.",
     "exportButton": "Eksportuj notatki",
     "exporting": "Eksportowanie...",
     "offline": "Eksport wymaga połączenia z serwerem.",
     "exportFailed": "Eksport nie powiódł się. Spróbuj ponownie.",
     "shareFailed": "Nie udało się otworzyć menu udostępniania. Spróbuj ponownie.",
     "shareUnavailable": "Udostępnianie plików nie jest dostępne na tym urządzeniu.",
-    "shareTitle": "Zapisz kopię zapasową Jot"
+    "shareTitle": "Zapisz kopię zapasową Jot",
+    "shareTitleMarkdown": "Zapisz eksport Markdown",
+    "formatLabel": "Format eksportu",
+    "formatJot": "Kopia zapasowa Jot (.zip)",
+    "formatMarkdown": "Markdown, zgodny z Obsidian (.zip)"
   },
   "upgrade": {
     "settingsSectionTitle": "Połącz z serwerem",

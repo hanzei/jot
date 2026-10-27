@@ -316,7 +316,7 @@ func (s *noteStore) getRevision(ctx context.Context, noteID, revisionID string) 
 func (s *noteStore) requireAccess(ctx context.Context, noteID, userID string) error {
 	hasAccess, err := s.HasAccess(ctx, noteID, userID)
 	if err != nil {
-		return err
+		return fmt.Errorf("check note access: %w", err)
 	}
 	if !hasAccess {
 		return ErrNoteNotFound
@@ -364,7 +364,7 @@ func (s *noteStore) RestoreRevision(ctx context.Context, noteID, revisionID, use
 			})
 		}
 	}
-	return s.convertType(ctx, noteID, userID, rev.NoteType, rev.Title, rev.Content, items, baseVersion, false)
+	return s.convertType(ctx, noteID, userID, rev.NoteType, rev.Title, rev.Content, items, baseVersion, true)
 }
 
 // revisionMatchesNote reports whether restoring rev would leave note as it is.
