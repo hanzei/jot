@@ -137,6 +137,10 @@ interface NoteModalProps {
   note?: Note | null;
   onClose: () => void;
   onSave: () => void;
+  // Called when the modal creates a brand-new note without closing (picking
+  // an image on an unsaved note). The caller should pass the created note
+  // back in as `note` so the modal continues editing it.
+  onCreated?: (note: Note) => void;
   onRefresh?: () => void;
   onShare?: (note: Note) => void;
   onDelete?: (noteId: string) => void;
@@ -160,7 +164,7 @@ interface NoteModalProps {
   initialContent?: string | undefined;
 }
 
-export default function NoteModal({ note = null, onClose, onSave, onRefresh, onShare, onDelete, onDuplicate, onConvert, onRestore, onPermanentlyDelete, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent }: NoteModalProps) {
+export default function NoteModal({ note = null, onClose, onSave, onCreated, onRefresh, onShare, onDelete, onDuplicate, onConvert, onRestore, onPermanentlyDelete, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent }: NoteModalProps) {
   const { t, i18n } = useTranslation();
   const { showToast, showErrorToast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -209,7 +213,7 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
     conflict, overwriteConflict,
     setSavedBaseline, markScalarSaved, applyDraftScalars, isDirty, hasUnflushedWork, baseline,
     reportSaveFailure, autoSaveNote, scheduleAutoSave, cancelPendingSave, flushSave,
-    beginExclusiveSave, endExclusiveSave, isSaving, requestAnotherSavePass,
+    beginExclusiveSave, endExclusiveSave, isSaving, requestAnotherSavePass, isMounted,
   } = useNoteDraft({ note, onRefresh, showError });
 
   useEffect(() => {
@@ -218,9 +222,64 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
     };
   }, []);
 
+  const buildCreateRequest = (): CreateNoteRequest => {
+    const metadata = {
+      color,
+      labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
+      // Pin toggled before the note existed (see handlePinToggle).
+      pinned: pinned || undefined,
+    };
+    return noteType === 'list'
+      ? {
+          note_type: 'list',
+          title,
+          // The bulk create path is positional: it reconstructs parent_id by
+          // attaching each indented item to the nearest preceding top-level
+          // one. items is kept in normalized order (a parent precedes its
+          // children), so deriving indent_level from parentId is sufficient.
+          items: items.map((item, idx) => ({
+            id: item.id,
+            text: item.text,
+            position: idx,
+            completed: item.completed,
+            indent_level: indentOf(item),
+          })),
+          ...metadata,
+        }
+      : { note_type: 'text', content, ...metadata };
+  };
+
+  // Images picked on a note that doesn't exist yet. Uploads need a note id,
+  // so the note is created first — even when it is otherwise empty, which is
+  // what makes an image-only note possible — and the caller switches the
+  // modal over to it. If the modal was closed mid-create, the uploads still
+  // land; the caller just refreshes its list.
+  const canCreateForImages = !note && !!onCreated;
+  const createNoteForImages = async (): Promise<Note | null> => {
+    if (!onCreated || !beginExclusiveSave()) return null;
+    cancelPendingSave();
+    setLoading(true);
+    try {
+      const created = await notes.create(buildCreateRequest());
+      if (isMounted()) {
+        onCreated(created);
+      } else {
+        onRefresh?.();
+      }
+      return created;
+    } catch (error) {
+      reportSaveFailure('Failed to save note:', error);
+      return null;
+    } finally {
+      endExclusiveSave();
+      setLoading(false);
+    }
+  };
+
   // Note image add/remove UI (upload queue, optimistic overlay, deferred
   // removal undo, drag-to-upload). Uploads require an existing note — an id to
-  // attach to — so the hook gates all of it on `note` being set.
+  // attach to — so the hook gates all of it on `note` being set, except the
+  // toolbar picker, which has createNoteForImages create one first.
   const {
     displayedImages,
     imageUploads,
@@ -238,7 +297,13 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
     retryImageUpload,
     removeUploadTile,
     resetForNoteSwitch: resetImagesForNoteSwitch,
-  } = useNoteImages({ note, uploadMaxBytes, onRefresh, showError });
+  } = useNoteImages({
+    note,
+    uploadMaxBytes,
+    onRefresh,
+    showError,
+    ensureNote: canCreateForImages ? createNoteForImages : undefined,
+  });
 
   // Tracks the note id whose state we have adopted into local editor state, so
   // we can tell "switched to a different note" (always adopt) apart from "same
@@ -1325,31 +1390,7 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
       if (note) {
         await persistExistingNote();
       } else {
-        const createData: CreateNoteRequest = noteType === 'list'
-          ? {
-              note_type: 'list',
-              title,
-              color,
-              // The bulk create path is positional: it reconstructs parent_id by
-              // attaching each indented item to the nearest preceding top-level
-              // one. items is kept in normalized order (a parent precedes its
-              // children), so deriving indent_level from parentId is sufficient.
-              items: items.map((item, idx) => ({
-                id: item.id,
-                text: item.text,
-                position: idx,
-                completed: item.completed,
-                indent_level: indentOf(item),
-              })),
-              labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
-            }
-          : {
-              note_type: 'text',
-              content,
-              color,
-              labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
-            };
-        await notes.create(createData);
+        await notes.create(buildCreateRequest());
       }
       onSave();
     } catch (error) {
@@ -1498,7 +1539,14 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
   };
 
   const handlePinToggle = async () => {
-    if (!note || isReadOnly) return;
+    if (isReadOnly) return;
+    if (!note) {
+      // A new note does not exist yet: pin is a local toggle, like colour, and
+      // the create request carries it. On its own it is not an unsaved change
+      // (hasUnsavedChanges), so closing a blank pinned note creates nothing.
+      setPinned(!pinned);
+      return;
+    }
 
     const newPinnedState = !pinned;
     setPinned(newPinnedState);
@@ -1670,16 +1718,22 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
     if (e.defaultPrevented) return;
 
     if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
-    if (!note || isReadOnly || isEditableElementFocused()) return;
+    if (isReadOnly || isEditableElementFocused()) return;
 
     const key = e.key === 'Backspace' ? 'backspace' : e.key === 'Delete' ? 'delete' : e.key.toLowerCase();
+
+    // Pin works on a new note too, like its button (handlePinToggle); every
+    // other shortcut acts on a note that exists.
+    if (key === 'p') {
+      e.preventDefault();
+      handlePinToggle();
+      return;
+    }
+    if (!note) return;
 
     if (key === 'a') {
       e.preventDefault();
       handleArchiveToggle();
-    } else if (key === 'p') {
-      e.preventDefault();
-      handlePinToggle();
     } else if (key === 'd') {
       e.preventDefault();
       if (!onDuplicate) return;
@@ -2457,7 +2511,10 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
                   <Palette className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                 </button>
 
-                {note && (
+                {/* Add image. On an unsaved note, picking a file creates the
+                    note first (createNoteForImages), so a note can be just an
+                    image. */}
+                {(note || canCreateForImages) && (
                   <>
                     <input
                       ref={imageFileInputRef}
@@ -2471,25 +2528,33 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
                     <button
                       type="button"
                       onClick={() => !isReadOnly && imageFileInputRef.current?.click()}
-                      disabled={isReadOnly}
+                      disabled={isReadOnly || loading}
                       className={`p-1 rounded-full transition-colors ${isReadOnly ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-200 dark:hover:bg-slate-700'}`}
                       title={t('images.addImage')}
                       aria-label={t('images.addImage')}
                     >
                       <Image className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                     </button>
-                    <button
-                      onClick={handlePinToggle}
-                      disabled={isReadOnly}
-                      className={`p-1 rounded-full transition-colors ${isReadOnly ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-200 dark:hover:bg-slate-700'}`}
-                      title={pinned ? t('note.unpinNote') : t('note.pinNote')}
-                      aria-label={pinned ? t('note.unpinNote') : t('note.pinNote')}
-                    >
-                      <Pin
-                        className={pinned ? 'h-5 w-5 text-blue-500' : 'h-5 w-5 text-gray-600 dark:text-gray-300'}
-                        fill={pinned ? 'currentColor' : 'none'}
-                      />
-                    </button>
+                  </>
+                )}
+
+                {/* Pin also works on a new note: a local toggle the create
+                    request carries (handlePinToggle). */}
+                <button
+                  onClick={handlePinToggle}
+                  disabled={isReadOnly}
+                  className={`p-1 rounded-full transition-colors ${isReadOnly ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-200 dark:hover:bg-slate-700'}`}
+                  title={pinned ? t('note.unpinNote') : t('note.pinNote')}
+                  aria-label={pinned ? t('note.unpinNote') : t('note.pinNote')}
+                >
+                  <Pin
+                    className={pinned ? 'h-5 w-5 text-blue-500' : 'h-5 w-5 text-gray-600 dark:text-gray-300'}
+                    fill={pinned ? 'currentColor' : 'none'}
+                  />
+                </button>
+
+                {note && (
+                  <>
                     <button
                       onClick={handleArchiveToggle}
                       disabled={isReadOnly}

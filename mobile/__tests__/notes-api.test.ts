@@ -8,7 +8,7 @@ import {
   deleteNote,
   duplicateNote,
   convertNoteType,
-  importKeepFile,
+  importFile,
 } from '../src/api/notes';
 
 jest.mock('axios', () => {
@@ -172,17 +172,17 @@ describe('Notes API', () => {
     });
   });
 
-  describe('importKeepFile', () => {
+  describe('importFile', () => {
     it('uploads multipart form data to POST /notes/import and returns import summary', async () => {
       const appendSpy = jest.spyOn(FormData.prototype, 'append');
       const summary = { imported: 2, skipped: 1 };
       mockAxiosInstance.post.mockResolvedValueOnce({ data: summary });
 
-      const result = await importKeepFile({
+      const result = await importFile({
         uri: 'file:///tmp/export.zip',
         name: 'export.zip',
         mimeType: 'application/zip',
-      });
+      }, 'google_keep');
 
       expect(mockAxiosInstance.post).toHaveBeenCalledWith(
         '/notes/import',
@@ -201,15 +201,29 @@ describe('Notes API', () => {
       appendSpy.mockRestore();
     });
 
-    it('propagates axios errors from importKeepFile', async () => {
+    it.each(['google_keep', 'jot_json'] as const)('sends import_type=%s, which the server requires', async (importType) => {
+      const appendSpy = jest.spyOn(FormData.prototype, 'append');
+      mockAxiosInstance.post.mockResolvedValueOnce({ data: { imported: 1, skipped: 0 } });
+
+      await importFile({
+        uri: 'file:///tmp/export.zip',
+        name: 'export.zip',
+        mimeType: 'application/zip',
+      }, importType);
+
+      expect(appendSpy).toHaveBeenCalledWith('import_type', importType);
+      appendSpy.mockRestore();
+    });
+
+    it('propagates axios errors from importFile', async () => {
       const expectedError = new Error('Network Error');
       mockAxiosInstance.post.mockRejectedValueOnce(expectedError);
 
-      await expect(importKeepFile({
+      await expect(importFile({
         uri: 'file:///tmp/export.json',
         name: 'export.json',
         mimeType: 'application/json',
-      })).rejects.toBe(expectedError);
+      }, 'google_keep')).rejects.toBe(expectedError);
     });
 
     it('keeps Android content URI in FormData and posts to /notes/import', async () => {
@@ -217,11 +231,11 @@ describe('Notes API', () => {
       (Platform as { OS: string }).OS = 'android';
       mockAxiosInstance.post.mockResolvedValueOnce({ data: { imported: 1, skipped: 0 } });
 
-      await importKeepFile({
+      await importFile({
         uri: 'content://com.android.providers.downloads.documents/document/123',
         name: 'export.json',
         mimeType: 'application/json',
-      });
+      }, 'google_keep');
 
       expect(appendSpy).toHaveBeenCalledWith(
         'file',
@@ -243,10 +257,10 @@ describe('Notes API', () => {
       const appendSpy = jest.spyOn(FormData.prototype, 'append');
       mockAxiosInstance.post.mockResolvedValueOnce({ data: { imported: 1, skipped: 0 } });
 
-      await importKeepFile({
+      await importFile({
         uri: 'file:///tmp/keep-export.zip',
         name: 'keep-export.zip',
-      });
+      }, 'google_keep');
 
       expect(appendSpy).toHaveBeenCalledWith(
         'file',

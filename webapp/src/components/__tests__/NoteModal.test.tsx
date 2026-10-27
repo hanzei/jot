@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, within, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import NoteModal, { ROW_REVEAL_CLASSES } from '../NoteModal';
 import { ToastProvider } from '../Toast';
 import { VALIDATION, type Note, type NoteItem, type NoteImage } from '@jot/shared';
@@ -399,9 +399,64 @@ describe('NoteModal', () => {
       await flushMicrotasks();
     };
 
-    it('does not render the add-image button for a brand-new (unsaved) note', () => {
+    it('does not render the add-image button for an unsaved note when the caller cannot adopt a created note', () => {
       renderNoteModal(defaultProps);
       expect(screen.queryByRole('button', { name: 'Add image' })).not.toBeInTheDocument();
+    });
+
+    describe('on a brand-new (unsaved) note', () => {
+      // Stands in for Dashboard: passes the note the modal created back in.
+      const onCreated = vi.fn();
+      function NewNoteHarness() {
+        const [note, setNote] = useState<Note | null>(null);
+        return (
+          <ToastProvider>
+            <NoteModal {...defaultProps} note={note} onCreated={(created) => { onCreated(created); setNote(created); }} />
+          </ToastProvider>
+        );
+      }
+
+      it('creates an empty note and uploads the picked image to it', async () => {
+        const created = createMockNote({ id: 'new1', content: '', images: [] });
+        mockNotesCreate.mockResolvedValueOnce(created);
+        render(<NewNoteHarness />);
+
+        expect(screen.getByRole('button', { name: 'Add image' })).toBeInTheDocument();
+        const file = makeImageFile();
+        await uploadViaPicker(file);
+        await flushMicrotasks();
+
+        expect(mockNotesCreate).toHaveBeenCalledWith(expect.objectContaining({ note_type: 'text', content: '' }));
+        expect(onCreated).toHaveBeenCalledWith(created);
+        expect(mockImagesUpload).toHaveBeenCalledWith('new1', file, expect.any(Function));
+        expect(defaultProps.onSave).not.toHaveBeenCalled();
+      });
+
+      it('still uploads to the created note when the modal closes mid-create', async () => {
+        const created = createMockNote({ id: 'new2', content: '', images: [] });
+        let resolveCreate: (note: Note) => void = () => {};
+        mockNotesCreate.mockReturnValueOnce(new Promise<Note>(resolve => { resolveCreate = resolve; }));
+        const { unmount } = render(<NewNoteHarness />);
+
+        const file = makeImageFile();
+        await uploadViaPicker(file);
+        unmount();
+        await act(async () => { resolveCreate(created); });
+
+        expect(mockImagesUpload).toHaveBeenCalledWith('new2', file, expect.any(Function));
+        expect(onCreated).not.toHaveBeenCalled();
+        expect(defaultProps.onRefresh).toHaveBeenCalled();
+      });
+
+      it('does not create a note when every picked file is rejected', async () => {
+        render(<NewNoteHarness />);
+
+        await uploadViaPicker(new File(['x'], 'doc.pdf', { type: 'application/pdf' }));
+
+        expect(mockNotesCreate).not.toHaveBeenCalled();
+        expect(mockImagesUpload).not.toHaveBeenCalled();
+        expect(screen.getByText('Only images can be attached.')).toBeInTheDocument();
+      });
     });
 
     it('uploads a file selected via the toolbar picker and shows an uploading tile', async () => {
@@ -2175,6 +2230,98 @@ describe('NoteModal', () => {
       // "Add labels" button.
       expect(screen.queryByRole('button', { name: 'Add labels' })).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Labels' })).toBeInTheDocument();
+    });
+  });
+
+  describe('Pin and archive on a new note', () => {
+    it('shows pin but not archive before the note exists', () => {
+      renderNoteModal(defaultProps);
+      expect(screen.getByRole('button', { name: 'Pin note' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Archive note' })).not.toBeInTheDocument();
+    });
+
+    it('toggles pin locally without creating or updating anything', async () => {
+      renderNoteModal(defaultProps);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Pin note' }));
+      await vi.runAllTimersAsync();
+
+      expect(screen.getByRole('button', { name: 'Unpin note' })).toBeInTheDocument();
+      expect(mockNotesCreate).not.toHaveBeenCalled();
+      expect(mockNotesUpdate).not.toHaveBeenCalled();
+    });
+
+    it('toggles pin with the p shortcut, while the note-only shortcuts stay inert', async () => {
+      const onShare = vi.fn();
+      renderNoteModal({ ...defaultProps, onShare });
+      // Shortcuts are ignored while a text field has focus.
+      (document.activeElement as HTMLElement | null)?.blur();
+
+      fireEvent.keyDown(window, { key: 'p' });
+      fireEvent.keyDown(window, { key: 's' });
+      await vi.runAllTimersAsync();
+
+      expect(screen.getByRole('button', { name: 'Unpin note' })).toBeInTheDocument();
+      expect(onShare).not.toHaveBeenCalled();
+      expect(mockNotesCreate).not.toHaveBeenCalled();
+      expect(mockNotesUpdate).not.toHaveBeenCalled();
+    });
+
+    it('closing a blank note that was only pinned creates nothing', async () => {
+      const onClose = vi.fn();
+      renderNoteModal({ ...defaultProps, onClose });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Pin note' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+      await vi.runAllTimersAsync();
+
+      expect(mockNotesCreate).not.toHaveBeenCalled();
+      expect(onClose).toHaveBeenCalled();
+    });
+
+    it('creates a text note pinned once it has content', async () => {
+      renderNoteModal(defaultProps);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Pin note' }));
+      fireEvent.change(screen.getByPlaceholderText('Take a note...'), { target: { value: 'Pinned from the start' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+      await vi.runAllTimersAsync();
+
+      expect(mockNotesCreate).toHaveBeenCalledWith(expect.objectContaining({
+        note_type: 'text',
+        content: 'Pinned from the start',
+        pinned: true,
+      }));
+      expect(mockNotesUpdate).not.toHaveBeenCalled();
+    });
+
+    it('creates a list note pinned', async () => {
+      renderNoteModal(defaultProps);
+
+      fireEvent.click(screen.getByText('List'));
+      fireEvent.click(screen.getByRole('button', { name: 'Pin note' }));
+      fireEvent.change(screen.getByPlaceholderText('Note title...'), { target: { value: 'Groceries' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+      await vi.runAllTimersAsync();
+
+      expect(mockNotesCreate).toHaveBeenCalledWith(expect.objectContaining({
+        note_type: 'list',
+        title: 'Groceries',
+        pinned: true,
+      }));
+    });
+
+    it('does not send pinned when the new note is left unpinned', async () => {
+      renderNoteModal(defaultProps);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Pin note' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Unpin note' }));
+      fireEvent.change(screen.getByPlaceholderText('Take a note...'), { target: { value: 'Plain note' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+      await vi.runAllTimersAsync();
+
+      expect(mockNotesCreate).toHaveBeenCalledTimes(1);
+      expect(mockNotesCreate.mock.calls[0]![0]).not.toHaveProperty('pinned', true);
     });
   });
 

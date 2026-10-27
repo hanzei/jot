@@ -187,8 +187,7 @@
     "aboutSection": "À propos",
     "aboutButton": "À propos de Jot",
     "importSection": "Importer",
-    "importDescription": "Importez des notes depuis des exports Google Keep.",
-    "importButton": "Importer depuis Google Keep",
+    "exportSection": "Exporter",
     "noServerConfigured": "Aucun serveur configuré",
     "patsSection": "Jetons d'accès personnels",
     "patsDescription": "Jetons pour l'accès à l'API depuis des scripts et des outils externes.",
@@ -468,6 +467,14 @@
     "loadError": "Impossible de charger les modifications non synchronisées."
   },
   "import": {
+    "formatLabel": "Format",
+    "formatGoogleKeep": "Google Keep",
+    "formatJot": "Sauvegarde Jot",
+    "description": "Téléversez un fichier d'export Google Keep. Exportez vos notes depuis Google Takeout et téléversez l'archive .zip ou un fichier .json individuel.",
+    "descriptionJot": "Téléversez une sauvegarde Jot (.zip) pour restaurer vos notes et leurs images. Les exports .json des anciennes versions de Jot ne sont pas pris en charge.",
+    "fileTypesJot": "Fichiers .zip",
+    "invalidFileTypeJot": "Type de fichier non valide. Veuillez sélectionner un fichier .zip.",
+    "selectFile": "Choisir un fichier",
     "fileTypes": "Fichiers .zip ou .json",
     "invalidFileType": "Type de fichier non valide. Veuillez sélectionner un fichier .json ou .zip.",
     "importedNotes_one": "{{count}} note importée",
@@ -477,6 +484,20 @@
     "importFailed": "Échec de l'importation. Vérifiez votre fichier et réessayez.",
     "importing": "Importation...",
     "importButton": "Importer"
+  },
+  "export": {
+    "description": "Téléchargez toutes vos notes et leurs images sous forme de sauvegarde Jot ou de fichiers Markdown pour Obsidian (.zip), puis enregistrez-la ou envoyez-la via le menu de partage de votre appareil.",
+    "exportButton": "Exporter les notes",
+    "exporting": "Exportation...",
+    "offline": "L'exportation nécessite une connexion à votre serveur.",
+    "exportFailed": "L'exportation a échoué. Veuillez réessayer.",
+    "shareFailed": "Impossible d'ouvrir le menu de partage. Veuillez réessayer.",
+    "shareUnavailable": "Le partage de fichiers n'est pas disponible sur cet appareil.",
+    "shareTitle": "Enregistrer la sauvegarde Jot",
+    "shareTitleMarkdown": "Enregistrer l'export Markdown",
+    "formatLabel": "Format d'export",
+    "formatJot": "Sauvegarde Jot (.zip)",
+    "formatMarkdown": "Markdown, compatible Obsidian (.zip)"
   },
   "upgrade": {
     "settingsSectionTitle": "Se connecter à un serveur",

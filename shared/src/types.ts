@@ -285,6 +285,12 @@ export interface CreateTextNoteRequest {
   note_type: 'text';
   color?: string | undefined;
   labels?: string[] | undefined;
+  /**
+   * Create the note already pinned for the creating user (pinned is per-user
+   * state). Lets a client pin a note before it exists without a follow-up
+   * PATCH. Omitted means unpinned.
+   */
+  pinned?: boolean | undefined;
 }
 
 export interface CreateListNoteRequest {
@@ -295,6 +301,8 @@ export interface CreateListNoteRequest {
   color?: string | undefined;
   items?: CreateNoteItemRequest[];
   labels?: string[] | undefined;
+  /** Create the note already pinned; see {@link CreateTextNoteRequest.pinned}. */
+  pinned?: boolean | undefined;
 }
 
 export type CreateNoteRequest = CreateTextNoteRequest | CreateListNoteRequest;
@@ -446,6 +454,15 @@ export interface ChangePasswordRequest {
 export interface ShareNoteRequest {
   user_id: string;
 }
+
+/** The `import_type` values `POST /notes/import` accepts with an uploaded file. */
+export type FileImportType = 'google_keep' | 'jot_json';
+
+/**
+ * `GET /notes/export?format=`: `jot` is the backup bundle Jot imports back,
+ * `markdown` a folder of Markdown files that opens as an Obsidian vault.
+ */
+export type ExportFormat = 'jot' | 'markdown';
 
 export interface ImportResponse {
   imported: number;

@@ -1,9 +1,35 @@
 import fs from 'fs';
 import path from 'path';
+import zlib from 'zlib';
 import { fileURLToPath } from 'url';
 import { test, expect, uniqueUsername } from '../fixtures';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+/**
+ * The entries of a zip by name, read from its central directory (the export is
+ * streamed, so local headers carry no sizes). Handles the stored and deflated
+ * entries the server writes, which is all this needs.
+ */
+function readZip(data: Buffer): Map<string, Buffer> {
+  const eocd = data.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  expect(eocd).toBeGreaterThanOrEqual(0);
+  const count = data.readUInt16LE(eocd + 10);
+  let offset = data.readUInt32LE(eocd + 16);
+  const entries = new Map<string, Buffer>();
+  for (let i = 0; i < count; i++) {
+    const method = data.readUInt16LE(offset + 10);
+    const size = data.readUInt32LE(offset + 20);
+    const nameLength = data.readUInt16LE(offset + 28);
+    const name = data.toString('utf8', offset + 46, offset + 46 + nameLength);
+    const local = data.readUInt32LE(offset + 42);
+    const start = local + 30 + data.readUInt16LE(local + 26) + data.readUInt16LE(local + 28);
+    const raw = data.subarray(start, start + size);
+    entries.set(name, method === 8 ? zlib.inflateRawSync(raw) : raw);
+    offset += 46 + nameLength + data.readUInt16LE(offset + 30) + data.readUInt16LE(offset + 32);
+  }
+  return entries;
+}
+
 const noteImageFile = {
   name: 'test-icon.png',
   mimeType: 'image/png',
@@ -257,6 +283,28 @@ test.describe('Export & Import', () => {
     const download = await downloadPromise;
 
     expect(download.suggestedFilename()).toMatch(/^jot-export-.*\.zip$/);
+
+    void authenticatedUser;
+  });
+
+  test('exports notes as a Markdown folder', async ({ authenticatedUser, dashboardPage, settingsPage, page }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createListNote('Markdown groceries', ['Milk', 'Eggs']);
+
+    await settingsPage.goto();
+    await page.getByLabel('Export format').selectOption({ label: 'Markdown, Obsidian-compatible (.zip)' });
+
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export Notes' }).click();
+    const download = await downloadPromise;
+
+    expect(download.suggestedFilename()).toMatch(/^jot-markdown-export-.*\.zip$/);
+    const downloadPath = await download.path();
+    const entries = readZip(fs.readFileSync(downloadPath!));
+    expect([...entries.keys()]).toEqual(['notes/markdown-groceries.md']);
+    const markdown = entries.get('notes/markdown-groceries.md')!.toString('utf8');
+    expect(markdown).toMatch(/^---\n[\s\S]*jot_type: "list"\n[\s\S]*\n---\n/);
+    expect(markdown).toContain('# Markdown groceries\n\n- [ ] Milk\n- [ ] Eggs\n');
 
     void authenticatedUser;
   });

@@ -210,8 +210,7 @@
     "aboutSection": "Over",
     "aboutButton": "Over Jot",
     "importSection": "Importeren",
-    "importDescription": "Importeer notities uit Google Keep-exports.",
-    "importButton": "Importeren uit Google Keep",
+    "exportSection": "Exporteren",
     "noServerConfigured": "Geen server geconfigureerd",
     "patsSection": "Persoonlijke toegangstokens",
     "patsDescription": "Tokens voor API-toegang vanuit scripts en externe tools.",
@@ -468,6 +467,14 @@
     "loadError": "Kon niet-gesynchroniseerde wijzigingen niet laden."
   },
   "import": {
+    "formatLabel": "Formaat",
+    "formatGoogleKeep": "Google Keep",
+    "formatJot": "Jot-back-up",
+    "description": "Upload een Google Keep-exportbestand. Exporteer je notities via Google Takeout en upload het .zip-archief of een individueel .json-notitiebestand.",
+    "descriptionJot": "Upload een Jot-back-up (.zip) om je notities en hun afbeeldingen te herstellen. .json-exports van oudere Jot-versies worden niet ondersteund.",
+    "fileTypesJot": ".zip-bestanden",
+    "invalidFileTypeJot": "Ongeldig bestandstype. Selecteer een .zip-bestand.",
+    "selectFile": "Bestand kiezen",
     "fileTypes": ".zip- of .json-bestanden",
     "invalidFileType": "Ongeldig bestandstype. Selecteer een .json- of .zip-bestand.",
     "importedNotes_one": "{{count}} notitie geïmporteerd",
@@ -477,6 +484,20 @@
     "importFailed": "Importeren mislukt. Controleer je bestand en probeer het opnieuw.",
     "importing": "Importeren...",
     "importButton": "Importeren"
+  },
+  "export": {
+    "description": "Download al je notities en hun afbeeldingen als Jot-back-up of als Markdown-bestanden voor Obsidian (.zip) en bewaar of verstuur deze via het deelmenu van je apparaat.",
+    "exportButton": "Notities exporteren",
+    "exporting": "Bezig met exporteren...",
+    "offline": "Exporteren vereist een verbinding met je server.",
+    "exportFailed": "Exporteren mislukt. Probeer het opnieuw.",
+    "shareFailed": "Het deelmenu kon niet worden geopend. Probeer het opnieuw.",
+    "shareUnavailable": "Bestanden delen is niet beschikbaar op dit apparaat.",
+    "shareTitle": "Jot-back-up opslaan",
+    "shareTitleMarkdown": "Markdown-export opslaan",
+    "formatLabel": "Exportformaat",
+    "formatJot": "Jot-back-up (.zip)",
+    "formatMarkdown": "Markdown, compatibel met Obsidian (.zip)"
   },
   "upgrade": {
     "settingsSectionTitle": "Verbinden met een server",

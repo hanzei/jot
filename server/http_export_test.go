@@ -3,11 +3,12 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"maps"
 	"net/http"
-	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hanzei/jot/server/client"
 	"github.com/stretchr/testify/assert"
@@ -347,18 +348,13 @@ func TestImportJotJSONRoundTrip(t *testing.T) {
 	assert.Empty(t, result.Errors)
 
 	// Verify imported notes.
-	activeNotes, err := dst.Client.ListNotes(t.Context(), nil)
-	require.NoError(t, err)
-	archivedNotes, err := dst.Client.ListNotes(t.Context(), &client.ListNotesOptions{Archived: true})
-	require.NoError(t, err)
-
-	allNotes := slices.Concat(activeNotes, archivedNotes)
-	assert.Len(t, allNotes, 4)
+	dstNotes := allNotes(t, dst)
+	assert.Len(t, dstNotes, 4)
 
 	// Look up notes by content or title depending on type.
 	byContent := map[string]client.Note{}
 	byTitle := map[string]client.Note{}
-	for _, n := range allNotes {
+	for _, n := range dstNotes {
 		byContent[n.Content] = n
 		byTitle[n.Title] = n
 	}
@@ -398,6 +394,69 @@ func TestImportJotJSONRoundTrip(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, ln.Labels, 1)
 	assert.Equal(t, "work", ln.Labels[0].Name)
+
+	// Every note keeps the dates it had in the source account.
+	srcNotes := allNotes(t, src)
+	require.Len(t, srcNotes, 4)
+	for _, s := range srcNotes {
+		key := s.Content
+		imported, ok := byContent[key]
+		if s.NoteType == client.NoteTypeList {
+			key = s.Title
+			imported, ok = byTitle[key]
+		}
+		require.True(t, ok, "note %q missing after import", key)
+		assert.True(t, s.CreatedAt.Equal(imported.CreatedAt), "note %q: created_at %v, want %v", key, imported.CreatedAt, s.CreatedAt)
+		assert.True(t, s.UpdatedAt.Equal(imported.UpdatedAt), "note %q: updated_at %v, want %v", key, imported.UpdatedAt, s.UpdatedAt)
+	}
+}
+
+func TestImportJotJSONTimestamps(t *testing.T) {
+	t.Parallel()
+	ts := setupTestServer(t)
+
+	// A zero want means the import time.
+	cases := []struct {
+		name                     string
+		fields                   string
+		wantCreated, wantUpdated time.Time
+	}{
+		{
+			name:        "restored from the bundle",
+			fields:      `,"created_at":"2020-03-04T05:06:07.123456Z","updated_at":"2021-08-09T10:11:12+02:00"`,
+			wantCreated: time.Date(2020, 3, 4, 5, 6, 7, 123456000, time.UTC),
+			wantUpdated: time.Date(2021, 8, 9, 8, 11, 12, 0, time.UTC),
+		},
+		{name: "both missing"},
+		{
+			name:        "updated_at missing",
+			fields:      `,"created_at":"2020-01-01T00:00:00Z"`,
+			wantCreated: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+		},
+		// created_at falls back to the import time, and updated_at may not
+		// stay before it.
+		{name: "created_at missing", fields: `,"updated_at":"2020-01-01T00:00:00Z"`},
+		// Year 0, and a value whose UTC year has five digits.
+		{name: "out of range", fields: `,"created_at":"0000-06-01T00:00:00Z","updated_at":"9999-12-31T23:30:00-05:00"`},
+		{
+			name:        "in the future",
+			fields:      `,"created_at":"2020-01-01T00:00:00Z","updated_at":"2999-01-01T00:00:00Z"`,
+			wantCreated: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+		},
+	}
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			user := ts.createTestUser(t, fmt.Sprintf("jottimes%d", i), "password123", false)
+			payload := `{"format":"jot_export","version":2,"exported_at":"2026-01-01T00:00:00Z","notes":[
+				{"content":"dated","note_type":"text","position":0,"labels":[]` + tc.fields + `}
+			]}`
+			_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.zip", bytes.NewReader(jotBundle(t, payload, nil)))
+			require.NoError(t, err)
+			notes := allNotes(t, user)
+			require.Len(t, notes, 1)
+			assertNoteTimes(t, notes[0], tc.wantCreated, tc.wantUpdated)
+		})
+	}
 }
 
 func TestImportJotJSONDuplicateImport(t *testing.T) {

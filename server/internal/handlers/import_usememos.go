@@ -39,6 +39,26 @@ type usememosAPIMemo struct {
 	Content   string   `json:"content"`
 	Tags      []string `json:"tags"`
 	Pinned    bool     `json:"pinned"`
+	// CreateTime and UpdateTime (RFC 3339) are the v1 API's timestamps;
+	// CreatedTs and UpdatedTs (Unix seconds) are the older API's. They're
+	// strings rather than time.Time so that one unparsable value only loses
+	// that memo's date, not the whole page.
+	CreateTime string `json:"createTime"`
+	UpdateTime string `json:"updateTime"`
+	CreatedTs  int64  `json:"createdTs"`
+	UpdatedTs  int64  `json:"updatedTs"`
+}
+
+// memoTimestamp returns a memo's timestamp from whichever API version's
+// field carries it, or the zero time when neither does.
+func memoTimestamp(rfc3339 string, unixSeconds int64) time.Time {
+	if t, err := time.Parse(time.RFC3339Nano, rfc3339); err == nil {
+		return t
+	}
+	if unixSeconds > 0 {
+		return time.Unix(unixSeconds, 0)
+	}
+	return time.Time{}
 }
 
 // The Memos v1 API State enum (proto/api/v1/common.proto) defines:
@@ -427,14 +447,16 @@ func (h *NotesHandler) importSingleMemo(ctx context.Context, userID string, idx 
 	// pinned/archived state, or not at all, and a failing memo does not discard
 	// the others.
 	note := models.JotImportNote{
-		Title:    noteTitle,
-		Content:  noteContent,
-		NoteType: noteType,
-		Color:    models.DefaultNoteColor,
-		Pinned:   memo.Pinned,
-		Archived: state == usememosStateArchived,
-		Labels:   normalizeLabels(tags),
-		Items:    items,
+		Title:     noteTitle,
+		Content:   noteContent,
+		NoteType:  noteType,
+		Color:     models.DefaultNoteColor,
+		Pinned:    memo.Pinned,
+		Archived:  state == usememosStateArchived,
+		Labels:    normalizeLabels(tags),
+		Items:     items,
+		CreatedAt: memoTimestamp(memo.CreateTime, memo.CreatedTs),
+		UpdatedAt: memoTimestamp(memo.UpdateTime, memo.UpdatedTs),
 	}
 	if err := h.noteStore.ImportJotNotes(ctx, userID, []models.JotImportNote{note}); err != nil {
 		return false, []string{fmt.Sprintf("failed to import memo #%d: %v", idx+1, err)}

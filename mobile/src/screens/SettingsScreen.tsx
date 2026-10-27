@@ -23,6 +23,7 @@ import SessionsSection from './settings/SessionsSection';
 import PATsSection from './settings/PATsSection';
 import SsoSection from './settings/SsoSection';
 import ImportSection from './settings/ImportSection';
+import ExportSection from './settings/ExportSection';
 import AppearanceSection from './settings/AppearanceSection';
 import DeveloperSection from './settings/DeveloperSection';
 import AboutSection from './settings/AboutSection';
@@ -68,6 +69,7 @@ export default function SettingsScreen() {
           {!isLocalMode && <SessionsSection />}
           {!isLocalMode && <PATsSection />}
           {!isLocalMode && <ImportSection />}
+          {!isLocalMode && <ExportSection />}
           <AppearanceSection />
           <DeveloperSection />
           <AboutSection />

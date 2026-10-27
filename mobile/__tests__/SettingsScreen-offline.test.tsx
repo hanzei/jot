@@ -6,7 +6,7 @@
  *  - revert + show an error when the failure is permanent.
  */
 
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import SettingsScreen from '../src/screens/SettingsScreen';
 import { useAuth } from '../src/store/AuthContext';
 import { updateMe, listSessions } from '../src/api/settings';
@@ -97,7 +97,7 @@ jest.mock('expo-document-picker', () => ({
 }));
 
 jest.mock('../src/api/notes', () => ({
-  importKeepFile: jest.fn(),
+  importFile: jest.fn(),
   getNotes: jest.fn(),
 }));
 
@@ -158,8 +158,12 @@ describe('SettingsScreen offline / queued settings changes', () => {
     mockListSessions.mockResolvedValue([]);
   });
 
-  afterEach(() => {
-    markServerReachable();
+  afterEach(async () => {
+    // The screen is still mounted here (RNTL unmounts after this hook), and
+    // ExportSection re-renders on a reachability flip.
+    await act(async () => {
+      markServerReachable();
+    });
   });
 
   // ── language ────────────────────────────────────────────────────────────

@@ -187,8 +187,7 @@
     "aboutSection": "Info",
     "aboutButton": "Info zu Jot",
     "importSection": "Importieren",
-    "importDescription": "Notizen aus Google Keep-Exporten importieren.",
-    "importButton": "Aus Google Keep importieren",
+    "exportSection": "Exportieren",
     "noServerConfigured": "Kein Server konfiguriert",
     "patsSection": "Persönliche Zugriffstoken",
     "patsDescription": "Token für den API-Zugriff aus Skripten und externen Tools.",
@@ -468,6 +467,14 @@
     "loadError": "Nicht synchronisierte Änderungen konnten nicht geladen werden."
   },
   "import": {
+    "formatLabel": "Format",
+    "formatGoogleKeep": "Google Keep",
+    "formatJot": "Jot-Sicherung",
+    "description": "Lade eine Google Keep-Exportdatei hoch. Exportiere deine Notizen aus Google Takeout und lade das .zip-Archiv oder eine einzelne .json-Notiz-Datei hoch.",
+    "descriptionJot": "Lade eine Jot-Sicherung (.zip) hoch, um deine Notizen samt Bildern wiederherzustellen. Reine .json-Exporte aus älteren Jot-Versionen werden nicht unterstützt.",
+    "fileTypesJot": ".zip-Dateien",
+    "invalidFileTypeJot": "Ungültiger Dateityp. Bitte eine .zip-Datei auswählen.",
+    "selectFile": "Datei auswählen",
     "fileTypes": ".zip- oder .json-Dateien",
     "invalidFileType": "Ungültiger Dateityp. Bitte eine .json- oder .zip-Datei auswählen.",
     "importedNotes_one": "{{count}} Notiz importiert",
@@ -477,6 +484,20 @@
     "importFailed": "Import fehlgeschlagen. Bitte Datei prüfen und erneut versuchen.",
     "importing": "Importieren...",
     "importButton": "Importieren"
+  },
+  "export": {
+    "description": "Lade alle deine Notizen samt Bildern als Jot-Sicherung oder als Markdown-Dateien für Obsidian (.zip) herunter und speichere oder versende sie über das Teilen-Menü deines Geräts.",
+    "exportButton": "Notizen exportieren",
+    "exporting": "Wird exportiert...",
+    "offline": "Für den Export ist eine Verbindung zu deinem Server nötig.",
+    "exportFailed": "Export fehlgeschlagen. Bitte versuche es erneut.",
+    "shareFailed": "Das Teilen-Menü konnte nicht geöffnet werden. Bitte versuche es erneut.",
+    "shareUnavailable": "Das Teilen von Dateien ist auf diesem Gerät nicht verfügbar.",
+    "shareTitle": "Jot-Sicherung speichern",
+    "shareTitleMarkdown": "Markdown-Export speichern",
+    "formatLabel": "Exportformat",
+    "formatJot": "Jot-Sicherung (.zip)",
+    "formatMarkdown": "Markdown, Obsidian-kompatibel (.zip)"
   },
   "upgrade": {
     "settingsSectionTitle": "Mit einem Server verbinden",

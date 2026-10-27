@@ -59,8 +59,18 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID string, n NewNot
 		return nil, ErrNoteExists
 	}
 
-	// Shift existing unpinned notes down to make room at position 0.
-	if _, err = tx.ExecContext(ctx,
+	// An unpinned note goes to the top of the unpinned grid, so shift the
+	// existing unpinned notes down to make room at position 0. A pinned note is
+	// placed as if it had been created and then pinned: at the end of the pinned
+	// list (nextPinnedPositionTx, as handlePinningTx does), remembering the top
+	// of the unpinned grid as its unpinned_position (unpinning later shifts the
+	// others to make room, see handleUnpinningTx).
+	position, unpinnedPosition := 0, 0
+	if n.Pinned {
+		if position, err = s.nextPinnedPositionTx(ctx, tx, noteID, userID); err != nil {
+			return nil, fmt.Errorf("place pinned note: %w", err)
+		}
+	} else if _, err = tx.ExecContext(ctx,
 		s.d.RewritePlaceholders(`UPDATE note_user_state SET position = position + 1
 		 WHERE user_id = ? AND pinned = FALSE AND archived = FALSE
 		 AND note_id IN (SELECT id FROM notes WHERE deleted_at IS NULL)`),
@@ -69,7 +79,6 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID string, n NewNot
 		return nil, fmt.Errorf("failed to shift existing notes: %w", err)
 	}
 
-	nextPosition := 0
 	now := Timestamp(Now())
 
 	var note Note
@@ -89,8 +98,8 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID string, n NewNot
 
 	if _, err = tx.ExecContext(ctx,
 		s.d.RewritePlaceholders(`INSERT INTO note_user_state (note_id, user_id, color, pinned, archived, position, unpinned_position, checked_items_collapsed, created_at, updated_at)
-		 VALUES (?, ?, ?, FALSE, FALSE, ?, ?, FALSE, ?, ?)`),
-		noteID, userID, n.Color, nextPosition, nextPosition, now, now,
+		 VALUES (?, ?, ?, ?, FALSE, ?, ?, FALSE, ?, ?)`),
+		noteID, userID, n.Color, n.Pinned, position, unpinnedPosition, now, now,
 	); err != nil {
 		return nil, fmt.Errorf("failed to create note user state: %w", err)
 	}
@@ -110,8 +119,9 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID string, n NewNot
 	note.NoteType = n.Type
 	note.Version = 1
 	note.Color = n.Color
-	note.Position = nextPosition
-	note.UnpinnedPosition = &nextPosition
+	note.Pinned = n.Pinned
+	note.Position = position
+	note.UnpinnedPosition = &unpinnedPosition
 	note.CheckedItemsCollapsed = false
 	note.Labels = []Label{}
 

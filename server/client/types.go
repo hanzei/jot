@@ -149,6 +149,7 @@ type CreateTextNoteRequest struct {
 	Content string   `json:"content"`
 	Color   string   `json:"color,omitempty"`
 	Labels  []string `json:"labels,omitempty"`
+	Pinned  bool     `json:"pinned,omitempty"`
 }
 
 // CreateListNoteRequest is the body for POST /api/v1/notes with note_type "list".
@@ -157,6 +158,7 @@ type CreateListNoteRequest struct {
 	Color  string           `json:"color,omitempty"`
 	Items  []CreateNoteItem `json:"items,omitempty"`
 	Labels []string         `json:"labels,omitempty"`
+	Pinned bool             `json:"pinned,omitempty"`
 }
 
 // CreateNoteItem describes a checklist item to create with a new list note.
@@ -291,6 +293,8 @@ type JotExportNote struct {
 	Labels                []string            `json:"labels"`
 	Items                 []JotExportNoteItem `json:"items,omitempty"`
 	Images                []JotExportImage    `json:"images,omitempty"`
+	CreatedAt             time.Time           `json:"created_at"`
+	UpdatedAt             time.Time           `json:"updated_at"`
 }
 
 // JotExportImage references an image of an exported note. File is the zip

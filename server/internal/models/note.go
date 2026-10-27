@@ -81,13 +81,15 @@ type NoteItemPatch struct {
 }
 
 // NewNote describes a note to insert with Create or CreateWithItems. ID is the
-// caller-supplied note ID, or "" to generate one server-side.
+// caller-supplied note ID, or "" to generate one server-side. Pinned creates
+// the note pinned for the creating user (pinned is per-user note_user_state).
 type NewNote struct {
 	ID      string
 	Title   string
 	Content string
 	Type    NoteType
 	Color   string
+	Pinned  bool
 }
 
 // NoteUpdate carries the fields that may be changed by a partial note update.

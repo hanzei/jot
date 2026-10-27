@@ -150,6 +150,11 @@ describe('buildCreateRequestFromNote', () => {
     });
   });
 
+  it('keeps a pinned note pinned in the fork', () => {
+    expect(buildCreateRequestFromNote({ ...makeTextNote('n1'), pinned: true })).toMatchObject({ pinned: true });
+    expect(buildCreateRequestFromNote({ ...makeListNote('n1'), pinned: true })).toMatchObject({ pinned: true });
+  });
+
   it('builds a list-note request mapping parent_id back to indent_level', () => {
     const req = buildCreateRequestFromNote(makeListNote('n1'));
     expect(req).toMatchObject({

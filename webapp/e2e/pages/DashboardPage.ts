@@ -29,6 +29,11 @@ export class DashboardPage {
     await this.page.click('button:has-text("New Note")');
   }
 
+  /** A footer toolbar button in the open note modal, by accessible name. */
+  modalToolbarButton(name: 'Pin note' | 'Unpin note' | 'Archive note'): Locator {
+    return this.page.getByRole('dialog').last().getByRole('button', { name, exact: true });
+  }
+
   async createNote(title: string, _content?: string) {
     await this.clickNewNote();
     // List notes have a title field; switch to list type to use the title for identification.

@@ -11,7 +11,7 @@ import { passwordFormKeys } from '@/pages/settings/passwordFormKeys';
 import { SUPPORTED_LANGUAGES, type LanguagePreference } from '@/utils/language';
 import type { ThemePreference } from '@/utils/theme';
 import { VALIDATION } from '@jot/shared';
-import type { ActiveSession, PersonalAccessToken, User } from '@jot/shared';
+import type { ActiveSession, ExportFormat, PersonalAccessToken, User } from '@jot/shared';
 
 type Translate = TFunction;
 
@@ -428,6 +428,8 @@ interface PreferencesInfoColumnProps {
   onOpenImportModal: () => void;
   onOpenAboutModal: () => void;
   onExport: () => void;
+  exportFormat: ExportFormat;
+  onExportFormatChange: (format: ExportFormat) => void;
   isExporting: boolean;
 }
 
@@ -446,6 +448,8 @@ export const PreferencesInfoColumn = ({
   onOpenImportModal,
   onOpenAboutModal,
   onExport,
+  exportFormat,
+  onExportFormatChange,
   isExporting,
 }: PreferencesInfoColumnProps) => (
   <div className="space-y-6">
@@ -542,6 +546,21 @@ export const PreferencesInfoColumn = ({
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
         {t('settings.importDescription')}
       </p>
+      <div className="mb-4">
+        <label htmlFor="export-format-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          {t('settings.exportFormatLabel')}
+        </label>
+        <select
+          id="export-format-select"
+          value={exportFormat}
+          onChange={(e) => onExportFormatChange(e.target.value as ExportFormat)}
+          disabled={isExporting}
+          className="block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+        >
+          <option value="jot">{t('settings.exportFormatJot')}</option>
+          <option value="markdown">{t('settings.exportFormatMarkdown')}</option>
+        </select>
+      </div>
       <div className="flex flex-wrap gap-3">
         <button
           type="button"

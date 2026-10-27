@@ -20,8 +20,10 @@ compiled web app, while SQLite keeps the default deployment small and portable.
   shortcuts for common navigation and creation actions.
 - **Pin, archive, duplicate, trash**: Keep active notes focused while retaining
   archived notes and automatically purging trashed notes after seven days.
-- **Import and export**: Import from a Jot export, Google Keep, or usememos, and
-  export your Jot notes, with their images, as a `.zip` bundle.
+- **Import and export**: Import from a Jot export, Google Keep, or usememos,
+  keeping each note's creation and last-modified dates, and export your Jot
+  notes, with their images, as a `.zip` bundle — either a Jot backup that
+  imports back, or plain Markdown files that open as an Obsidian vault.
 
 ### Collaboration
 
@@ -275,21 +277,31 @@ Access: `http://localhost:5173` — API calls are proxied to the Go server autom
 
 ### Testing against Postgres
 
-Server tests run against SQLite by default and need no setup. To also
-exercise the Postgres path locally (store-level and migration tests), point
-`TEST_POSTGRES_DSN` at a running Postgres server — each test creates and
-drops its own isolated database on it, and tests skip cleanly when the
-variable is unset:
+Server tests run against SQLite by default and need no setup. To run them
+against Postgres instead — the store and migration tests, and the HTTP
+integration suite — use:
 
 ```bash
-docker run --rm -d --name jot-test-postgres \
-  -e POSTGRES_USER=jot -e POSTGRES_PASSWORD=jot -e POSTGRES_DB=jot_test \
-  -p 5432:5432 postgres:18-alpine
-
-TEST_POSTGRES_DSN="postgres://jot:jot@localhost:5432/jot_test?sslmode=disable" task test-server
+task test-server-postgres                     # whole suite
+task test-server-postgres -- -run TestCreateNote   # go test flags after --
 ```
 
-CI runs both paths on every PR touching `server/**` (see `.github/workflows/server-ci.yml`).
+It needs no running database. It uses the first of these that works, and
+tears down anything it started on exit:
+
+1. an existing `TEST_POSTGRES_DSN` (any server the tests may create databases on)
+2. the PostgreSQL server binaries (`initdb`, `pg_ctl`), on `PATH` or under
+   `/usr/lib/postgresql/*/bin` — a throwaway cluster on a free port
+3. Docker — a `postgres:18-alpine` container on a free port
+
+Each test creates and drops its own database, so one server is enough. The
+integration suite picks its database with `JOT_TEST_DB_DRIVER` (`sqlite` or
+`postgres`); store and migration tests run against Postgres whenever
+`TEST_POSTGRES_DSN` is set, and skip it cleanly otherwise. See
+`scripts/test-postgres.sh` for details.
+
+CI runs both `task test-server` and `task test-server-postgres` on every PR
+touching `server/**` (see `.github/workflows/server-ci.yml`).
 
 ## Mobile app
 
@@ -465,7 +477,10 @@ than the upload directory permanently removes the newer images. Images whose
 files are missing are logged as warnings.
 
 Separately, each user can export their own notes, images included, as a `.zip`
-bundle from Settings and import it into any Jot server. An import of up to
+bundle from Settings, in the webapp or the mobile app (which hands the file to
+the device's share sheet), and import it into any Jot server. Notes keep their
+creation and last-modified dates; bundles exported before those were included
+import with the import time instead. An import of up to
 1 GiB is spooled to the system temp directory (`TMPDIR`, `/tmp` by default)
 while it is processed, so leave room there. Plain `.json` exports from Jot
 versions before image export was added can no longer be imported.

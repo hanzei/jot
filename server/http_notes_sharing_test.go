@@ -501,8 +501,11 @@ func TestEdgeCases(t *testing.T) {
 	})
 
 	t.Run("create note with empty fields", func(t *testing.T) {
-		_, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{})
-		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+		// Allowed so an image-only note can be created before its upload.
+		note, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{})
+		require.NoError(t, err)
+		assert.Equal(t, client.NoteTypeText, note.NoteType)
+		assert.Empty(t, note.Content)
 	})
 
 	t.Run("create note with list items", func(t *testing.T) {

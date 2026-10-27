@@ -104,6 +104,9 @@ type CreateNoteRequest struct {
 	Color    string           `json:"color,omitempty"`
 	Items    []CreateNoteItem `json:"items,omitempty"`
 	Labels   []string         `json:"labels,omitempty"`
+	// Pinned creates the note already pinned for the creating user, so a client
+	// that let the user pin a note before it existed needs no follow-up PATCH.
+	Pinned bool `json:"pinned,omitempty"`
 }
 
 type CreateNoteItem struct {
@@ -138,10 +141,8 @@ type EmptyTrashResponse struct {
 }
 
 func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
-	if req.Title == "" && req.Content == "" && len(req.Items) == 0 {
-		return http.StatusBadRequest, errors.New("note must have a title, content, or items")
-	}
-
+	// An empty note is allowed: clients create one when the first thing added
+	// to a new note is an image, which needs a note id to attach to.
 	if err := models.ValidateNoteTitle(req.Title); err != nil {
 		return http.StatusBadRequest, err
 	}
@@ -378,6 +379,7 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 		Content: req.Content,
 		Type:    req.NoteType,
 		Color:   req.Color,
+		Pinned:  req.Pinned,
 	}, items)
 	if err != nil {
 		return storeError(err, "create note")

@@ -37,6 +37,7 @@ jest.mock('../src/db/noteQueries', () => ({
   markNotePendingCreate: jest.fn().mockResolvedValue(undefined),
   isNotePendingCreate: jest.fn().mockResolvedValue(false),
   getLocalNotePositions: jest.fn().mockResolvedValue(new Map()),
+  getNextLocalPinnedPosition: jest.fn().mockResolvedValue(0),
   createLocalItem: jest.fn().mockResolvedValue(undefined),
   patchLocalItem: jest.fn().mockResolvedValue(undefined),
   deleteLocalItem: jest.fn().mockResolvedValue(undefined),
@@ -44,6 +45,9 @@ jest.mock('../src/db/noteQueries', () => ({
   setLocalItemsCompleted: jest.fn().mockResolvedValue(undefined),
   deleteLocalItems: jest.fn().mockResolvedValue(undefined),
   reconcileLocalItems: jest.fn().mockResolvedValue(undefined),
+  getStoredLabels: jest.fn().mockResolvedValue([]),
+  upsertLabel: jest.fn().mockResolvedValue(undefined),
+  generateClientLabelId: jest.fn(() => 'ClientLabelId00000000A'),
 }));
 
 jest.mock('../src/db/syncQueue', () => ({
@@ -151,6 +155,21 @@ describe('useNotes hooks', () => {
 
       expect(result.current.data).toEqual(newNote);
       expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newNote);
+    });
+
+    it('stores the labels a create returns, since it may have minted them', async () => {
+      const errands = { id: 'label-errands', user_id: 'u1', name: 'Errands', created_at: '', updated_at: '' };
+      mockNotesApi.createNote.mockResolvedValueOnce({
+        id: 'server-id', content: 'Labelled', note_type: 'text',
+        color: '#ffffff', pinned: false, archived: false, position: 0,
+        is_shared: false, deleted_at: null,
+        user_id: 'u1', created_at: '', updated_at: '', labels: [errands], shared_with: [],
+      } as never);
+
+      const { result } = await renderHook(() => useCreateNote(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ content: 'Labelled', note_type: 'text', labels: ['Errands'] });
+
+      expect(mockNoteQueries.upsertLabel).toHaveBeenCalledWith(expect.anything(), errands);
     });
 
     it('creates a list note via API and caches locally', async () => {
@@ -262,6 +281,61 @@ describe('useNotes hooks', () => {
         }),
       );
       expect(result.current.data?.id).toBe('ClientNoteId000000000A');
+    });
+
+    it('creates a pinned note locally and carries pinned in the queued create', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      mockNoteQueries.getNextLocalPinnedPosition.mockResolvedValueOnce(3);
+
+      const { result } = await renderHook(() => useCreateNote(), { wrapper: createWrapper() });
+
+      const created = await result.current.mutateAsync({ content: 'Pinned offline', note_type: 'text', pinned: true });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      // The local row is pinned straight away, at the end of the pinned section
+      // like the server places it, and the replayed POST asks the server to
+      // create it pinned.
+      expect(created.pinned).toBe(true);
+      expect(created.position).toBe(3);
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operation: 'create',
+          body: expect.objectContaining({ content: 'Pinned offline', pinned: true }),
+        }),
+      );
+    });
+
+    it('attaches the named labels to the local row, queueing unknown ones ahead of the note', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      const work = { id: 'label-work', user_id: 'test-user-id', name: 'Work', created_at: '', updated_at: '' };
+      mockNoteQueries.getStoredLabels.mockImplementation(async () => [work]);
+
+      const { result } = await renderHook(() => useCreateNote(), { wrapper: createWrapper() });
+
+      const created = await result.current.mutateAsync({ content: 'Labelled offline', note_type: 'text', labels: ['work', 'Errands'] });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      // A known label is reused (matched case-insensitively); a new one is
+      // minted and stored, with its create queued before the note's so the
+      // replayed create resolves the name to that same id.
+      expect(created.labels).toEqual([
+        work,
+        expect.objectContaining({ id: 'ClientLabelId00000000A', name: 'Errands' }),
+      ]);
+      expect(mockNoteQueries.upsertLabel).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ id: 'ClientLabelId00000000A', name: 'Errands' }),
+      );
+      const ops = mockSyncQueue.enqueueOperation.mock.calls.map((call) => call[1]);
+      expect(ops).toEqual([
+        expect.objectContaining({ operation: 'createLabel', body: { id: 'ClientLabelId00000000A', name: 'Errands' } }),
+        expect.objectContaining({
+          operation: 'create',
+          body: expect.objectContaining({ content: 'Labelled offline', labels: ['work', 'Errands'] }),
+        }),
+      ]);
+      mockNoteQueries.getStoredLabels.mockImplementation(async () => []);
     });
   });
 

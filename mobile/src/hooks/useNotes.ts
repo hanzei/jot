@@ -50,6 +50,7 @@ import {
   isNotePendingCreate,
   getPendingCreateNoteIds,
   getLocalNotePositions,
+  getNextLocalPinnedPosition,
   createLocalItem,
   patchLocalItem,
   deleteLocalItem,
@@ -57,14 +58,17 @@ import {
   setLocalItemsCompleted,
   deleteLocalItems,
   reconcileLocalItems,
+  upsertLabel,
 } from '../db/noteQueries';
 import { enqueueOperation, rethrowIfNotQueueable } from '../db/syncQueue';
 import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from './useNetworkStatus';
 import { useAuth } from '../store/AuthContext';
 import { assertSwitchWriteAllowed, isServerSwitchInProgress } from '../api/client';
+import { resolveLocalLabel } from './useLabels';
 import {
   labelCountsQueryKey,
+  labelsQueryKey,
   noteLocalQueryKey,
   notesLocalQueryScopeKey,
 } from './queryKeys';
@@ -226,6 +230,9 @@ export function useCreateNote() {
         try {
           const note = await createNote(data);
           await saveNote(db, note);
+          // Labels sent by name may have been minted by the create; store them so
+          // the drawer shows them right away (#691).
+          for (const label of note.labels ?? []) await upsertLabel(db, label);
           return note;
         } catch (err) {
           // Transient failure: fall through to the offline path so the new note
@@ -240,7 +247,15 @@ export function useCreateNote() {
       // (issue #475) — no server-side ID reconciliation needed.
       const clientId = generateClientNoteId();
       const now = new Date().toISOString();
+      // Attach the labels the create names (a new note labelled before it
+      // existed, or a sync-failure fork) to the local row too. A label not known
+      // locally gets its own create queued ahead of this note's, so the server
+      // resolves the name to that same id on replay.
       const labels: Label[] = [];
+      for (const name of data.labels ?? []) {
+        const label = await resolveLocalLabel(db, name, user?.id ?? '');
+        if (!labels.some((l) => l.id === label.id)) labels.push(label);
+      }
       const shared_with: NoteShare[] = [];
 
       // Pre-assign a permanent, server-format ID to every list item so the *same*
@@ -261,9 +276,9 @@ export function useCreateNote() {
         // the first successful sync replaces it with the canonical server note.
         version: 1,
         color: data.color ?? DEFAULT_NOTE_COLOR,
-        pinned: false,
+        pinned: data.pinned ?? false,
         archived: false,
-        position: 0,
+        position: data.pinned ? await getNextLocalPinnedPosition(db) : 0,
         is_shared: false,
         unread: null,
         deleted_at: null as string | null,
@@ -326,7 +341,10 @@ export function useCreateNote() {
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       // A create can carry labels (the sync-failure fork does), which the new
       // note then counts towards.
-      if (data.labels?.length) invalidateLabelCounts(queryClient);
+      if (data.labels?.length) {
+        invalidateLabelCounts(queryClient);
+        queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
+      }
     },
   });
 }

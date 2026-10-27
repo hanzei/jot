@@ -210,8 +210,7 @@
     "aboutSection": "Informazioni",
     "aboutButton": "Informazioni su Jot",
     "importSection": "Importa",
-    "importDescription": "Importa note dalle esportazioni di Google Keep.",
-    "importButton": "Importa da Google Keep",
+    "exportSection": "Esporta",
     "noServerConfigured": "Nessun server configurato",
     "patsSection": "Token di accesso personali",
     "patsDescription": "Token per l'accesso alle API da script e strumenti esterni.",
@@ -468,6 +467,14 @@
     "loadError": "Impossibile caricare le modifiche non sincronizzate."
   },
   "import": {
+    "formatLabel": "Formato",
+    "formatGoogleKeep": "Google Keep",
+    "formatJot": "Backup Jot",
+    "description": "Carica un file di esportazione di Google Keep. Esporta le tue note da Google Takeout e carica l'archivio .zip o un singolo file .json.",
+    "descriptionJot": "Carica un backup Jot (.zip) per ripristinare le tue note e le loro immagini. Le esportazioni .json delle versioni precedenti di Jot non sono supportate.",
+    "fileTypesJot": "File .zip",
+    "invalidFileTypeJot": "Tipo di file non valido. Seleziona un file .zip.",
+    "selectFile": "Scegli file",
     "fileTypes": "File .zip o .json",
     "invalidFileType": "Tipo di file non valido. Seleziona un file .json o .zip.",
     "importedNotes_one": "Importata {{count}} nota",
@@ -477,6 +484,20 @@
     "importFailed": "Importazione non riuscita. Controlla il file e riprova.",
     "importing": "Importazione...",
     "importButton": "Importa"
+  },
+  "export": {
+    "description": "Scarica tutte le tue note e le relative immagini come backup di Jot o come file Markdown per Obsidian (.zip), poi salvalo o invialo con il menu di condivisione del dispositivo.",
+    "exportButton": "Esporta note",
+    "exporting": "Esportazione...",
+    "offline": "L'esportazione richiede una connessione al tuo server.",
+    "exportFailed": "Esportazione non riuscita. Riprova.",
+    "shareFailed": "Impossibile aprire il menu di condivisione. Riprova.",
+    "shareUnavailable": "La condivisione di file non è disponibile su questo dispositivo.",
+    "shareTitle": "Salva backup di Jot",
+    "shareTitleMarkdown": "Salva esportazione Markdown",
+    "formatLabel": "Formato di esportazione",
+    "formatJot": "Backup di Jot (.zip)",
+    "formatMarkdown": "Markdown, compatibile con Obsidian (.zip)"
   },
   "upgrade": {
     "settingsSectionTitle": "Connetti a un server",

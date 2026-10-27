@@ -43,7 +43,7 @@ func logLinesForUnauthenticatedRequest(t *testing.T, level string) []map[string]
 
 	tmpDir := t.TempDir()
 	require.NoError(t, os.WriteFile(tmpDir+"/index.html", []byte("<html></html>"), 0o600))
-	cfg := defaultTestConfig(tmpDir)
+	cfg := defaultTestConfig(t, tmpDir)
 	cfg.LogLevel = level
 	cfg.LogFormat = "json"
 

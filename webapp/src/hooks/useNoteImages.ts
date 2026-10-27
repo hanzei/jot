@@ -16,6 +16,10 @@ interface UseNoteImagesOptions {
   onRefresh?: (() => void) | undefined;
   // Surfaces a validation/upload error in the modal's own error banner.
   showError: (message: string) => void;
+  // Supplies a note to upload to when files are picked before the note
+  // exists: the caller creates it (resolving null on failure). Without it,
+  // picking files on an unsaved note does nothing.
+  ensureNote?: (() => Promise<Note | null>) | undefined;
 }
 
 // useNoteImages owns the note-image add/remove UI: the upload queue and its
@@ -23,7 +27,7 @@ interface UseNoteImagesOptions {
 // self-echo, the client-deferred removal undo window, and the drag-to-upload
 // state. These are coupled to each other and barely to the rest of the editor,
 // which is what makes them separable; the caller only renders what comes back.
-export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError }: UseNoteImagesOptions) {
+export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError, ensureNote }: UseNoteImagesOptions) {
   const { t } = useTranslation();
 
   const [imageUploads, setImageUploads] = useState<PendingImageUpload[]>([]);
@@ -65,7 +69,9 @@ export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError }: Us
   const [isDraggingImage, setIsDraggingImage] = useState(false);
   const imageFileInputRef = useRef<HTMLInputElement>(null);
   const imageUploadsRef = useRef<PendingImageUpload[]>([]);
-  const imageUploadFilesRef = useRef<Map<string, File>>(new Map());
+  // Each upload's file and the note it targets — not always `note`: uploads
+  // started by ensureNote target the created note before the prop catches up.
+  const imageUploadFilesRef = useRef<Map<string, { file: File; noteId: string }>>(new Map());
   // Upload ids currently in flight, checked synchronously (not via React
   // state) so a rapid double-click on Retry can't start a second concurrent
   // request for the same file before a re-render reflects the first one.
@@ -83,6 +89,13 @@ export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError }: Us
   useEffect(() => {
     optimisticImagesRef.current = optimisticImages;
   }, [optimisticImages]);
+
+  // Read through a ref so a caller passing an inline callback doesn't rebuild
+  // queueImageFiles (and every handler built on it) on each render.
+  const ensureNoteRef = useRef(ensureNote);
+  useEffect(() => {
+    ensureNoteRef.current = ensureNote;
+  });
 
   // Once note.images actually contains an optimistically-added image (a
   // later refresh caught up), drop it from the local overlay so it doesn't
@@ -130,9 +143,7 @@ export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError }: Us
     imageUploadFilesRef.current.delete(uploadId);
   }, []);
 
-  const runImageUpload = useCallback((uploadId: string, file: File) => {
-    const noteId = note?.id;
-    if (!noteId) return;
+  const runImageUpload = useCallback((uploadId: string, file: File, noteId: string) => {
     // Guard against a duplicate concurrent request for the same upload — a
     // rapid double-click on Retry (or the initial upload racing a fast
     // retry) before React re-renders the tile out of its clickable state.
@@ -166,37 +177,39 @@ export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError }: Us
         : t('images.uploadFailed');
       setImageUploads(prev => prev.map(u => (u.id === uploadId ? { ...u, status: 'error', errorMessage: message } : u)));
     });
-  }, [note?.id, removeUploadTile, t, imageMaxMB, onRefresh]);
+  }, [removeUploadTile, t, imageMaxMB, onRefresh]);
 
-  const startImageUpload = useCallback((file: File) => {
+  const startImageUpload = useCallback((file: File, noteId: string) => {
     const id = generateId();
     const previewUrl = URL.createObjectURL(file);
-    imageUploadFilesRef.current.set(id, file);
+    imageUploadFilesRef.current.set(id, { file, noteId });
     setImageUploads(prev => [...prev, { id, filename: file.name, previewUrl, progress: 0, status: 'uploading' }]);
-    runImageUpload(id, file);
+    runImageUpload(id, file, noteId);
   }, [runImageUpload]);
 
   const retryImageUpload = useCallback((uploadId: string) => {
-    const file = imageUploadFilesRef.current.get(uploadId);
-    if (!file) return;
+    const entry = imageUploadFilesRef.current.get(uploadId);
+    if (!entry) return;
     setImageUploads(prev => prev.map(u => (u.id === uploadId
       ? { id: u.id, filename: u.filename, previewUrl: u.previewUrl, status: 'uploading', progress: 0 }
       : u)));
-    runImageUpload(uploadId, file);
+    runImageUpload(uploadId, entry.file, entry.noteId);
   }, [runImageUpload]);
 
   // Entry point for the toolbar picker, drag & drop, and paste. Validates
   // each file and enforces the per-note image cap client-side (the server
   // enforces it authoritatively) before starting an upload per valid file.
-  const queueImageFiles = useCallback((files: File[]) => {
-    if (!note || files.length === 0) return;
+  // Without a note, ensureNote creates one once at least one file is valid,
+  // so a note is only created when there is something to upload to it.
+  const queueImageFiles = useCallback(async (files: File[]) => {
+    if (files.length === 0 || (!note && !ensureNoteRef.current)) return;
 
-    const noteImages = note.images ?? [];
+    const noteImages = note?.images ?? [];
     const confirmedIds = new Set(noteImages.map(img => img.id));
     // Images this session already uploaded to this note that note.images
     // doesn't reflect yet (see optimisticImages above) still occupy a slot.
     const unconfirmedOptimisticCount = optimisticImagesRef.current.filter(
-      e => e.noteId === note.id && !confirmedIds.has(e.image.id)
+      e => e.noteId === note?.id && !confirmedIds.has(e.image.id)
     ).length;
     let remainingSlots = IMAGE_MAX_PER_NOTE
       - noteImages.length
@@ -208,6 +221,7 @@ export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError }: Us
     // several invalid files in one action would otherwise only ever surface
     // the last file's error.
     const errors = new Set<string>();
+    const accepted: File[] = [];
     for (const file of files) {
       const validationError = validateImageFile(file);
       if (validationError) {
@@ -219,15 +233,19 @@ export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError }: Us
         break;
       }
       remainingSlots -= 1;
-      startImageUpload(file);
+      accepted.push(file);
     }
     if (errors.size > 0) showError(Array.from(errors).join(' '));
+    if (accepted.length === 0) return;
+    const target = note ?? await ensureNoteRef.current?.();
+    if (!target) return;
+    for (const file of accepted) startImageUpload(file, target.id);
   }, [note, showError, startImageUpload, t, validateImageFile]);
 
   const handleImageFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     e.target.value = '';
-    queueImageFiles(files);
+    void queueImageFiles(files);
   }, [queueImageFiles]);
 
   const handleImageDragEnter = useCallback((e: React.DragEvent) => {
@@ -271,7 +289,7 @@ export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError }: Us
       showError(t('images.errorWrongType'));
       return;
     }
-    queueImageFiles(imageFiles);
+    void queueImageFiles(imageFiles);
   }, [note, queueImageFiles, showError, t]);
 
   const handleModalPaste = useCallback((e: React.ClipboardEvent) => {
@@ -282,7 +300,7 @@ export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError }: Us
       .filter((f): f is File => f !== null);
     if (files.length === 0) return;
     e.preventDefault();
-    queueImageFiles(files);
+    void queueImageFiles(files);
   }, [note, queueImageFiles]);
 
   // Clears the local "removed, showing undo" state for an image — called
@@ -365,10 +383,17 @@ export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError }: Us
   // alone entirely (not reset here) for the same reason on the upload side —
   // it's pruned per-note during render as each note is (re-)opened, not
   // cleared on switch.
+  // Uploads already targeting the incoming note (ones ensureNote started for
+  // the note being switched to) are kept.
   const resetForNoteSwitch = useCallback(() => {
-    imageUploadsRef.current.forEach(u => URL.revokeObjectURL(u.previewUrl));
-    imageUploadFilesRef.current.clear();
-    setImageUploads([]);
+    const files = imageUploadFilesRef.current;
+    const keep = (u: PendingImageUpload) => !!note && files.get(u.id)?.noteId === note.id;
+    imageUploadsRef.current.forEach(u => {
+      if (keep(u)) return;
+      URL.revokeObjectURL(u.previewUrl);
+      files.delete(u.id);
+    });
+    setImageUploads(prev => prev.filter(keep));
     const stillPending = (note?.images ?? []).filter(img => pendingImageRemovalsRef.current.has(img.id));
     setRemovedImages(stillPending);
   }, [note]);

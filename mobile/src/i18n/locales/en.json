@@ -211,8 +211,7 @@
     "aboutSection": "About",
     "aboutButton": "About Jot",
     "importSection": "Import",
-    "importDescription": "Import notes from Google Keep exports.",
-    "importButton": "Import from Google Keep",
+    "exportSection": "Export",
     "patsSection": "Personal Access Tokens",
     "patsDescription": "Tokens for API access from scripts and external tools.",
     "patsNamePlaceholder": "Token name",
@@ -468,6 +467,14 @@
     "loadError": "Couldn't load unsynced changes."
   },
   "import": {
+    "formatLabel": "Format",
+    "formatGoogleKeep": "Google Keep",
+    "formatJot": "Jot backup",
+    "description": "Upload a Google Keep export file. Export your notes from Google Takeout and upload the .zip archive or an individual .json note file.",
+    "descriptionJot": "Upload a Jot backup (.zip) to restore your notes and their images. Plain .json exports from older versions of Jot are not supported.",
+    "fileTypesJot": ".zip files",
+    "invalidFileTypeJot": "Invalid file type. Please select a .zip file.",
+    "selectFile": "Choose file",
     "fileTypes": ".zip or .json files",
     "invalidFileType": "Invalid file type. Please select a .json or .zip file.",
     "importedNotes_one": "Imported {{count}} note",
@@ -477,6 +484,20 @@
     "importFailed": "Import failed. Please check your file and try again.",
     "importing": "Importing...",
     "importButton": "Import"
+  },
+  "export": {
+    "description": "Download all your notes and their images as a Jot backup or as Markdown files for Obsidian (.zip), then save or send it with your device's share sheet.",
+    "exportButton": "Export notes",
+    "exporting": "Exporting...",
+    "offline": "Exporting needs a connection to your server.",
+    "exportFailed": "Export failed. Please try again.",
+    "shareFailed": "Could not open the share sheet. Please try again.",
+    "shareUnavailable": "Sharing files is not available on this device.",
+    "shareTitle": "Save Jot backup",
+    "shareTitleMarkdown": "Save Markdown export",
+    "formatLabel": "Export format",
+    "formatJot": "Jot backup (.zip)",
+    "formatMarkdown": "Markdown, Obsidian-compatible (.zip)"
   },
   "upgrade": {
     "settingsSectionTitle": "Connect to a server",
