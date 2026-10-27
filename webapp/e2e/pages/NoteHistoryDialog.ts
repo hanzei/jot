@@ -1,5 +1,7 @@
 import type { Page, Locator } from '@playwright/test';
 import { expect } from '@playwright/test';
+import { DashboardPage } from './DashboardPage';
+import { expectDialogSettled } from './dialogs';
 
 /**
  * The note modal's Version history panel: a timeline of revisions, a preview
@@ -36,11 +38,10 @@ export class NoteHistoryDialog {
 
   /** Opens the panel from the open note modal's overflow menu. */
   async open() {
-    const menuButton = this.page.getByRole('dialog').last().getByRole('button', { name: 'Note options' });
-    await menuButton.click();
-    await expect(menuButton).toHaveAttribute('aria-expanded', 'true');
+    await new DashboardPage(this.page).openModalOverflowMenu();
     await this.menuItem().click();
     await expect(this.dialog()).toBeVisible();
+    await expectDialogSettled(this.dialog());
   }
 
   async showComparison() {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { Check, History, Square, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -212,7 +212,7 @@ export default function NoteHistoryDialog({ noteId, current, usersById, onClose,
                 </div>
 
                 <div className="min-h-0 flex-1 overflow-y-auto p-4 text-gray-900 dark:text-white" data-testid="note-history-content">
-                  {detailFailed && !selected ? (
+                  {detailFailed ? (
                     <p role="alert" className="text-sm">{t('history.loadFailed')}</p>
                   ) : !selected ? (
                     <p role="status" className="text-sm text-gray-700 dark:text-gray-200">{t('history.loading')}</p>
@@ -337,7 +337,15 @@ function DiffLegend() {
 const REMOVED_CLASS = 'bg-red-100 text-red-950 dark:bg-red-950 dark:text-red-50';
 const ADDED_CLASS = 'bg-green-100 text-green-950 dark:bg-green-950 dark:text-green-50';
 
-function LineDiff({ lines }: { lines: DiffLine[] }) {
+const LINE_STYLE: Record<DiffLine['kind'], { className: string; sign: string }> = {
+  same: { className: '', sign: ' ' },
+  removed: { className: REMOVED_CLASS, sign: '−' },
+  added: { className: ADDED_CLASS, sign: '+' },
+};
+
+// Memoized: a long comparison is thousands of rows, and the note modal behind
+// the panel re-renders on autosave status and remote updates.
+const LineDiff = memo(function LineDiff({ lines }: { lines: DiffLine[] }) {
   const { t } = useTranslation();
   return (
     <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-md border border-gray-200 font-mono text-xs dark:border-slate-700">
@@ -345,18 +353,18 @@ function LineDiff({ lines }: { lines: DiffLine[] }) {
         <div
           key={index}
           data-diff={line.kind}
-          className={`px-2 ${line.kind === 'removed' ? REMOVED_CLASS : line.kind === 'added' ? ADDED_CLASS : ''}`}
+          className={`px-2 ${LINE_STYLE[line.kind].className}`}
         >
           {line.kind !== 'same' && (
             <span className="sr-only">{line.kind === 'removed' ? t('history.onlyInVersion') : t('history.onlyInCurrent')}: </span>
           )}
-          <span aria-hidden="true" className="mr-2 select-none">{line.kind === 'removed' ? '−' : line.kind === 'added' ? '+' : ' '}</span>
+          <span aria-hidden="true" className="mr-2 select-none">{LINE_STYLE[line.kind].sign}</span>
           {line.text || ' '}
         </div>
       ))}
     </pre>
   );
-}
+});
 
 function ItemChangeRow({ change }: { change: ItemChange }) {
   const { t } = useTranslation();

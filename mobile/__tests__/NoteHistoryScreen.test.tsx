@@ -21,6 +21,7 @@ import { getLocalNote, markNotePendingCreate, saveNote } from '../src/db/noteQue
 import { enqueueOperation } from '../src/db/syncQueue';
 import { makeListNote, makeNoteItem, makeTextNote } from './helpers/fixtures';
 import { silenceConsole } from './helpers/consoleGuard';
+import { noteLocalQueryScopeKey } from '../src/hooks/queryKeys';
 
 const mockGoBack = jest.fn();
 type BeforeRemoveListener = (e: { preventDefault: () => void }) => void;
@@ -317,14 +318,18 @@ describe('NoteHistoryScreen', () => {
     });
     mockGetRevisions.mockResolvedValue([summary({ id: 'rev-1' })]);
     mockGetRevision.mockResolvedValue(revision({ id: 'rev-1', content: 'older text' }));
-    await renderScreen();
+    const { queryClient } = await renderScreen();
 
     await fireEvent.press(await screen.findByTestId('history-revision-rev-1'));
     await screen.findByText('older text');
     expect(screen.getByTestId('history-restore')).toBeDisabled();
 
+    // What a queue drain does once the change reaches the server.
     await globalThis.testDb.runAsync('DELETE FROM sync_queue');
-    await waitFor(() => expect(screen.getByTestId('history-restore')).toBeEnabled(), { timeout: 5000 });
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
+    });
+    await waitFor(() => expect(screen.getByTestId('history-restore')).toBeEnabled());
     expect(screen.queryByTestId('history-restore-hint')).toBeNull();
   });
 

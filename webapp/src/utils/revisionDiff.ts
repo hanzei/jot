@@ -53,8 +53,9 @@ const asText = (noteType: NoteType, title: string, content: string, items: ListI
  */
 export function compareItems(revisionItems: ListItem[], currentItems: ListItem[]): ItemChange[] {
   const baseline = new Map<string, ItemSnapshot>(revisionItems.map(item => [item.id, itemSnapshot(item)]));
+  const revisionIds = revisionItems.map(item => item.id);
   const changes: ItemChange[] = [];
-  for (const op of diffItems(baseline, revisionItems.map(item => item.id), currentItems)) {
+  for (const op of diffItems(baseline, revisionIds, currentItems)) {
     if (op.kind === 'create') {
       changes.push({ kind: 'added', text: op.snapshot.text });
     } else if (op.kind === 'delete') {
@@ -73,7 +74,7 @@ export function compareItems(revisionItems: ListItem[], currentItems: ListItem[]
     }
   }
   const currentIds = new Set(currentItems.map(item => item.id));
-  const keptBefore = revisionItems.map(item => item.id).filter(id => currentIds.has(id));
+  const keptBefore = revisionIds.filter(id => currentIds.has(id));
   const keptAfter = currentItems.map(item => item.id).filter(id => baseline.has(id));
   if (keptBefore.some((id, index) => keptAfter[index] !== id)) changes.push({ kind: 'reordered' });
   return changes;

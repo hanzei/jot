@@ -13,7 +13,7 @@ import { useNavigation, useRoute, type RouteProp } from '@react-navigation/nativ
 import { useTranslation } from 'react-i18next';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import axios from 'axios';
-import { userDisplayName, type NoteRevision, type NoteRevisionSummary } from '@jot/shared';
+import { groupNoteItems, userDisplayName, type NoteRevision, type NoteRevisionSummary } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { useTheme } from '../theme/ThemeContext';
 import { useConfirm } from '../hooks/useConfirm';
@@ -47,6 +47,13 @@ function formatEditedAt(iso: string): string {
   });
 }
 
+/** The translation key for why a restore failed. */
+function restoreErrorKey(err: Error): string {
+  if (err instanceof UnsyncedNoteError) return 'history.unsynced';
+  if (axios.isAxiosError(err) && err.response?.status === 409) return 'history.restoreConflict';
+  return 'history.restoreFailed';
+}
+
 /**
  * Read-only history of a note, opened from the editor's overflow menu: the
  * revisions the server kept, a preview of one, and Restore. Online-only — the
@@ -73,7 +80,13 @@ export default function NoteHistoryScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = useNoteRevision(noteId, selectedId, available);
   const restore = useRestoreNoteRevision();
-  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const { reset: resetRestore } = restore;
+  const restoreError = restore.error ? restoreErrorKey(restore.error) : null;
+
+  const closePreview = useCallback(() => {
+    setSelectedId(null);
+    resetRestore();
+  }, [resetRestore]);
 
   const authorName = useCallback((actorId: string | null): string | null => {
     if (!actorId) return null;
@@ -90,12 +103,11 @@ export default function NoteHistoryScreen() {
 
   const handleBack = useCallback(() => {
     if (selectedId) {
-      setSelectedId(null);
-      setRestoreError(null);
+      closePreview();
       return;
     }
     navigation.goBack();
-  }, [navigation, selectedId]);
+  }, [closePreview, navigation, selectedId]);
 
   // The hardware back button and the modal swipe-down step back from a
   // preview to the list too, like the header arrow. Leaving after a restore
@@ -106,10 +118,9 @@ export default function NoteHistoryScreen() {
     if (!selectedId || restorePending || restoreSucceeded) return undefined;
     return navigation.addListener('beforeRemove', (e) => {
       e.preventDefault();
-      setSelectedId(null);
-      setRestoreError(null);
+      closePreview();
     });
-  }, [navigation, restorePending, restoreSucceeded, selectedId]);
+  }, [closePreview, navigation, restorePending, restoreSucceeded, selectedId]);
 
   const handleRestore = useCallback(async (rev: NoteRevision) => {
     let message = t('history.restoreConfirmMessage');
@@ -123,7 +134,8 @@ export default function NoteHistoryScreen() {
     });
     if (!confirmed) return;
 
-    setRestoreError(null);
+    // The message comes from restore.error (restoreErrorKey); this only
+    // follows up on it.
     try {
       await restore.mutateAsync({ noteId, revisionId: rev.id });
       showToast(t('history.restored'), 'success');
@@ -131,15 +143,12 @@ export default function NoteHistoryScreen() {
     } catch (err) {
       if (err instanceof UnsyncedNoteError) {
         void syncState.refetch();
-        setRestoreError('history.unsynced');
       } else if (axios.isAxiosError(err) && err.response?.status === 409) {
         // The note moved on since this screen read it: refresh the list so the
         // newest revision (the content that won) is there to look at.
-        setRestoreError('history.restoreConflict');
         void revisions.refetch();
       } else {
         console.warn('Failed to restore note revision');
-        setRestoreError('history.restoreFailed');
       }
     }
   }, [confirm, navigation, note, noteId, restore, revisions, showToast, syncState, t]);
@@ -149,7 +158,7 @@ export default function NoteHistoryScreen() {
     return (
       <TouchableOpacity
         style={[styles.row, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}
-        onPress={() => { setRestoreError(null); setSelectedId(item.id); }}
+        onPress={() => { resetRestore(); setSelectedId(item.id); }}
         testID={`history-revision-${item.id}`}
         accessibilityRole="button"
         accessibilityLabel={t('history.revisionLabel', { description: label })}
@@ -161,7 +170,7 @@ export default function NoteHistoryScreen() {
         </Text>
       </TouchableOpacity>
     );
-  }, [colors, describe, t]);
+  }, [colors, describe, resetRestore, t]);
 
   const centered = (icon: React.ReactNode, title: string, subtitle: string | null, testID: string, action?: React.ReactNode) => (
     <View style={styles.empty} testID={testID}>
@@ -196,7 +205,7 @@ export default function NoteHistoryScreen() {
       <View>
         {rev.title ? <Text style={[styles.previewTitle, { color: colors.text }]}>{rev.title}</Text> : null}
         {rev.items.length === 0 && <Text style={{ color: colors.textMuted }}>{t('history.emptyVersion')}</Text>}
-        {rev.items.map((item) => {
+        {groupNoteItems(rev.items).map((item) => {
           const Icon = item.completed ? SquareCheck : Square;
           return (
             <View key={item.id} style={[styles.previewItem, item.parent_id ? styles.previewItemNested : null]}>
@@ -230,8 +239,7 @@ export default function NoteHistoryScreen() {
     } else {
       const rev = selected.data;
       const unsynced = syncState.data === 'unsynced';
-      const restoring = restore.isPending;
-      const disabled = restoring || !available || syncState.data !== 'synced';
+      const disabled = restorePending || !available || syncState.data !== 'synced';
       const hint = !available ? 'history.restoreOffline' : unsynced ? 'history.unsynced' : null;
       body = (
         <View style={styles.flex}>
@@ -256,9 +264,9 @@ export default function NoteHistoryScreen() {
               testID="history-restore"
               accessibilityRole="button"
               accessibilityLabel={t('history.restore')}
-              accessibilityState={{ disabled, busy: restoring }}
+              accessibilityState={{ disabled, busy: restorePending }}
             >
-              {restoring
+              {restorePending
                 ? <ActivityIndicator size="small" color="#fff" />
                 : <Text style={styles.buttonText}>{t('history.restore')}</Text>}
             </TouchableOpacity>

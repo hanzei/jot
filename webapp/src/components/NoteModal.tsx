@@ -17,7 +17,7 @@ import NoteHistoryDialog from '@/components/NoteHistoryDialog';
 import { useToast } from '@/hooks/useToast';
 import { useNoteImages } from '@/hooks/useNoteImages';
 import { useCompletedItems } from '@/hooks/useCompletedItems';
-import { useNoteDraft, NoteConflictError, type AutoSaveDraft } from '@/hooks/useNoteDraft';
+import { useNoteDraft, type AutoSaveDraft } from '@/hooks/useNoteDraft';
 import { useSizeTransition } from '@/hooks/useSizeTransition';
 import { applyTextareaEdit } from '@/utils/textareaEdit';
 import { getCaretLine, getOffsetAtLine } from '@/utils/textareaCaret';
@@ -1458,6 +1458,19 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     void performConvert();
   };
 
+  // Refetch the version rather than trusting the `note` prop: persistExistingNote()
+  // may have just flushed a scalar edit that bumped it server-side, and a stale
+  // value would make the operation spuriously conflict with its own flush.
+  // Falls back to the prop's version when the refetch fails.
+  const refetchBaseVersion = async (current: Note, operation: string): Promise<number> => {
+    try {
+      return (await notes.getById(current.id)).version;
+    } catch (error) {
+      console.error(`Failed to refetch note version before ${operation}:`, error);
+      return current.version;
+    }
+  };
+
   const performConvert = async () => {
     if (!note || !onConvert) return;
     const targetType: NoteType = noteType === 'list' ? 'text' : 'list';
@@ -1474,15 +1487,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
       return;
     }
 
-    // Refetch the version rather than trusting the `note` prop: persistExistingNote()
-    // may have just flushed a scalar edit that bumped it server-side, and a stale
-    // value here would make the conversion spuriously conflict with its own flush.
-    let baseVersion = note.version;
-    try {
-      baseVersion = (await notes.getById(note.id)).version;
-    } catch (error) {
-      console.error('Failed to refetch note version before conversion:', error);
-    }
+    const baseVersion = await refetchBaseVersion(note, 'conversion');
 
     try {
       const data: ConvertNoteTypeRequest = targetType === 'list'
@@ -1515,23 +1520,24 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
   };
 
   // History panel's Restore. Local edits are flushed first, so they are what
-  // the restore replaces and land in history themselves, and the version is
-  // refetched for the same reason as in performConvert. Rejects (with the API
-  // error, for a 409) to keep the panel open; the panel reports it.
+  // the restore replaces and land in history themselves. A failed flush is
+  // reported like any other save failure (a conflict raises the conflict
+  // banner) and closes the panel, which covers that banner. A failed restore
+  // rejects (with the API error, for a 409) to keep the panel open; the panel
+  // reports it.
   const handleRestoreRevision = async (revision: NoteRevisionSummary) => {
     if (!note) return;
     if (!beginExclusiveSave()) throw new Error('A save is already in progress');
     setLoading(true);
     try {
-      await persistExistingNote();
-      // Refetch the version for the same reason performConvert does, falling
-      // back the same way when the refetch fails.
-      let baseVersion = note.version;
       try {
-        baseVersion = (await notes.getById(note.id)).version;
+        await persistExistingNote();
       } catch (error) {
-        console.error('Failed to refetch note version before restore:', error);
+        reportSaveFailure('Failed to save note before restore:', error);
+        setShowHistory(false);
+        return;
       }
+      const baseVersion = await refetchBaseVersion(note, 'restore');
       const restored = await notes.restoreRevision(note.id, revision.id, { base_version: baseVersion });
       cancelPendingSave();
       adoptNote(restored);
@@ -1539,13 +1545,6 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
       showToast(t('history.restored'), 'success');
       onRefresh?.();
     } catch (error) {
-      if (error instanceof NoteConflictError) {
-        // Flushing local edits hit a conflict, and the conflict banner (Reload
-        // or Overwrite) sits under the panel: close it so the user can resolve
-        // that first. Retrying the restore would only conflict again.
-        setShowHistory(false);
-        return;
-      }
       console.error('Failed to restore note revision:', error);
       throw error;
     } finally {
@@ -1766,7 +1765,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     if (e.defaultPrevented) return;
 
     if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
-    if (isReadOnly || showHistory || isEditableElementFocused()) return;
+    if (isReadOnly || isEditableElementFocused()) return;
 
     const key = e.key === 'Backspace' ? 'backspace' : e.key === 'Delete' ? 'delete' : e.key.toLowerCase();
 

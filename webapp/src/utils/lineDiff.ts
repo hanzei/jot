@@ -1,7 +1,7 @@
 // Line diff for the note history panel's "Compared to current" view of a text
 // note. Pure, so it is tested on its own.
 
-export type DiffLineKind = 'same' | 'removed' | 'added';
+type DiffLineKind = 'same' | 'removed' | 'added';
 
 export interface DiffLine {
   kind: DiffLineKind;
@@ -48,9 +48,10 @@ function diffMiddle(a: string[], b: string[]): DiffLine[] {
   }
 
   // lcs[i][j] is the LCS length of a[i:] and b[j:], built from the end so the
-  // walk below can go forward.
+  // walk below can go forward. An LCS is no longer than the shorter side,
+  // which the cell cap holds to 2,000 lines, so 16 bits are plenty.
   const width = b.length + 1;
-  const lcs = new Uint32Array((a.length + 1) * width);
+  const lcs = new Uint16Array((a.length + 1) * width);
   for (let i = a.length - 1; i >= 0; i--) {
     for (let j = b.length - 1; j >= 0; j--) {
       lcs[i * width + j] = a[i] === b[j]

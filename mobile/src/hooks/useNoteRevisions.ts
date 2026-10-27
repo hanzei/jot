@@ -40,28 +40,24 @@ export function useHistoryAvailable(): boolean {
  *   the queued changes would replay on top of the restored content.
  * - `synced`: nothing pending.
  */
-export type NoteHistorySyncState = 'notCreated' | 'unsynced' | 'synced';
+type NoteHistorySyncState = 'notCreated' | 'unsynced' | 'synced';
 
-export async function readNoteHistorySyncState(db: SQLiteDatabase, noteId: string): Promise<NoteHistorySyncState> {
+async function readNoteHistorySyncState(db: SQLiteDatabase, noteId: string): Promise<NoteHistorySyncState> {
   if (await isNotePendingCreate(db, noteId)) return 'notCreated';
   const protectedIds = await getProtectedNoteIds(db);
   return protectedIds.has(noteId) ? 'unsynced' : 'synced';
 }
 
-// How often an open History screen re-reads a note's sync state while its
-// changes are still queued. The queue has no drain event to subscribe to, and
-// the read is a local SQLite query, so a short poll is cheap.
-const UNSYNCED_RECHECK_MS = 2000;
-
 export function useNoteHistorySyncState(noteId: string) {
   const db = useSQLiteContext();
   return useQuery({
-    queryKey: [...noteRevisionsQueryKey(noteId), 'sync-state'],
+    // Under the note's local key, so the invalidation that follows every
+    // queue drain re-reads it and Restore becomes available once the queued
+    // changes reach the server.
+    queryKey: [...noteLocalQueryKey(noteId), 'history-sync-state'],
     queryFn: () => readNoteHistorySyncState(db, noteId),
     staleTime: 0,
     gcTime: 0,
-    // Re-enable Restore once the queued changes reach the server.
-    refetchInterval: (query) => (query.state.data === 'unsynced' ? UNSYNCED_RECHECK_MS : false),
   });
 }
 
@@ -130,7 +126,8 @@ export function useRestoreNoteRevision() {
         (old) => old?.map((n) => (n.id === restored.id ? restored : n)),
       );
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-      queryClient.invalidateQueries({ queryKey: noteRevisionsQueryKey(restored.id) });
+      // The history list is not refetched: the screen closes on success, and
+      // the list (gcTime 0) loads afresh the next time it opens.
     },
   });
 }
