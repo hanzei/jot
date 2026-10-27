@@ -9,6 +9,10 @@ import {
   duplicateNote,
   convertNoteType,
   importFile,
+  getNoteRevisions,
+  getNoteRevision,
+  restoreNoteRevision,
+  RESTORE_REVISION_TIMEOUT_MS,
 } from '../src/api/notes';
 
 jest.mock('axios', () => {
@@ -276,6 +280,42 @@ describe('Notes API', () => {
         { headers: { 'Content-Type': 'multipart/form-data' } },
       );
       appendSpy.mockRestore();
+    });
+  });
+
+  describe('note revisions', () => {
+    it('lists revisions from GET /notes/{id}/revisions', async () => {
+      const revisions = [{ id: 'rev-1', note_id: 'n1' }];
+      mockAxiosInstance.get.mockResolvedValueOnce({ data: { revisions } });
+
+      const result = await getNoteRevisions('n1');
+
+      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/notes/n1/revisions');
+      expect(result).toEqual(revisions);
+    });
+
+    it('gets one revision from GET /notes/{id}/revisions/{revision_id}', async () => {
+      const revision = { id: 'rev-1', note_id: 'n1', content: 'older' };
+      mockAxiosInstance.get.mockResolvedValueOnce({ data: revision });
+
+      const result = await getNoteRevision('n1', 'rev-1');
+
+      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/notes/n1/revisions/rev-1');
+      expect(result).toEqual(revision);
+    });
+
+    it('restores with base_version and a read-sized timeout', async () => {
+      const note = { id: 'n1', content: 'older', version: 4 };
+      mockAxiosInstance.post.mockResolvedValueOnce({ data: note });
+
+      const result = await restoreNoteRevision('n1', 'rev-1', { base_version: 3 });
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+        '/notes/n1/revisions/rev-1/restore',
+        { base_version: 3 },
+        { timeout: RESTORE_REVISION_TIMEOUT_MS },
+      );
+      expect(result).toEqual(note);
     });
   });
 });

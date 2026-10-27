@@ -20,6 +20,10 @@ compiled web app, while SQLite keeps the default deployment small and portable.
   shortcuts for common navigation and creation actions.
 - **Pin, archive, duplicate, trash**: Keep active notes focused while retaining
   archived notes and automatically purging trashed notes after seven days.
+- **Version history**: Look back at earlier versions of a note, compare one
+  with the current note, and restore it. A restore, or overwriting another
+  device's edit, can itself be undone from the history. Up to 50 versions per
+  note are kept for 90 days; images are not part of the history.
 - **Import and export**: Import from a Jot export, Google Keep, or usememos,
   keeping each note's creation and last-modified dates, and export your Jot
   notes, with their images, as a `.zip` bundle — either a Jot backup that

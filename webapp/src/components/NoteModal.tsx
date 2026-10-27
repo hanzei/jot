@@ -1,9 +1,9 @@
 import { useState, useEffect, useEffectEvent, useMemo, useRef, useCallback, useId, type ReactElement, type ReactNode } from 'react';
-import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Users, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, Pin, EllipsisVertical, Square, Undo2 } from 'lucide-react';
+import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Users, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, Pin, EllipsisVertical, Square, Undo2, History } from 'lucide-react';
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator, type NoteRevisionSummary } from '@jot/shared';
 import { notes } from '@/utils/api';
 import { renderMarkdown, inlineMarkdownToText } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -13,6 +13,7 @@ import SortableItem from '@/components/SortableItem';
 import InlineMarkdown from '@/components/InlineMarkdown';
 import MarkdownToolbar, { type MarkdownToolbarAction } from '@/components/MarkdownToolbar';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import NoteHistoryDialog from '@/components/NoteHistoryDialog';
 import { useToast } from '@/hooks/useToast';
 import { useNoteImages } from '@/hooks/useNoteImages';
 import { useCompletedItems } from '@/hooks/useCompletedItems';
@@ -173,6 +174,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showConvertConfirm, setShowConvertConfirm] = useState(false);
   const [showPermanentDeleteConfirm, setShowPermanentDeleteConfirm] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   // A note in the bin opens view-only: every editing affordance is disabled
   // and the overflow menu offers only Restore / Delete forever, matching the
   // mobile app's trashed-note editor.
@@ -1456,6 +1458,19 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     void performConvert();
   };
 
+  // Refetch the version rather than trusting the `note` prop: persistExistingNote()
+  // may have just flushed a scalar edit that bumped it server-side, and a stale
+  // value would make the operation spuriously conflict with its own flush.
+  // Falls back to the prop's version when the refetch fails.
+  const refetchBaseVersion = async (current: Note, operation: string): Promise<number> => {
+    try {
+      return (await notes.getById(current.id)).version;
+    } catch (error) {
+      console.error(`Failed to refetch note version before ${operation}:`, error);
+      return current.version;
+    }
+  };
+
   const performConvert = async () => {
     if (!note || !onConvert) return;
     const targetType: NoteType = noteType === 'list' ? 'text' : 'list';
@@ -1472,15 +1487,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
       return;
     }
 
-    // Refetch the version rather than trusting the `note` prop: persistExistingNote()
-    // may have just flushed a scalar edit that bumped it server-side, and a stale
-    // value here would make the conversion spuriously conflict with its own flush.
-    let baseVersion = note.version;
-    try {
-      baseVersion = (await notes.getById(note.id)).version;
-    } catch (error) {
-      console.error('Failed to refetch note version before conversion:', error);
-    }
+    const baseVersion = await refetchBaseVersion(note, 'conversion');
 
     try {
       const data: ConvertNoteTypeRequest = targetType === 'list'
@@ -1511,6 +1518,46 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
       setShowConvertConfirm(false);
     }
   };
+
+  // History panel's Restore. Local edits are flushed first, so they are what
+  // the restore replaces and land in history themselves. A failed flush is
+  // reported like any other save failure (a conflict raises the conflict
+  // banner) and closes the panel, which covers that banner. A failed restore
+  // rejects (with the API error, for a 409) to keep the panel open; the panel
+  // reports it.
+  const handleRestoreRevision = async (revision: NoteRevisionSummary) => {
+    if (!note) return;
+    if (!beginExclusiveSave()) throw new Error('A save is already in progress');
+    setLoading(true);
+    try {
+      try {
+        await persistExistingNote();
+      } catch (error) {
+        reportSaveFailure('Failed to save note before restore:', error);
+        setShowHistory(false);
+        return;
+      }
+      const baseVersion = await refetchBaseVersion(note, 'restore');
+      const restored = await notes.restoreRevision(note.id, revision.id, { base_version: baseVersion });
+      cancelPendingSave();
+      adoptNote(restored);
+      setShowHistory(false);
+      showToast(t('history.restored'), 'success');
+      onRefresh?.();
+    } catch (error) {
+      console.error('Failed to restore note revision:', error);
+      throw error;
+    } finally {
+      endExclusiveSave();
+      setLoading(false);
+    }
+  };
+
+  // The editor's current content, compared against a revision in the panel.
+  const historyCurrent = useMemo(
+    () => ({ noteType, title, content, items }),
+    [noteType, title, content, items],
+  );
 
   const handleDuplicate = async () => {
     if (!note || !onDuplicate || loading || isSaving() || isReadOnly) return;
@@ -2626,6 +2673,16 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                               </>
                             ) : (
                               <>
+                            <MenuItem>
+                              <button
+                                onClick={() => setShowHistory(true)}
+                                className={OVERFLOW_ITEM}
+                                data-testid="note-history"
+                              >
+                                <History className="h-4 w-4 mr-2" />
+                                {t('history.menuItem')}
+                              </button>
+                            </MenuItem>
                             {onConvert && (
                               <MenuItem>
                                 <button
@@ -2764,6 +2821,16 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
         onConfirm={confirmPermanentlyDelete}
         onCancel={() => setShowPermanentDeleteConfirm(false)}
       />
+
+      {note && !isReadOnly && showHistory && (
+        <NoteHistoryDialog
+          noteId={note.id}
+          current={historyCurrent}
+          usersById={usersById}
+          onClose={() => setShowHistory(false)}
+          onRestore={handleRestoreRevision}
+        />
+      )}
 
       <ConfirmDialog
         open={showConvertConfirm}

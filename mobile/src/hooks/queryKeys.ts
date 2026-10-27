@@ -29,6 +29,15 @@ export function noteSharesQueryKey(noteId: string | null): [string, string, stri
   return ['noteShares', currentQueryServerScope(), noteId];
 }
 
+// Note history is fetched from the server only, never stored locally.
+export function noteRevisionsQueryKey(noteId: string): [string, string, string] {
+  return ['note-revisions', currentQueryServerScope(), noteId];
+}
+
+export function noteRevisionQueryKey(noteId: string, revisionId: string | null): [string, string, string, string | null] {
+  return ['note-revisions', currentQueryServerScope(), noteId, revisionId];
+}
+
 export function deadLettersQueryKey(): [string, string] {
   return ['dead-letters', currentQueryServerScope()];
 }

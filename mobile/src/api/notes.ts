@@ -13,6 +13,10 @@ import type {
   FileImportType,
   ImportResponse,
   NoteListResponse,
+  NoteRevision,
+  NoteRevisionListResponse,
+  NoteRevisionSummary,
+  RestoreNoteRevisionRequest,
 } from '@jot/shared';
 
 function stripClientOnlyParams(params: GetNotesParams): Omit<GetNotesParams, 'user_id'> {
@@ -113,6 +117,33 @@ export async function emptyTrash(): Promise<EmptyTrashResponse> {
 
 export async function reorderNotes(noteIds: string[]): Promise<void> {
   await api.post('/notes/reorder', { note_ids: noteIds });
+}
+
+// Note history is online-only: revisions are never cached locally, and a
+// restore has no queue to fall back on (mobile-connectivity-handling.md §4.3).
+
+export async function getNoteRevisions(noteId: string): Promise<NoteRevisionSummary[]> {
+  const res = await api.get<NoteRevisionListResponse>(`/notes/${noteId}/revisions`);
+  return res.data.revisions;
+}
+
+export async function getNoteRevision(noteId: string, revisionId: string): Promise<NoteRevision> {
+  const res = await api.get<NoteRevision>(`/notes/${noteId}/revisions/${revisionId}`);
+  return res.data;
+}
+
+/**
+ * Timeout for a restore. It is a one-shot op with no offline queue behind it,
+ * so it gets a read-sized budget instead of the short write one; the request
+ * interceptor only shortens a POST left at the default, hence its own value.
+ */
+export const RESTORE_REVISION_TIMEOUT_MS = 20000;
+
+export async function restoreNoteRevision(noteId: string, revisionId: string, data: RestoreNoteRevisionRequest): Promise<Note> {
+  const res = await api.post<Note>(`/notes/${noteId}/revisions/${revisionId}/restore`, data, {
+    timeout: RESTORE_REVISION_TIMEOUT_MS,
+  });
+  return res.data;
 }
 
 export interface ImportFile {

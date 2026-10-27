@@ -33,6 +33,9 @@ const {
   mockDeleteItems,
   mockImagesUpload,
   mockImagesDelete,
+  mockListRevisions,
+  mockGetRevision,
+  mockRestoreRevision,
   dragEndRef,
 } = vi.hoisted(() => ({
   // Captures the latest DndContext onDragEnd so tests can invoke a drag directly
@@ -61,6 +64,9 @@ const {
     id: 'uploaded1', filename: 'upload.png', content_type: 'image/png', width: 10, height: 10, created_at: '2024-01-01T00:00:00Z',
   }),
   mockImagesDelete: vi.fn().mockResolvedValue(undefined),
+  mockListRevisions: vi.fn().mockResolvedValue([]),
+  mockGetRevision: vi.fn(),
+  mockRestoreRevision: vi.fn(),
 }));
 vi.mock('@/utils/api', () => ({
   notes: {
@@ -74,6 +80,9 @@ vi.mock('@/utils/api', () => ({
     toggleItemCompleted: mockToggleItemCompleted,
     setItemsCompleted: mockSetItemsCompleted,
     deleteItems: mockDeleteItems,
+    listRevisions: mockListRevisions,
+    getRevision: mockGetRevision,
+    restoreRevision: mockRestoreRevision,
     addLabel: vi.fn(),
     removeLabel: vi.fn(),
   },
@@ -3344,6 +3353,90 @@ describe('NoteModal', () => {
       fireEvent.keyDown(input, { key: 'b', ctrlKey: true, shiftKey: true });
 
       expect(input).toHaveValue('hello world');
+    });
+  });
+  describe('Version history', () => {
+    const revision = {
+      id: 'rev1',
+      note_id: '1',
+      note_type: 'text' as const,
+      title: '',
+      actor_id: null,
+      edited_at: '2026-10-01T10:00:00Z',
+      created_at: '2026-10-01T10:05:00Z',
+    };
+
+    it('offers history for an existing note only', () => {
+      const { unmount } = renderNoteModal({ ...defaultProps, note: createMockNote() });
+      expect(screen.getByTestId('note-history')).toHaveTextContent('Version history');
+      unmount();
+
+      renderNoteModal({ ...defaultProps, note: null });
+      expect(screen.queryByTestId('note-history')).not.toBeInTheDocument();
+    });
+
+    it('does not offer history for a note in the bin', () => {
+      renderNoteModal({ ...defaultProps, note: createMockNote({ deleted_at: '2023-06-01T00:00:00Z' }) });
+      expect(screen.queryByTestId('note-history')).not.toBeInTheDocument();
+    });
+
+    it('restores a revision against the current version and adopts the result', async () => {
+      const note = createMockNote({ note_type: 'text', content: 'Current text', version: 3 });
+      const onRefresh = vi.fn();
+      mockNotesGetById.mockResolvedValueOnce({ version: 4 });
+      mockListRevisions.mockResolvedValueOnce([revision]);
+      mockGetRevision.mockResolvedValueOnce({ ...revision, content: 'Older text', items: [] });
+      // The restore converts the note back to a list, which the editor must adopt.
+      mockRestoreRevision.mockResolvedValueOnce(createMockNote({
+        note_type: 'list', title: 'Groceries', version: 5,
+        items: [{ id: 'i1', note_id: '1', text: 'Milk', completed: false, position: 0, parent_id: null, assigned_to: '', created_at: '', updated_at: '' }],
+      }));
+
+      renderNoteModal({ ...defaultProps, note, onRefresh });
+      fireEvent.click(screen.getByTestId('note-history'));
+      // The panel loads in effects, so flush inside act for their state updates.
+      await act(async () => { await vi.runAllTimersAsync(); });
+      fireEvent.click(screen.getByTestId('note-history-restore'));
+      await act(async () => { await vi.runAllTimersAsync(); });
+
+      expect(mockRestoreRevision).toHaveBeenCalledWith('1', 'rev1', { base_version: 4 });
+      expect(screen.queryByTestId('note-history-dialog')).not.toBeInTheDocument();
+      expect(screen.getByDisplayValue('Groceries')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Milk')).toBeInTheDocument();
+      expect(onRefresh).toHaveBeenCalled();
+    });
+
+    it('falls back to the known version when the refetch fails', async () => {
+      const note = createMockNote({ note_type: 'text', content: 'Current text', version: 3 });
+      mockNotesGetById.mockRejectedValueOnce(new Error('timeout'));
+      mockListRevisions.mockResolvedValueOnce([revision]);
+      mockGetRevision.mockResolvedValueOnce({ ...revision, content: 'Older text', items: [] });
+      mockRestoreRevision.mockResolvedValueOnce(createMockNote({ note_type: 'text', content: 'Older text', version: 4 }));
+
+      renderNoteModal({ ...defaultProps, note });
+      fireEvent.click(screen.getByTestId('note-history'));
+      await act(async () => { await vi.runAllTimersAsync(); });
+      fireEvent.click(screen.getByTestId('note-history-restore'));
+      await act(async () => { await vi.runAllTimersAsync(); });
+
+      expect(mockRestoreRevision).toHaveBeenCalledWith('1', 'rev1', { base_version: 3 });
+    });
+
+    it('closes the panel instead of restoring when flushing local edits conflicts', async () => {
+      const note = createMockNote({ note_type: 'list', title: 'Groceries', version: 3 });
+      mockNotesUpdate.mockRejectedValueOnce({ response: { status: 409 } });
+      mockListRevisions.mockResolvedValueOnce([{ ...revision, note_type: 'list', title: 'Older' }]);
+      mockGetRevision.mockResolvedValueOnce({ ...revision, note_type: 'list', title: 'Older', content: '', items: [] });
+
+      renderNoteModal({ ...defaultProps, note });
+      fireEvent.change(screen.getByDisplayValue('Groceries'), { target: { value: 'Shopping' } });
+      fireEvent.click(screen.getByTestId('note-history'));
+      await act(async () => { await vi.runAllTimersAsync(); });
+      fireEvent.click(screen.getByTestId('note-history-restore'));
+      await act(async () => { await vi.runAllTimersAsync(); });
+
+      expect(mockRestoreRevision).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('note-history-dialog')).not.toBeInTheDocument();
     });
   });
 });
