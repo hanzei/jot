@@ -34,6 +34,8 @@ import { Archive, ArrowLeft, Check, ChevronRight, CircleAlert, EllipsisVertical,
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, useMarkNoteViewed, NoteConversionCapError } from '../hooks/useNotes';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
+import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { useFailedNoteIds } from '../store/OfflineContext';
@@ -169,6 +171,11 @@ export default function NoteEditorScreen() {
   const pendingShare = usePendingShare();
   const redirectInitiatedRef = useRef(false);
   const { user: currentUser, isLocalMode } = useAuth();
+  // Note history is online-only; its menu entry is disabled while it can't
+  // load. Read at render time rather than subscribed to: opening the menu
+  // re-renders the editor, which is when the value is shown.
+  const { isConnected } = useNetworkStatus();
+  const historyAvailable = isOnlineWriteAllowed(isConnected);
   const { usersById } = useUsers();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
@@ -1217,6 +1224,11 @@ export default function NoteEditorScreen() {
   const openShareScreen = useCallback(() => {
     void withSavedNote((id) => navigation.navigate('Share', { noteId: id }));
   }, [withSavedNote, navigation]);
+  // Saved first so the editor is clean when the history screen opens: a restore
+  // then lands in the editor through the normal refresh of an unedited note.
+  const openHistoryScreen = useCallback(() => {
+    void withSavedNote((id) => navigation.navigate('NoteHistory', { noteId: id }));
+  }, [withSavedNote, navigation]);
 
   // Muted icon color for the bar; disabled buttons render at reduced opacity.
   const barIconColor = hasNoteColor ? '#444' : colors.icon;
@@ -1861,6 +1873,8 @@ export default function NoteEditorScreen() {
         onDuplicate={isBlankNewNote ? undefined : handleDuplicate}
         onConvert={handleConvertNoteType}
         onManageLabels={openLabelPicker}
+        onHistory={!isLocalMode && noteId !== null ? openHistoryScreen : undefined}
+        historyUnavailable={!historyAvailable}
         onUncheckAllItems={noteType === 'list' && checkedItems.length > 0 ? handleUncheckAllItems : undefined}
         onDeleteCheckedItems={noteType === 'list' && checkedItems.length > 0 ? handleDeleteCompletedItems : undefined}
         onMoveToTrash={ownsNote ? handleDelete : undefined}

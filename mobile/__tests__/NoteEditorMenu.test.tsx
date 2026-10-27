@@ -130,6 +130,29 @@ describe('NoteEditorMenu', () => {
     expect(queryByTestId('editor-menu-trash')).toBeNull();
   });
 
+  it('offers History when given, disabled with a hint while it cannot load', async () => {
+    const onHistory = jest.fn();
+    const onClose = jest.fn();
+    const { getByTestId, queryByTestId, rerender } = await render(
+      <NoteEditorMenu visible onClose={onClose} onSend={noop} onHistory={onHistory} />,
+    );
+    expect(queryByTestId('editor-menu-history-hint')).toBeNull();
+    await fireEvent.press(getByTestId('editor-menu-history'));
+    expect(onClose).toHaveBeenCalled();
+    expect(onHistory).toHaveBeenCalledTimes(1);
+
+    await rerender(<NoteEditorMenu visible onClose={onClose} onSend={noop} onHistory={onHistory} historyUnavailable />);
+    expect(getByTestId('editor-menu-history-hint')).toHaveTextContent('history.menuOffline');
+    expect(getByTestId('editor-menu-history')).toBeDisabled();
+    await fireEvent.press(getByTestId('editor-menu-history'));
+    expect(onHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits History without a callback (local mode, unsaved or trashed note)', async () => {
+    const { queryByTestId } = await render(<NoteEditorMenu visible onClose={noop} onSend={noop} />);
+    expect(queryByTestId('editor-menu-history')).toBeNull();
+  });
+
   it('hides the checked-items bulk actions when their callbacks are absent', async () => {
     const { queryByTestId } = await render(
       <NoteEditorMenu visible onClose={noop} onSend={noop} onMoveToTrash={noop} noteType="list" />,

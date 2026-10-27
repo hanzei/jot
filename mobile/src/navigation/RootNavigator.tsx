@@ -12,6 +12,7 @@ import MainDrawer from './MainDrawer';
 import { CardRectRegistryProvider } from '../screens/notesList/cardRectRegistry';
 import NoteEditorScreen from '../screens/NoteEditorScreen';
 import ShareScreen from '../screens/ShareScreen';
+import NoteHistoryScreen from '../screens/NoteHistoryScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import SyncFailuresScreen from '../screens/SyncFailuresScreen';
 import DiagnosticsScreen from '../screens/DiagnosticsScreen';
@@ -51,6 +52,7 @@ export type RootStackParamList = {
     openKey?: string;
   };
   Share: { noteId: string };
+  NoteHistory: { noteId: string };
   Settings: undefined;
   SyncFailures: undefined;
   Diagnostics: undefined;
@@ -60,7 +62,7 @@ export type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-// Identify a NoteEditor/Share screen by the note it targets. Without this,
+// Identify a NoteEditor/Share/NoteHistory screen by the note it targets. Without this,
 // React Navigation matches routes by name only, so a deep link to a different
 // note while an editor is already open navigates back to the existing instance
 // and replaces its params in place. NoteEditorScreen seeds its state from the
@@ -115,6 +117,15 @@ function AuthenticatedStack() {
               <Stack.Screen
                 name="Share"
                 component={ShareScreen}
+                getId={getNoteScreenId}
+                options={{
+                  headerShown: false,
+                  presentation: 'modal',
+                }}
+              />
+              <Stack.Screen
+                name="NoteHistory"
+                component={NoteHistoryScreen}
                 getId={getNoteScreenId}
                 options={{
                   headerShown: false,
