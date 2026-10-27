@@ -192,12 +192,16 @@ func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, act
 // title is cleared and the item delete is a no-op in that direction); existing
 // items are deleted regardless of direction.
 func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetType NoteType, title, content string, targetItems []NewNoteItem, baseVersion *int) (*Note, error) {
-	return s.convertType(ctx, id, userID, targetType, title, content, targetItems, baseVersion, true)
+	return s.convertType(ctx, id, userID, targetType, title, content, targetItems, baseVersion, false)
 }
 
-// convertType is ConvertType, with the replaced content's revision coalescing
-// (see captureRevisionTx) only when coalesceRevision is set.
-func (s *noteStore) convertType(ctx context.Context, id, userID string, targetType NoteType, title, content string, targetItems []NewNoteItem, baseVersion *int, coalesceRevision bool) (*Note, error) {
+// convertType is ConvertType, or with restore set, the write behind
+// RestoreRevision: the replaced content is snapshotted without coalescing (see
+// captureRevisionTx), and a version mismatch is always a conflict. The
+// idempotent-replay check compares items by text and completion only, so it
+// could mistake a note that differs from the revision just in nesting or
+// assignees for the restore having already happened.
+func (s *noteStore) convertType(ctx context.Context, id, userID string, targetType NoteType, title, content string, targetItems []NewNoteItem, baseVersion *int, restore bool) (*Note, error) {
 	if !targetType.Valid() {
 		return nil, ErrInvalidNoteType
 	}
@@ -218,12 +222,12 @@ func (s *noteStore) convertType(ctx context.Context, id, userID string, targetTy
 
 	now := Timestamp(Now())
 
-	rev, err := snapshotNoteTx(ctx, tx, s.d, id, userID, now, coalesceRevision)
+	rev, err := snapshotNoteTx(ctx, tx, s.d, id, userID, now, !restore)
 	if err != nil {
 		return nil, err
 	}
 
-	alreadyApplied, err := s.convertNoteRowTx(ctx, tx, id, userID, targetType, title, content, targetItems, baseVersion, now)
+	alreadyApplied, err := s.convertNoteRowTx(ctx, tx, id, userID, targetType, title, content, targetItems, baseVersion, !restore, now)
 	if err != nil {
 		return nil, err
 	}
@@ -272,9 +276,10 @@ func (s *noteStore) replaceConvertedContentTx(ctx context.Context, tx *sql.Tx, r
 // convertNoteRowTx updates the notes row's title/content/note_type/version for
 // a type conversion inside tx. alreadyApplied is true when a concurrent write
 // already committed this exact conversion (detected via the idempotent-replay
-// check below); the caller should then skip re-touching note_items and just
-// commit, since the winning write already did that atomically.
-func (s *noteStore) convertNoteRowTx(ctx context.Context, tx *sql.Tx, id, actorID string, targetType NoteType, title, content string, targetItems []NewNoteItem, baseVersion *int, now string) (alreadyApplied bool, err error) {
+// check below, run only when allowReplay is set); the caller should then skip
+// re-touching note_items and just commit, since the winning write already did
+// that atomically.
+func (s *noteStore) convertNoteRowTx(ctx context.Context, tx *sql.Tx, id, actorID string, targetType NoteType, title, content string, targetItems []NewNoteItem, baseVersion *int, allowReplay bool, now string) (alreadyApplied bool, err error) {
 	// deleted_at IS NULL guards against a concurrent trash landing between the
 	// HasAccess check in ConvertType and this UPDATE.
 	query := `UPDATE notes SET title = ?, content = ?, note_type = ?, version = version + 1, updated_at = ?, ` + contentChangedSet + ` WHERE id = ? AND deleted_at IS NULL`
@@ -296,6 +301,9 @@ func (s *noteStore) convertNoteRowTx(ctx context.Context, tx *sql.Tx, id, actorI
 	}
 	if baseVersion == nil {
 		return false, ErrNoteNotFound
+	}
+	if !allowReplay {
+		return false, ErrNoteVersionConflict
 	}
 
 	// Zero rows means the version guard did not match. Re-read to check whether a

@@ -401,6 +401,29 @@ func TestNoteRevisionRestore(t *testing.T) {
 			require.ErrorIs(t, err, ErrNoteVersionConflict)
 		})
 
+		t.Run("a stale base_version conflicts even when only nesting differs", func(t *testing.T) {
+			// The revision and the note agree on title, item text, and
+			// completion; only eggs' nesting differs. A conversion replay check
+			// would take that for an already-applied restore.
+			note := createRevisionListNote(t, store)
+			milk := itemIDByText(t, store, note.ID, "milk")
+			eggs := itemIDByText(t, store, note.ID, "eggs")
+			_, err := store.PatchItem(t.Context(), note.ID, revisionOwnerID, eggs, NoteItemPatch{ParentID: &milk})
+			require.NoError(t, err)
+			flat := latestRevision(t, store, note.ID)
+			require.Nil(t, flat.Items[1].ParentID)
+			for _, title := range []string{"renamed", "groceries"} {
+				_, err = store.Update(t.Context(), note.ID, revisionOwnerID, NoteUpdate{Title: &title})
+				require.NoError(t, err)
+			}
+
+			_, err = store.RestoreRevision(t.Context(), note.ID, flat.ID, revisionOwnerID, &note.Version)
+			require.ErrorIs(t, err, ErrNoteVersionConflict)
+			current, err := store.GetByID(t.Context(), note.ID, revisionOwnerID)
+			require.NoError(t, err)
+			require.NotNil(t, current.Items[1].ParentID, "nothing was restored")
+		})
+
 		t.Run("a revision of another note is not found", func(t *testing.T) {
 			a := createRevisionTextNote(t, store, "a")
 			b := createRevisionTextNote(t, store, "b")
