@@ -369,3 +369,11 @@ func (c *Client) ExportNotes(ctx context.Context) (*JotExportBundle, error) {
 	}
 	return bundle, nil
 }
+
+// ExportNotesMarkdown downloads the authenticated user's notes as a Markdown
+// export (GET /notes/export?format=markdown): a zip of notes/<slug>.md files
+// and the images they link to. It returns the zip as served.
+func (c *Client) ExportNotesMarkdown(ctx context.Context) ([]byte, error) {
+	data, _, err := c.doGetBytes(ctx, "/api/v1/notes/export?format=markdown")
+	return data, err
+}

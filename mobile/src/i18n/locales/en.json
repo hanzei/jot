@@ -486,14 +486,18 @@
     "importButton": "Import"
   },
   "export": {
-    "description": "Download a Jot backup (.zip) of all your notes and their images, then save or send it with your device's share sheet.",
+    "description": "Download all your notes and their images as a Jot backup or as Markdown files for Obsidian (.zip), then save or send it with your device's share sheet.",
     "exportButton": "Export notes",
     "exporting": "Exporting...",
     "offline": "Exporting needs a connection to your server.",
     "exportFailed": "Export failed. Please try again.",
     "shareFailed": "Could not open the share sheet. Please try again.",
     "shareUnavailable": "Sharing files is not available on this device.",
-    "shareTitle": "Save Jot backup"
+    "shareTitle": "Save Jot backup",
+    "shareTitleMarkdown": "Save Markdown export",
+    "formatLabel": "Export format",
+    "formatJot": "Jot backup (.zip)",
+    "formatMarkdown": "Markdown, Obsidian-compatible (.zip)"
   },
   "upgrade": {
     "settingsSectionTitle": "Connect to a server",

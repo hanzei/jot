@@ -486,14 +486,18 @@
     "importButton": "Importer"
   },
   "export": {
-    "description": "Téléchargez une sauvegarde Jot (.zip) de toutes vos notes et de leurs images, puis enregistrez-la ou envoyez-la via le menu de partage de votre appareil.",
+    "description": "Téléchargez toutes vos notes et leurs images sous forme de sauvegarde Jot ou de fichiers Markdown pour Obsidian (.zip), puis enregistrez-la ou envoyez-la via le menu de partage de votre appareil.",
     "exportButton": "Exporter les notes",
     "exporting": "Exportation...",
     "offline": "L'exportation nécessite une connexion à votre serveur.",
     "exportFailed": "L'exportation a échoué. Veuillez réessayer.",
     "shareFailed": "Impossible d'ouvrir le menu de partage. Veuillez réessayer.",
     "shareUnavailable": "Le partage de fichiers n'est pas disponible sur cet appareil.",
-    "shareTitle": "Enregistrer la sauvegarde Jot"
+    "shareTitle": "Enregistrer la sauvegarde Jot",
+    "shareTitleMarkdown": "Enregistrer l'export Markdown",
+    "formatLabel": "Format d'export",
+    "formatJot": "Sauvegarde Jot (.zip)",
+    "formatMarkdown": "Markdown, compatible Obsidian (.zip)"
   },
   "upgrade": {
     "settingsSectionTitle": "Se connecter à un serveur",

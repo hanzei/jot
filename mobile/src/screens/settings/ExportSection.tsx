@@ -2,12 +2,19 @@ import { useState, useCallback, useEffect, useRef, useSyncExternalStore } from '
 import { View, Text, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import * as Sharing from 'expo-sharing';
+import type { ExportFormat } from '@jot/shared';
 import { useTheme } from '../../theme/ThemeContext';
 import { downloadExportBundle } from '../../api/export';
 import { isOnlineWriteAllowed, isServerReachable, subscribeToServerReachability } from '../../api/serverReachability';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { deleteFileIfExists } from '../../utils/fs';
+import FormatRadioGroup, { type FormatOption } from './FormatRadioGroup';
 import { styles } from './styles';
+
+const FORMAT_OPTIONS: FormatOption<ExportFormat>[] = [
+  { value: 'jot', labelKey: 'export.formatJot' },
+  { value: 'markdown', labelKey: 'export.formatMarkdown' },
+];
 
 export default function ExportSection() {
   const { colors } = useTheme();
@@ -15,6 +22,7 @@ export default function ExportSection() {
   const { isConnected } = useNetworkStatus();
 
   const [exporting, setExporting] = useState(false);
+  const [format, setFormat] = useState<ExportFormat>('jot');
   const [exportError, setExportError] = useState('');
 
   // Subscribed only to re-render when reachability flips; isOnlineWriteAllowed
@@ -42,7 +50,7 @@ export default function ExportSection() {
         setExportError('export.shareUnavailable');
         return;
       }
-      bundleUri = await downloadExportBundle(controller.signal);
+      bundleUri = await downloadExportBundle(format, controller.signal);
       if (controller.signal.aborted) {
         deleteFileIfExists(bundleUri);
         return;
@@ -50,7 +58,7 @@ export default function ExportSection() {
       await Sharing.shareAsync(bundleUri, {
         mimeType: 'application/zip',
         UTI: 'public.zip-archive',
-        dialogTitle: t('export.shareTitle'),
+        dialogTitle: t(format === 'markdown' ? 'export.shareTitleMarkdown' : 'export.shareTitle'),
       });
       // Kept for the receiving app; see EXPORT_BUNDLE_RETENTION_MS.
     } catch {
@@ -69,7 +77,7 @@ export default function ExportSection() {
       abortRef.current = null;
       setExporting(false);
     }
-  }, [t]);
+  }, [format, t]);
 
   const disabled = exporting || !online;
 
@@ -79,6 +87,14 @@ export default function ExportSection() {
       <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>
         {t('export.description')}
       </Text>
+      <FormatRadioGroup
+        labelKey="export.formatLabel"
+        options={FORMAT_OPTIONS}
+        value={format}
+        onChange={setFormat}
+        disabled={exporting}
+        testIDPrefix="settings-export-format"
+      />
       {!online && (
         <Text style={[styles.sectionDescription, { color: colors.textMuted }]} testID="settings-export-offline">
           {t('export.offline')}

@@ -59,24 +59,24 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 20,
   },
-  importFormatLabel: {
+  formatLabel: {
     fontSize: 14,
     fontWeight: '500',
     marginBottom: 8,
   },
-  importFormatRow: {
+  formatRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
     marginBottom: 12,
   },
-  importFormatOption: {
+  formatOption: {
     borderWidth: 1,
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 6,
   },
-  importFormatOptionText: {
+  formatOptionText: {
     fontSize: 14,
     fontWeight: '500',
   },
