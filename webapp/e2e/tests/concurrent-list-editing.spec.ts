@@ -6,6 +6,14 @@ import { DashboardPage } from '../pages/DashboardPage';
  * two tabs must merge per item instead of one tab overwriting the other.
  */
 test.describe('Concurrent list editing', () => {
+  // These tests check list items off with forced clicks, which skip
+  // Playwright's stability wait. The note modal is vertically centred and
+  // animates its height whenever the item counts change (useSizeTransition), as
+  // well as on open, so a forced click mid-animation lands on the row beside the
+  // checkbox. Reduced motion turns both animations off (canAnimate,
+  // motion-reduce:transition-none); these specs test list logic, not motion.
+  test.use({ reducedMotion: 'reduce' });
+
   test('edits to different items from two tabs both survive', async ({ page, dashboardPage, authenticatedUser }) => {
     expect(authenticatedUser.username).toBeTruthy();
 

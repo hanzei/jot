@@ -1790,7 +1790,6 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
         <DialogPanel
           ref={panelRef}
           transition
-          data-testid="note-modal-panel"
           className={`mx-auto w-full max-w-lg max-h-[90vh] overflow-hidden rounded-lg shadow-xl relative transition duration-200 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none ${
             colors.find(c => c.value === color)?.class || 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600'
           }`}
