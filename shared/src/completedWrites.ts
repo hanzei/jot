@@ -65,8 +65,13 @@ interface Claim {
   prior: boolean;
 }
 
+interface ParsedTimestamp {
+  wholeSecondMs: number;
+  nanos: number;
+}
+
 interface Seen {
-  updatedAt: string;
+  at: ParsedTimestamp;
   completed: boolean;
 }
 
@@ -81,11 +86,13 @@ const TIMESTAMP_PATTERN = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d{1,9}))?(Z|[
 export const compareServerTimestamps = (a: string, b: string): number | null => {
   const pa = parseServerTimestamp(a);
   const pb = parseServerTimestamp(b);
-  if (!pa || !pb) return null;
-  return pa.wholeSecondMs !== pb.wholeSecondMs ? pa.wholeSecondMs - pb.wholeSecondMs : pa.nanos - pb.nanos;
+  return pa && pb ? compareParsed(pa, pb) : null;
 };
 
-const parseServerTimestamp = (value: string): { wholeSecondMs: number; nanos: number } | null => {
+const compareParsed = (a: ParsedTimestamp, b: ParsedTimestamp): number =>
+  a.wholeSecondMs !== b.wholeSecondMs ? a.wholeSecondMs - b.wholeSecondMs : a.nanos - b.nanos;
+
+const parseServerTimestamp = (value: string): ParsedTimestamp | null => {
   const match = TIMESTAMP_PATTERN.exec(value);
   if (!match) return null;
   const wholeSecondMs = Date.parse(`${match[1]}${match[3]}`);
@@ -96,10 +103,10 @@ const parseServerTimestamp = (value: string): { wholeSecondMs: number; nanos: nu
 export const createCompletedWriteTracker = (): CompletedWriteTracker => {
   // Per item, the writes still claiming it, oldest first.
   const claimsById = new Map<string, Claim[]>();
-  // Per item a local write has ever claimed, the newest server state seen in
-  // any snapshot. Bounded by what this client writes, not by every item synced.
-  const seenById = new Map<string, Seen>();
-  const tracked = new Set<string>();
+  // Keyed by every item a local write has ever claimed: the newest server state
+  // seen in any snapshot, or null until one with a readable timestamp arrives.
+  // Bounded by what this client writes, not by every item synced.
+  const seenById = new Map<string, Seen | null>();
   let nextWrite = 0;
 
   const claimedLater = (id: string, write: number | null): boolean => {
@@ -111,11 +118,12 @@ export const createCompletedWriteTracker = (): CompletedWriteTracker => {
   // Records a snapshot item's server state if it is the newest seen, and returns
   // the newest completed value known for it.
   const newestCompleted = (item: ServerCompletedItem): boolean => {
-    const updatedAt = item.updated_at;
-    if (!tracked.has(item.id) || updatedAt === undefined || !parseServerTimestamp(updatedAt)) return item.completed;
+    if (!seenById.has(item.id) || item.updated_at === undefined) return item.completed;
+    const at = parseServerTimestamp(item.updated_at);
+    if (!at) return item.completed;
     const seen = seenById.get(item.id);
-    if (seen && compareServerTimestamps(updatedAt, seen.updatedAt)! < 0) return seen.completed; // both readable
-    seenById.set(item.id, { updatedAt, completed: item.completed });
+    if (seen && compareParsed(at, seen.at) < 0) return seen.completed;
+    seenById.set(item.id, { at, completed: item.completed });
     return item.completed;
   };
 
@@ -146,7 +154,7 @@ export const createCompletedWriteTracker = (): CompletedWriteTracker => {
       for (const entry of priorById) {
         const claims = claimsById.get(entry[0]);
         const claim = { write: nextWrite, prior: entry[1] };
-        tracked.add(entry[0]);
+        if (!seenById.has(entry[0])) seenById.set(entry[0], null);
         if (claims) claims.push(claim);
         else claimsById.set(entry[0], [claim]);
       }

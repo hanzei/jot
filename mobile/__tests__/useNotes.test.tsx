@@ -154,7 +154,7 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toEqual(newNote);
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newNote);
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newNote, { serverSnapshot: true });
     });
 
     it('stores the labels a create returns, since it may have minted them', async () => {
@@ -189,7 +189,7 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toEqual(newListNote);
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newListNote);
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newListNote, { serverSnapshot: true });
     });
 
     it('blocks write when server switch is in progress', async () => {
@@ -1586,7 +1586,7 @@ describe('useNotes hooks', () => {
 
       expect(result.current.data).toEqual(duplicated);
       expect(mockNotesApi.duplicateNote).toHaveBeenCalledWith('123');
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), duplicated);
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), duplicated, { serverSnapshot: true });
     });
   });
 

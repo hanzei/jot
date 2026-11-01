@@ -21,7 +21,7 @@ import {
 } from '../api/notes';
 import { shareNote, unshareNote } from '../api/users';
 import { useOfflineNote } from './useOfflineNotes';
-import { DEFAULT_NOTE_COLOR, generateId, textToListNote, listToText, checkConvertToListCaps, completedCascadeScope, patchTouchesSharedContent } from '@jot/shared';
+import { DEFAULT_NOTE_COLOR, generateId, textToListNote, listToText, checkConvertToListCaps, applyCompletedValues, completedCascadeScope, patchTouchesSharedContent } from '@jot/shared';
 import type {
   Note,
   NoteItem,
@@ -61,7 +61,7 @@ import {
   upsertLabel,
 } from '../db/noteQueries';
 import { localCompletedWrites } from '../db/localCompletedWrites';
-import { enqueueOperation, rethrowIfNotQueueable } from '../db/syncQueue';
+import { enqueueOperation, isQueueableError, rethrowIfNotQueueable, saveServerResponseNote, type EnqueueParams } from '../db/syncQueue';
 import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from './useNetworkStatus';
 import { useAuth } from '../store/AuthContext';
@@ -88,9 +88,7 @@ function collectToggleCascade(items: NoteItem[], itemId: string, completed: bool
 
 /** Returns a copy of `items` with the completed-toggle cascade applied. */
 function applyToggleToItems(items: NoteItem[], itemId: string, completed: boolean): NoteItem[] {
-  const ids = new Set(collectToggleCascade(items, itemId, completed));
-  if (ids.size === 0) return items;
-  return items.map((i) => (ids.has(i.id) ? { ...i, completed } : i));
+  return applyCompletedValues(items, new Map(collectToggleCascade(items, itemId, completed).map((id) => [id, completed])));
 }
 
 /** Writes per-item completed values to SQLite, one grouped write per value. */
@@ -108,69 +106,77 @@ async function setLocalCompletedValues(
   }
 }
 
-/**
- * Applies a completed-toggle cascade to the note's rows in SQLite and records
- * the write in `localCompletedWrites`, returning its token. The caller must
- * `localCompletedWrites.end(write)` once the toggle settles.
- *
- * Every changed id is one whose value actually flips, so the whole set moves to
- * `completed` in one grouped write — no per-id transaction, and no window where
- * a re-read can catch a parent checked but its children not.
- */
-async function applyToggleToLocalItems(
-  db: SQLiteDatabase,
-  noteId: string,
-  itemId: string,
-  completed: boolean,
-): Promise<number> {
-  const note = await getLocalNote(db, noteId);
-  const changedIds = note?.note_type === 'list' && note.items ? collectToggleCascade(note.items, itemId, completed) : [];
-  // Claimed before the write is awaited, so taps claim rows in the order made.
-  const write = localCompletedWrites.begin(new Map(changedIds.map((id) => [id, !completed])));
-  if (!note) return write;
-  try {
-    await setLocalItemsCompleted(db, noteId, changedIds, completed);
-  } catch (err) {
-    localCompletedWrites.end(write);
-    throw err;
-  }
-  return write;
-}
-
-/**
- * Takes a failed completed-flag write back: `localCompletedWrites.fail` names
- * exactly the rows no later write has taken over, and those are reverted in
- * SQLite and in the cached note reads alike. Rolling the cache back to its
- * pre-write snapshot instead would also undo every later write's optimistic
- * state.
- */
-async function revertCompletedWrite(
-  db: SQLiteDatabase,
-  queryClient: QueryClient,
-  noteId: string,
-  write: number,
-): Promise<void> {
-  const revert = localCompletedWrites.fail(write);
-  await setLocalCompletedValues(db, noteId, revert);
-  if (revert.size === 0) return;
-  applyOptimisticNote(queryClient, noteId, (note) =>
-    note.note_type === 'list' && note.items
-      ? { ...note, items: note.items.map((i) => {
-        const value = revert.get(i.id);
-        return value === undefined ? i : { ...i, completed: value };
-      }) }
-      : note,
-  );
-}
-
-/**
- * Re-reads a note from SQLite after a completed-flag write failed, so anything
- * the failure left in the cache (one thrown before the local write, say) settles
- * on what SQLite holds.
- */
+/** Invalidates a note's SQLite-backed reads, detail and lists. */
 function invalidateNoteReads(queryClient: QueryClient, noteId: string): void {
   queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
   queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+}
+
+interface LocalCompletedWrite {
+  /** For every item the write changes, the value it replaces. */
+  priorById: ReadonlyMap<string, boolean>;
+  /** Applies the change to SQLite. */
+  writeLocal: () => Promise<void>;
+  /** Sends the change, resolving to the note's full item list. */
+  send: () => Promise<NoteItem[]>;
+  /** Writes the response to SQLite, gated as answering `write`. */
+  persist: (write: number, serverItems: NoteItem[]) => Promise<void>;
+  /** The replay op to queue when offline or after a transient failure. */
+  queued: EnqueueParams;
+}
+
+/**
+ * The shared body of the completed-flag mutations. The change is claimed in
+ * localCompletedWrites and written to SQLite *before* the request goes out:
+ * both note reads are SQLite-backed, so while a row still holds its old value
+ * any re-read in that window (the queue drain's invalidation, a background note
+ * sync, a sibling write's onSettled) resolves to the pre-write note and
+ * overwrites the optimistic cache. Writing first makes the local rows agree
+ * with the cache for the whole flight, so a re-read is a no-op.
+ *
+ * Online, the response is the note's full item list as of this write — it
+ * still reports any row tapped after this one with its old value — so it is
+ * written back through the gate. A permanent failure reverts the rows no later
+ * write has taken over, in SQLite and the cache alike; rolling the cache back to
+ * its pre-write snapshot instead would undo every later write's optimistic
+ * state. Offline, or after a transient failure, the change is queued for replay.
+ * Resolves to the response, or [] when queued.
+ */
+async function runLocalCompletedWrite(
+  db: SQLiteDatabase,
+  queryClient: QueryClient,
+  noteId: string,
+  isConnected: boolean,
+  op: LocalCompletedWrite,
+): Promise<NoteItem[]> {
+  const write = localCompletedWrites.begin(op.priorById);
+  try {
+    await op.writeLocal();
+    // Queue instead of calling online while the note's create is still pending:
+    // it drains FIFO first (#475), and a direct call would 404 and drop the edit.
+    if (isOnlineWriteAllowed(isConnected) && !(await isNotePendingCreate(db, noteId))) {
+      try {
+        const serverItems = await op.send();
+        await op.persist(write, serverItems);
+        return serverItems;
+      } catch (err) {
+        if (!isQueueableError(err)) {
+          const revert = localCompletedWrites.fail(write);
+          await setLocalCompletedValues(db, noteId, revert);
+          if (revert.size > 0) {
+            applyOptimisticNote(queryClient, noteId, (note) =>
+              note.note_type === 'list' && note.items ? { ...note, items: applyCompletedValues(note.items, revert) } : note,
+            );
+          }
+          throw err;
+        }
+      }
+    }
+    await enqueueOperation(db, op.queued);
+    return [];
+  } finally {
+    localCompletedWrites.end(write);
+  }
 }
 
 /**
@@ -277,7 +283,7 @@ export function useCreateNote() {
       if (isOnlineWriteAllowed(isConnected)) {
         try {
           const note = await createNote(data);
-          await saveNote(db, note);
+          await saveServerResponseNote(db, note);
           // Labels sent by name may have been minted by the create; store them so
           // the drawer shows them right away (#691).
           for (const label of note.labels ?? []) await upsertLabel(db, label);
@@ -469,7 +475,7 @@ export function useUpdateNote() {
           const body: UpdateNoteRequest =
             touchesContent && existing ? { ...data, base_version: existing.version } : data;
           const updatedNote = await updateNote(id, body);
-          await saveNote(db, updatedNote, { serverSnapshot: true });
+          await saveServerResponseNote(db, updatedNote);
           return updatedNote;
         } catch (err) {
           // Transient failure: fall through to the offline path so the edit is
@@ -646,7 +652,7 @@ export function useConvertNoteType() {
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           const convertedNote = await convertNoteType(id, { ...data, base_version: existing.version });
-          await saveNote(db, convertedNote, { serverSnapshot: true });
+          await saveServerResponseNote(db, convertedNote);
           return convertedNote;
         } catch (err) {
           // Transient failure: fall through to the offline path so the
@@ -899,7 +905,7 @@ export function useDuplicateNote() {
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           const duplicatedNote = await duplicateNote(id);
-          await saveNote(db, duplicatedNote);
+          await saveServerResponseNote(db, duplicatedNote);
           return duplicatedNote;
         } catch (err) {
           // Transient failure: fall through to the offline path so the duplicate
@@ -1270,7 +1276,7 @@ export function useShareNote() {
           // Fetch updated note so shared_with_json in SQLite reflects server state
           try {
             const updated = await getNote(noteId);
-            await saveNote(db, updated, { serverSnapshot: true });
+            await saveServerResponseNote(db, updated);
           } catch { /* share succeeded; note will sync on next background refresh */ }
           return;
         } catch (err) {
@@ -1330,7 +1336,7 @@ export function useUnshareNote() {
           await unshareNote(noteId, userId);
           try {
             const updated = await getNote(noteId);
-            await saveNote(db, updated, { serverSnapshot: true });
+            await saveServerResponseNote(db, updated);
           } catch { /* unshare succeeded; note will sync on next background refresh */ }
           return;
         } catch (err) {
@@ -1430,7 +1436,7 @@ export function useToggleNoteItemCompleted() {
   return useMutation({
     onMutate: async ({ noteId, itemId, completed }: { noteId: string; itemId: string; completed: boolean }) => {
       await cancelNoteReads(queryClient, noteId);
-      return applyOptimisticNote(queryClient, noteId, (note) =>
+      applyOptimisticNote(queryClient, noteId, (note) =>
         note.note_type === 'list' && note.items
           ? { ...note, items: applyToggleToItems(note.items, itemId, completed) }
           : note,
@@ -1438,69 +1444,34 @@ export function useToggleNoteItemCompleted() {
     },
     mutationFn: async ({ noteId, itemId, completed }: { noteId: string; itemId: string; completed: boolean }): Promise<NoteItem[]> => {
       assertSwitchWriteAllowed();
-
-      // Write the cascade to SQLite up front, before the request goes out. Both
-      // note reads are SQLite-backed, so while the row still says unchecked any
-      // re-read in that window (the queue drain's invalidation, a background
-      // note sync, a sibling toggle's onSuccess) resolves to the pre-toggle note
-      // and overwrites the optimistic cache above — the checked row visibly
-      // comes back for the length of one round trip before the response
-      // re-checks it. Writing first makes the local rows agree with the
-      // optimistic cache for the whole flight, so a re-read is a no-op.
-      const write = await applyToggleToLocalItems(db, noteId, itemId, completed);
-
-      try {
-        // Queue instead of calling online while the note's create is still pending:
-        // it drains FIFO first (#475), and a direct call would 404 and drop the edit.
-        const pendingCreate = await isNotePendingCreate(db, noteId);
-        if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
-          try {
-            const serverItems = await toggleItemCompleted(noteId, itemId, completed);
-            // The response is the note's full item list as of this write, so it
-            // still reports a row tapped after this one unchecked: write back
-            // only what localCompletedWrites says it may still decide.
-            await setLocalCompletedValues(db, noteId, localCompletedWrites.accept(write, serverItems));
-            return serverItems;
-          } catch (err) {
-            // Transient failure: fall through to the offline path so the toggle is
-            // queued for replay instead of being lost. A permanent one takes back
-            // the local rows no later toggle has taken over — otherwise the
-            // pre-flight write above would outlive the failed toggle.
-            try {
-              rethrowIfNotQueueable(err);
-            } catch (permanent) {
-              await revertCompletedWrite(db, queryClient, noteId, write);
-              throw permanent;
-            }
-          }
-        }
-
-        // Offline (or a transient online failure): the cascade is already in the
-        // local DB, so only the replay op is left to enqueue.
-        await enqueueOperation(db, {
+      const note = await getLocalNote(db, noteId);
+      // Every changed id is one whose value actually flips, so the whole set
+      // moves in one grouped write — no window where a re-read can catch a
+      // parent checked but its children not.
+      const changedIds = note?.note_type === 'list' && note.items ? collectToggleCascade(note.items, itemId, completed) : [];
+      return runLocalCompletedWrite(db, queryClient, noteId, isConnected, {
+        priorById: new Map(changedIds.map((id) => [id, !completed])),
+        writeLocal: () => setLocalItemsCompleted(db, noteId, changedIds, completed),
+        send: () => toggleItemCompleted(noteId, itemId, completed),
+        persist: (write, serverItems) =>
+          setLocalCompletedValues(db, noteId, localCompletedWrites.accept(write, serverItems)),
+        queued: {
           operation: 'toggleItemCompleted',
           endpoint: `/notes/${noteId}/items/${itemId}/toggle-completed`,
           method: 'POST',
           body: { completed } as Record<string, unknown>,
-        });
-        return [];
-      } finally {
-        localCompletedWrites.end(write);
-      }
+        },
+      });
     },
-    onError: (_err, { noteId }) => invalidateNoteReads(queryClient, noteId),
-    onSuccess: (_data, { noteId }) => {
-      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
-      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-    },
+    onSettled: (_data, _err, { noteId }) => invalidateNoteReads(queryClient, noteId),
   });
 }
 
 /**
  * Bulk-uncheck a caller-supplied set of item ids (the note's currently
- * completed items, captured at action time). Mirrors useToggleNoteItemCompleted's
- * online-try / offline-queue / optimistic-rollback structure, but over a set
- * of ids instead of a single item with cascade.
+ * completed items, captured at action time). The same runLocalCompletedWrite
+ * as useToggleNoteItemCompleted, over a set of ids instead of a single item with
+ * cascade.
  */
 export function useUncheckAllItems() {
   const db = useSQLiteContext();
@@ -1510,7 +1481,7 @@ export function useUncheckAllItems() {
   return useMutation({
     onMutate: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }) => {
       await cancelNoteReads(queryClient, noteId);
-      return applyOptimisticNote(queryClient, noteId, (note) =>
+      applyOptimisticNote(queryClient, noteId, (note) =>
         note.note_type === 'list' && note.items
           ? { ...note, items: applySetCompletedToItems(note.items, itemIds, false) }
           : note,
@@ -1520,57 +1491,24 @@ export function useUncheckAllItems() {
       assertSwitchWriteAllowed();
       if (itemIds.length === 0) return [];
 
-      // Local rows first, for the reason spelled out in useToggleNoteItemCompleted:
-      // a note re-read while the request is in flight must not resolve to the
-      // still-checked rows and undo the optimistic uncheck on screen.
-      const write = localCompletedWrites.begin(new Map(itemIds.map((id) => [id, true])));
-      try {
-        await setLocalItemsCompleted(db, noteId, itemIds, false);
-
-        // Queue instead of calling online while the note's create is still pending:
-        // it drains FIFO first (#475), and a direct call would 404 and drop the edit.
-        const pendingCreate = await isNotePendingCreate(db, noteId);
-        if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
-          try {
-            const serverItems = await uncheckAllItems(noteId, itemIds);
-            // The server returns the note's full, authoritative item list, so
-            // reconcile every field (and prune any local row it no longer
-            // contains) rather than just patching `completed` — which goes
-            // through localCompletedWrites like every snapshot's.
-            await reconcileLocalItems(db, noteId, serverItems, write);
-            return serverItems;
-          } catch (err) {
-            // Transient failure: fall through to the offline path so the change is
-            // queued for replay instead of being lost. A permanent one re-checks
-            // the local rows no later write has taken over.
-            try {
-              rethrowIfNotQueueable(err);
-            } catch (permanent) {
-              await revertCompletedWrite(db, queryClient, noteId, write);
-              throw permanent;
-            }
-          }
-        }
-
-        // Offline (or a transient online failure): the uncheck is already in the
-        // local DB, so only the replay op is left to enqueue. It carries the exact
-        // ids captured at click time.
-        await enqueueOperation(db, {
+      return runLocalCompletedWrite(db, queryClient, noteId, isConnected, {
+        priorById: new Map(itemIds.map((id) => [id, true])),
+        writeLocal: () => setLocalItemsCompleted(db, noteId, itemIds, false),
+        send: () => uncheckAllItems(noteId, itemIds),
+        // The server returns the note's full, authoritative item list, so
+        // reconcile every field (and prune any local row it no longer contains)
+        // rather than just patching `completed`.
+        persist: (write, serverItems) => reconcileLocalItems(db, noteId, serverItems, write),
+        // Carries the exact ids captured at click time.
+        queued: {
           operation: 'uncheckAllItems',
           endpoint: `/notes/${noteId}/items/set-completed`,
           method: 'POST',
           body: { item_ids: itemIds, completed: false } as Record<string, unknown>,
-        });
-        return [];
-      } finally {
-        localCompletedWrites.end(write);
-      }
+        },
+      });
     },
-    onError: (_err, { noteId }) => invalidateNoteReads(queryClient, noteId),
-    onSuccess: (_data, { noteId }) => {
-      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
-      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-    },
+    onSettled: (_data, _err, { noteId }) => invalidateNoteReads(queryClient, noteId),
   });
 }
 

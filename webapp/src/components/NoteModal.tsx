@@ -3,7 +3,7 @@ import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Users, Check
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, completedCascadeScope, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, completedCascadeScope, completedPriorById, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
 import { renderMarkdown, inlineMarkdownToText } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -211,7 +211,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     noteLabels, setNoteLabels,
     showSaved, flashSaved, markDirty,
     conflict, overwriteConflict,
-    setSavedBaseline, markScalarSaved, applyDraftScalars, isDirty, hasUnflushedWork, baseline,
+    setSavedBaseline, markScalarSaved, applyDraftScalars, isDirty, hasUnflushedWork, baseline, completedWrites,
     reportSaveFailure, autoSaveNote, scheduleAutoSave, cancelPendingSave, flushSave,
     beginExclusiveSave, endExclusiveSave, isSaving, requestAnotherSavePass, isMounted,
   } = useNoteDraft({ note, onRefresh, showError });
@@ -348,6 +348,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     itemsRef,
     commitItems,
     baseline,
+    completedWrites,
     cancelPendingSave,
     markDirty,
     flashSaved,
@@ -425,11 +426,15 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
         setCheckedItemsCollapsed(next.checked_items_collapsed);
         // Items arrive ordered by position from the server. normalizeItemOrder
         // keeps each group contiguous and re-sequences positions so all later
-        // mutations build on a consistent ordering.
-        listItems = normalizeItemOrder((next.items ?? []).map((item, index) => ({
+        // mutations build on a consistent ordering. Their completed flags go
+        // through the completed-write gate, so a snapshot older than a write
+        // response already seen cannot put a checked row back.
+        const serverItems = next.items ?? [];
+        const completedById = completedWrites.accept(null, serverItems);
+        listItems = normalizeItemOrder(serverItems.map((item, index) => ({
           id: item.id || `existing_${item.position}_${index}`,
           text: item.text,
-          completed: item.completed,
+          completed: completedById.get(item.id) ?? item.completed,
           position: item.position,
           parentId: item.parent_id ?? null,
           assigned_to: item.assigned_to ?? '',
@@ -454,7 +459,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
       setNoteLabels([]);
       setSavedBaseline({ title: '', content: '', pinned: false, archived: false, color: DEFAULT_NOTE_COLOR, checked_items_collapsed: false }, [], null);
     }
-  }, [commitItems, setSavedBaseline, setTitle, setContent, setNoteType, setColor, setPinned, setArchived,
+  }, [commitItems, completedWrites, setSavedBaseline, setTitle, setContent, setNoteType, setColor, setPinned, setArchived,
       setCheckedItemsCollapsed, setNoteLabels, initialType, initialContent]);
 
   useEffect(() => {
@@ -1137,11 +1142,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     // The pre-toggle state of just the items this toggle changes (the target
     // and, for a parent, its children — or, for a child being unchecked, its
     // parent), so a failure reverts only those flags.
-    const scope = new Set(completedCascadeScope(before, itemId, completed));
-    const priorById = new Map<string, boolean>();
-    for (const item of before) {
-      if (scope.has(item.id) && item.completed !== completed) priorById.set(item.id, item.completed);
-    }
+    const priorById = completedPriorById(before, completedCascadeScope(before, itemId, completed), completed);
 
     commitItems(applyCompletedCascade(before, itemId, completed));
     await writeCompleted(priorById, noteId => notes.toggleItemCompleted(noteId, itemId, completed));

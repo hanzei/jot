@@ -12,7 +12,9 @@ import * as Haptics from 'expo-haptics';
 import type { TFunction } from 'i18next';
 import {
   VALIDATION,
+  applyCompletedValues,
   completedCascadeScope,
+  completedPriorById,
   createCompletedWriteTracker,
   generateId,
   splitPasteIntoItems,
@@ -211,15 +213,14 @@ export function useListItemEditing({
     priorById: ReadonlyMap<string, boolean>,
     request: () => Promise<ServerCompletedItem[]>,
   ): Promise<void> => {
-    const apply = (completedById: ReadonlyMap<string, boolean>, syncBaseline: boolean) => {
-      const next = itemsRef.current.map((item) => {
-        const value = completedById.get(item.id);
-        return value === undefined || value === item.completed ? item : { ...item, completed: value };
-      });
+    const applyItems = (completedById: ReadonlyMap<string, boolean>) => {
+      const next = applyCompletedValues(itemsRef.current, completedById);
+      if (next === itemsRef.current) return;
       itemsRef.current = next;
       setItems(next);
-      if (!syncBaseline) return;
-      // Advance the baseline so the diff engine does not re-patch completed
+    };
+    // Advance the baseline so the diff engine does not re-patch completed
+    const syncBaseline = (completedById: ReadonlyMap<string, boolean>) => {
       for (const entry of completedById) {
         const snap = savedItemsRef.current.get(entry[0]);
         if (snap) savedItemsRef.current.set(entry[0], { ...snap, completed: entry[1] });
@@ -233,20 +234,22 @@ export function useListItemEditing({
         // it still reports any row tapped after this one unchecked — apply only
         // what the gate says it may still decide, composing on the latest state
         // so a concurrent write's optimistic change is preserved.
-        apply(completedWrites.accept(write, serverItems), true);
+        const completedById = completedWrites.accept(write, serverItems);
+        applyItems(completedById);
+        syncBaseline(completedById);
       } else {
         // Offline: the local DB already holds the change; advance the baseline
         // for the items no later write has taken over.
+        const decided = new Map<string, boolean>();
         for (const entry of priorById) {
-          if (!completedWrites.decides(write, entry[0])) continue;
-          const snap = savedItemsRef.current.get(entry[0]);
-          if (snap) savedItemsRef.current.set(entry[0], { ...snap, completed: !entry[1] });
+          if (completedWrites.decides(write, entry[0])) decided.set(entry[0], !entry[1]);
         }
+        syncBaseline(decided);
       }
     } catch {
       // Revert only the items no later write has taken over, so a concurrent
       // write's optimistic state survives.
-      apply(completedWrites.fail(write), false);
+      applyItems(completedWrites.fail(write));
       setSaveError('note.failedSaveChanges');
     } finally {
       completedWrites.end(write);
@@ -348,12 +351,7 @@ export function useListItemEditing({
       // the save baseline and to revert precisely on failure — without
       // clobbering any other item whose state may change before this async
       // call settles.
-      const scope = new Set(completedCascadeScope(before, itemId, completed));
-      const priorById = new Map(
-        before
-          .filter((item) => scope.has(item.id) && item.completed !== completed)
-          .map((item) => [item.id, item.completed]),
-      );
+      const priorById = completedPriorById(before, completedCascadeScope(before, itemId, completed), completed);
 
       // Optimistic cascade applied immediately, with a subtle settle as the
       // item moves between the active list and the completed section.

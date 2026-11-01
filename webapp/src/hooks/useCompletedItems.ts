@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { createCompletedWriteTracker, type Note, type NoteItem } from '@jot/shared';
+import { applyCompletedValues, completedPriorById, type CompletedWriteTracker, type Note, type NoteItem } from '@jot/shared';
 import { notes } from '@/utils/api';
 import type { ListItem } from '@/utils/noteItems';
 
@@ -29,6 +29,8 @@ interface UseCompletedItemsOptions {
   itemsRef: React.RefObject<ListItem[]>;
   commitItems: (items: ListItem[]) => void;
   baseline: CompletedItemsBaseline;
+  // The draft's completed-write gate, which every server snapshot passes through.
+  completedWrites: CompletedWriteTracker;
   // Cancels any pending debounced autosave, so a stale write can't race a
   // bulk operation that has already been sent.
   cancelPendingSave: () => void;
@@ -53,6 +55,7 @@ export function useCompletedItems({
   itemsRef,
   commitItems,
   baseline,
+  completedWrites,
   cancelPendingSave,
   markDirty,
   flashSaved,
@@ -115,16 +118,9 @@ export function useCompletedItems({
     };
   }, []);
 
-  // Which in-flight completed writes claim which items; see completedWrites in
-  // @jot/shared. Every server item snapshot's completed flags go through it.
-  const [completedWrites] = useState(createCompletedWriteTracker);
-
   const commitCompleted = useCallback((completedById: ReadonlyMap<string, boolean>) => {
-    if (completedById.size === 0) return;
-    commitItems(itemsRef.current.map(item => {
-      const next = completedById.get(item.id);
-      return next === undefined || next === item.completed ? item : { ...item, completed: next };
-    }));
+    const next = applyCompletedValues(itemsRef.current, completedById);
+    if (next !== itemsRef.current) commitItems(next);
   }, [commitItems, itemsRef]);
 
   // Persists an optimistic completed-flag change the caller has already
@@ -169,14 +165,10 @@ export function useCompletedItems({
   // the request failed and the local state was rolled back, so callers don't
   // offer an undo for something that never happened.
   const setItemsCompletedLocallyAndRemotely = useCallback(async (ids: string[], completed: boolean): Promise<boolean> => {
-    const targets = new Set(ids);
-    const priorById = new Map<string, boolean>();
-    for (const item of itemsRef.current) {
-      if (targets.has(item.id) && item.completed !== completed) priorById.set(item.id, item.completed);
-    }
-    commitItems(itemsRef.current.map(item => (targets.has(item.id) ? { ...item, completed } : item)));
+    const priorById = completedPriorById(itemsRef.current, ids, completed);
+    commitCompleted(new Map(ids.map(id => [id, completed])));
     return writeCompleted(priorById, id => notes.setItemsCompleted(id, ids, completed));
-  }, [commitItems, itemsRef, writeCompleted]);
+  }, [commitCompleted, itemsRef, writeCompleted]);
 
   // Unchecks every completed item, then shows a transient "N unchecked — Undo"
   // bar. Undo re-checks exactly that snapshot (the same bulk endpoint with

@@ -144,9 +144,38 @@ export const completedCascadeScope = (
   return ids;
 };
 
-// applyCompletedCascade applies completedCascadeScope to the items.
-export const applyCompletedCascade = (items: ListItem[], itemId: string, completed: boolean): ListItem[] => {
-  const scope = new Set(completedCascadeScope(items, itemId, completed));
-  if (scope.size === 0) return items;
-  return items.map(item => (scope.has(item.id) ? { ...item, completed } : item));
+// completedPriorById maps each of `ids` whose completed value would change by
+// being set to `completed` to the value it has now — the "prior" a completed
+// write records so a failure can revert it.
+export const completedPriorById = (
+  items: ReadonlyArray<Pick<ListItem, 'id' | 'completed'>>,
+  ids: Iterable<string>,
+  completed: boolean,
+): Map<string, boolean> => {
+  const targets = new Set(ids);
+  const prior = new Map<string, boolean>();
+  for (const item of items) {
+    if (targets.has(item.id) && item.completed !== completed) prior.set(item.id, item.completed);
+  }
+  return prior;
 };
+
+// applyCompletedValues sets each item's completed flag from `completedById`,
+// returning `items` itself when no value changes so callers can skip a commit.
+export const applyCompletedValues = <T extends Pick<ListItem, 'id' | 'completed'>>(
+  items: T[],
+  completedById: ReadonlyMap<string, boolean>,
+): T[] => {
+  let changed = false;
+  const next = items.map(item => {
+    const value = completedById.get(item.id);
+    if (value === undefined || value === item.completed) return item;
+    changed = true;
+    return { ...item, completed: value };
+  });
+  return changed ? next : items;
+};
+
+// applyCompletedCascade applies completedCascadeScope to the items.
+export const applyCompletedCascade = (items: ListItem[], itemId: string, completed: boolean): ListItem[] =>
+  applyCompletedValues(items, new Map(completedCascadeScope(items, itemId, completed).map(id => [id, completed])));

@@ -721,7 +721,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           if (clientId && hasStringId(data)) {
             const serverNote = data as Note;
             idMappings.push({ localId: clientId, serverNote });
-            await saveNote(db, serverNote);
+            await saveServerResponseNote(db, serverNote);
             await clearNotePendingCreate(db, clientId);
           }
         } else if (entry.operation === 'createLabel' && body?.local_id) {
@@ -1005,16 +1005,21 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
 }
 
 /**
- * Persist a note returned by the server during queue drain, if the response looks
- * like a note. Deliberately uses saveNote without the pending-op skip, not
- * saveServerNote: this runs as the queue entry for that note is being drained, so
- * the entry is still pending and the skip would refuse the server's authoritative
- * response for the very note we just synced. The drain owns the note here (#487).
- * Its completed flags still go through localCompletedWrites like any snapshot.
+ * Persist a note the server returned in answer to this client's own write on it
+ * — an online hook's request, or the queue drain's replay. Unlike
+ * saveServerNote it skips no note with a pending op: the writer owns the note
+ * here (#487), so the skip would refuse the server's authoritative response for
+ * the very note just written. Its completed flags still go through
+ * localCompletedWrites like any server snapshot.
  */
+export async function saveServerResponseNote(db: SQLiteDatabase, note: Note): Promise<void> {
+  await saveNote(db, note, { serverSnapshot: true });
+}
+
+/** {@link saveServerResponseNote} for a raw drain response, if it looks like a note. */
 async function saveNoteFromResponse(db: SQLiteDatabase, data: unknown): Promise<void> {
   if (hasStringId(data)) {
-    await saveNote(db, data as Note, { serverSnapshot: true });
+    await saveServerResponseNote(db, data as Note);
   }
 }
 

@@ -8,11 +8,11 @@ import {
   getDeadLetteredOperations,
   deleteDeadLetter,
   deadLetterAffectedNoteIds,
+  saveServerResponseNote,
   type DeadLetteredOperation,
 } from '../db/syncQueue';
 import {
   getLocalNote,
-  saveNote,
   clearNoteSyncFailed,
   permanentDeleteLocalNote,
   markLocalNoteDeleted,
@@ -83,7 +83,7 @@ export async function reconcileDiscard(db: SQLiteDatabase, dl: DeadLetteredOpera
       await clearNoteSyncFailed(db, dl.note_id);
       try {
         const serverNote = await getNote(dl.note_id);
-        await saveNote(db, serverNote, { serverSnapshot: true });
+        await saveServerResponseNote(db, serverNote);
       } catch (err) {
         const status = axios.isAxiosError(err) ? err.response?.status : undefined;
         if (isGoneStatus(status)) {

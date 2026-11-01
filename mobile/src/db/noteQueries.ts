@@ -207,8 +207,7 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note, serverSnapshot = fal
     // stale one takes the newest value seen.
     const completedById = serverSnapshot ? localCompletedWrites.accept(null, items) : null;
     for (const item of items) {
-      const keepLocalCompleted = completedById !== null && !completedById.has(item.id);
-      const completed = completedById?.get(item.id) ?? item.completed;
+      const completed = completedBinding(completedById, item);
       await db.runAsync(
         `INSERT INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -221,7 +220,7 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note, serverSnapshot = fal
            assigned_to = excluded.assigned_to,
            created_at = excluded.created_at,
            updated_at = excluded.updated_at`,
-        [item.id, note.id, item.text, completed ? 1 : 0, item.position, item.parent_id ?? null, item.assigned_to ?? '', item.created_at ?? '', item.updated_at ?? '', keepLocalCompleted ? 1 : 0],
+        [item.id, note.id, item.text, completed.value, item.position, item.parent_id ?? null, item.assigned_to ?? '', item.created_at ?? '', item.updated_at ?? '', completed.keepLocal],
       );
     }
     if (items.length > 0) {
@@ -251,10 +250,28 @@ interface SaveNoteOptions {
   skipNoteIds?: ReadonlySet<string>;
   /**
    * The notes are server snapshots, so their items' completed flags go through
-   * localCompletedWrites rather than overwriting a toggle still in flight.
-   * Set by the server-sourced writers in syncQueue.ts.
+   * localCompletedWrites rather than overwriting a toggle still in flight. Set
+   * only by the server-snapshot writers in syncQueue.ts (saveServerNote,
+   * saveServerResponseNote and friends); a raw saveNote is a local write.
    */
   serverSnapshot?: boolean;
+}
+
+/**
+ * The completed binding for a server item under the completed-write gate:
+ * `keepLocal` is 1 when the gate withholds the item (an existing row keeps its
+ * local value), and `value` is what to write otherwise — the gate's value, or
+ * the item's own when no gate applies.
+ */
+function completedBinding(
+  completedById: ReadonlyMap<string, boolean> | null,
+  item: { id: string; completed: boolean },
+): { keepLocal: 0 | 1; value: 0 | 1 } {
+  const gated = completedById?.get(item.id);
+  return {
+    keepLocal: completedById !== null && gated === undefined ? 1 : 0,
+    value: (gated ?? item.completed) ? 1 : 0,
+  };
 }
 
 export async function saveNote(db: SQLiteDatabase, note: Note, options?: SaveNoteOptions): Promise<void> {
@@ -1039,10 +1056,15 @@ export async function reorderLocalItems(db: SQLiteDatabase, noteId: string, item
 export async function setLocalItemsCompleted(db: SQLiteDatabase, noteId: string, itemIds: string[], completed: boolean): Promise<void> {
   if (itemIds.length === 0) return;
   const now = new Date().toISOString();
+  const value = completed ? 1 : 0;
+  const placeholders = itemIds.map(() => '?').join(', ');
   await withSerializedTransaction(db, async () => {
-    for (const id of itemIds) {
-      await db.runAsync('UPDATE note_items SET completed = ?, updated_at = ? WHERE id = ? AND note_id = ?', [completed ? 1 : 0, now, id, noteId]);
-    }
+    // One statement, and only rows not already at the value: callers often pass
+    // a whole note's worth of ids of which few, if any, actually change.
+    await db.runAsync(
+      `UPDATE note_items SET completed = ?, updated_at = ? WHERE note_id = ? AND completed != ? AND id IN (${placeholders})`,
+      [value, now, noteId, value, ...itemIds],
+    );
     await touchLocalNote(db, noteId);
   });
 }
@@ -1089,11 +1111,11 @@ export async function reconcileLocalItems(
   const completedById = localCompletedWrites.accept(write, items);
   await withSerializedTransaction(db, async () => {
     for (const item of items) {
-      const completed = completedById.get(item.id);
+      const completed = completedBinding(completedById, item);
       await db.runAsync(
         `UPDATE note_items SET text = ?, completed = CASE WHEN ? THEN completed ELSE ? END, position = ?, parent_id = ?, assigned_to = ?, updated_at = ?
          WHERE id = ? AND note_id = ?`,
-        [item.text, completed === undefined ? 1 : 0, (completed ?? item.completed) ? 1 : 0, item.position, item.parent_id, item.assigned_to, now, item.id, noteId],
+        [item.text, completed.keepLocal, completed.value, item.position, item.parent_id, item.assigned_to, now, item.id, noteId],
       );
       // No-ops (via INSERT OR IGNORE) unless the UPDATE above matched zero rows,
       // i.e. this item doesn't exist locally yet (e.g. created on another
@@ -1101,7 +1123,7 @@ export async function reconcileLocalItems(
       await db.runAsync(
         `INSERT OR IGNORE INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [item.id, noteId, item.text, (completed ?? item.completed) ? 1 : 0, item.position, item.parent_id, item.assigned_to, now, now],
+        [item.id, noteId, item.text, completed.value, item.position, item.parent_id, item.assigned_to, now, now],
       );
     }
     if (items.length > 0) {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyCompletedCascade, completedCascadeScope, dropTargetParentId, groupNoteItems, itemHasChildren, normalizeItemOrder, type ListItem } from '../listItems';
+import { applyCompletedCascade, applyCompletedValues, completedCascadeScope, completedPriorById, dropTargetParentId, groupNoteItems, itemHasChildren, normalizeItemOrder, type ListItem } from '../listItems';
 
 // Terse builder so each case reads as the structure under test rather than as
 // six fields of boilerplate per item.
@@ -220,5 +220,26 @@ describe('completedCascadeScope', () => {
 
   it('is empty for an unknown item', () => {
     expect(completedCascadeScope(items, 'missing', true)).toEqual([]);
+  });
+});
+
+describe('completedPriorById', () => {
+  it('maps only the ids whose value would change to their current value', () => {
+    const items = [item('a', { completed: false }), item('b', { completed: true }), item('c', { completed: false })];
+    expect(completedPriorById(items, ['a', 'b'], true)).toEqual(new Map([['a', false]]));
+  });
+});
+
+describe('applyCompletedValues', () => {
+  it('sets the given completed flags and keeps every other item as it is', () => {
+    const items = [item('a'), item('b')];
+    const next = applyCompletedValues(items, new Map([['a', true]]));
+    expect(next.map(it => it.completed)).toEqual([true, false]);
+    expect(next[1]).toBe(items[1]);
+  });
+
+  it('returns the same array when no value changes', () => {
+    const items = [item('a', { completed: true })];
+    expect(applyCompletedValues(items, new Map([['a', true], ['missing', false]]))).toBe(items);
   });
 });
