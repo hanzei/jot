@@ -129,9 +129,7 @@ export const createCompletedWriteTracker = (): CompletedWriteTracker => {
 
   const release = (write: number, handOff: boolean): Map<string, boolean> => {
     const revert = new Map<string, boolean>();
-    for (const entry of claimsById) {
-      const id = entry[0];
-      const claims = entry[1];
+    for (const [id, claims] of claimsById) {
       const index = claims.findIndex(claim => claim.write === write);
       if (index === -1) continue;
       const own = claims[index]!; // findIndex just located it
@@ -151,12 +149,12 @@ export const createCompletedWriteTracker = (): CompletedWriteTracker => {
   return {
     begin(priorById) {
       nextWrite += 1;
-      for (const entry of priorById) {
-        const claims = claimsById.get(entry[0]);
-        const claim = { write: nextWrite, prior: entry[1] };
-        if (!seenById.has(entry[0])) seenById.set(entry[0], null);
+      for (const [id, prior] of priorById) {
+        const claims = claimsById.get(id);
+        const claim = { write: nextWrite, prior };
+        if (!seenById.has(id)) seenById.set(id, null);
         if (claims) claims.push(claim);
-        else claimsById.set(entry[0], [claim]);
+        else claimsById.set(id, [claim]);
       }
       return nextWrite;
     },
