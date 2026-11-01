@@ -119,23 +119,66 @@ export const dropTargetParentId = (
   return null; // a top-level sibling after above
 };
 
-// applyCompletedCascade mirrors the server's cascade locally: a top-level
-// item's completed state cascades to all of its children (in either
-// direction), while unchecking a child also un-completes its parent — a
-// parent can never stay "done" with an incomplete child. Completing every
-// child does not auto-complete the parent; that still requires checking it.
-export const applyCompletedCascade = (items: ListItem[], itemId: string, completed: boolean): ListItem[] => {
+// completedCascadeScope is the one statement of the completed cascade, mirroring
+// the server's cascadeItemCompletion: setting a top-level item's completed state
+// also sets all of its children (in either direction), while unchecking a child
+// also un-completes its parent — a parent can never stay "done" with an
+// incomplete child. Completing every child does not auto-complete the parent;
+// that still requires checking it. Returns the ids the toggle writes, whether or
+// not each value actually flips; every one of them ends up at `completed`.
+export const completedCascadeScope = (
+  items: ReadonlyArray<Pick<ListItem, 'id' | 'parentId'>>,
+  itemId: string,
+  completed: boolean,
+): string[] => {
   const target = items.find(item => item.id === itemId);
-  if (!target) return items;
-  const cascadeToChildren = target.parentId === null;
-  const uncompleteParent = target.parentId !== null && !completed;
-  return items.map(item => {
-    if (item.id === itemId) return { ...item, completed };
-    if (cascadeToChildren && item.parentId === itemId) return { ...item, completed };
-    if (uncompleteParent && item.id === target.parentId) return { ...item, completed: false };
-    return item;
-  });
+  if (!target) return [];
+  const ids = [itemId];
+  if (target.parentId === null) {
+    for (const item of items) {
+      if (item.parentId === itemId) ids.push(item.id);
+    }
+  } else if (!completed) {
+    ids.push(target.parentId);
+  }
+  return ids;
 };
+
+// completedPriorById maps each of `ids` whose completed value would change by
+// being set to `completed` to the value it has now — the "prior" a completed
+// write records so a failure can revert it.
+export const completedPriorById = (
+  items: ReadonlyArray<Pick<ListItem, 'id' | 'completed'>>,
+  ids: Iterable<string>,
+  completed: boolean,
+): Map<string, boolean> => {
+  const targets = new Set(ids);
+  const prior = new Map<string, boolean>();
+  for (const item of items) {
+    if (targets.has(item.id) && item.completed !== completed) prior.set(item.id, item.completed);
+  }
+  return prior;
+};
+
+// applyCompletedValues sets each item's completed flag from `completedById`,
+// returning `items` itself when no value changes so callers can skip a commit.
+export const applyCompletedValues = <T extends Pick<ListItem, 'id' | 'completed'>>(
+  items: T[],
+  completedById: ReadonlyMap<string, boolean>,
+): T[] => {
+  let changed = false;
+  const next = items.map(item => {
+    const value = completedById.get(item.id);
+    if (value === undefined || value === item.completed) return item;
+    changed = true;
+    return { ...item, completed: value };
+  });
+  return changed ? next : items;
+};
+
+// applyCompletedCascade applies completedCascadeScope to the items.
+export const applyCompletedCascade = (items: ListItem[], itemId: string, completed: boolean): ListItem[] =>
+  applyCompletedValues(items, new Map(completedCascadeScope(items, itemId, completed).map(id => [id, completed])));
 
 // moveItemIntoSlot replaces the row slotId with the item itemId, which leaves
 // its own place in the list; the slot row is dropped. It is the structural half

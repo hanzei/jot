@@ -646,7 +646,7 @@ export default function NoteEditorScreen() {
     savedOrderRef: sync.savedOrderRef,
     withPendingIndicator,
     withItemWriteInFlight: sync.withItemWriteInFlight,
-    holdItemCompleted: sync.holdItemCompleted,
+    completedWrites: sync.completedWrites,
     scrollViewRef,
     openAssigneePicker,
     confirm,

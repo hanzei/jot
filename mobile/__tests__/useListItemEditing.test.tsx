@@ -1,7 +1,8 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { ScrollView } from 'react-native';
 import { act, renderHook } from '@testing-library/react-native';
 import type { TFunction } from 'i18next';
+import { createCompletedWriteTracker } from '@jot/shared';
 import { useEditorDoc } from '../src/screens/noteEditor/useEditorDoc';
 import { useListItemEditing } from '../src/screens/noteEditor/useListItemEditing';
 import type { ItemSnapshot, LocalItem } from '../src/screens/noteEditor/listItemModel';
@@ -29,8 +30,6 @@ const markDirty = jest.fn();
 const cancelScheduledSave = jest.fn();
 const setSaveError = jest.fn();
 const openAssigneePicker = jest.fn();
-const mockReleaseHold = jest.fn();
-const mockHoldItemCompleted = jest.fn(() => mockReleaseHold);
 
 const t = ((key: string) => key) as unknown as TFunction;
 
@@ -47,6 +46,8 @@ function useHarness() {
   const savedItemsRef = useRef<Map<string, ItemSnapshot>>(new Map());
   const savedOrderRef = useRef<string[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
+  // Owned by useNoteEditorSync in the app; its save diff reads claimed().
+  const [completedWrites] = useState(createCompletedWriteTracker);
   const editing = useListItemEditing({
     doc: doc.handle,
     items: doc.items,
@@ -59,15 +60,14 @@ function useHarness() {
     withPendingIndicator: (fn) => fn(),
     // The refresh guard lives in useNoteEditorSync; the screen tests cover it.
     withItemWriteInFlight: (op) => op(),
-    // Holds are the save engine's concern; useNoteEditorSync's tests cover them.
-    holdItemCompleted: mockHoldItemCompleted,
+    completedWrites,
     scrollViewRef,
     openAssigneePicker,
     confirm: mockConfirm,
     showToast: mockShowToast,
     t,
   });
-  return { doc, editing, savedItemsRef, savedOrderRef };
+  return { doc, editing, savedItemsRef, savedOrderRef, completedWrites };
 }
 
 /** Mounts the harness and seeds it with `items` as the last-saved baseline. */
@@ -221,7 +221,7 @@ describe('useListItemEditing — accepting a completed-item suggestion', () => {
     expect(items[1]!.text).toBe('mil');
     expect(items[2]!.completed).toBe(true);
     expect(setSaveError).toHaveBeenCalledWith('note.failedSaveChanges');
-    expect(mockReleaseHold).toHaveBeenCalledTimes(1);
+    expect(result.current.completedWrites.claimed().size).toBe(0);
   });
 
   it('settles a restored child back under its parent rather than at the typed row', async () => {
@@ -252,18 +252,17 @@ describe('useListItemEditing — toggling a row completed', () => {
     item('other'),
   ];
 
-  it('holds the flags it touches out of the save diff until the response is reconciled', async () => {
+  it('claims the flags it changes, so the save diff leaves them, until the response is reconciled', async () => {
     const { result } = await mountWith(cascadeItems());
     let resolveToggle!: (items: { id: string; completed: boolean }[]) => void;
     mockToggleItemCompleted.mockReturnValue(new Promise((resolve) => { resolveToggle = resolve; }));
 
     await act(async () => { result.current.editing.listItemHandlers.onToggle('parent', true); });
 
-    expect(mockHoldItemCompleted).toHaveBeenCalledWith(['parent', 'child']);
-    expect(mockReleaseHold).not.toHaveBeenCalled();
+    expect([...result.current.completedWrites.claimed()].sort()).toEqual(['child', 'parent']);
 
     await act(async () => { resolveToggle([{ id: 'parent', completed: true }, { id: 'child', completed: true }]); });
-    expect(mockReleaseHold).toHaveBeenCalledTimes(1);
+    expect(result.current.completedWrites.claimed().size).toBe(0);
   });
 
   it('reconciles from the server response and advances the baseline for the rows it returned', async () => {

@@ -6,8 +6,9 @@ import {
   VALIDATION,
   advanceSnapshot,
   buildScalarPatch,
-  createCompletedHolds,
+  createCompletedWriteTracker,
   diffItems,
+  type CompletedWriteTracker,
   type CreateNoteRequest,
   type Note,
   type NoteScalars,
@@ -103,12 +104,8 @@ export interface NoteEditorSync {
    * effect held off for its duration. See `itemWritesInFlightRef` for why.
    */
   withItemWriteInFlight: <T>(op: () => Promise<T>) => Promise<T>;
-  /**
-   * Holds the given items' completed flags out of the save diff for the
-   * duration of a toggle request; call the returned function once its response
-   * is reconciled into the baseline (or it failed).
-   */
-  holdItemCompleted: (ids: readonly string[]) => () => void;
+  /** The editor's completed-write tracker; see completedWrites in @jot/shared. */
+  completedWrites: CompletedWriteTracker;
 
   exitSavePrompt: ExitSavePrompt | null;
   isExitRetrying: boolean;
@@ -198,9 +195,11 @@ export function useNoteEditorSync({
   // it. A counter rather than a boolean, since rows can be checked off faster
   // than the requests come back.
   const itemWritesInFlightRef = useRef(0);
-  // Completed flags owned by an in-flight toggle request, which the save diff
-  // must not PATCH (see createCompletedHolds).
-  const completedHoldsRef = useRef(createCompletedHolds());
+  // Which in-flight completed writes claim which items (see completedWrites in
+  // @jot/shared). Owned here, next to the save baseline, because the save diff
+  // leaves the flags it claims to those writes; the editing hook runs the
+  // writes through it.
+  const [completedWrites] = useState(createCompletedWriteTracker);
   const requiresHydrationRef = useRef(initialNoteId !== null);
 
   // Auto-dismiss sync toast after 4 seconds
@@ -342,7 +341,7 @@ export function useNoteEditorSync({
     // Advance the baseline incrementally after each successful op so a later
     // failure does not re-send already-applied ops on the next retry (which
     // would re-create items and get stuck on 409 Conflict).
-    for (const op of diffItems(base, savedOrderRef.current, currentItems, completedHoldsRef.current.held())) {
+    for (const op of diffItems(base, savedOrderRef.current, currentItems, completedWrites.claimed())) {
       switch (op.kind) {
         case 'create':
           try {
@@ -368,7 +367,7 @@ export function useNoteEditorSync({
       }
     }
     savedOrderRef.current = currentItems.map((it) => it.id);
-  }, []);
+  }, [completedWrites]);
 
   const flushSave = useCallback(async (unmounting = false, { createIfEmpty = false }: FlushOptions = {}): Promise<boolean> => {
     const mustCreate = createIfEmpty && !noteIdRef.current;
@@ -561,11 +560,6 @@ export function useNoteEditorSync({
   // the effect already treats a note arriving mid-save: the write's own success
   // invalidates the note reads, so the refetch right behind it carries both the
   // write and anything remote that landed meanwhile.
-  const holdItemCompleted = useCallback(
-    (ids: readonly string[]): (() => void) => completedHoldsRef.current.hold(ids),
-    [],
-  );
-
   const withItemWriteInFlight = useCallback(async <T,>(op: () => Promise<T>): Promise<T> => {
     itemWritesInFlightRef.current += 1;
     try {
@@ -741,7 +735,7 @@ export function useNoteEditorSync({
     isClosingRef,
     saveInFlightRef,
     withItemWriteInFlight,
-    holdItemCompleted,
+    completedWrites,
     exitSavePrompt,
     isExitRetrying,
     handleExitRetry,

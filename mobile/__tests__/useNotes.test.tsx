@@ -8,6 +8,7 @@ import * as notesApi from '../src/api/notes';
 import * as usersApi from '../src/api/users';
 import * as noteQueriesModule from '../src/db/noteQueries';
 import * as clientModule from '../src/api/client';
+import { insertQueueEntry } from '../src/db/syncQueue';
 
 jest.mock('../src/api/notes');
 jest.mock('../src/api/users');
@@ -154,7 +155,7 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toEqual(newNote);
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newNote);
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newNote, expect.objectContaining({ serverSnapshot: true }));
     });
 
     it('stores the labels a create returns, since it may have minted them', async () => {
@@ -189,7 +190,7 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toEqual(newListNote);
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newListNote);
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newListNote, expect.objectContaining({ serverSnapshot: true }));
     });
 
     it('blocks write when server switch is in progress', async () => {
@@ -629,7 +630,7 @@ describe('useNotes hooks', () => {
 
       expect(result.current.data).toEqual(updated);
       expect(mockNotesApi.updateNote).toHaveBeenCalledWith('123', { title: 'Updated' });
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), updated);
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), updated, expect.objectContaining({ serverSnapshot: true }));
     });
   });
 
@@ -1266,6 +1267,126 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
     });
 
+    // The response is the note's full item list as of that one write, so the
+    // response to an earlier tap still reports a later-tapped row unchecked.
+    // Writing every item from it back to SQLite unchecked the later row locally
+    // — and kept it that way when the stale response was the last to land.
+    it('useToggleNoteItemCompleted never writes a stale snapshot of a later toggle back to SQLite', async () => {
+      const twoItemNote = {
+        ...listNote,
+        items: [
+          { ...listNote.items[0]!, id: 'qa', parent_id: null, completed: false },
+          { ...listNote.items[0]!, id: 'qb', parent_id: null, completed: false, position: 1 },
+        ],
+      };
+      const t0 = '2026-01-01T00:00:00Z';
+      const tA = '2026-01-01T00:00:01Z';
+      const tB = '2026-01-01T00:00:02Z';
+      const { wrapper, queryClient } = createWrapperWithClient();
+      queryClient.setQueryData(noteLocalQueryKey('n1'), twoItemNote);
+      mockNoteQueries.getLocalNote
+        .mockResolvedValueOnce(twoItemNote as never)
+        .mockResolvedValueOnce(twoItemNote as never);
+
+      const first = deferred<unknown[]>();
+      const second = deferred<unknown[]>();
+      mockNotesApi.toggleItemCompleted.mockReset();
+      mockNotesApi.toggleItemCompleted
+        .mockReturnValueOnce(first.promise as never)
+        .mockReturnValueOnce(second.promise as never);
+
+      const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
+      const tapA = result.current.mutateAsync({ noteId: 'n1', itemId: 'qa', completed: true });
+      await waitFor(() => expect(mockNotesApi.toggleItemCompleted).toHaveBeenCalledTimes(1));
+      const tapB = result.current.mutateAsync({ noteId: 'n1', itemId: 'qb', completed: true });
+      await waitFor(() => expect(mockNotesApi.toggleItemCompleted).toHaveBeenCalledTimes(2));
+
+      // B's response lands first; A's, read before B's write, lands last.
+      second.resolve([{ id: 'qa', completed: true, updated_at: tA }, { id: 'qb', completed: true, updated_at: tB }]);
+      await tapB;
+      first.resolve([{ id: 'qa', completed: true, updated_at: tA }, { id: 'qb', completed: false, updated_at: t0 }]);
+      await tapA;
+
+      expect(mockNoteQueries.setLocalItemsCompleted).not.toHaveBeenCalledWith(
+        expect.anything(), 'n1', expect.arrayContaining(['qb']), false,
+      );
+      expect(mockNoteQueries.setLocalItemsCompleted).toHaveBeenLastCalledWith(expect.anything(), 'n1', ['qa', 'qb'], true);
+    });
+
+    // Two overlapping toggles of one item that both fail permanently must leave
+    // the row where it was before either, in SQLite and in the cache — and the
+    // first failure must not roll the cache back over the second toggle.
+    it('useToggleNoteItemCompleted unwinds overlapping permanent failures to the original state', async () => {
+      const oneItemNote = { ...listNote, items: [{ ...listNote.items[0]!, id: 'qz', parent_id: null, completed: false }] };
+      const checkedNote = { ...oneItemNote, items: [{ ...oneItemNote.items[0]!, completed: true }] };
+      const { wrapper, queryClient } = createWrapperWithClient();
+      queryClient.setQueryData(noteLocalQueryKey('n1'), oneItemNote);
+      mockNoteQueries.getLocalNote
+        .mockResolvedValueOnce(oneItemNote as never)
+        .mockResolvedValueOnce(checkedNote as never);
+
+      const check = deferred<unknown[]>();
+      const uncheck = deferred<unknown[]>();
+      mockNotesApi.toggleItemCompleted.mockReset();
+      mockNotesApi.toggleItemCompleted
+        .mockReturnValueOnce(check.promise as never)
+        .mockReturnValueOnce(uncheck.promise as never);
+
+      const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
+      const tapCheck = result.current.mutateAsync({ noteId: 'n1', itemId: 'qz', completed: true }).catch(() => {});
+      await waitFor(() => expect(mockNotesApi.toggleItemCompleted).toHaveBeenCalledTimes(1));
+      const tapUncheck = result.current.mutateAsync({ noteId: 'n1', itemId: 'qz', completed: false }).catch(() => {});
+      await waitFor(() => expect(mockNotesApi.toggleItemCompleted).toHaveBeenCalledTimes(2));
+
+      // The check fails first: the uncheck still decides the row, so nothing reverts.
+      check.reject(makeAxiosError(404));
+      await tapCheck;
+      const cachedZ = () => (queryClient.getQueryData(noteLocalQueryKey('n1')) as { items: Array<{ completed: boolean }> }).items[0]!.completed;
+      expect(cachedZ()).toBe(false);
+
+      // Then the uncheck fails: the row returns to before the first tap.
+      uncheck.reject(makeAxiosError(404));
+      await tapUncheck;
+      // Pre-flight check, pre-flight uncheck, then the one revert — to unchecked.
+      expect(mockNoteQueries.setLocalItemsCompleted).toHaveBeenCalledTimes(3);
+      expect(mockNoteQueries.setLocalItemsCompleted).toHaveBeenLastCalledWith(expect.anything(), 'n1', ['qz'], false);
+      expect(cachedZ()).toBe(false);
+    });
+
+    // An earlier change queued for replay (offline, or after a transient
+    // failure) has not reached the server yet, so an online toggle's response
+    // still reports the queued item's old value: it must neither be written to
+    // SQLite nor handed to the editor.
+    it('useToggleNoteItemCompleted leaves alone an item a queued op has yet to replay', async () => {
+      const { wrapper, queryClient } = createWrapperWithClient();
+      const note = { ...listNote, items: [
+        { ...listNote.items[0]!, id: 'wq', parent_id: null, completed: false },
+        { ...listNote.items[0]!, id: 'wt', parent_id: null, completed: false, position: 1 },
+      ] };
+      queryClient.setQueryData(noteLocalQueryKey('n1'), note);
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(note as never);
+      await insertQueueEntry(globalThis.testDb, {
+        operation: 'uncheckAllItems',
+        endpoint: '/notes/n1/items/set-completed',
+        method: 'POST',
+        body: { item_ids: ['wq'], completed: false },
+      });
+      mockNotesApi.toggleItemCompleted.mockReset();
+      mockNotesApi.toggleItemCompleted.mockResolvedValueOnce([
+        { id: 'wq', completed: true, updated_at: '2026-01-01T00:00:00Z' },
+        { id: 'wt', completed: true, updated_at: '2026-01-01T00:00:01Z' },
+      ] as never);
+
+      const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
+      const returned = await result.current.mutateAsync({ noteId: 'n1', itemId: 'wt', completed: true });
+
+      expect(returned.map((i) => i.id)).toEqual(['wt']);
+      expect(mockNoteQueries.setLocalItemsCompleted).not.toHaveBeenCalledWith(
+        expect.anything(), 'n1', expect.arrayContaining(['wq']), expect.anything(),
+      );
+      await globalThis.testDb.runAsync('DELETE FROM sync_queue');
+    });
+
     it('useToggleNoteItemCompleted takes the local rows back on a permanent failure', async () => {
       const { wrapper, queryClient } = createWrapperWithClient();
       queryClient.setQueryData(noteLocalQueryKey('n1'), listNote);
@@ -1304,6 +1425,8 @@ describe('useNotes hooks', () => {
     it('useToggleNoteItemCompleted rolls back the optimistic toggle on a permanent failure', async () => {
       const { wrapper, queryClient } = createWrapperWithClient();
       queryClient.setQueryData(noteLocalQueryKey('n1'), listNote);
+      // The cached note is a read of the local row, which the revert is keyed on.
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(listNote as never);
       mockNotesApi.toggleItemCompleted.mockRejectedValueOnce(makeAxiosError(404));
 
       const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
@@ -1498,7 +1621,7 @@ describe('useNotes hooks', () => {
 
       expect(result.current.data).toEqual(duplicated);
       expect(mockNotesApi.duplicateNote).toHaveBeenCalledWith('123');
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), duplicated);
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), duplicated, expect.objectContaining({ serverSnapshot: true }));
     });
   });
 
@@ -1698,7 +1821,7 @@ describe('useNotes hooks', () => {
           expect.objectContaining({ text: 'Buy eggs', position: 1, completed: false }),
         ],
       });
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), converted);
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), converted, expect.objectContaining({ serverSnapshot: true }));
     });
 
     it('promotes a leading heading to the list title instead of an item', async () => {

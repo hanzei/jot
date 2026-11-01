@@ -3,7 +3,7 @@ import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Users, Check
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, distinctCompletedTexts, findSuggestedItem, generateId, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, distinctCompletedTexts, findSuggestedItem, generateId, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, completedCascadeScope, completedPriorById, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
 import { renderMarkdown, inlineMarkdownToText } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -213,9 +213,9 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     noteLabels, setNoteLabels,
     showSaved, flashSaved, markDirty,
     conflict, overwriteConflict,
-    setSavedBaseline, markScalarSaved, applyDraftScalars, isDirty, hasUnflushedWork, baseline,
+    setSavedBaseline, markScalarSaved, applyDraftScalars, isDirty, hasUnflushedWork, baseline, completedWrites,
     reportSaveFailure, autoSaveNote, scheduleAutoSave, cancelPendingSave, flushSave,
-    beginExclusiveSave, endExclusiveSave, isSaving, requestAnotherSavePass, holdItemCompleted, isMounted,
+    beginExclusiveSave, endExclusiveSave, isSaving, requestAnotherSavePass, isMounted,
   } = useNoteDraft({ note, onRefresh, showError });
 
   useEffect(() => {
@@ -332,8 +332,9 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     })
   );
 
-  // Bulk actions on the checked items: deferred delete and uncheck-all, each
-  // behind its own in-modal undo bar.
+  // Completed-flag writes: the single-item toggle, and the bulk actions on the
+  // checked items (deferred delete and uncheck-all, each behind its own in-modal
+  // undo bar).
   const {
     removedCompletedItems,
     hiddenCompletedItemIds,
@@ -343,11 +344,13 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     handleUncheckAllItems,
     undoUncheckAll,
     resetForNoteSwitch: resetCompletedItemsForNoteSwitch,
+    writeCompleted,
   } = useCompletedItems({
     note,
     itemsRef,
     commitItems,
     baseline,
+    completedWrites,
     cancelPendingSave,
     markDirty,
     flashSaved,
@@ -427,11 +430,15 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
         setCheckedItemsCollapsed(next.checked_items_collapsed);
         // Items arrive ordered by position from the server. normalizeItemOrder
         // keeps each group contiguous and re-sequences positions so all later
-        // mutations build on a consistent ordering.
-        listItems = normalizeItemOrder((next.items ?? []).map((item, index) => ({
+        // mutations build on a consistent ordering. Their completed flags go
+        // through the completed-write gate, so a snapshot older than a write
+        // response already seen cannot put a checked row back.
+        const serverItems = next.items ?? [];
+        const completedById = completedWrites.accept(null, serverItems);
+        listItems = normalizeItemOrder(serverItems.map((item, index) => ({
           id: item.id || `existing_${item.position}_${index}`,
           text: item.text,
-          completed: item.completed,
+          completed: completedById.get(item.id) ?? item.completed,
           position: item.position,
           parentId: item.parent_id ?? null,
           assigned_to: item.assigned_to ?? '',
@@ -456,7 +463,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
       setNoteLabels([]);
       setSavedBaseline({ title: '', content: '', pinned: false, archived: false, color: DEFAULT_NOTE_COLOR, checked_items_collapsed: false }, [], null);
     }
-  }, [commitItems, setSavedBaseline, setTitle, setContent, setNoteType, setColor, setPinned, setArchived,
+  }, [commitItems, completedWrites, setSavedBaseline, setTitle, setContent, setNoteType, setColor, setPinned, setArchived,
       setCheckedItemsCollapsed, setNoteLabels, initialType, initialContent]);
 
   useEffect(() => {
@@ -1125,68 +1132,25 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
 
   // handleItemCompletedToggle checks/unchecks an item through the dedicated
   // toggle-completed endpoint so a parent's children cascade atomically in one
-  // request. It applies an optimistic local cascade first, then reconciles only
-  // the completed flags the server reports — never replacing the whole list, so
-  // unsaved edits and not-yet-created items are preserved. Items keep their slot
-  // in the single ordered array, so unchecking returns an item to where it was.
-  // Resolves false only when the request failed and the flags were reverted.
+  // request. It applies an optimistic local cascade first; writeCompleted then
+  // reconciles only the completed flags the response may still decide (the
+  // response is the note's full item list as of this write, so it still reports
+  // any row tapped after it unchecked). Items keep their slot in the single
+  // ordered array, so unchecking returns an item to where it was. Resolves
+  // false only when the request failed and the flags were reverted.
   const handleItemCompletedToggle = async (itemId: string, completed: boolean): Promise<boolean> => {
     if (isReadOnly) return true;
     const before = itemsRef.current;
     const target = before.find(item => item.id === itemId);
     if (!target || target.completed === completed) return true;
 
-    // Remember the pre-toggle completed state of just the items this toggle
-    // touches (the target and, for a parent, its children — or, for a child
-    // being unchecked, its parent), so an error reverts only those flags
-    // without clobbering edits made to other items meanwhile.
-    const revertCompleted = new Map<string, boolean>([[target.id, target.completed]]);
-    if (target.parentId === null) {
-      for (const item of before) {
-        if (item.parentId === itemId) revertCompleted.set(item.id, item.completed);
-      }
-    } else if (!completed) {
-      const parent = before.find(item => item.id === target.parentId);
-      if (parent) revertCompleted.set(parent.id, parent.completed);
-    }
+    // The pre-toggle state of just the items this toggle changes (the target
+    // and, for a parent, its children — or, for a child being unchecked, its
+    // parent), so a failure reverts only those flags.
+    const priorById = completedPriorById(before, completedCascadeScope(before, itemId, completed), completed);
 
     commitItems(applyCompletedCascade(before, itemId, completed));
-
-    // A not-yet-persisted note has no server-side item to toggle; the bulk
-    // create on save carries the completed flags instead.
-    if (!note?.id) return true;
-
-    cancelPendingSave();
-    // Until the response is reconciled into the baseline, an autosave pass
-    // (one already running, or one queued by an edit meanwhile) must not PATCH
-    // these optimistic flags: the server cascades a PATCHed parent to all its
-    // children, which is not what this toggle does.
-    const releaseHold = holdItemCompleted([...revertCompleted.keys()]);
-
-    try {
-      const serverItems = await notes.toggleItemCompleted(note.id, itemId, completed);
-      const completedById = new Map(serverItems.map(item => [item.id, item.completed]));
-      commitItems(itemsRef.current.map(item => {
-        const serverCompleted = completedById.get(item.id);
-        return serverCompleted === undefined ? item : { ...item, completed: serverCompleted };
-      }));
-      // Advance the baseline so the diff engine does not re-patch completed.
-      baseline.syncCompleted(completedById);
-      onRefresh?.();
-      flashSaved();
-      return true;
-    } catch (error) {
-      console.error('Failed to toggle item:', error);
-      // Revert only the toggled completed flags; leave any concurrent edits.
-      commitItems(itemsRef.current.map(item => {
-        const original = revertCompleted.get(item.id);
-        return original === undefined ? item : { ...item, completed: original };
-      }));
-      showError(t('note.failedSaveChanges'));
-      return false;
-    } finally {
-      releaseHold();
-    }
+    return writeCompleted(priorById, noteId => notes.toggleItemCompleted(noteId, itemId, completed));
   };
 
   // Helper function to handle text updates with debouncing

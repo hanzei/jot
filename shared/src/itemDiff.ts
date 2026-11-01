@@ -80,10 +80,11 @@ const orderChanged = (savedOrder: readonly string[], curOrder: readonly string[]
  * already say everything. Callers still set their saved order to the current
  * order once every operation has succeeded.
  *
- * `heldCompleted` names items whose completed flag an in-flight toggle request
- * owns (see {@link createCompletedHolds}). Their flag is left out of any patch:
- * the toggle endpoint applies the parent/child cascade atomically, whereas a
- * PATCH unchecking a parent would make the server uncheck all its children.
+ * `heldCompleted` names items whose completed flag an in-flight completed write
+ * still owns (`CompletedWriteTracker.claimed()`). Their flag is left out of any
+ * patch: the write's endpoint applies the parent/child cascade atomically,
+ * whereas a PATCH unchecking a parent would make the server uncheck all its
+ * children.
  */
 export function diffItems(
   savedItems: ReadonlyMap<string, ItemSnapshot>,
@@ -101,8 +102,8 @@ export function diffItems(
       ops.push({ kind: 'create', itemId: it.id, request: createItemRequest(it), snapshot: itemSnapshot(it) });
       continue;
     }
-    // A held item's completed flag belongs to the in-flight toggle: diff it as
-    // if unchanged, so the patch neither sends nor records it.
+    // A held item's completed flag belongs to an in-flight completed write:
+    // diff it as if unchanged, so the patch neither sends nor records it.
     const view = heldCompleted.has(it.id) ? { ...it, completed: snap.completed } : it;
     const patch = itemPatch(snap, view);
     if (Object.keys(patch).length > 0) {
@@ -128,7 +129,8 @@ const NO_HELD_IDS: ReadonlySet<string> = new Set();
  * actually sent move to the op's snapshot; the rest keep their current
  * baseline value. Taking the whole snapshot instead would roll back anything
  * advanced while the request was in flight — notably the completed flags a
- * toggle reconciled from the server — and the next save would re-send them.
+ * completed write reconciled from the server — and the next save would re-send
+ * them.
  */
 export const advanceSnapshot = (
   current: ItemSnapshot | undefined,
@@ -140,41 +142,6 @@ export const advanceSnapshot = (
     completed: op.patch.completed !== undefined ? op.snapshot.completed : current.completed,
     parentId: op.patch.parent_id !== undefined ? op.snapshot.parentId : current.parentId,
     assigned_to: op.patch.assigned_to !== undefined ? op.snapshot.assigned_to : current.assigned_to,
-  };
-};
-
-/**
- * Tracks which items' completed flags are owned by an in-flight toggle
- * request, for {@link diffItems}'s `heldCompleted`. An editor holds the ids a
- * toggle touches (the item, plus its children or its parent) from just before
- * the request until it has reconciled the response into the baseline, so an
- * autosave pass that runs meanwhile does not PATCH the optimistic flags. Holds
- * are counted, so overlapping toggles on the same item each keep it held.
- */
-export interface CompletedHolds {
-  /** Holds `ids`; the returned function releases them (idempotently). */
-  hold: (ids: readonly string[]) => () => void;
-  /** The ids currently held. */
-  held: () => ReadonlySet<string>;
-}
-
-export const createCompletedHolds = (): CompletedHolds => {
-  const counts = new Map<string, number>();
-  return {
-    hold: (ids) => {
-      for (const id of ids) counts.set(id, (counts.get(id) ?? 0) + 1);
-      let released = false;
-      return () => {
-        if (released) return;
-        released = true;
-        for (const id of ids) {
-          const n = (counts.get(id) ?? 0) - 1;
-          if (n > 0) counts.set(id, n);
-          else counts.delete(id);
-        }
-      };
-    },
-    held: () => new Set(counts.keys()),
   };
 };
 

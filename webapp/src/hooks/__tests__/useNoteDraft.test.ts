@@ -515,28 +515,28 @@ describe('useNoteDraft', () => {
       expect(notes.updateItem).not.toHaveBeenCalled();
     });
 
-    it('leaves a held completed flag out of the save until the hold is released', async () => {
+    it('leaves a flag an in-flight completed write claims out of the save until it settles', async () => {
       const note = createMockNote({ id: '1', note_type: 'list', title: 'List' });
       const { result } = renderDraft({ note });
       adopt(result.current, note, [listItem('a', { completed: true })]);
 
-      let release!: () => void;
+      let write!: number;
       act(() => {
-        release = result.current.holdItemCompleted(['a']);
+        write = result.current.completedWrites.begin(new Map([['a', true]]));
         result.current.commitItems([listItem('a', { completed: false, text: 'renamed' })]);
       });
       await act(async () => {
         await result.current.autoSaveNote();
       });
 
-      // The text still saves; the flag the toggle owns does not.
+      // The text still saves; the flag the write owns does not.
       expect(notes.updateItem).toHaveBeenCalledTimes(1);
       expect(notes.updateItem).toHaveBeenCalledWith('1', 'a', { text: 'renamed' });
 
-      // Once released, a flag that still differs from the baseline is an
+      // Once settled, a flag that still differs from the baseline is an
       // ordinary unsaved change again.
       vi.mocked(notes.updateItem).mockClear();
-      act(() => release());
+      act(() => result.current.completedWrites.end(write));
       await act(async () => {
         await result.current.autoSaveNote();
       });

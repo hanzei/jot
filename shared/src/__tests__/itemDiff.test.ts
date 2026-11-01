@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   advanceSnapshot,
   buildScalarPatch,
-  createCompletedHolds,
   createItemRequest,
   diffItems,
   itemSnapshot,
@@ -180,35 +179,6 @@ describe('advanceSnapshot', () => {
   it('takes the op snapshot for an item missing from the baseline', () => {
     const op = { patch: { text: 'b' }, snapshot: snap({ text: 'b' }) };
     expect(advanceSnapshot(undefined, op)).toBe(op.snapshot);
-  });
-});
-
-describe('createCompletedHolds', () => {
-  it('holds ids until released', () => {
-    const holds = createCompletedHolds();
-    const release = holds.hold(['a', 'b']);
-    expect([...holds.held()].sort()).toEqual(['a', 'b']);
-    release();
-    expect(holds.held().size).toBe(0);
-  });
-
-  it('keeps an id held while any overlapping hold is open', () => {
-    const holds = createCompletedHolds();
-    const first = holds.hold(['a']);
-    const second = holds.hold(['a', 'b']);
-    first();
-    expect([...holds.held()].sort()).toEqual(['a', 'b']);
-    second();
-    expect(holds.held().size).toBe(0);
-  });
-
-  it('ignores a second release of the same hold', () => {
-    const holds = createCompletedHolds();
-    const first = holds.hold(['a']);
-    holds.hold(['a']);
-    first();
-    first();
-    expect([...holds.held()]).toEqual(['a']);
   });
 });
 

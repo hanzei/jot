@@ -5,9 +5,9 @@ import {
   VALIDATION,
   advanceSnapshot,
   buildScalarPatch,
-  createCompletedHolds,
   diffItems,
   itemSnapshot,
+  createCompletedWriteTracker,
   itemsDiffer,
   patchTouchesSharedContent,
   type ItemSnapshot,
@@ -112,9 +112,11 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
   // so edits made during the save are not lost.
   const pendingSaveRef = useRef(false);
   const savingRef = useRef(false);
-  // Completed flags owned by an in-flight toggle request, which the save diff
-  // must not PATCH (see createCompletedHolds).
-  const completedHoldsRef = useRef(createCompletedHolds());
+  // Which in-flight completed writes claim which items; every server item
+  // snapshot's completed flags — write responses and adopted notes alike — go
+  // through it (see completedWrites in @jot/shared), and the save diff leaves
+  // the flags it claims to those writes.
+  const [completedWrites] = useState(createCompletedWriteTracker);
 
   useEffect(() => {
     noteIdRef.current = note?.id ?? null;
@@ -241,7 +243,7 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
   // retry — which would otherwise re-create items and get stuck on 409 Conflict.
   const persistItemDiff = useCallback(async (noteId: string, listItems: ListItem[]) => {
     const base = savedItemsRef.current;
-    for (const op of diffItems(base, savedOrderRef.current, listItems, completedHoldsRef.current.held())) {
+    for (const op of diffItems(base, savedOrderRef.current, listItems, completedWrites.claimed())) {
       switch (op.kind) {
         case 'create':
           try {
@@ -266,7 +268,7 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
       }
     }
     savedOrderRef.current = listItems.map(it => it.id);
-  }, []);
+  }, [completedWrites]);
 
   // Flushes all pending scalar and item changes to the server in one pass.
   // Throws NoteConflictError (with the conflict state raised) when the note
@@ -388,14 +390,6 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
     pendingSaveRef.current = true;
   }, []);
 
-  // Holds the given items' completed flags out of the save diff for the
-  // duration of a toggle request; call the returned function once its response
-  // is reconciled into the baseline (or it failed).
-  const holdItemCompleted = useCallback(
-    (ids: readonly string[]): (() => void) => completedHoldsRef.current.hold(ids),
-    [],
-  );
-
   // The two baseline mutations the completed-item bulk actions need, handed
   // over as named operations so that hook never touches the diff refs directly.
   const baseline = useMemo<CompletedItemsBaseline>(() => ({
@@ -440,11 +434,11 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
     // Stale-write conflict (409 on base_version)
     conflict, overwriteConflict,
     // Baseline
-    setSavedBaseline, markScalarSaved, applyDraftScalars, isDirty, hasUnflushedWork, baseline,
+    setSavedBaseline, markScalarSaved, applyDraftScalars, isDirty, hasUnflushedWork, baseline, completedWrites,
     // Save pipeline
     reportSaveFailure,
     autoSaveNote, scheduleAutoSave, cancelPendingSave, flushSave,
-    beginExclusiveSave, endExclusiveSave, isSaving, requestAnotherSavePass, holdItemCompleted,
+    beginExclusiveSave, endExclusiveSave, isSaving, requestAnotherSavePass,
     isMounted,
   };
 }
