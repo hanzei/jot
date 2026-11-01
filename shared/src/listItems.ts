@@ -119,20 +119,34 @@ export const dropTargetParentId = (
   return null; // a top-level sibling after above
 };
 
-// applyCompletedCascade mirrors the server's cascade locally: a top-level
-// item's completed state cascades to all of its children (in either
-// direction), while unchecking a child also un-completes its parent — a
-// parent can never stay "done" with an incomplete child. Completing every
-// child does not auto-complete the parent; that still requires checking it.
-export const applyCompletedCascade = (items: ListItem[], itemId: string, completed: boolean): ListItem[] => {
+// completedCascadeScope is the one statement of the completed cascade, mirroring
+// the server's cascadeItemCompletion: setting a top-level item's completed state
+// also sets all of its children (in either direction), while unchecking a child
+// also un-completes its parent — a parent can never stay "done" with an
+// incomplete child. Completing every child does not auto-complete the parent;
+// that still requires checking it. Returns the ids the toggle writes, whether or
+// not each value actually flips; every one of them ends up at `completed`.
+export const completedCascadeScope = (
+  items: ReadonlyArray<Pick<ListItem, 'id' | 'parentId'>>,
+  itemId: string,
+  completed: boolean,
+): string[] => {
   const target = items.find(item => item.id === itemId);
-  if (!target) return items;
-  const cascadeToChildren = target.parentId === null;
-  const uncompleteParent = target.parentId !== null && !completed;
-  return items.map(item => {
-    if (item.id === itemId) return { ...item, completed };
-    if (cascadeToChildren && item.parentId === itemId) return { ...item, completed };
-    if (uncompleteParent && item.id === target.parentId) return { ...item, completed: false };
-    return item;
-  });
+  if (!target) return [];
+  const ids = [itemId];
+  if (target.parentId === null) {
+    for (const item of items) {
+      if (item.parentId === itemId) ids.push(item.id);
+    }
+  } else if (!completed) {
+    ids.push(target.parentId);
+  }
+  return ids;
+};
+
+// applyCompletedCascade applies completedCascadeScope to the items.
+export const applyCompletedCascade = (items: ListItem[], itemId: string, completed: boolean): ListItem[] => {
+  const scope = new Set(completedCascadeScope(items, itemId, completed));
+  if (scope.size === 0) return items;
+  return items.map(item => (scope.has(item.id) ? { ...item, completed } : item));
 };

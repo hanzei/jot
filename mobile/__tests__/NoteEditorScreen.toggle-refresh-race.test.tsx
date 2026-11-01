@@ -133,9 +133,15 @@ describe('NoteEditorScreen toggle / refresh race', () => {
     const note = threeItemListNote();
     mockUseOfflineNote.mockReturnValue({ data: note });
     const ids = note.items.map((item) => item.id);
-    const pending = ids.map(() => deferred<{ id: string; completed: boolean }[]>());
+    const pending = ids.map(() => deferred<{ id: string; completed: boolean; updated_at: string }[]>());
     for (const p of pending) mockToggleMutateAsync.mockReturnValueOnce(p.promise);
-    const snapshot = (checked: string[]) => ids.map((id) => ({ id, completed: checked.includes(id) }));
+    // A snapshot as the server reports it: each checked item carries the time
+    // of its own write (one second per tap), an unchecked one its creation time.
+    const snapshot = (checked: string[]) => ids.map((id, i) => ({
+      id,
+      completed: checked.includes(id),
+      updated_at: checked.includes(id) ? `2026-01-01T00:00:0${i + 1}Z` : '2026-01-01T00:00:00Z',
+    }));
 
     const { getAllByTestId, getByText, queryAllByTestId } = await render(<NoteEditorScreen />);
     const press = (node: { props: unknown }) =>

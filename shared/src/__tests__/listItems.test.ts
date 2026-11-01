@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyCompletedCascade, dropTargetParentId, groupNoteItems, itemHasChildren, normalizeItemOrder, type ListItem } from '../listItems';
+import { applyCompletedCascade, completedCascadeScope, dropTargetParentId, groupNoteItems, itemHasChildren, normalizeItemOrder, type ListItem } from '../listItems';
 
 // Terse builder so each case reads as the structure under test rather than as
 // six fields of boilerplate per item.
@@ -197,5 +197,28 @@ describe('groupNoteItems', () => {
     const input = [noteItem('a1', 0, 'a'), noteItem('a', 1)];
     groupNoteItems(input);
     expect(idsOf(input)).toEqual(['a1', 'a']);
+  });
+});
+
+describe('completedCascadeScope', () => {
+  const items = [
+    { id: 'p', parentId: null },
+    { id: 'c1', parentId: 'p' },
+    { id: 'c2', parentId: 'p' },
+    { id: 'solo', parentId: null },
+  ];
+
+  it('covers a top-level item and all of its children, in either direction', () => {
+    expect(completedCascadeScope(items, 'p', true)).toEqual(['p', 'c1', 'c2']);
+    expect(completedCascadeScope(items, 'p', false)).toEqual(['p', 'c1', 'c2']);
+  });
+
+  it('covers a child alone when checked, and its parent too when unchecked', () => {
+    expect(completedCascadeScope(items, 'c1', true)).toEqual(['c1']);
+    expect(completedCascadeScope(items, 'c1', false)).toEqual(['c1', 'p']);
+  });
+
+  it('is empty for an unknown item', () => {
+    expect(completedCascadeScope(items, 'missing', true)).toEqual([]);
   });
 });

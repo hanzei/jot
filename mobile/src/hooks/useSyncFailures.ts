@@ -83,7 +83,7 @@ export async function reconcileDiscard(db: SQLiteDatabase, dl: DeadLetteredOpera
       await clearNoteSyncFailed(db, dl.note_id);
       try {
         const serverNote = await getNote(dl.note_id);
-        await saveNote(db, serverNote);
+        await saveNote(db, serverNote, { serverSnapshot: true });
       } catch (err) {
         const status = axios.isAxiosError(err) ? err.response?.status : undefined;
         if (isGoneStatus(status)) {

@@ -290,7 +290,7 @@ export function useAddLabelToNote() {
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           const updatedNote = await addLabelToNote(noteId, trimmed);
-          await saveNote(db, updatedNote);
+          await saveNote(db, updatedNote, { serverSnapshot: true });
           // The server may have minted a brand-new label; persist it to the store
           // so it shows in the drawer immediately (#691).
           const normalized = trimmed.toLowerCase();
@@ -344,7 +344,7 @@ export function useRemoveLabelFromNote() {
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           const updatedNote = await removeLabelFromNote(noteId, labelId);
-          await saveNote(db, updatedNote);
+          await saveNote(db, updatedNote, { serverSnapshot: true });
           return updatedNote;
         } catch (err) {
           // Transient failure: fall through to the offline path so the edit is

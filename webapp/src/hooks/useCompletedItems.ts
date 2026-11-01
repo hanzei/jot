@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Note, NoteItem } from '@jot/shared';
+import { createCompletedWriteTracker, type Note, type NoteItem } from '@jot/shared';
 import { notes } from '@/utils/api';
 import type { ListItem } from '@/utils/noteItems';
 
@@ -38,7 +38,8 @@ interface UseCompletedItemsOptions {
   onRefresh?: (() => void) | undefined;
 }
 
-// useCompletedItems owns the bulk actions on a list note's checked items:
+// useCompletedItems owns every write to list items' completed flags — the
+// single-item toggle (writeCompleted) as well as the bulk actions on checked items:
 // deleting them behind a client-deferred undo window, and unchecking them all
 // with an undo that re-checks the same snapshot. Both are rendered as inline
 // bars inside the DialogPanel rather than the app-wide toast, because
@@ -114,27 +115,29 @@ export function useCompletedItems({
     };
   }, []);
 
-  // Reconciles only the completed flags the server reports (never replacing the
-  // whole list, so unsaved edits and not-yet-created items survive) and advances
-  // the diff baseline so the autosave engine does not re-patch them.
-  const reconcileCompletedFromServer = useCallback((serverItems: NoteItem[]) => {
-    const completedById = new Map(serverItems.map(item => [item.id, item.completed]));
+  // Which in-flight completed writes claim which items; see completedWrites in
+  // @jot/shared. Every server item snapshot's completed flags go through it.
+  const [completedWrites] = useState(createCompletedWriteTracker);
+
+  const commitCompleted = useCallback((completedById: ReadonlyMap<string, boolean>) => {
+    if (completedById.size === 0) return;
     commitItems(itemsRef.current.map(item => {
-      const serverCompleted = completedById.get(item.id);
-      return serverCompleted === undefined ? item : { ...item, completed: serverCompleted };
+      const next = completedById.get(item.id);
+      return next === undefined || next === item.completed ? item : { ...item, completed: next };
     }));
-    baseline.syncCompleted(completedById);
-  }, [baseline, commitItems, itemsRef]);
+  }, [commitItems, itemsRef]);
 
-  // Sets completed on the given items in one bulk request, applying an
-  // optimistic local update first and reverting precisely those flags on error.
-  // Mirrors the single-item toggle's reconcile-only-completed-flags approach.
-  // Resolves false when the request failed and the local state was rolled back,
-  // so callers don't offer an undo for something that never happened.
-  const setItemsCompletedLocallyAndRemotely = useCallback(async (ids: string[], completed: boolean): Promise<boolean> => {
-    const targets = new Set(ids);
-    commitItems(itemsRef.current.map(item => (targets.has(item.id) ? { ...item, completed } : item)));
-
+  // Persists an optimistic completed-flag change the caller has already
+  // committed. `priorById` holds the value each changed item had before it, and
+  // `request` sends the write. Only the completed flags the response may still
+  // decide are applied (never the whole list, so unsaved edits and
+  // not-yet-created items survive), and the diff baseline advances with them so
+  // the autosave engine does not re-patch them. On failure only the items no
+  // later write has taken over are reverted. Resolves false on failure.
+  const writeCompleted = useCallback(async (
+    priorById: ReadonlyMap<string, boolean>,
+    request: (noteId: string) => Promise<NoteItem[]>,
+  ): Promise<boolean> => {
     // A not-yet-persisted note has no server-side items; the bulk create on save
     // carries the flags instead.
     if (!noteId) {
@@ -143,19 +146,37 @@ export function useCompletedItems({
     }
     cancelPendingSave();
 
+    const write = completedWrites.begin(priorById);
     try {
-      const serverItems = await notes.setItemsCompleted(noteId, ids, completed);
-      reconcileCompletedFromServer(serverItems);
+      const serverItems = await request(noteId);
+      const completedById = completedWrites.accept(write, serverItems);
+      commitCompleted(completedById);
+      baseline.syncCompleted(completedById);
       onRefresh?.();
       flashSaved();
       return true;
     } catch (error) {
-      console.error('Failed to set items completed:', error);
-      commitItems(itemsRef.current.map(item => (targets.has(item.id) ? { ...item, completed: !completed } : item)));
+      console.error('Failed to save completed items:', error);
+      commitCompleted(completedWrites.fail(write));
       showError(t('note.failedSaveChanges'));
       return false;
+    } finally {
+      completedWrites.end(write);
     }
-  }, [cancelPendingSave, commitItems, itemsRef, markDirty, noteId, reconcileCompletedFromServer, onRefresh, flashSaved, showError, t]);
+  }, [baseline, cancelPendingSave, commitCompleted, completedWrites, flashSaved, markDirty, noteId, onRefresh, showError, t]);
+
+  // Sets completed on the given items in one bulk request. Resolves false when
+  // the request failed and the local state was rolled back, so callers don't
+  // offer an undo for something that never happened.
+  const setItemsCompletedLocallyAndRemotely = useCallback(async (ids: string[], completed: boolean): Promise<boolean> => {
+    const targets = new Set(ids);
+    const priorById = new Map<string, boolean>();
+    for (const item of itemsRef.current) {
+      if (targets.has(item.id) && item.completed !== completed) priorById.set(item.id, item.completed);
+    }
+    commitItems(itemsRef.current.map(item => (targets.has(item.id) ? { ...item, completed } : item)));
+    return writeCompleted(priorById, id => notes.setItemsCompleted(id, ids, completed));
+  }, [commitItems, itemsRef, writeCompleted]);
 
   // Unchecks every completed item, then shows a transient "N unchecked — Undo"
   // bar. Undo re-checks exactly that snapshot (the same bulk endpoint with
@@ -205,19 +226,23 @@ export function useCompletedItems({
   // client suppresses its own SSE echo. Local text edits are preserved.
   const finalizeCompletedDeletion = useCallback((ids: Set<string>, serverItems?: NoteItem[]) => {
     const serverById = new Map((serverItems ?? []).map(item => [item.id, item]));
+    // The response answers no completed write, so its flags only apply to items
+    // no toggle is still writing, and never older than one already seen.
+    const completedById = completedWrites.accept(null, serverItems ?? []);
     const next = itemsRef.current
       .filter(item => !ids.has(item.id))
       .map(item => {
         const server = serverById.get(item.id);
         if (!server) return item;
         const parentId = server.parent_id ?? null;
-        if (parentId === item.parentId && server.completed === item.completed) return item;
-        return { ...item, parentId, completed: server.completed };
+        const completed = completedById.get(item.id) ?? item.completed;
+        if (parentId === item.parentId && completed === item.completed) return item;
+        return { ...item, parentId, completed };
       });
     commitItems(next);
     baseline.applyBulkDeletion(ids, next);
     setRemovedCompletedItems(prev => prev.filter(item => !ids.has(item.id)));
-  }, [baseline, commitItems, itemsRef]);
+  }, [baseline, commitItems, completedWrites, itemsRef]);
 
   // Deletes all checked items, client-deferred behind an in-modal undo bar. The
   // items hide immediately; the single bulk DELETE fires only once the undo
@@ -294,5 +319,6 @@ export function useCompletedItems({
     handleUncheckAllItems,
     undoUncheckAll,
     resetForNoteSwitch,
+    writeCompleted,
   };
 }

@@ -427,12 +427,12 @@ export async function getProtectedNoteIds(db: SQLiteDatabase): Promise<Set<strin
  * event re-applies canonical server state normally.
  */
 export async function saveServerNote(db: SQLiteDatabase, note: Note): Promise<void> {
-  await saveNote(db, note, { skipNoteIds: await getProtectedNoteIds(db) });
+  await saveNote(db, note, { skipNoteIds: await getProtectedNoteIds(db), serverSnapshot: true });
 }
 
 /** Batch counterpart of {@link saveServerNote}; reads the protected set once. */
 export async function saveServerNotes(db: SQLiteDatabase, notes: Note[]): Promise<void> {
-  await saveNotes(db, notes, { skipNoteIds: await getProtectedNoteIds(db) });
+  await saveNotes(db, notes, { skipNoteIds: await getProtectedNoteIds(db), serverSnapshot: true });
 }
 
 /**
@@ -475,7 +475,7 @@ export async function saveServerNotesScope(
   params?: GetNotesParams,
 ): Promise<void> {
   const skipNoteIds = await getProtectedNoteIds(db);
-  await reconcileServerNotesScope(db, serverNotes, params, { skipNoteIds });
+  await reconcileServerNotesScope(db, serverNotes, params, { skipNoteIds, serverSnapshot: true });
 }
 
 function remapValue(value: unknown, idMap: Map<string, string>): unknown {
@@ -1006,14 +1006,15 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
 
 /**
  * Persist a note returned by the server during queue drain, if the response looks
- * like a note. Deliberately uses the raw (ungated) saveNote, not saveServerNote:
- * this runs as the queue entry for that note is being drained, so the entry is
- * still pending and the gate would refuse the server's authoritative response for
- * the very note we just synced. The drain owns the note here (#487).
+ * like a note. Deliberately uses saveNote without the pending-op skip, not
+ * saveServerNote: this runs as the queue entry for that note is being drained, so
+ * the entry is still pending and the skip would refuse the server's authoritative
+ * response for the very note we just synced. The drain owns the note here (#487).
+ * Its completed flags still go through localCompletedWrites like any snapshot.
  */
 async function saveNoteFromResponse(db: SQLiteDatabase, data: unknown): Promise<void> {
   if (hasStringId(data)) {
-    await saveNote(db, data as Note);
+    await saveNote(db, data as Note, { serverSnapshot: true });
   }
 }
 

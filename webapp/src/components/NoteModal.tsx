@@ -3,7 +3,7 @@ import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Users, Check
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, completedCascadeScope, createCompletedWriteTracker, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, completedCascadeScope, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
 import { renderMarkdown, inlineMarkdownToText } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -330,8 +330,9 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     })
   );
 
-  // Bulk actions on the checked items: deferred delete and uncheck-all, each
-  // behind its own in-modal undo bar.
+  // Completed-flag writes: the single-item toggle, and the bulk actions on the
+  // checked items (deferred delete and uncheck-all, each behind its own in-modal
+  // undo bar).
   const {
     removedCompletedItems,
     hiddenCompletedItemIds,
@@ -341,6 +342,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     handleUncheckAllItems,
     undoUncheckAll,
     resetForNoteSwitch: resetCompletedItemsForNoteSwitch,
+    writeCompleted,
   } = useCompletedItems({
     note,
     itemsRef,
@@ -403,8 +405,6 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
   // derivation of note.id.
   const [isCoarsePointer] = useState(() => window.matchMedia('(pointer: coarse)').matches);
   const [appOrigin] = useState(() => window.location.origin);
-  // Which in-flight toggle last wrote each item; see completedWrites in @jot/shared.
-  const [completedWrites] = useState(createCompletedWriteTracker);
   const noteDeepLinkHref = note?.id && isCoarsePointer
     ? buildMobileDeepLink(`/notes/${note.id}`, appOrigin)
     : null;
@@ -1123,68 +1123,28 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
 
   // handleItemCompletedToggle checks/unchecks an item through the dedicated
   // toggle-completed endpoint so a parent's children cascade atomically in one
-  // request. It applies an optimistic local cascade first, then reconciles only
-  // the completed flags of the items this toggle wrote — never replacing the
-  // whole list, so unsaved edits and not-yet-created items are preserved. Items
-  // keep their slot in the single ordered array, so unchecking returns an item
-  // to where it was.
-  //
-  // The response carries the note's full item list as of this write, which
-  // still reports any item tapped after it as unchecked. Each flag is therefore
-  // taken from the response only while this toggle is still the latest write to
-  // that item (completedWrites), so checking rows off in quick succession never
-  // puts an already-checked row back in the active list.
+  // request. It applies an optimistic local cascade first; writeCompleted then
+  // reconciles only the completed flags the response may still decide (the
+  // response is the note's full item list as of this write, so it still reports
+  // any row tapped after it unchecked). Items keep their slot in the single
+  // ordered array, so unchecking returns an item to where it was.
   const handleItemCompletedToggle = async (itemId: string, completed: boolean) => {
     if (isReadOnly) return;
     const before = itemsRef.current;
     const target = before.find(item => item.id === itemId);
     if (!target || target.completed === completed) return;
 
-    // Remember the pre-toggle completed state of just the items this toggle
-    // touches (the target and, for a parent, its children — or, for a child
-    // being unchecked, its parent), so an error reverts only those flags
-    // without clobbering edits made to other items meanwhile.
-    const scope = completedCascadeScope(before, itemId, completed);
-    const revertCompleted = new Map<string, boolean>();
+    // The pre-toggle state of just the items this toggle changes (the target
+    // and, for a parent, its children — or, for a child being unchecked, its
+    // parent), so a failure reverts only those flags.
+    const scope = new Set(completedCascadeScope(before, itemId, completed));
+    const priorById = new Map<string, boolean>();
     for (const item of before) {
-      if (scope.includes(item.id)) revertCompleted.set(item.id, item.completed);
+      if (scope.has(item.id) && item.completed !== completed) priorById.set(item.id, item.completed);
     }
 
     commitItems(applyCompletedCascade(before, itemId, completed));
-
-    // A not-yet-persisted note has no server-side item to toggle; the bulk
-    // create on save carries the completed flags instead.
-    if (!note?.id) return;
-
-    cancelPendingSave();
-
-    const write = completedWrites.begin(scope);
-    try {
-      const serverItems = await notes.toggleItemCompleted(note.id, itemId, completed);
-      const completedById = new Map<string, boolean>();
-      for (const item of serverItems) {
-        if (completedWrites.owns(write, item.id)) completedById.set(item.id, item.completed);
-      }
-      commitItems(itemsRef.current.map(item => {
-        const serverCompleted = completedById.get(item.id);
-        return serverCompleted === undefined ? item : { ...item, completed: serverCompleted };
-      }));
-      // Advance the baseline so the diff engine does not re-patch completed.
-      baseline.syncCompleted(completedById);
-      onRefresh?.();
-      flashSaved();
-    } catch (error) {
-      console.error('Failed to toggle item:', error);
-      // Revert only the toggled completed flags no later toggle has taken
-      // over; leave any concurrent edits.
-      commitItems(itemsRef.current.map(item => {
-        const original = revertCompleted.get(item.id);
-        return original === undefined || !completedWrites.owns(write, item.id) ? item : { ...item, completed: original };
-      }));
-      showError(t('note.failedSaveChanges'));
-    } finally {
-      completedWrites.end(write);
-    }
+    await writeCompleted(priorById, noteId => notes.toggleItemCompleted(noteId, itemId, completed));
   };
 
   // Helper function to handle text updates with debouncing
