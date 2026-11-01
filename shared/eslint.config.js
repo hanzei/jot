@@ -28,37 +28,6 @@ export default [
       '@typescript-eslint/consistent-type-imports': ['error', { disallowTypeAnnotations: false }],
     },
   },
-  // Mobile's Babel (babel-preset-expo) lowers these constructs to
-  // `@babel/runtime` helpers that cannot be resolved from shared/, and every
-  // mobile suite then fails to load with an error pointing at an unrelated
-  // import. Tests are compiled by vitest, not mobile's Babel, and declaration
-  // files emit no code, so both are exempt. See "`@jot/shared`: syntax that needs a @babel/runtime helper" in
-  // CLAUDE.md.
-  {
-    files: ['src/**/*.ts'],
-    ignores: ['src/__tests__/**', 'src/**/*.d.ts'],
-    rules: {
-      'no-restricted-syntax': [
-        'error',
-        {
-          selector: 'ArrayPattern',
-          message: 'No array destructuring in shared/src: mobile\'s Babel needs a @babel/runtime helper for it. Use index access (`entry[0]`). See CLAUDE.md.',
-        },
-        {
-          selector: 'ObjectPattern > RestElement',
-          message: 'No object rest (`{ a, ...rest }`) in shared/src: mobile\'s Babel needs a @babel/runtime helper for it. Copy with spread and `delete`, or pick fields explicitly. See CLAUDE.md.',
-        },
-        {
-          selector: ':function[async=true]',
-          message: 'No async functions in shared/src: mobile\'s Babel needs a @babel/runtime helper for them. Chain `.then` instead. See CLAUDE.md.',
-        },
-        {
-          selector: ':matches(ClassDeclaration, ClassExpression)',
-          message: 'No classes in shared/src: mobile\'s Babel needs @babel/runtime helpers for them. Use plain functions and objects. See CLAUDE.md.',
-        },
-      ],
-    },
-  },
   // This config file itself. Without a block naming it, it matched no
   // configuration carrying rules and ESLint linted it against nothing — which
   // is how its own imports went semicolon-less under a config that mandates

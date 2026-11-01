@@ -27,8 +27,7 @@ import { formatLiteralImage, isAllowedLinkHref } from './markdown';
  * is a symlink and resolution follows the realpath, so a lookup never reaches the
  * consumer's `node_modules`. CI installs dependencies in `webapp/` and `mobile/`
  * only, so `shared/node_modules` does not exist there and even a *type-only*
- * `import from 'marked'` fails to resolve for both consumers. It is the same trap
- * the `@babel/runtime` note in CLAUDE.md describes.
+ * `import from 'marked'` fails to resolve for both consumers.
  *
  * marked's `Token` union is structurally assignable to this, so callers pass
  * `Lexer.lexInline(...)` output directly with no cast.

@@ -105,24 +105,15 @@ A formatting-only commit goes in `.git-blame-ignore-revs`.
   added both as an invocation in `lint:ts` and to `references`, or it is
   silently unchecked.
 
-### `@jot/shared`: syntax that needs a `@babel/runtime` helper
+### `@jot/shared`
 
-Mobile's Babel lowers some syntax to `@babel/runtime` helpers, resolved relative
-to `shared/`, which has none. In `shared/src` (outside `__tests__/`), avoid:
-
-- array destructuring (`.map(([id]) => id)`, `const [a, b] = pair`) — use index
-  access (`entry[0]`);
-- object rest (`const { a, ...rest } = obj`) — pick fields explicitly;
-- `async` functions — chain `.then`;
-- classes — use plain functions and objects.
-
-Spread (array and object), `for...of`, object destructuring without rest, `?.`,
-`??`, generators, rest parameters, and imports are fine. `task lint-shared`
-enforces the list (`no-restricted-syntax` in `shared/eslint.config.js`). A
-construct the rule misses fails as **every** mobile suite failing to load with
-`Cannot find module '@babel/runtime/helpers/...'`, pointing at an unrelated
-import — so run `task test-mobile` after touching `shared/src`, not just
-`task test-shared`.
+Mobile's Jest compiles `shared/src` with `babel-preset-expo`, which lowers array
+destructuring, object rest, `async` functions, and classes to
+`@babel/runtime/helpers/*` requires. `shared/` has no `node_modules`, so those
+resolve only through the `@babel/runtime` entry in `mobile/jest.config.js`'s
+`moduleNameMapper`; if it goes, **every** mobile suite fails to load with an
+error pointing at an unrelated import. Run `task test-mobile` after touching
+`shared/src`, not just `task test-shared`.
 
 Domain types live in `shared/src/types.ts`; do not duplicate them in a client.
 

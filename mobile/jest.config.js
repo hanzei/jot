@@ -13,6 +13,14 @@ module.exports = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^@jot/shared$': '<rootDir>/../shared/src',
+    // babel-preset-expo lowers array destructuring, object rest, async
+    // functions, and classes to `@babel/runtime/helpers/*` requires. In a file
+    // under shared/, Node resolution walks up from shared/, which has no
+    // node_modules, so without this every suite fails to load
+    // (__tests__/sharedBabelRuntime.test.ts covers it). Metro needs no
+    // equivalent: an `expo export` with a helper required from shared/src
+    // resolves it, and the Hermes build leaves these constructs unlowered.
+    '^@babel/runtime/(.*)$': '<rootDir>/node_modules/@babel/runtime/$1',
   },
   // No forceExit: every suite lets its worker exit on its own, so a handle
   // leaked by app code (a sync/SSE/offline timer or subscription) shows up as
