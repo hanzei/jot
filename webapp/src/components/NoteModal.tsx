@@ -29,6 +29,7 @@ import {
   indentOf,
   itemHasChildren,
   itemTextareaId,
+  moveItemIntoSlot,
   normalizeItemOrder,
   precedingTopLevelId,
   type ListItem,
@@ -1309,8 +1310,8 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     applyItemMarkdownEdit(editingItemId, textarea, (state) => toggleInlineMarker(state, marker));
   };
 
-  // Restores a completed item at the position of the current (placeholder) item,
-  // keeping its assignment, and removes the placeholder.
+  // Restores a completed item at the position of the row being typed in,
+  // keeping its assignment and group, and removes the typed row.
   const acceptSuggestion = (currentItemId: string, suggestionText: string) => {
     if (isReadOnly) return;
     const completedItem = completedItems.find(
@@ -1329,26 +1330,20 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
       return;
     }
 
-    // Drop the empty placeholder and re-activate the matched completed item in
-    // its place, keeping its assignee and group (parentId). normalizeItemOrder
-    // settles it back into its group and re-sequences positions.
-    const currentItems = itemsRef.current;
-    const placeholderIndex = currentItems.findIndex(item => item.id === currentItemId);
-    const withoutBoth = currentItems.filter(
-      item => item.id !== currentItemId && item.id !== completedItem.id
-    );
-    const restoredItem: ListItem = { ...completedItem, completed: false };
-    const insertIndex = placeholderIndex >= 0 ? Math.min(placeholderIndex, withoutBoth.length) : withoutBoth.length;
-    withoutBoth.splice(insertIndex, 0, restoredItem);
-
-    commitItems(normalizeItemOrder(withoutBoth));
-
-    cancelPendingSave();
-    autoSaveNote();
+    // Drop the typed row and move the matched completed item into its place,
+    // then uncheck it exactly as its checkbox would: the toggle endpoint
+    // applies the parent/child cascade atomically and the baseline advances to
+    // its result. Saving only afterwards keeps the diff from re-sending the
+    // cascaded flags as PATCHes — on the server, PATCHing a parent unchecked
+    // also unchecks every one of its children.
+    commitItems(moveItemIntoSlot(itemsRef.current, currentItemId, completedItem.id));
+    void handleItemCompletedToggle(completedItem.id, false).finally(() => {
+      autoSaveNote();
+    });
 
     // Restore focus to the item now sitting at the same position
     setTimeout(() => {
-      const el = itemInputRefs.current.get(restoredItem.id);
+      const el = itemInputRefs.current.get(completedItem.id);
       if (el) {
         el.focus();
         el.setSelectionRange(el.value.length, el.value.length);

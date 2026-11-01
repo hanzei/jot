@@ -31,6 +31,7 @@ import {
   indentLevelFromDrag,
   itemHasChildren,
   normalizeItemOrder,
+  moveItemIntoSlot,
   type ItemSnapshot,
   type LocalItem,
 } from './listItemModel';
@@ -685,53 +686,37 @@ export function useListItemEditing({
 
   const handleAcceptSuggestion = useCallback(
     (itemId: string, suggestionText: string) => {
-      // Capture the completed item ID from the ref snapshot so we can focus it after setItems
-      const restoredId = itemsRef.current.find(
+      const current = itemsRef.current;
+      const completedItem = current.find(
         (item) => item.completed && item.text.trim().toLowerCase() === suggestionText.toLowerCase(),
-      )?.id;
+      );
 
-      setItems((prev) => {
-        const completedItem = prev.find(
-          (item) => item.completed && item.text.trim().toLowerCase() === suggestionText.toLowerCase(),
-        );
+      if (!completedItem) {
+        const updated = current.map((item) => (item.id === itemId ? { ...item, text: suggestionText } : item));
+        itemsRef.current = updated;
+        setItems(updated);
+        markDirtyAndScheduleUpdate();
+        return;
+      }
 
-        if (!completedItem) {
-          return prev.map((item) => (item.id === itemId ? { ...item, text: suggestionText } : item));
-        }
-
-        const currentUnchecked = prev.filter((item) => !item.completed);
-        // itemId is always an unchecked item so findIndex should never return -1; Math.max guards against stale ref races
-        const insertAt = Math.max(0, currentUnchecked.findIndex((item) => item.id === itemId));
-
-        const filtered = prev.filter(
-          (item) => item.id !== itemId && item.id !== completedItem.id,
-        );
-
-        const restoredItem: LocalItem = { ...completedItem, completed: false };
-        const remainingUncompleted = filtered.filter((item) => !item.completed);
-        const remainingCompleted = filtered.filter((item) => item.completed);
-
-        const newUncompleted = [
-          ...remainingUncompleted.slice(0, insertAt),
-          restoredItem,
-          ...remainingUncompleted.slice(insertAt),
-        ].map((item, i) => ({ ...item, position: i }));
-
-        return [
-          ...newUncompleted,
-          ...remainingCompleted.map((item, i) => ({ ...item, position: newUncompleted.length + i })),
-        ];
+      // Drop the typed row and move the matched completed item into its place,
+      // then uncheck it exactly as its checkbox would: the toggle endpoint
+      // applies the parent/child cascade atomically and the baseline advances
+      // to its result. Saving only afterwards keeps the diff from re-sending
+      // the cascaded flags as PATCHes — on the server, PATCHing a parent
+      // unchecked also unchecks every one of its children.
+      const moved = moveItemIntoSlot(current, itemId, completedItem.id);
+      itemsRef.current = moved;
+      setItems(moved);
+      void handleItemCompletedToggle(completedItem.id, false).finally(() => {
+        markDirtyAndScheduleUpdate();
       });
 
-      markDirtyAndScheduleUpdate();
-
-      if (restoredId) {
-        setTimeout(() => {
-          itemInputRefsMap.current.get(restoredId)?.current?.focus();
-        }, 50);
-      }
+      setTimeout(() => {
+        itemInputRefsMap.current.get(completedItem.id)?.current?.focus();
+      }, 50);
     },
-    [itemsRef, markDirtyAndScheduleUpdate, setItems],
+    [handleItemCompletedToggle, itemsRef, markDirtyAndScheduleUpdate, setItems],
   );
 
   const handleAssignItem = useCallback(

@@ -136,3 +136,34 @@ export const applyCompletedCascade = (items: ListItem[], itemId: string, complet
     return item;
   });
 };
+
+// moveItemIntoSlot replaces the row slotId with the item itemId, which leaves
+// its own place in the list; the slot row is dropped. It is the structural half
+// of accepting a completed-item autocomplete suggestion: the typed row is
+// consumed and the matched completed item takes its place. The moved item keeps
+// everything else — completed flag, assignee, parentId — so the slot row's
+// indent is ignored and normalizeItemOrder settles a child back under its
+// parent. Callers then uncheck it through their checkbox toggle path, which
+// owns the completed cascade and its server round-trip. A child of the dropped
+// slot row is promoted to top level, as the server's ON DELETE SET NULL does.
+// An unknown slotId appends the item at the end; an unknown itemId returns the
+// input unchanged.
+export const moveItemIntoSlot = (items: ListItem[], slotId: string, itemId: string): ListItem[] => {
+  const moved = items.find(item => item.id === itemId);
+  if (!moved) return items;
+  // Replace the slot row in place rather than splicing at its old index, which
+  // would land one slot late whenever the moved item sat above it.
+  const next: ListItem[] = [];
+  let placed = false;
+  for (const item of items) {
+    if (item.id === itemId) continue;
+    if (item.id === slotId) {
+      next.push(moved);
+      placed = true;
+    } else {
+      next.push(item);
+    }
+  }
+  if (!placed) next.push(moved);
+  return normalizeItemOrder(next);
+};

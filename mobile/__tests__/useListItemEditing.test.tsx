@@ -159,6 +159,66 @@ describe('useListItemEditing — accepting a completed-item suggestion', () => {
     expect(ids(items)).toEqual(['done', 'other']);
     expect(items[0]!.completed).toBe(false);
   });
+
+  it('un-completes the checked parent of a restored child, as unchecking it would', async () => {
+    const { result } = await mountWith([
+      item('typing', { text: 'soc' }),
+      item('packing', { completed: true }),
+      item('socks', { text: 'Socks', parentId: 'packing', completed: true }),
+      item('shirts', { parentId: 'packing', completed: true }),
+    ]);
+
+    await act(async () => { result.current.editing.handleAcceptSuggestion('typing', 'Socks'); });
+
+    const byId = new Map(result.current.doc.items.map((it) => [it.id, it]));
+    expect(byId.get('socks')!.completed).toBe(false);
+    expect(byId.get('packing')!.completed).toBe(false);
+    expect(byId.get('shirts')!.completed).toBe(true);
+  });
+
+  it('unchecks through the toggle endpoint and advances the baseline before saving', async () => {
+    const { result } = await mountWith([
+      item('typing', { text: 'soc' }),
+      item('packing', { completed: true }),
+      item('socks', { text: 'Socks', parentId: 'packing', completed: true }),
+      item('shirts', { parentId: 'packing', completed: true }),
+    ]);
+    mockToggleItemCompleted.mockResolvedValue([
+      { id: 'packing', completed: false },
+      { id: 'socks', completed: false },
+      { id: 'shirts', completed: true },
+    ]);
+
+    await act(async () => { result.current.editing.handleAcceptSuggestion('typing', 'Socks'); });
+
+    expect(mockToggleItemCompleted).toHaveBeenCalledWith({ noteId: 'note-1', itemId: 'socks', completed: false });
+    // The cascaded parent is already in the baseline, so the save that follows
+    // does not PATCH it unchecked — which the server would cascade to "shirts".
+    const baseline = result.current.savedItemsRef.current;
+    expect(baseline.get('packing')!.completed).toBe(false);
+    expect(baseline.get('socks')!.completed).toBe(false);
+    expect(markDirty).toHaveBeenCalled();
+    expect(mockToggleItemCompleted.mock.invocationCallOrder[0]!)
+      .toBeLessThan(markDirty.mock.invocationCallOrder[0]!);
+  });
+
+  it('settles a restored child back under its parent rather than at the typed row', async () => {
+    const { result } = await mountWith([
+      item('produce'),
+      item('apples', { parentId: 'produce' }),
+      item('bread'),
+      item('typing', { text: 'ban' }),
+      item('bananas', { text: 'Bananas', parentId: 'produce', completed: true }),
+    ]);
+
+    await act(async () => { result.current.editing.handleAcceptSuggestion('typing', 'Bananas'); });
+
+    const items = result.current.doc.items;
+    // Typed below "bread", but a child must stay contiguous with its group.
+    expect(ids(items)).toEqual(['produce', 'apples', 'bananas', 'bread']);
+    expect(items.map((it) => it.position)).toEqual([0, 1, 2, 3]);
+    expect(items[2]!.parentId).toBe('produce');
+  });
 });
 
 describe('useListItemEditing — toggling a row completed', () => {
