@@ -107,15 +107,10 @@ export interface ReviveSuggestionHooks {
  * already running can still send the removal earlier; the undo then re-creates
  * the row under its own id.)
  */
-// Written with .then rather than async/await: mobile's Babel compiles shared/
-// and can lower an async function to a @babel/runtime helper, which shared/
-// cannot resolve — the same trap as array destructuring. No shared code uses
-// async yet; keep it that way unless the mobile suite proves it safe.
-export const reviveSuggestedItem = (slotId: string, itemId: string, hooks: ReviveSuggestionHooks): Promise<void> => {
+export const reviveSuggestedItem = async (slotId: string, itemId: string, hooks: ReviveSuggestionHooks): Promise<void> => {
   const original = hooks.read();
   hooks.commit(moveItemIntoSlot(original, slotId, itemId));
-  return hooks.uncheck(itemId).then(revived => {
-    if (!revived) hooks.commit(undoMoveItemIntoSlot(hooks.read(), original, slotId, itemId));
-    hooks.save();
-  });
+  const revived = await hooks.uncheck(itemId);
+  if (!revived) hooks.commit(undoMoveItemIntoSlot(hooks.read(), original, slotId, itemId));
+  hooks.save();
 };
