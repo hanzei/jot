@@ -372,6 +372,16 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     return { uncompletedItems, completedItems, completedItemTexts };
   }, [items, hiddenCompletedItemIds]);
 
+  // Ids of items that have children, so each row's hasChildren is a lookup
+  // rather than a scan of the whole list on every render.
+  const parentIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const item of items) {
+      if (item.parentId !== null) ids.add(item.parentId);
+    }
+    return ids;
+  }, [items]);
+
   // Softly animate the modal's height when its contents structurally change
   // (an item checked off, added/removed, or the completed section toggled), so
   // the panel resizes smoothly instead of jumping. Keyed on structural counts
@@ -1341,7 +1351,8 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
       autoSaveNote();
     });
 
-    // Restore focus to the item now sitting at the same position
+    // Focus the revived item, which sits in the typed row's place (or, for a
+    // child, back in its own group)
     setTimeout(() => {
       const el = itemInputRefs.current.get(completedItem.id);
       if (el) {
@@ -2180,7 +2191,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                           usersById={usersById}
                           onAssignItem={assignItem}
                           completedItemTexts={completedItemTexts}
-                          hasChildren={itemHasChildren(items, item.id)}
+                          hasChildren={parentIds.has(item.id)}
                           onAcceptSuggestion={acceptSuggestion}
                           onEditingChange={handleItemEditingChange}
                           keepSourceVisible={editingItemId === item.id}

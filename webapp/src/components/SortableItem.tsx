@@ -350,7 +350,12 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
               setSelectedSuggestionIndex(-1);
             }}
             onFocus={readOnly ? undefined : (e) => {
-              setStartedEmpty(e.currentTarget.value.trim() === '');
+              // Coming back from the dropdown (Shift+Tab off an option) is the
+              // same editing session — the blur above kept it open — so keep
+              // what the row started as rather than re-reading the typed text.
+              if (!suggestionsRef.current?.contains(e.relatedTarget as Node | null)) {
+                setStartedEmpty(e.currentTarget.value.trim() === '');
+              }
               captureSwapHeight();
               setIsEditing(true);
               onEditingChange?.(item.id, true);

@@ -191,6 +191,19 @@ describe('SortableItem suggestion eligibility', () => {
     fireEvent.focus(input());
     expect(suggestionList()).not.toBeInTheDocument();
   });
+
+  it('keeps offering them when focus comes back from the dropdown', () => {
+    const { typeText } = renderItem(['buy milk']);
+
+    fireEvent.focus(input());
+    typeText('buy');
+    const list = suggestionList()!;
+
+    // A round trip into the dropdown is still the same editing session.
+    fireEvent.blur(input(), { relatedTarget: list });
+    fireEvent.focus(input(), { relatedTarget: list });
+    expect(suggestionList()).toBeInTheDocument();
+  });
 });
 
 /**
