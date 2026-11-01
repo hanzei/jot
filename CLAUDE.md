@@ -105,14 +105,24 @@ A formatting-only commit goes in `.git-blame-ignore-revs`.
   added both as an invocation in `lint:ts` and to `references`, or it is
   silently unchecked.
 
-### `@jot/shared`: no array destructuring
+### `@jot/shared`: syntax that needs a `@babel/runtime` helper
 
-Mobile's Babel lowers array destructuring (`.map(([id]) => id)`,
-`const [a, b] = pair`) to a `@babel/runtime` helper resolved relative to
-`shared/`, which has none. Use index access (`entry[0]`) instead. Spread,
-`for...of`, and imports are fine. The failure shows up as **every** mobile suite
-failing to load, with an error pointing at an unrelated import line — so run
-`task test-mobile` after touching `shared/src`, not just `task test-shared`.
+Mobile's Babel lowers some syntax to `@babel/runtime` helpers, resolved relative
+to `shared/`, which has none. In `shared/src` (outside `__tests__/`), avoid:
+
+- array destructuring (`.map(([id]) => id)`, `const [a, b] = pair`) — use index
+  access (`entry[0]`);
+- object rest (`const { a, ...rest } = obj`) — pick fields explicitly;
+- `async` functions — chain `.then`;
+- classes — use plain functions and objects.
+
+Spread (array and object), `for...of`, object destructuring without rest, `?.`,
+`??`, generators, rest parameters, and imports are fine. `task lint-shared`
+enforces the list (`no-restricted-syntax` in `shared/eslint.config.js`). A
+construct the rule misses fails as **every** mobile suite failing to load with
+`Cannot find module '@babel/runtime/helpers/...'`, pointing at an unrelated
+import — so run `task test-mobile` after touching `shared/src`, not just
+`task test-shared`.
 
 Domain types live in `shared/src/types.ts`; do not duplicate them in a client.
 
