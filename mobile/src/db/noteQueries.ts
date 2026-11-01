@@ -140,7 +140,12 @@ async function getItemsForNote(db: SQLiteDatabase, noteId: string): Promise<Note
 // markers are always set and cleared by their own explicit UPDATEs
 // (markNotePendingCreate / clearNotePendingCreate / markNoteSyncFailed /
 // clearNoteSyncFailed).
-async function saveNoteInTx(db: SQLiteDatabase, note: Note, serverSnapshot = false): Promise<void> {
+async function saveNoteInTx(
+  db: SQLiteDatabase,
+  note: Note,
+  serverSnapshot = false,
+  keepLocalCompletedIds?: ReadonlySet<string>,
+): Promise<void> {
   const title = note.note_type === 'list' ? note.title : '';
   const content = note.note_type === 'text' ? note.content : '';
   const checkedItemsCollapsed = note.note_type === 'list' ? (note.checked_items_collapsed ? 1 : 0) : 0;
@@ -207,7 +212,7 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note, serverSnapshot = fal
     // stale one takes the newest value seen.
     const completedById = serverSnapshot ? localCompletedWrites.accept(null, items) : null;
     for (const item of items) {
-      const completed = completedBinding(completedById, item);
+      const completed = completedBinding(completedById, item, keepLocalCompletedIds);
       await db.runAsync(
         `INSERT INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -255,6 +260,8 @@ interface SaveNoteOptions {
    * saveServerResponseNote and friends); a raw saveNote is a local write.
    */
   serverSnapshot?: boolean;
+  /** Items that keep their local completed value whatever the snapshot says. */
+  keepLocalCompletedIds?: ReadonlySet<string>;
 }
 
 /**
@@ -266,17 +273,19 @@ interface SaveNoteOptions {
 function completedBinding(
   completedById: ReadonlyMap<string, boolean> | null,
   item: { id: string; completed: boolean },
+  keepLocalIds?: ReadonlySet<string>,
 ): { keepLocal: 0 | 1; value: 0 | 1 } {
   const gated = completedById?.get(item.id);
+  const keepLocal = (completedById !== null && gated === undefined) || keepLocalIds?.has(item.id) === true;
   return {
-    keepLocal: completedById !== null && gated === undefined ? 1 : 0,
+    keepLocal: keepLocal ? 1 : 0,
     value: (gated ?? item.completed) ? 1 : 0,
   };
 }
 
 export async function saveNote(db: SQLiteDatabase, note: Note, options?: SaveNoteOptions): Promise<void> {
   if (options?.skipNoteIds?.has(note.id)) return;
-  await withSerializedTransaction(db, () => saveNoteInTx(db, note, options?.serverSnapshot));
+  await withSerializedTransaction(db, () => saveNoteInTx(db, note, options?.serverSnapshot, options?.keepLocalCompletedIds));
 }
 
 /**
@@ -1117,15 +1126,17 @@ export async function reconcileLocalItems(
   noteId: string,
   items: ServerItemInput[],
   write: number | null = null,
+  keepLocalCompletedIds?: ReadonlySet<string>,
 ): Promise<void> {
   const now = new Date().toISOString();
   // The completed flags go through localCompletedWrites: `write` is the token of
   // the local write this list answers, or null for one it does not (a queue
-  // drain's replay, a bulk delete). Every other field is taken as reported.
+  // drain's replay, a bulk delete). `keepLocalCompletedIds` keeps the local value
+  // of items a queued op has yet to replay. Every other field is taken as reported.
   const completedById = localCompletedWrites.accept(write, items);
   await withSerializedTransaction(db, async () => {
     for (const item of items) {
-      const completed = completedBinding(completedById, item);
+      const completed = completedBinding(completedById, item, keepLocalCompletedIds);
       await db.runAsync(
         `UPDATE note_items SET text = ?, completed = CASE WHEN ? THEN completed ELSE ? END, position = ?, parent_id = ?, assigned_to = ?, updated_at = ?
          WHERE id = ? AND note_id = ?`,

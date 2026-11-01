@@ -8,6 +8,7 @@ import * as notesApi from '../src/api/notes';
 import * as usersApi from '../src/api/users';
 import * as noteQueriesModule from '../src/db/noteQueries';
 import * as clientModule from '../src/api/client';
+import { insertQueueEntry } from '../src/db/syncQueue';
 
 jest.mock('../src/api/notes');
 jest.mock('../src/api/users');
@@ -154,7 +155,7 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toEqual(newNote);
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newNote, { serverSnapshot: true });
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newNote, expect.objectContaining({ serverSnapshot: true }));
     });
 
     it('stores the labels a create returns, since it may have minted them', async () => {
@@ -189,7 +190,7 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toEqual(newListNote);
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newListNote, { serverSnapshot: true });
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newListNote, expect.objectContaining({ serverSnapshot: true }));
     });
 
     it('blocks write when server switch is in progress', async () => {
@@ -629,7 +630,7 @@ describe('useNotes hooks', () => {
 
       expect(result.current.data).toEqual(updated);
       expect(mockNotesApi.updateNote).toHaveBeenCalledWith('123', { title: 'Updated' });
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), updated, { serverSnapshot: true });
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), updated, expect.objectContaining({ serverSnapshot: true }));
     });
   });
 
@@ -1352,6 +1353,40 @@ describe('useNotes hooks', () => {
       expect(cachedZ()).toBe(false);
     });
 
+    // An earlier change queued for replay (offline, or after a transient
+    // failure) has not reached the server yet, so an online toggle's response
+    // still reports the queued item's old value: it must neither be written to
+    // SQLite nor handed to the editor.
+    it('useToggleNoteItemCompleted leaves alone an item a queued op has yet to replay', async () => {
+      const { wrapper, queryClient } = createWrapperWithClient();
+      const note = { ...listNote, items: [
+        { ...listNote.items[0]!, id: 'wq', parent_id: null, completed: false },
+        { ...listNote.items[0]!, id: 'wt', parent_id: null, completed: false, position: 1 },
+      ] };
+      queryClient.setQueryData(noteLocalQueryKey('n1'), note);
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(note as never);
+      await insertQueueEntry(globalThis.testDb, {
+        operation: 'uncheckAllItems',
+        endpoint: '/notes/n1/items/set-completed',
+        method: 'POST',
+        body: { item_ids: ['wq'], completed: false },
+      });
+      mockNotesApi.toggleItemCompleted.mockReset();
+      mockNotesApi.toggleItemCompleted.mockResolvedValueOnce([
+        { id: 'wq', completed: true, updated_at: '2026-01-01T00:00:00Z' },
+        { id: 'wt', completed: true, updated_at: '2026-01-01T00:00:01Z' },
+      ] as never);
+
+      const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
+      const returned = await result.current.mutateAsync({ noteId: 'n1', itemId: 'wt', completed: true });
+
+      expect(returned.map((i) => i.id)).toEqual(['wt']);
+      expect(mockNoteQueries.setLocalItemsCompleted).not.toHaveBeenCalledWith(
+        expect.anything(), 'n1', expect.arrayContaining(['wq']), expect.anything(),
+      );
+      await globalThis.testDb.runAsync('DELETE FROM sync_queue');
+    });
+
     it('useToggleNoteItemCompleted takes the local rows back on a permanent failure', async () => {
       const { wrapper, queryClient } = createWrapperWithClient();
       queryClient.setQueryData(noteLocalQueryKey('n1'), listNote);
@@ -1586,7 +1621,7 @@ describe('useNotes hooks', () => {
 
       expect(result.current.data).toEqual(duplicated);
       expect(mockNotesApi.duplicateNote).toHaveBeenCalledWith('123');
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), duplicated, { serverSnapshot: true });
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), duplicated, expect.objectContaining({ serverSnapshot: true }));
     });
   });
 
@@ -1786,7 +1821,7 @@ describe('useNotes hooks', () => {
           expect.objectContaining({ text: 'Buy eggs', position: 1, completed: false }),
         ],
       });
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), converted, { serverSnapshot: true });
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), converted, expect.objectContaining({ serverSnapshot: true }));
     });
 
     it('promotes a leading heading to the list title instead of an item', async () => {

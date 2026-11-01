@@ -1,5 +1,6 @@
 import { getLocalNote, reconcileLocalItems, saveNote } from '../src/db/noteQueries';
 import { localCompletedWrites } from '../src/db/localCompletedWrites';
+import { insertQueueEntry, reconcileServerItems, saveServerResponseNote } from '../src/db/syncQueue';
 import { makeListNote, makeNoteItem } from './helpers/fixtures';
 
 // Server item snapshots written into SQLite go through localCompletedWrites:
@@ -60,5 +61,74 @@ describe('completed-flag gate on server snapshots', () => {
       items: [makeNoteItem({ id: 'gate-c', note_id: 'n3', completed: true, updated_at: T1 })],
     }), { serverSnapshot: true });
     expect(await localCompleted('n3')).toBe(true);
+  });
+});
+
+// A completed op that was queued (offline, or after a transient failure) has
+// released its in-memory claim, but the server's copy of its items still
+// predates it until it replays — so server writers that apply the rest of a
+// snapshot keep those items' local completed value, read from the queue.
+describe('completed values a queued op has yet to replay', () => {
+  async function seedGroup(noteId: string) {
+    const db = globalThis.testDb;
+    // A parent checked offline, with its child cascaded; plus an unrelated item.
+    await saveNote(db, makeListNote({
+      id: noteId,
+      items: [
+        makeNoteItem({ id: `${noteId}-p`, note_id: noteId, completed: true }),
+        makeNoteItem({ id: `${noteId}-c`, note_id: noteId, completed: true, parent_id: `${noteId}-p`, position: 1 }),
+        makeNoteItem({ id: `${noteId}-x`, note_id: noteId, completed: false, position: 2 }),
+      ],
+    }));
+    await insertQueueEntry(db, {
+      operation: 'toggleItemCompleted',
+      endpoint: `/notes/${noteId}/items/${noteId}-p/toggle-completed`,
+      method: 'POST',
+      body: { completed: true },
+    });
+    return db;
+  }
+
+  async function completedById(noteId: string): Promise<Record<string, boolean>> {
+    const note = await getLocalNote(globalThis.testDb, noteId);
+    const out: Record<string, boolean> = {};
+    for (const item of note?.note_type === 'list' ? note.items ?? [] : []) out[item.id] = item.completed;
+    return out;
+  }
+
+  it('a server response note keeps the queued item and its cascade, and takes everything else', async () => {
+    const db = await seedGroup('q1');
+    // The reply to a title PATCH sent before the queued toggle replayed.
+    await saveServerResponseNote(db, makeListNote({
+      id: 'q1',
+      items: [
+        makeNoteItem({ id: 'q1-p', note_id: 'q1', completed: false }),
+        makeNoteItem({ id: 'q1-c', note_id: 'q1', completed: false, parent_id: 'q1-p', position: 1 }),
+        makeNoteItem({ id: 'q1-x', note_id: 'q1', completed: true, position: 2 }),
+      ],
+    }));
+    expect(await completedById('q1')).toEqual({ 'q1-p': true, 'q1-c': true, 'q1-x': true });
+  });
+
+  it('a drain response applies its own op but keeps the items a later queued op still has to replay', async () => {
+    const db = await seedGroup('q2');
+    // Replaying an earlier op (entry id 0 stands for one not in the queue):
+    // the parent's queued toggle is still pending, so its items stay checked.
+    await reconcileServerItems(db, 'q2', [
+      makeNoteItem({ id: 'q2-p', note_id: 'q2', completed: false }),
+      makeNoteItem({ id: 'q2-c', note_id: 'q2', completed: false, parent_id: 'q2-p', position: 1 }),
+      makeNoteItem({ id: 'q2-x', note_id: 'q2', completed: true, position: 2 }),
+    ], { exceptEntryId: 0 });
+    expect(await completedById('q2')).toEqual({ 'q2-p': true, 'q2-c': true, 'q2-x': true });
+
+    // Replaying the toggle itself: its own response is authoritative, even where
+    // it disagrees with the local rows.
+    const entry = await db.getFirstAsync<{ id: number }>("SELECT id FROM sync_queue WHERE endpoint LIKE '/notes/q2/%'");
+    await reconcileServerItems(db, 'q2', [
+      makeNoteItem({ id: 'q2-p', note_id: 'q2', completed: false }),
+      makeNoteItem({ id: 'q2-c', note_id: 'q2', completed: false, parent_id: 'q2-p', position: 1 }),
+      makeNoteItem({ id: 'q2-x', note_id: 'q2', completed: true, position: 2 }),
+    ], { exceptEntryId: entry!.id });
+    expect(await completedById('q2')).toEqual({ 'q2-p': false, 'q2-c': false, 'q2-x': true });
   });
 });

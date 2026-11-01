@@ -61,7 +61,15 @@ import {
   upsertLabel,
 } from '../db/noteQueries';
 import { localCompletedWrites } from '../db/localCompletedWrites';
-import { enqueueOperation, isQueueableError, rethrowIfNotQueueable, saveServerResponseNote, type EnqueueParams } from '../db/syncQueue';
+import {
+  enqueueOperation,
+  getQueuedCompletedItemIds,
+  isQueueableError,
+  reconcileServerItems,
+  rethrowIfNotQueueable,
+  saveServerResponseNote,
+  type EnqueueParams,
+} from '../db/syncQueue';
 import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from './useNetworkStatus';
 import { useAuth } from '../store/AuthContext';
@@ -119,8 +127,11 @@ interface LocalCompletedWrite {
   writeLocal: () => Promise<void>;
   /** Sends the change, resolving to the note's full item list. */
   send: () => Promise<NoteItem[]>;
-  /** Writes the response to SQLite, gated as answering `write`. */
-  persist: (write: number, serverItems: NoteItem[]) => Promise<void>;
+  /**
+   * Writes the response to SQLite, gated as answering `write`, and leaving the
+   * `queued` items — ones a queued op has yet to replay — at their local value.
+   */
+  persist: (write: number, serverItems: NoteItem[], queued: ReadonlySet<string>) => Promise<void>;
   /** The replay op to queue when offline or after a transient failure. */
   queued: EnqueueParams;
 }
@@ -140,7 +151,8 @@ interface LocalCompletedWrite {
  * write has taken over, in SQLite and the cache alike; rolling the cache back to
  * its pre-write snapshot instead would undo every later write's optimistic
  * state. Offline, or after a transient failure, the change is queued for replay.
- * Resolves to the response, or [] when queued.
+ * Resolves to the response — minus any item an earlier queued op still has to
+ * replay, whose server value predates it — or [] when queued.
  */
 async function runLocalCompletedWrite(
   db: SQLiteDatabase,
@@ -157,8 +169,9 @@ async function runLocalCompletedWrite(
     if (isOnlineWriteAllowed(isConnected) && !(await isNotePendingCreate(db, noteId))) {
       try {
         const serverItems = await op.send();
-        await op.persist(write, serverItems);
-        return serverItems;
+        const queued = await getQueuedCompletedItemIds(db, noteId);
+        await op.persist(write, serverItems, queued);
+        return queued.size === 0 ? serverItems : serverItems.filter((item) => !queued.has(item.id));
       } catch (err) {
         if (!isQueueableError(err)) {
           const revert = localCompletedWrites.fail(write);
@@ -1453,8 +1466,11 @@ export function useToggleNoteItemCompleted() {
         priorById: new Map(changedIds.map((id) => [id, !completed])),
         writeLocal: () => setLocalItemsCompleted(db, noteId, changedIds, completed),
         send: () => toggleItemCompleted(noteId, itemId, completed),
-        persist: (write, serverItems) =>
-          setLocalCompletedValues(db, noteId, localCompletedWrites.accept(write, serverItems)),
+        persist: (write, serverItems, queued) => {
+          const completedById = localCompletedWrites.accept(write, serverItems);
+          for (const id of queued) completedById.delete(id);
+          return setLocalCompletedValues(db, noteId, completedById);
+        },
         queued: {
           operation: 'toggleItemCompleted',
           endpoint: `/notes/${noteId}/items/${itemId}/toggle-completed`,
@@ -1498,7 +1514,7 @@ export function useUncheckAllItems() {
         // The server returns the note's full, authoritative item list, so
         // reconcile every field (and prune any local row it no longer contains)
         // rather than just patching `completed`.
-        persist: (write, serverItems) => reconcileLocalItems(db, noteId, serverItems, write),
+        persist: (write, serverItems, queued) => reconcileLocalItems(db, noteId, serverItems, write, queued),
         // Carries the exact ids captured at click time.
         queued: {
           operation: 'uncheckAllItems',
@@ -1554,7 +1570,7 @@ export function useDeleteCompletedItems() {
           // The server returns the note's full, authoritative remaining item
           // list; reconciling against it (rather than deleting exactly
           // `itemIds`) prunes precisely what the server actually removed.
-          await reconcileLocalItems(db, noteId, serverItems);
+          await reconcileServerItems(db, noteId, serverItems);
           return serverItems;
         } catch (err) {
           // Transient failure: fall through to the offline path so the delete is

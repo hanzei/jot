@@ -1,13 +1,15 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import axios from 'axios';
 import api from '../api/client';
-import type { GetNotesParams, Note, NoteItem } from '@jot/shared';
+import { completedCascadeScope, type GetNotesParams, type Note, type NoteItem } from '@jot/shared';
 import {
+  getLocalNote,
   saveNote,
   saveNotes,
   saveLabels,
   reconcileLocalItems,
   reconcileServerNotesScope,
+  type ServerItemInput,
   markNoteSyncFailed,
   clearNoteSyncFailed,
   clearNotePendingCreate,
@@ -430,6 +432,57 @@ export async function saveServerNote(db: SQLiteDatabase, note: Note): Promise<vo
   await saveNote(db, note, { skipNoteIds: await getProtectedNoteIds(db), serverSnapshot: true });
 }
 
+/**
+ * Items of `noteId` whose completed flag a queued, not-yet-replayed
+ * `toggleItemCompleted` or `uncheckAllItems` op will still set: the item-level
+ * counterpart of {@link getProtectedNoteIds} for writers that must apply the
+ * rest of a server snapshot. Until the op replays, the server's copy of these
+ * items predates it, so a snapshot's completed value for them is stale — keep
+ * the local one. Read from the queue itself, so it holds across restarts.
+ * `exceptEntryId` leaves out the entry whose own response is being applied.
+ */
+export async function getQueuedCompletedItemIds(
+  db: SQLiteDatabase,
+  noteId: string,
+  exceptEntryId?: number,
+): Promise<Set<string>> {
+  const entries = await db.getAllAsync<Pick<QueueEntry, 'id' | 'operation' | 'endpoint' | 'body'>>(
+    "SELECT id, operation, endpoint, body FROM sync_queue WHERE operation IN ('toggleItemCompleted', 'uncheckAllItems')",
+  );
+  const ids = new Set<string>();
+  let localItems: NoteItem[] | null = null;
+  for (const entry of entries) {
+    if (entry.id === exceptEntryId) continue;
+    // /notes/{noteId}/items/{itemId}/toggle-completed or /notes/{noteId}/items/set-completed
+    const segments = entry.endpoint.split('/');
+    if (segments[2] !== noteId) continue;
+    const body = parseQueueBody(entry.body);
+    if (entry.operation === 'uncheckAllItems') {
+      const itemIds = body?.item_ids;
+      if (Array.isArray(itemIds)) {
+        for (const id of itemIds) if (typeof id === 'string') ids.add(id);
+      }
+      continue;
+    }
+    const itemId = segments[4];
+    if (!itemId) continue;
+    // The op names only the tapped item; its cascade is recovered from the local
+    // note, whose rows the op already wrote.
+    if (localItems === null) {
+      const note = await getLocalNote(db, noteId);
+      localItems = note?.note_type === 'list' ? note.items ?? [] : [];
+    }
+    const scope = completedCascadeScope(
+      localItems.map((i) => ({ id: i.id, parentId: i.parent_id })),
+      itemId,
+      body?.completed === true,
+    );
+    ids.add(itemId);
+    for (const id of scope) ids.add(id);
+  }
+  return ids;
+}
+
 /** Batch counterpart of {@link saveServerNote}; reads the protected set once. */
 export async function saveServerNotes(db: SQLiteDatabase, notes: Note[]): Promise<void> {
   await saveNotes(db, notes, { skipNoteIds: await getProtectedNoteIds(db), serverSnapshot: true });
@@ -751,7 +804,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           // stale local row (e.g. leftover parent_id/position from an earlier
           // partial sync, or one deleted by another session while this
           // device was offline) never gets corrected.
-          await reconcileItemsFromResponse(db, endpoint.split('/')[2]!, response?.data);
+          await reconcileItemsFromResponse(db, endpoint.split('/')[2]!, response?.data, entry.id);
         } else if (entry.operation === 'share') {
           // Share returns 204 (no body) and the optimistic local note carries a
           // synthetic `optimistic_<userId>` share row; re-fetch the canonical note
@@ -1013,7 +1066,27 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
  * localCompletedWrites like any server snapshot.
  */
 export async function saveServerResponseNote(db: SQLiteDatabase, note: Note): Promise<void> {
-  await saveNote(db, note, { serverSnapshot: true });
+  await saveNote(db, note, {
+    serverSnapshot: true,
+    keepLocalCompletedIds: await getQueuedCompletedItemIds(db, note.id),
+  });
+}
+
+/**
+ * Reconciles a note's local rows against a server-authoritative full item list
+ * (see reconcileLocalItems), keeping the completed value of every item a queued
+ * completed op still has to replay (see {@link getQueuedCompletedItemIds}).
+ * `write` is the localCompletedWrites token the list answers, if any;
+ * `exceptEntryId` is the queue entry it answers during a drain.
+ */
+export async function reconcileServerItems(
+  db: SQLiteDatabase,
+  noteId: string,
+  items: ServerItemInput[],
+  options: { write?: number; exceptEntryId?: number } = {},
+): Promise<void> {
+  const queued = await getQueuedCompletedItemIds(db, noteId, options.exceptEntryId);
+  await reconcileLocalItems(db, noteId, items, options.write ?? null, queued);
 }
 
 /** {@link saveServerResponseNote} for a raw drain response, if it looks like a note. */
@@ -1031,9 +1104,9 @@ async function saveNoteFromResponse(db: SQLiteDatabase, data: unknown): Promise<
  * (e.g. a malformed/legacy response) is skipped rather than wiping the note's
  * items.
  */
-async function reconcileItemsFromResponse(db: SQLiteDatabase, noteId: string, items: unknown): Promise<void> {
+async function reconcileItemsFromResponse(db: SQLiteDatabase, noteId: string, items: unknown, entryId: number): Promise<void> {
   if (!Array.isArray(items)) return;
-  await reconcileLocalItems(db, noteId, items as NoteItem[]);
+  await reconcileServerItems(db, noteId, items as NoteItem[], { exceptEntryId: entryId });
 }
 
 /**
