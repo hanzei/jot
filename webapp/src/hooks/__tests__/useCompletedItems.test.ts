@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { createCompletedWriteTracker, type Note, type NoteItem } from '@jot/shared';
-import { useCompletedItems, COMPLETED_DELETE_UNDO_MS, type CompletedItemsBaseline } from '../useCompletedItems';
+import { useCompletedItems, COMPLETED_DELETE_UNDO_MS, COMPLETED_REFRESH_SETTLE_MS, type CompletedItemsBaseline } from '../useCompletedItems';
 import type { ListItem } from '@/utils/noteItems';
 import { notes } from '@/utils/api';
 import { createMockNote } from '@/utils/__tests__/test-helpers';
@@ -350,6 +350,137 @@ describe('useCompletedItems', () => {
       });
 
       expect(result.current.recentlyUnchecked).toBeNull();
+    });
+  });
+
+  // Every refresh reloads the whole dashboard, so a burst of completed writes
+  // owes one refresh once it settles rather than one per write (#1147).
+  describe('refresh coalescing', () => {
+    const serverItem = (id: string, completed: boolean): NoteItem =>
+      ({ id, completed, note_id: '1', text: id, position: 0, parent_id: null, assigned_to: '', created_at: '', updated_at: '' });
+
+    // A completed write whose response the test releases.
+    const heldWrite = () => {
+      let release: () => void = () => {};
+      const response = new Promise<NoteItem[]>((resolve) => { release = () => resolve([serverItem('a', true)]); });
+      return { request: () => response, release };
+    };
+
+    const write = (result: { current: ReturnType<typeof useHarness> }, request: () => Promise<NoteItem[]>) => {
+      let done: Promise<boolean> = Promise.resolve(true);
+      act(() => {
+        done = result.current.writeCompleted(new Map([['a', false]]), request);
+      });
+      return done;
+    };
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    it('refreshes once after a burst of overlapping writes settles', async () => {
+      const onRefresh = vi.fn();
+      const { result } = renderHook(() => useHarness({ note: noteWithCheckedItems(), initialItems: activeAndDoneItems(), onRefresh }));
+
+      const writes = [heldWrite(), heldWrite(), heldWrite()];
+      const done = writes.map(w => write(result, w.request));
+      // Nothing refreshes while any write of the burst is still in flight.
+      for (const w of writes.slice(0, -1)) {
+        await act(async () => {
+          w.release();
+          await vi.advanceTimersByTimeAsync(COMPLETED_REFRESH_SETTLE_MS);
+        });
+      }
+      expect(onRefresh).not.toHaveBeenCalled();
+
+      await act(async () => {
+        writes[writes.length - 1]!.release();
+        await Promise.all(done);
+      });
+      // The last write settled just now; the refresh waits out the delay.
+      expect(onRefresh).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(COMPLETED_REFRESH_SETTLE_MS);
+      });
+      expect(onRefresh).toHaveBeenCalledTimes(1);
+    });
+
+    it('refreshes once for writes spaced closer than the settle delay', async () => {
+      const onRefresh = vi.fn();
+      const { result } = renderHook(() => useHarness({ note: noteWithCheckedItems(), initialItems: activeAndDoneItems(), onRefresh }));
+
+      for (let i = 0; i < 3; i++) {
+        await act(async () => {
+          await write(result, () => Promise.resolve([serverItem('a', true)]));
+          await vi.advanceTimersByTimeAsync(COMPLETED_REFRESH_SETTLE_MS - 1);
+        });
+      }
+      expect(onRefresh).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(onRefresh).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not refresh after a write that failed', async () => {
+      const onRefresh = vi.fn();
+      const { result } = renderHook(() => useHarness({ note: noteWithCheckedItems(), initialItems: activeAndDoneItems(), onRefresh }));
+
+      await act(async () => {
+        await write(result, () => Promise.reject(new Error('boom')));
+        await vi.advanceTimersByTimeAsync(COMPLETED_REFRESH_SETTLE_MS);
+      });
+      expect(onRefresh).not.toHaveBeenCalled();
+    });
+
+    it('runs an owed refresh straight away when the modal closes', async () => {
+      const onRefresh = vi.fn();
+      const { result, unmount } = renderHook(() => useHarness({ note: noteWithCheckedItems(), initialItems: activeAndDoneItems(), onRefresh }));
+
+      await act(async () => {
+        await write(result, () => Promise.resolve([serverItem('a', true)]));
+      });
+      unmount();
+      expect(onRefresh).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(COMPLETED_REFRESH_SETTLE_MS);
+      expect(onRefresh).toHaveBeenCalledTimes(1);
+    });
+
+    it('refreshes as soon as a write still in flight at close settles', async () => {
+      const onRefresh = vi.fn();
+      const { result, unmount } = renderHook(() => useHarness({ note: noteWithCheckedItems(), initialItems: activeAndDoneItems(), onRefresh }));
+
+      const held = heldWrite();
+      const done = write(result, held.request);
+      unmount();
+      expect(onRefresh).not.toHaveBeenCalled();
+
+      held.release();
+      await done;
+      expect(onRefresh).toHaveBeenCalledTimes(1);
+    });
+
+    it('lets a landed deferred delete cover the refresh a write owes', async () => {
+      const onRefresh = vi.fn();
+      const { result } = renderHook(() => useHarness({ note: noteWithCheckedItems(), initialItems: activeAndDoneItems(), onRefresh }));
+
+      act(() => {
+        result.current.handleDeleteCompletedItems();
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(COMPLETED_DELETE_UNDO_MS - 1);
+        await write(result, () => Promise.resolve([serverItem('a', true)]));
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(onRefresh).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(COMPLETED_REFRESH_SETTLE_MS);
+      });
+      expect(onRefresh).toHaveBeenCalledTimes(1);
     });
   });
 
