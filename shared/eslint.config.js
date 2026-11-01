@@ -3,6 +3,8 @@ import tseslint from '@typescript-eslint/eslint-plugin';
 import tsparser from '@typescript-eslint/parser';
 import comments from '@eslint-community/eslint-plugin-eslint-comments';
 
+const SHARED_PACKAGE_IMPORT_MESSAGE = 'shared/ has no runtime dependencies and CI does not install shared/node_modules, so a package import (even type-only) breaks both clients\' typecheck. Use a relative import, or declare the type structurally — see InlineMarkdownToken in src/inlineMarkdown.ts.';
+
 export default [
   {
     ignores: ['node_modules/**'],
@@ -34,8 +36,10 @@ export default [
   // package import — even `import type` — resolves locally (bootstrap installs
   // `shared/node_modules`) and fails only in the webapp and mobile workflows.
   // The regex matches any specifier not starting with `.`, i.e. every bare one.
-  // Tests are exempt: vitest runs them, and `shared-ci.yml` installs their
-  // dependencies (`marked`, `vitest`).
+  // `no-restricted-imports` sees only import/export declarations, so the
+  // `no-restricted-syntax` selectors apply the same test to `import('x')` types
+  // and dynamic `import('x')` expressions. Tests are exempt: vitest runs them,
+  // and `shared-ci.yml` installs their dependencies (`marked`, `vitest`).
   {
     files: ['src/**/*.ts'],
     ignores: ['src/__tests__/**'],
@@ -43,9 +47,13 @@ export default [
       'no-restricted-imports': ['error', {
         patterns: [{
           regex: '^[^.]',
-          message: 'shared/ has no runtime dependencies and CI does not install shared/node_modules, so a package import (even type-only) breaks both clients\' typecheck. Use a relative import, or declare the type structurally — see InlineMarkdownToken in src/inlineMarkdown.ts.',
+          message: SHARED_PACKAGE_IMPORT_MESSAGE,
         }],
       }],
+      'no-restricted-syntax': ['error',
+        { selector: 'TSImportType[argument.literal.value=/^[^.]/]', message: SHARED_PACKAGE_IMPORT_MESSAGE },
+        { selector: 'ImportExpression[source.value=/^[^.]/]', message: SHARED_PACKAGE_IMPORT_MESSAGE },
+      ],
     },
   },
   // This config file itself. Without a block naming it, it matched no
