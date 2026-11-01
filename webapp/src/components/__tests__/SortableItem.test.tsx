@@ -63,7 +63,11 @@ function renderItem(
     texts = next;
     utils.rerender(element());
   };
+  // A keystroke: the change event is what opens the dropdown (the row was empty
+  // at focus, so there was nothing to show then), and the re-render is NoteModal
+  // feeding the new text back through `item`.
   const typeText = (next: string) => {
+    fireEvent.change(input(), { target: { value: next } });
     text = next;
     utils.rerender(element());
   };
