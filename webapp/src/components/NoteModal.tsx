@@ -2180,6 +2180,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                           usersById={usersById}
                           onAssignItem={assignItem}
                           completedItemTexts={completedItemTexts}
+                          hasChildren={itemHasChildren(items, item.id)}
                           onAcceptSuggestion={acceptSuggestion}
                           onEditingChange={handleItemEditingChange}
                           keepSourceVisible={editingItemId === item.id}

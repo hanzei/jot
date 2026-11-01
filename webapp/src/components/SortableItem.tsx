@@ -59,6 +59,11 @@ export interface SortableItemProps {
   usersById?: Map<string, User> | undefined;
   onAssignItem?: (itemId: string, userId: string) => void;
   completedItemTexts?: string[];
+  /**
+   * Whether other items are nested under this one. Accepting a suggestion
+   * replaces the row, which would orphan them, so such a row offers none.
+   */
+  hasChildren?: boolean;
   onAcceptSuggestion?: (currentItemId: string, suggestionText: string) => void;
   /**
    * Fires as the row gains and loses the caret — the same transition that swaps
@@ -81,11 +86,18 @@ export interface SortableItemProps {
 // per-row delete control. Owns only its own transient UI state (which popovers
 // are open, which suggestion is highlighted); every mutation is delegated back
 // to NoteModal, which holds the item model.
-export default function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isCompleted = false, readOnly = false, onKeyDown, onPaste, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem, completedItemTexts = [], onAcceptSuggestion, onEditingChange, keepSourceVisible = false }: SortableItemProps) {
+export default function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isCompleted = false, readOnly = false, onKeyDown, onPaste, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem, completedItemTexts = [], hasChildren = false, onAcceptSuggestion, onEditingChange, keepSourceVisible = false }: SortableItemProps) {
   const { t } = useTranslation();
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+  // Whether the row was empty when the caret entered it. Accepting a
+  // suggestion consumes the row being typed in, so suggestions are offered only
+  // on a row that started empty — a new row, never an existing item being
+  // edited, whose id, assignee and history the swap would discard. Captured at
+  // focus rather than read from the saved baseline, which autosave advances
+  // while the user is still typing into a new row.
+  const [startedEmpty, setStartedEmpty] = useState(false);
   // Focused and editing are the same state, deliberately: the row shows its
   // Markdown rendered until you put the caret in it, and shows source for
   // exactly as long as the caret is there. That is what keeps every keystroke
@@ -207,7 +219,7 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
 
   const suggestions = useMemo(() => {
     const trimmed = item.text.trim();
-    if (!trimmed) return [];
+    if (!trimmed || !startedEmpty || hasChildren) return [];
     const q = trimmed.toLowerCase();
     const results: string[] = [];
     for (const text of completedItemTexts) {
@@ -218,7 +230,7 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
       }
     }
     return results;
-  }, [item.text, completedItemTexts]);
+  }, [item.text, completedItemTexts, startedEmpty, hasChildren]);
 
   // A highlight must not outlive the list it points into. `suggestions` is
   // derived from `completedItemTexts`, which changes whenever an item is
@@ -337,7 +349,8 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
               if (e.target.value.trim()) setShowSuggestions(true);
               setSelectedSuggestionIndex(-1);
             }}
-            onFocus={readOnly ? undefined : () => {
+            onFocus={readOnly ? undefined : (e) => {
+              setStartedEmpty(e.currentTarget.value.trim() === '');
               captureSwapHeight();
               setIsEditing(true);
               onEditingChange?.(item.id, true);

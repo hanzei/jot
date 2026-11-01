@@ -62,6 +62,11 @@ interface ListItemProps {
   hasNoteColor?: boolean;
   completedItemTexts?: string[];
   /**
+   * Whether other items are nested under this one. Accepting a suggestion
+   * replaces the row, which would orphan them, so such a row offers none.
+   */
+  hasChildren?: boolean;
+  /**
    * When true, the checkbox pops (scales up from small) once on mount. Set only
    * for the item the user just checked off, so the completed-section row it
    * mounts into animates — without popping every completed row on load/expand.
@@ -126,6 +131,7 @@ function ListItem({
   inputAccessoryViewID,
   hasNoteColor = false,
   completedItemTexts,
+  hasChildren = false,
   popOnMount = false,
   onDrag,
   onToggle,
@@ -141,6 +147,13 @@ function ListItem({
   const { colors } = useTheme();
   const { t } = useTranslation();
   const [showSuggestions, setShowSuggestions] = useState(false);
+  // Whether the row was empty when the caret entered it. Accepting a
+  // suggestion consumes the row being typed in, so suggestions are offered only
+  // on a row that started empty — a new row, never an existing item being
+  // edited, whose id, assignee and history the swap would discard. Captured at
+  // focus rather than read from the saved baseline, which autosave advances
+  // while the user is still typing into a new row.
+  const [startedEmpty, setStartedEmpty] = useState(false);
   // The delete (x) button is only shown while this row is focused (the "selected"
   // row), so users are less likely to delete an item they didn't mean to.
   const [isFocused, setIsFocused] = useState(false);
@@ -251,7 +264,7 @@ function ListItem({
   }, []);
 
   const suggestions = useMemo(() => {
-    if (!completedItemTexts || !text.trim()) return [];
+    if (!completedItemTexts || !text.trim() || !startedEmpty || hasChildren) return [];
     const q = text.trim().toLowerCase();
     const results: string[] = [];
     for (const s of completedItemTexts) {
@@ -262,7 +275,7 @@ function ListItem({
       }
     }
     return results;
-  }, [text, completedItemTexts]);
+  }, [text, completedItemTexts, startedEmpty, hasChildren]);
 
   // Links are inert in an editable row and live in a read-only one, so only the
   // editable row's nodes are built here — `InlineMarkdown` owns the read-only
@@ -460,6 +473,7 @@ function ListItem({
                     if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
                     setIsFocused(true);
                     setIsEditing(true);
+                    setStartedEmpty(text.trim() === '');
                     onFocus?.(event);
                     if (!completed) setShowSuggestions(true);
                   }}

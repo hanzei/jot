@@ -537,6 +537,43 @@ describe('ListItem', () => {
     });
   });
 
+  describe('completed-item suggestions', () => {
+    // Accepting a suggestion replaces the row being typed in, so it is only
+    // offered where nothing would be lost: a row that was empty when it took
+    // the caret and has no sub-items. The row is re-rendered with the typed
+    // text the way the editor does after each keystroke.
+    const row = (text: string, props: Partial<React.ComponentProps<typeof ListItem>> = {}) => (
+      <ListItem text={text} completed={false} completedItemTexts={['Buy milk']} {...props} />
+    );
+
+    it('offers suggestions on a row that was empty when focused', async () => {
+      const { getByTestId, queryByTestId, rerender } = await render(row(''));
+
+      await fireEvent(getByTestId('list-item-text'), 'focus');
+      await rerender(row('buy'));
+
+      expect(queryByTestId('suggestion-chip-Buy milk')).not.toBeNull();
+    });
+
+    it('offers none while editing an item that already had text', async () => {
+      const { getByTestId, queryByTestId, rerender } = await render(row('buy now'));
+
+      await fireEvent(getByTestId('list-item-text'), 'focus');
+      await rerender(row('buy'));
+
+      expect(queryByTestId('suggestion-chip-Buy milk')).toBeNull();
+    });
+
+    it('offers none on a row with sub-items', async () => {
+      const { getByTestId, queryByTestId, rerender } = await render(row('', { hasChildren: true }));
+
+      await fireEvent(getByTestId('list-item-text'), 'focus');
+      await rerender(row('buy', { hasChildren: true }));
+
+      expect(queryByTestId('suggestion-chip-Buy milk')).toBeNull();
+    });
+  });
+
   describe('checkbox pop animation', () => {
     it('pops the checkbox on mount when popOnMount is set', async () => {
       jest.spyOn(layoutAnimation, 'isReduceMotionEnabledSync').mockReturnValue(false);

@@ -7,7 +7,9 @@ import type { DashboardPage } from '../pages/DashboardPage';
  * suggests the text of completed items, and accepting a suggestion revives that
  * completed item in place of the typed row rather than adding a duplicate.
  * Reviving applies the same parent/child cascade as unchecking the item, and a
- * revived child keeps its own group whatever row it was typed in.
+ * revived child keeps its own group whatever row it was typed in. Because the
+ * typed row is consumed, suggestions are only offered on a row that started
+ * empty, never while editing an existing item.
  */
 test.describe('Completed-item suggestions', () => {
   type ApiItem = { id: string; text: string; completed: boolean; parent_id: string | null };
@@ -106,14 +108,27 @@ test.describe('Completed-item suggestions', () => {
     await dashboardPage.expectListItemCount(3);
     await expect(page.getByText('Completed items (1)')).toBeVisible();
 
-    // Arrow down highlights the suggestion; Enter then revives Milk.
-    await dashboardPage.listItemInput(0).focus();
-    await page.keyboard.press('End');
-    await page.keyboard.type('l');
+    // Enter focused a fresh row. Arrow down highlights the suggestion there,
+    // and Enter then revives Milk in that row's place.
+    await page.keyboard.type('mil');
     await expect(suggestion(page, 'Milk')).toBeVisible();
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Enter');
     await expect(page.getByText(/Completed items/)).toHaveCount(0);
-    await dashboardPage.expectListItemValue(0, 'Milk');
+    await dashboardPage.expectListItemValue(0, 'mi');
+    await dashboardPage.expectListItemValue(1, 'Milk');
+  });
+
+  test('editing an existing item offers no suggestions', async ({ page, dashboardPage, authenticatedUser }) => {
+    void authenticatedUser;
+    await dashboardPage.createListNote('Pantry', ['Milk', 'Bread']);
+    await dashboardPage.openNote('Pantry');
+    await rowCheckbox(page, 0).check();
+    await expect(page.getByText('Completed items (1)')).toBeVisible();
+
+    // Accepting would consume "Bread", so retyping it must not offer "Milk".
+    await dashboardPage.listItemInput(0).fill('mil');
+    await expect(dashboardPage.listItemInput(0)).toHaveValue('mil');
+    await expect(page.getByRole('listbox', { name: 'Suggestions from completed items' })).toHaveCount(0);
   });
 });

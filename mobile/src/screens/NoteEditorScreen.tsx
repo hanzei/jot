@@ -1252,6 +1252,7 @@ export default function NoteEditorScreen() {
             collaborators,
             hasNoteColor,
             completedItemTexts,
+            hasChildren: itemHasChildren(itemsRef.current, item.id),
             onToggle: () => listItemHandlers.onToggle(item.id, !item.completed),
             onChangeText: (text) => listItemHandlers.onChangeText(originalIndex, text),
             onDelete: () => listItemHandlers.onDelete(originalIndex),
