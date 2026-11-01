@@ -91,7 +91,7 @@ vi.mock('@/utils/api', () => ({
 // Mock @headlessui/react
 vi.mock('@headlessui/react', () => {
   const DialogPanel = ({ className, children, ...rest }: { className?: string; children?: ReactNode } & Record<string, unknown>) => (
-    <div className={className} data-testid="dialog-panel" {...rest}>{children}</div>
+    <div className={className} {...rest}>{children}</div>
   );
 
   const Dialog = ({ children, open }: { children?: ReactNode; open?: boolean }) => (
@@ -564,7 +564,7 @@ describe('NoteModal', () => {
       const note = createMockNote({ images: [] });
       renderNoteModal({ ...defaultProps, note });
 
-      const panel = screen.getByTestId('dialog-panel');
+      const panel = screen.getByTestId('note-modal-panel');
       const file = makeImageFile();
       fireEvent.drop(panel, { dataTransfer: { files: [file] } });
       await flushMicrotasks();
@@ -576,7 +576,7 @@ describe('NoteModal', () => {
       const note = createMockNote({ images: [] });
       renderNoteModal({ ...defaultProps, note });
 
-      const panel = screen.getByTestId('dialog-panel');
+      const panel = screen.getByTestId('note-modal-panel');
       fireEvent.dragEnter(panel, { dataTransfer: { items: [{ kind: 'file', type: 'image/png' }] } });
 
       expect(screen.getByTestId('note-image-drop-overlay')).toBeInTheDocument();
@@ -589,7 +589,7 @@ describe('NoteModal', () => {
       const note = createMockNote({ images: [] });
       renderNoteModal({ ...defaultProps, note });
 
-      const panel = screen.getByTestId('dialog-panel');
+      const panel = screen.getByTestId('note-modal-panel');
       // fireEvent returns false only when some handler called preventDefault().
       const notPrevented = fireEvent.dragOver(panel, { dataTransfer: { types: ['text/plain'] } });
       expect(notPrevented).toBe(true);
@@ -599,7 +599,7 @@ describe('NoteModal', () => {
       const note = createMockNote({ images: [] });
       renderNoteModal({ ...defaultProps, note });
 
-      const panel = screen.getByTestId('dialog-panel');
+      const panel = screen.getByTestId('note-modal-panel');
       const file = makeImageFile();
       fireEvent.paste(panel, {
         clipboardData: { items: [{ kind: 'file', type: 'image/png', getAsFile: () => file }] },
@@ -711,7 +711,7 @@ describe('NoteModal', () => {
       const note = createMockNote({ images: [] });
       renderNoteModal({ ...defaultProps, note });
 
-      const panel = screen.getByTestId('dialog-panel');
+      const panel = screen.getByTestId('note-modal-panel');
       const pdf = new File(['x'], 'doc.pdf', { type: 'application/pdf' });
       fireEvent.drop(panel, { dataTransfer: { files: [pdf] } });
       await flushMicrotasks();
@@ -726,7 +726,7 @@ describe('NoteModal', () => {
       const note = createMockNote({ images: [] });
       renderNoteModal({ ...defaultProps, note });
 
-      const panel = screen.getByTestId('dialog-panel');
+      const panel = screen.getByTestId('note-modal-panel');
       const image = makeImageFile();
       const pdf = new File(['x'], 'doc.pdf', { type: 'application/pdf' });
       fireEvent.drop(panel, { dataTransfer: { files: [pdf, image] } });

@@ -206,6 +206,28 @@ export class DashboardPage {
     const openButton = card.locator('[data-note-card="true"]');
     await openButton.focus();
     await this.page.keyboard.press('Enter');
+    await this.waitForNoteModalToSettle();
+  }
+
+  // The note modal's panel is vertically centred and animates as it opens: it
+  // scales in, and its height animates once the note's items land a render
+  // after mount (useSizeTransition). Until both finish its rows are still
+  // moving, so a forced click (which skips Playwright's stability wait) aims at
+  // where an item checkbox was a frame ago and lands on the row instead.
+  //
+  // The two-frame wait covers the gap before the item render starts the height
+  // animation. Only the panel's own animations count: its subtree can hold an
+  // infinite one, such as a spinner.
+  private async waitForNoteModalToSettle() {
+    const panel = this.page.getByTestId('note-modal-panel');
+    await expect(panel).toBeVisible();
+    await panel.evaluate(async el => {
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      // A size animation cancelled by a newer one rejects its `finished`.
+      for (let running = el.getAnimations(); running.length > 0; running = el.getAnimations()) {
+        await Promise.allSettled(running.map(animation => animation.finished));
+      }
+    });
   }
 
   async closeNoteModal() {
