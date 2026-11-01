@@ -18,6 +18,8 @@ import {
   distinctCompletedTexts,
   findSuggestedItem,
   generateId,
+  reinsertIds,
+  reviveSuggestedItem,
   splitPasteIntoItems,
   truncateToCodePoints,
   type CompletedWriteTracker,
@@ -37,9 +39,7 @@ import {
   dropTargetParentId,
   indentLevelFromDrag,
   itemHasChildren,
-  moveItemIntoSlot,
   normalizeItemOrder,
-  undoMoveItemIntoSlot,
   type ItemSnapshot,
   type LocalItem,
 } from './listItemModel';
@@ -50,33 +50,6 @@ const FOCUSED_INPUT_KEYBOARD_MARGIN = 120;
 // How long the Android bar outlives a row's blur before hiding, so tapping from
 // one row to the next does not flash it away and back.
 const ITEM_BLUR_SETTLE_MS = 150;
-
-// Re-inserts each id in `idsToRestore` back into `currentIds`, anchored right
-// after its nearest still-present predecessor in `originalOrder` (or at the
-// start, if none precedes it). Used to revert a failed bulk delete: reverting
-// to a stale full snapshot would also discard any edit or addition made to
-// *other* items while the request was in flight, so instead only the deleted
-// ids are restored, on top of whatever `currentIds` has become by the time
-// the failure is handled.
-function reinsertIds(currentIds: string[], originalOrder: string[], idsToRestore: Set<string>): string[] {
-  const present = new Set(currentIds);
-  const result = [...currentIds];
-  for (const [i, id] of originalOrder.entries()) {
-    if (!idsToRestore.has(id)) continue;
-    let anchor: string | null = null;
-    for (let j = i - 1; j >= 0; j--) {
-      const candidate = originalOrder[j]!;
-      if (present.has(candidate)) {
-        anchor = candidate;
-        break;
-      }
-    }
-    const insertAt = anchor ? result.indexOf(anchor) + 1 : 0;
-    result.splice(insertAt, 0, id);
-    present.add(id);
-  }
-  return result;
-}
 
 export interface UseListItemEditingParams {
   doc: EditorDocHandle;
@@ -99,11 +72,7 @@ export interface UseListItemEditingParams {
    * the optimistic one.
    */
   withItemWriteInFlight: <T>(op: () => Promise<T>) => Promise<T>;
-  /**
-   * The editor's completed-write tracker, owned by the sync hook so its save
-   * diff can leave claimed flags to the writes (see completedWrites in
-   * @jot/shared).
-   */
+  /** The editor's completed-write tracker (owned by useNoteEditorSync). */
   completedWrites: CompletedWriteTracker;
   /** The editor's scroll container, kept scrolled to the focused row. */
   scrollViewRef: React.RefObject<ScrollView | null>;
@@ -688,25 +657,14 @@ export function useListItemEditing({
         return;
       }
 
-      // Drop the typed row and move the matched completed item into its place,
-      // then uncheck it exactly as its checkbox would: the toggle endpoint
-      // applies the parent/child cascade atomically and the baseline advances
-      // to its result. Saving only afterwards keeps the diff from re-sending
-      // the cascaded flags as PATCHes — on the server, PATCHing a parent
-      // unchecked also unchecks every one of its children.
-      const typedRow = current.find((item) => item.id === itemId);
-      const moved = moveItemIntoSlot(current, itemId, completedItem.id);
-      itemsRef.current = moved;
-      setItems(moved);
-      void handleItemCompletedToggle(completedItem.id, false).then((ok) => {
-        // A failed toggle re-checked the item; put the typed row back too, so
-        // the save below doesn't delete what the user typed for nothing.
-        if (!ok && typedRow) {
-          const restored = undoMoveItemIntoSlot(itemsRef.current, current, typedRow, completedItem.id);
-          itemsRef.current = restored;
-          setItems(restored);
-        }
-        markDirtyAndScheduleUpdate();
+      void reviveSuggestedItem(itemId, completedItem.id, {
+        read: () => itemsRef.current,
+        commit: (next) => {
+          itemsRef.current = next;
+          setItems(next);
+        },
+        uncheck: (id) => handleItemCompletedToggle(id, false),
+        save: markDirtyAndScheduleUpdate,
       });
 
       setTimeout(() => {

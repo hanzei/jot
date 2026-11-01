@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
+import { failRequests } from '../fixtures/apiErrors';
 import type { DashboardPage } from '../pages/DashboardPage';
 
 /**
@@ -13,9 +14,6 @@ import type { DashboardPage } from '../pages/DashboardPage';
  */
 test.describe('Completed-item suggestions', () => {
   type ApiItem = { id: string; text: string; completed: boolean; parent_id: string | null };
-
-  const rowCheckbox = (page: Page, index: number) =>
-    page.locator('[data-testid="list-item-row"] input[type="checkbox"]').nth(index);
 
   const suggestion = (page: Page, text: string) =>
     page.getByRole('listbox', { name: 'Suggestions from completed items' })
@@ -40,7 +38,7 @@ test.describe('Completed-item suggestions', () => {
     await page.keyboard.press('Tab');
     await dashboardPage.listItemInput(2).focus();
     await page.keyboard.press('Tab');
-    await rowCheckbox(page, 0).check();
+    await dashboardPage.listItemCheckbox(0).check();
     await expect(page.getByText('Completed items (3)')).toBeVisible();
   };
 
@@ -98,7 +96,7 @@ test.describe('Completed-item suggestions', () => {
     void authenticatedUser;
     await dashboardPage.createListNote('Errands', ['Milk']);
     await dashboardPage.openNote('Errands');
-    await rowCheckbox(page, 0).check();
+    await dashboardPage.listItemCheckbox(0).check();
     await expect(page.getByText('Completed items (1)')).toBeVisible();
 
     // With nothing highlighted, Enter keeps its normal add-item behavior.
@@ -123,11 +121,12 @@ test.describe('Completed-item suggestions', () => {
     void authenticatedUser;
     await dashboardPage.createListNote('Basket', ['Milk']);
     await dashboardPage.openNote('Basket');
-    await rowCheckbox(page, 0).check();
+    await dashboardPage.listItemCheckbox(0).check();
     await expect(page.getByText('Completed items (1)')).toBeVisible();
 
-    await page.route('**/api/v1/notes/*/items/*/toggle-completed', (route) =>
-      route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"boom"}' }));
+    await failRequests(page, '**/api/v1/notes/*/items/*/toggle-completed', 'POST', {
+      status: 500, code: 'internal', message: 'internal server error', requestId: 'e2e0123456789abc',
+    });
 
     await dashboardPage.addListItem('mil');
     await suggestion(page, 'Milk').click();
@@ -146,7 +145,7 @@ test.describe('Completed-item suggestions', () => {
     void authenticatedUser;
     await dashboardPage.createListNote('Pantry', ['Milk', 'Bread']);
     await dashboardPage.openNote('Pantry');
-    await rowCheckbox(page, 0).check();
+    await dashboardPage.listItemCheckbox(0).check();
     await expect(page.getByText('Completed items (1)')).toBeVisible();
 
     // Accepting would consume "Bread", so retyping it must not offer "Milk".

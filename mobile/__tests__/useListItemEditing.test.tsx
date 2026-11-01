@@ -46,7 +46,6 @@ function useHarness() {
   const savedItemsRef = useRef<Map<string, ItemSnapshot>>(new Map());
   const savedOrderRef = useRef<string[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
-  // Owned by useNoteEditorSync in the app; its save diff reads claimed().
   const [completedWrites] = useState(createCompletedWriteTracker);
   const editing = useListItemEditing({
     doc: doc.handle,

@@ -1,11 +1,9 @@
 // The completed-item autocomplete both note editors offer while a list row is
-// being typed in: which completed items are suggested, on which rows, and
-// which item accepting a suggestion revives. The editors keep only the UI
-// state (whether the row started empty, the dropdown/chips) and the accept
-// handler itself, which moves the item with moveItemIntoSlot and unchecks it
-// through their checkbox toggle path.
+// being typed in: which completed items are suggested, on which rows, and what
+// accepting one does. The editors keep only the UI state (whether the row
+// started empty, the dropdown/chips) and the wiring to their own item state.
 
-import type { ListItem } from './listItems';
+import { moveItemIntoSlot, undoMoveItemIntoSlot, type ListItem } from './listItems';
 
 /** The most suggestions a row shows at once. */
 export const MAX_ITEM_SUGGESTIONS = 5;
@@ -78,7 +76,46 @@ export const itemSuggestions = (
  * whose trimmed text matches it ignoring case — the same item
  * {@link distinctCompletedTexts} took the spelling from.
  */
-export const findSuggestedItem = <T extends ListItem>(items: readonly T[], suggestion: string): T | undefined => {
+export const findSuggestedItem = (items: readonly ListItem[], suggestion: string): ListItem | undefined => {
   const key = suggestion.trim().toLowerCase();
   return items.find(item => item.completed && item.text.trim().toLowerCase() === key);
+};
+
+/** How {@link reviveSuggestedItem} reaches an editor's item state. */
+export interface ReviveSuggestionHooks {
+  /** The editor's latest items (its live ref, not a render snapshot). */
+  read: () => ListItem[];
+  commit: (items: ListItem[]) => void;
+  /**
+   * Unchecks an item through the editor's checkbox toggle path, resolving
+   * false only when the request failed and its flags were reverted.
+   */
+  uncheck: (itemId: string) => Promise<boolean>;
+  /** Persists the remaining changes (the slot row's removal, the new order). */
+  save: () => void;
+}
+
+/**
+ * Accepting a suggestion: the row being typed in (`slotId`) is consumed and
+ * the completed item it matched (`itemId`) takes its place, then is unchecked
+ * exactly as its checkbox would — the toggle endpoint applies the parent/child
+ * cascade atomically, and the editor's save diff leaves the flags that write
+ * claims alone until it settles. The save runs only once the toggle has
+ * settled, so the typed row's removal is normally sent only for a revive that
+ * happened; when the toggle fails, the typed row and the item go back where
+ * they were and the save has nothing of the attempt left to send. (A save pass
+ * already running can still send the removal earlier; the undo then re-creates
+ * the row under its own id.)
+ */
+// Written with .then rather than async/await: mobile's Babel compiles shared/
+// and can lower an async function to a @babel/runtime helper, which shared/
+// cannot resolve — the same trap as array destructuring. No shared code uses
+// async yet; keep it that way unless the mobile suite proves it safe.
+export const reviveSuggestedItem = (slotId: string, itemId: string, hooks: ReviveSuggestionHooks): Promise<void> => {
+  const original = hooks.read();
+  hooks.commit(moveItemIntoSlot(original, slotId, itemId));
+  return hooks.uncheck(itemId).then(revived => {
+    if (!revived) hooks.commit(undoMoveItemIntoSlot(hooks.read(), original, slotId, itemId));
+    hooks.save();
+  });
 };

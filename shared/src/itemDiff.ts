@@ -38,7 +38,7 @@ export const itemSnapshot = (item: ListItem): ItemSnapshot => ({
 /** One granular item request, in the order {@link diffItems} emits them. */
 export type ItemDiffOp =
   | { kind: 'create'; itemId: string; request: CreateNoteItemRequest; snapshot: ItemSnapshot }
-  | { kind: 'patch'; itemId: string; patch: PatchNoteItemRequest; snapshot: ItemSnapshot }
+  | { kind: 'patch'; itemId: string; patch: PatchNoteItemRequest }
   | { kind: 'delete'; itemId: string }
   | { kind: 'reorder'; itemIds: string[] };
 
@@ -74,17 +74,18 @@ const orderChanged = (savedOrder: readonly string[], curOrder: readonly string[]
  * Compares the current items against the saved baseline and returns the
  * operations that bring the server in line: creates and patches in list order
  * (so a parent is created before its children), then deletes, then one
- * reorder if the id order moved. Patches carry only the changed fields.
+ * reorder if the id order moved. Patches carry only the changed fields, and a
+ * caller advances the baseline from exactly those ({@link advanceSnapshot}).
  *
  * An empty list emits no reorder (the server rejects an empty one); its deletes
  * already say everything. Callers still set their saved order to the current
  * order once every operation has succeeded.
  *
  * `heldCompleted` names items whose completed flag an in-flight completed write
- * still owns (`CompletedWriteTracker.claimed()`). Their flag is left out of any
- * patch: the write's endpoint applies the parent/child cascade atomically,
- * whereas a PATCH unchecking a parent would make the server uncheck all its
- * children.
+ * still owns (`CompletedWriteTracker.claimed()`), and leaves that flag out of
+ * their patches: the write's endpoint applies the parent/child cascade
+ * atomically, whereas a PATCH unchecking a parent would make the server uncheck
+ * all its children.
  */
 export function diffItems(
   savedItems: ReadonlyMap<string, ItemSnapshot>,
@@ -102,12 +103,10 @@ export function diffItems(
       ops.push({ kind: 'create', itemId: it.id, request: createItemRequest(it), snapshot: itemSnapshot(it) });
       continue;
     }
-    // A held item's completed flag belongs to an in-flight completed write:
-    // diff it as if unchanged, so the patch neither sends nor records it.
-    const view = heldCompleted.has(it.id) ? { ...it, completed: snap.completed } : it;
-    const patch = itemPatch(snap, view);
+    const patch = itemPatch(snap, it);
+    if (heldCompleted.has(it.id)) delete patch.completed;
     if (Object.keys(patch).length > 0) {
-      ops.push({ kind: 'patch', itemId: it.id, patch, snapshot: itemSnapshot(view) });
+      ops.push({ kind: 'patch', itemId: it.id, patch });
     }
   }
 
@@ -125,31 +124,28 @@ export function diffItems(
 const NO_HELD_IDS: ReadonlySet<string> = new Set();
 
 /**
- * The baseline entry after a patch op succeeds: only the fields the patch
- * actually sent move to the op's snapshot; the rest keep their current
- * baseline value. Taking the whole snapshot instead would roll back anything
- * advanced while the request was in flight — notably the completed flags a
- * completed write reconciled from the server — and the next save would re-send
- * them.
+ * The baseline entry after a patch succeeds: the fields it sent take the sent
+ * values, the rest keep their current baseline value. Snapshotting the whole
+ * item instead would roll back anything advanced while the request was in
+ * flight — notably the completed flags a completed write reconciled from the
+ * server — and the next save would re-send them.
  */
-export const advanceSnapshot = (
-  current: ItemSnapshot | undefined,
-  op: { patch: PatchNoteItemRequest; snapshot: ItemSnapshot },
-): ItemSnapshot => {
-  if (!current) return op.snapshot;
-  return {
-    text: op.patch.text !== undefined ? op.snapshot.text : current.text,
-    completed: op.patch.completed !== undefined ? op.snapshot.completed : current.completed,
-    parentId: op.patch.parent_id !== undefined ? op.snapshot.parentId : current.parentId,
-    assigned_to: op.patch.assigned_to !== undefined ? op.snapshot.assigned_to : current.assigned_to,
-  };
-};
+export const advanceSnapshot = (current: ItemSnapshot, patch: PatchNoteItemRequest): ItemSnapshot => ({
+  text: patch.text ?? current.text,
+  completed: patch.completed ?? current.completed,
+  // null leaves the parent unchanged; '' is the wire form of top-level.
+  parentId: patch.parent_id === undefined || patch.parent_id === null ? current.parentId : patch.parent_id || null,
+  assigned_to: patch.assigned_to ?? current.assigned_to,
+});
 
 /**
  * True when the items differ from the baseline in any way a save would send —
  * or in order alone, which also covers an emptied list whose deletes the
  * baseline has already absorbed. Same answer as `diffItems(...).length > 0`
- * (plus the order check), without building the operations.
+ * (plus the order check), without building the operations — except that it
+ * ignores `heldCompleted` on purpose: a flag an in-flight write still owns
+ * counts as unflushed, which holds off adopting a server copy of the note
+ * until the write settles.
  */
 export const itemsDiffer = (
   savedItems: ReadonlyMap<string, ItemSnapshot>,

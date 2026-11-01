@@ -254,10 +254,13 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
           }
           base.set(op.itemId, op.snapshot);
           break;
-        case 'patch':
+        case 'patch': {
           await notes.updateItem(noteId, op.itemId, op.patch);
-          base.set(op.itemId, advanceSnapshot(base.get(op.itemId), op));
+          // An entry that vanished meanwhile (a bulk delete absorbed it) stays gone.
+          const current = base.get(op.itemId);
+          if (current) base.set(op.itemId, advanceSnapshot(current, op.patch));
           break;
+        }
         case 'delete':
           await notes.deleteItem(noteId, op.itemId);
           base.delete(op.itemId);

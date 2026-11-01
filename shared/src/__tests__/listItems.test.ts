@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyCompletedCascade, applyCompletedValues, completedCascadeScope, completedPriorById, dropTargetParentId, groupNoteItems, itemHasChildren, moveItemIntoSlot, normalizeItemOrder, undoMoveItemIntoSlot, type ListItem } from '../listItems';
+import { applyCompletedCascade, applyCompletedValues, completedCascadeScope, completedPriorById, dropTargetParentId, groupNoteItems, itemHasChildren, moveItemIntoSlot, normalizeItemOrder, reinsertIds, undoMoveItemIntoSlot, type ListItem } from '../listItems';
 
 // Terse builder so each case reads as the structure under test rather than as
 // six fields of boilerplate per item.
@@ -228,6 +228,17 @@ describe('moveItemIntoSlot', () => {
   });
 });
 
+describe('reinsertIds', () => {
+  it('puts each id back after its nearest still-present original predecessor', () => {
+    // "c" was added meanwhile; "b" and "d" are restored around it.
+    expect(reinsertIds(['a', 'c'], ['a', 'b', 'd'], new Set(['b', 'd']))).toEqual(['a', 'b', 'd', 'c']);
+  });
+
+  it('puts an id with no surviving predecessor at the start', () => {
+    expect(reinsertIds(['b'], ['a', 'b'], new Set(['a']))).toEqual(['a', 'b']);
+  });
+});
+
 describe('undoMoveItemIntoSlot', () => {
   const original = () => [
     item('a'),
@@ -239,7 +250,7 @@ describe('undoMoveItemIntoSlot', () => {
   it('restores the list the move started from', () => {
     const before = original();
     const moved = moveItemIntoSlot(before, 'typing', 'milk');
-    const undone = undoMoveItemIntoSlot(moved, before, before[1]!, 'milk');
+    const undone = undoMoveItemIntoSlot(moved, before, 'typing', 'milk');
     expect(ids(undone)).toEqual(['a', 'typing', 'b', 'milk']);
     expect(undone.find(it => it.id === 'typing')?.text).toBe('mil');
   });
@@ -252,7 +263,7 @@ describe('undoMoveItemIntoSlot', () => {
       item('p1', { parentId: 'p', completed: true }),
     ];
     const moved = moveItemIntoSlot(before, 'typing', 'p1');
-    const undone = undoMoveItemIntoSlot(moved, before, before[1]!, 'p1');
+    const undone = undoMoveItemIntoSlot(moved, before, 'typing', 'p1');
     expect(ids(undone)).toEqual(['a', 'typing', 'p', 'p1']);
   });
 
@@ -260,13 +271,13 @@ describe('undoMoveItemIntoSlot', () => {
     const before = original();
     const moved = moveItemIntoSlot(before, 'typing', 'milk')
       .map(it => (it.id === 'milk' ? { ...it, text: 'Milk 2L' } : it));
-    const undone = undoMoveItemIntoSlot(moved, before, before[1]!, 'milk');
+    const undone = undoMoveItemIntoSlot(moved, before, 'typing', 'milk');
     expect(undone.find(it => it.id === 'milk')?.text).toBe('Milk 2L');
   });
 
   it('returns the input unchanged when the slot row is already present', () => {
     const before = original();
-    expect(undoMoveItemIntoSlot(before, before, before[1]!, 'milk')).toBe(before);
+    expect(undoMoveItemIntoSlot(before, before, 'typing', 'milk')).toBe(before);
   });
 });
 

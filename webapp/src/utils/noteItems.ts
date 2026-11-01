@@ -9,8 +9,8 @@
 // NoteModal is the only consumer today; it holds the state these operate on
 // and persists whatever they return.
 
-import { applyCompletedCascade, dropTargetParentId, itemHasChildren, moveItemIntoSlot, normalizeItemOrder, undoMoveItemIntoSlot, type ListItem } from '@jot/shared';
-export { applyCompletedCascade, dropTargetParentId, itemHasChildren, moveItemIntoSlot, normalizeItemOrder, undoMoveItemIntoSlot, type ListItem };
+import { applyCompletedCascade, dropTargetParentId, itemHasChildren, normalizeItemOrder, type ListItem } from '@jot/shared';
+export { applyCompletedCascade, dropTargetParentId, itemHasChildren, normalizeItemOrder, type ListItem };
 
 // The DOM id of a row's textarea. Derived from the item id (22 random
 // alphanumerics, so always a valid id) rather than useId, because NoteModal has

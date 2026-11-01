@@ -96,6 +96,10 @@ export class DashboardPage {
     return this.page.locator('[data-testid="list-item-row"]').nth(index);
   }
 
+  listItemCheckbox(index: number): Locator {
+    return this.listItemRow(index).locator('input[type="checkbox"]');
+  }
+
   /**
    * The rendered form of the row at `index`, present only while that row is
    * showing Markdown rather than source (docs/specs/markdown-rendering.md §1.2).

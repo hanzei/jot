@@ -3,7 +3,7 @@ import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Users, Check
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, distinctCompletedTexts, findSuggestedItem, generateId, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, completedCascadeScope, completedPriorById, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, distinctCompletedTexts, findSuggestedItem, generateId, reviveSuggestedItem, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, completedCascadeScope, completedPriorById, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
 import { renderMarkdown, inlineMarkdownToText } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -29,10 +29,8 @@ import {
   indentOf,
   itemHasChildren,
   itemTextareaId,
-  moveItemIntoSlot,
   normalizeItemOrder,
   precedingTopLevelId,
-  undoMoveItemIntoSlot,
   type ListItem,
 } from '@/utils/noteItems';
 import type {
@@ -1305,22 +1303,11 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
       return;
     }
 
-    // Drop the typed row and move the matched completed item into its place,
-    // then uncheck it exactly as its checkbox would: the toggle endpoint
-    // applies the parent/child cascade atomically and the baseline advances to
-    // its result. Saving only afterwards keeps the diff from re-sending the
-    // cascaded flags as PATCHes — on the server, PATCHing a parent unchecked
-    // also unchecks every one of its children.
-    const original = itemsRef.current;
-    const typedRow = original.find(item => item.id === currentItemId);
-    commitItems(moveItemIntoSlot(original, currentItemId, completedItem.id));
-    void handleItemCompletedToggle(completedItem.id, false).then((ok) => {
-      // A failed toggle re-checked the item; put the typed row back too, so
-      // the save below doesn't delete what the user typed for nothing.
-      if (!ok && typedRow) {
-        commitItems(undoMoveItemIntoSlot(itemsRef.current, original, typedRow, completedItem.id));
-      }
-      autoSaveNote();
+    void reviveSuggestedItem(currentItemId, completedItem.id, {
+      read: () => itemsRef.current,
+      commit: commitItems,
+      uncheck: id => handleItemCompletedToggle(id, false),
+      save: () => { autoSaveNote(); },
     });
 
     // Focus the revived item, which sits in the typed row's place (or, for a

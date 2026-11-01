@@ -1,9 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   MAX_ITEM_SUGGESTIONS,
   distinctCompletedTexts,
   findSuggestedItem,
   itemSuggestions,
+  reviveSuggestedItem,
 } from '../itemSuggestions';
 import type { ListItem } from '../listItems';
 
@@ -73,5 +74,40 @@ describe('findSuggestedItem', () => {
 
   it('returns undefined when no completed item matches', () => {
     expect(findSuggestedItem([item('a', { text: 'Milk' })], 'Milk')).toBeUndefined();
+  });
+});
+
+describe('reviveSuggestedItem', () => {
+  // An editor's item state as the hooks see it, recording each step.
+  const editor = (initial: ListItem[], uncheckResult: boolean) => {
+    let items = initial;
+    const steps: string[] = [];
+    const hooks = {
+      read: () => items,
+      commit: (next: ListItem[]) => {
+        items = next;
+        steps.push(`commit:${next.map(it => it.id).join(',')}`);
+      },
+      uncheck: vi.fn((id: string) => {
+        steps.push(`uncheck:${id}`);
+        return Promise.resolve(uncheckResult);
+      }),
+      save: () => { steps.push('save'); },
+    };
+    return { hooks, steps, items: () => items };
+  };
+  const list = () => [item('a'), item('typing', { text: 'mil' }), item('milk', { text: 'Milk', completed: true })];
+
+  it('moves the item into the typed row, unchecks it, then saves', async () => {
+    const { hooks, steps } = editor(list(), true);
+    await reviveSuggestedItem('typing', 'milk', hooks);
+    expect(steps).toEqual(['commit:a,milk', 'uncheck:milk', 'save']);
+  });
+
+  it('puts the typed row back before saving when the uncheck fails', async () => {
+    const { hooks, steps, items } = editor(list(), false);
+    await reviveSuggestedItem('typing', 'milk', hooks);
+    expect(steps).toEqual(['commit:a,milk', 'uncheck:milk', 'commit:a,typing,milk', 'save']);
+    expect(items().find(it => it.id === 'typing')?.text).toBe('mil');
   });
 });

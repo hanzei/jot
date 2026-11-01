@@ -58,12 +58,7 @@ export interface CompletedWriteTracker {
   fail(write: number): Map<string, boolean>;
   /** Settles a write. Idempotent, so it is safe in a `finally` after fail(). */
   end(write: number): void;
-  /**
-   * The items some in-flight write still claims. An editor's save diff leaves
-   * their completed flags out (diffItems' `heldCompleted`): the write's own
-   * endpoint applies the cascade atomically, whereas a PATCH unchecking a
-   * parent would make the server uncheck all its children.
-   */
+  /** The items some in-flight write still claims; see diffItems' `heldCompleted`. */
   claimed(): ReadonlySet<string>;
 }
 
