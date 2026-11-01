@@ -974,6 +974,18 @@ async function touchLocalNote(db: SQLiteDatabase, noteId: string): Promise<void>
   await db.runAsync('UPDATE notes SET updated_at = ? WHERE id = ?', [new Date().toISOString(), noteId]);
 }
 
+/**
+ * touchLocalNote, but only when a write actually changed `changedRows` rows —
+ * the server likewise bumps a note only when an item write changed something
+ * (touchNoteIfChangedTx), so a no-op does not move it in "last modified" order.
+ * Only meaningful for statements whose row count implies a change: a DELETE,
+ * or an UPDATE that excludes rows already at the new value (SQLite counts
+ * every row an UPDATE matches, changed or not).
+ */
+async function touchLocalNoteIfChanged(db: SQLiteDatabase, noteId: string, changedRows: number): Promise<void> {
+  if (changedRows > 0) await touchLocalNote(db, noteId);
+}
+
 export interface LocalItemInput {
   id: string;
   text: string;
@@ -1038,8 +1050,8 @@ export async function patchLocalItem(db: SQLiteDatabase, noteId: string, itemId:
 
 export async function deleteLocalItem(db: SQLiteDatabase, noteId: string, itemId: string): Promise<void> {
   await withSerializedTransaction(db, async () => {
-    await db.runAsync('DELETE FROM note_items WHERE id = ? AND note_id = ?', [itemId, noteId]);
-    await touchLocalNote(db, noteId);
+    const result = await db.runAsync('DELETE FROM note_items WHERE id = ? AND note_id = ?', [itemId, noteId]);
+    await touchLocalNoteIfChanged(db, noteId, result.changes);
   });
 }
 
@@ -1061,21 +1073,23 @@ export async function setLocalItemsCompleted(db: SQLiteDatabase, noteId: string,
   await withSerializedTransaction(db, async () => {
     // One statement, and only rows not already at the value: callers often pass
     // a whole note's worth of ids of which few, if any, actually change.
-    await db.runAsync(
+    const result = await db.runAsync(
       `UPDATE note_items SET completed = ?, updated_at = ? WHERE note_id = ? AND completed != ? AND id IN (${placeholders})`,
       [value, now, noteId, value, ...itemIds],
     );
-    await touchLocalNote(db, noteId);
+    await touchLocalNoteIfChanged(db, noteId, result.changes);
   });
 }
 
 export async function deleteLocalItems(db: SQLiteDatabase, noteId: string, itemIds: string[]): Promise<void> {
   if (itemIds.length === 0) return;
   await withSerializedTransaction(db, async () => {
+    let deleted = 0;
     for (const id of itemIds) {
-      await db.runAsync('DELETE FROM note_items WHERE id = ? AND note_id = ?', [id, noteId]);
+      const result = await db.runAsync('DELETE FROM note_items WHERE id = ? AND note_id = ?', [id, noteId]);
+      deleted += result.changes;
     }
-    await touchLocalNote(db, noteId);
+    await touchLocalNoteIfChanged(db, noteId, deleted);
   });
 }
 
