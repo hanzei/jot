@@ -35,42 +35,55 @@ const item: ListItem = {
 // NoteModal recomputes from the note's items — so a collaborator completing or
 // un-completing an item over SSE changes this prop with no keystroke in the
 // field. Re-rendering with a new prop value is exactly that vector.
-function renderItem(completedItemTexts: string[], onAcceptSuggestion = vi.fn()) {
-  const utils = render(
+//
+// Suggestions are only offered on a row that was empty when it took the caret,
+// so the row starts as `initialText` (empty by default) and `typeText`
+// re-renders it the way NoteModal does after each keystroke.
+function renderItem(
+  completedItemTexts: string[],
+  { initialText = '', hasChildren = false }: { initialText?: string; hasChildren?: boolean } = {},
+) {
+  const onAcceptSuggestion = vi.fn();
+  let text = initialText;
+  let texts = completedItemTexts;
+  const element = () => (
     <SortableItem
       id="item-1"
       index={0}
-      item={item}
+      item={{ ...item, text }}
       onUpdateListItem={vi.fn().mockResolvedValue(undefined)}
       onRemoveListItem={vi.fn()}
-      completedItemTexts={completedItemTexts}
+      completedItemTexts={texts}
+      hasChildren={hasChildren}
       onAcceptSuggestion={onAcceptSuggestion}
     />
   );
-  const rerenderWith = (texts: string[]) =>
-    utils.rerender(
-      <SortableItem
-        id="item-1"
-        index={0}
-        item={item}
-        onUpdateListItem={vi.fn().mockResolvedValue(undefined)}
-        onRemoveListItem={vi.fn()}
-        completedItemTexts={texts}
-        onAcceptSuggestion={onAcceptSuggestion}
-      />
-    );
-  return { ...utils, rerenderWith, onAcceptSuggestion };
+  const utils = render(element());
+  const rerenderWith = (next: string[]) => {
+    texts = next;
+    utils.rerender(element());
+  };
+  // A keystroke: the change event is what opens the dropdown (the row was empty
+  // at focus, so there was nothing to show then), and the re-render is NoteModal
+  // feeding the new text back through `item`.
+  const typeText = (next: string) => {
+    fireEvent.change(input(), { target: { value: next } });
+    text = next;
+    utils.rerender(element());
+  };
+  /** Focuses the row, types "buy", and highlights the entry at `index` with ArrowDown. */
+  const highlight = (index: number) => {
+    fireEvent.focus(input());
+    typeText('buy');
+    for (let i = 0; i <= index; i++) {
+      fireEvent.keyDown(input(), { key: 'ArrowDown' });
+    }
+  };
+  return { ...utils, rerenderWith, typeText, highlight, onAcceptSuggestion };
 }
 
 const input = () => screen.getByTestId('list-item-input');
-
-/** Opens the dropdown and highlights the entry at `index` with ArrowDown. */
-function highlight(index: number) {
-  fireEvent.focus(input());
-  for (let i = 0; i <= index; i++) {
-    fireEvent.keyDown(input(), { key: 'ArrowDown' });
-  }
-}
+const suggestionList = () => screen.queryByRole('listbox');
 
 describe('SortableItem suggestion highlight', () => {
   beforeEach(() => {
@@ -78,7 +91,7 @@ describe('SortableItem suggestion highlight', () => {
   });
 
   it('accepts the highlighted suggestion on Enter', () => {
-    const { onAcceptSuggestion } = renderItem(['buy milk', 'buy bread']);
+    const { highlight, onAcceptSuggestion } = renderItem(['buy milk', 'buy bread']);
 
     highlight(1);
     fireEvent.keyDown(input(), { key: 'Enter' });
@@ -87,7 +100,7 @@ describe('SortableItem suggestion highlight', () => {
   });
 
   it('drops a highlight when the suggestions are replaced at the same length', () => {
-    const { rerenderWith, onAcceptSuggestion } = renderItem(['buy milk', 'buy bread']);
+    const { highlight, rerenderWith, onAcceptSuggestion } = renderItem(['buy milk', 'buy bread']);
 
     highlight(1);
     // Same count, different entry at index 1 — the stale index still resolves,
@@ -99,7 +112,7 @@ describe('SortableItem suggestion highlight', () => {
   });
 
   it('drops a highlight across a shrink and re-expand', () => {
-    const { rerenderWith, onAcceptSuggestion } = renderItem(['buy milk', 'buy bread', 'buy eggs']);
+    const { highlight, rerenderWith, onAcceptSuggestion } = renderItem(['buy milk', 'buy bread', 'buy eggs']);
 
     highlight(2);
     // Out of range while shrunk, then in range again — but pointing at a
@@ -112,7 +125,7 @@ describe('SortableItem suggestion highlight', () => {
   });
 
   it('keeps the highlight when an unrelated re-render re-supplies the same suggestions', () => {
-    const { rerenderWith, onAcceptSuggestion } = renderItem(['buy milk', 'buy bread']);
+    const { highlight, rerenderWith, onAcceptSuggestion } = renderItem(['buy milk', 'buy bread']);
 
     highlight(1);
     // A fresh array with identical contents — NoteModal produces one on every
@@ -124,7 +137,7 @@ describe('SortableItem suggestion highlight', () => {
   });
 
   it('only points aria-activedescendant at a suggestion that exists', () => {
-    const { rerenderWith } = renderItem(['buy milk', 'buy bread']);
+    const { highlight, rerenderWith } = renderItem(['buy milk', 'buy bread']);
 
     expect(input()).not.toHaveAttribute('aria-activedescendant');
 
@@ -133,6 +146,63 @@ describe('SortableItem suggestion highlight', () => {
 
     rerenderWith(['buy milk']);
     expect(input()).not.toHaveAttribute('aria-activedescendant');
+  });
+});
+
+describe('SortableItem suggestion eligibility', () => {
+  // Accepting a suggestion replaces the row being typed in, so it must only be
+  // offered where nothing would be lost by that.
+  it('offers suggestions on a row that was empty when focused', () => {
+    const { typeText } = renderItem(['buy milk']);
+
+    fireEvent.focus(input());
+    typeText('buy');
+
+    expect(suggestionList()).toBeInTheDocument();
+  });
+
+  it('offers none while editing an item that already had text', () => {
+    const { typeText } = renderItem(['buy milk'], { initialText: 'buy now' });
+
+    fireEvent.focus(input());
+    typeText('buy');
+
+    expect(suggestionList()).not.toBeInTheDocument();
+  });
+
+  it('offers none on a row with sub-items', () => {
+    const { typeText } = renderItem(['buy milk'], { hasChildren: true });
+
+    fireEvent.focus(input());
+    typeText('buy');
+
+    expect(suggestionList()).not.toBeInTheDocument();
+  });
+
+  it('decides again on each focus, from the text the row has then', () => {
+    const { typeText } = renderItem(['buy milk']);
+
+    fireEvent.focus(input());
+    typeText('buy');
+    expect(suggestionList()).toBeInTheDocument();
+
+    // Leaving and returning makes it an existing item being edited.
+    fireEvent.blur(input());
+    fireEvent.focus(input());
+    expect(suggestionList()).not.toBeInTheDocument();
+  });
+
+  it('keeps offering them when focus comes back from the dropdown', () => {
+    const { typeText } = renderItem(['buy milk']);
+
+    fireEvent.focus(input());
+    typeText('buy');
+    const list = suggestionList()!;
+
+    // A round trip into the dropdown is still the same editing session.
+    fireEvent.blur(input(), { relatedTarget: list });
+    fireEvent.focus(input(), { relatedTarget: list });
+    expect(suggestionList()).toBeInTheDocument();
   });
 });
 
