@@ -9,6 +9,14 @@ import type { ListItem } from '@/utils/noteItems';
 // "N items unchecked" bar reuses it so both bars linger for the same time.
 export const COMPLETED_DELETE_UNDO_MS = 10_000;
 
+// How long completed-flag writes have to stay quiet before the refresh they owe
+// runs. Each refresh reloads the whole dashboard (note list, labels, label
+// counts and the open note), and ticking through a list sends one write per
+// tap, so refreshing per write ran into the per-user rate limit. Long enough to
+// span the gap between taps; the modal already shows the final state, so the
+// only thing the delay holds back is the dashboard card behind it.
+export const COMPLETED_REFRESH_SETTLE_MS = 1_500;
+
 // The slice of the autosave engine's diff baseline these bulk actions have to
 // advance. Passed in as named operations rather than as the raw refs so the
 // engine stays free to move, and so it is obvious from here exactly which two
@@ -92,31 +100,78 @@ export function useCompletedItems({
     onRefreshRef.current = onRefresh;
   }, [onRefresh]);
 
+  // The refresh completed-flag writes owe, coalesced (#1147): a successful write
+  // only marks one as owed, and it runs once no write is in flight and none has
+  // started for COMPLETED_REFRESH_SETTLE_MS. A burst of taps therefore costs one
+  // refresh, not one per tap. Deferring it is safe because the modal never
+  // waits on it: each write already reconciles its own flags, and a refetched
+  // note only reaches the editor through the completed-write gate. Once the
+  // modal has closed there is no burst left to wait for, so the owed refresh
+  // runs as soon as nothing is in flight — neither a write nor the deletes the
+  // close flushes (`flushing`). One object in a ref, so the unmount flush below
+  // can hold on to it.
+  const completedRefreshRef = useRef<{
+    inFlight: number;
+    owed: boolean;
+    closed: boolean;
+    flushing: boolean;
+    timeoutId: ReturnType<typeof setTimeout> | undefined;
+  }>({ inFlight: 0, owed: false, closed: false, flushing: false, timeoutId: undefined });
+  // Runs a refresh now, which also settles any the completed writes owe.
+  const runRefresh = useCallback(() => {
+    const state = completedRefreshRef.current;
+    clearTimeout(state.timeoutId);
+    state.timeoutId = undefined;
+    state.owed = false;
+    onRefreshRef.current?.();
+  }, []);
+  // After close: runs the owed refresh once neither a write nor the close's
+  // delete flush is still in flight, so it neither refetches items mid-delete
+  // nor repeats once the other lands.
+  const refreshIfSettled = useCallback(() => {
+    const state = completedRefreshRef.current;
+    if (state.owed && state.inFlight === 0 && !state.flushing) runRefresh();
+  }, [runRefresh]);
+
   // On unmount (the modal is fully closed — note switches keep it mounted) flush
   // any deferred completed-item deletes immediately. The undo bar is gone once
   // closed, so waiting out the timer only risks a reopen showing stale items
   // that the lingering timer then removes; firing now keeps server and a reopen
-  // consistent. Runs once (empty deps) so it triggers on unmount only.
+  // consistent. Its only dependency is stable, so it triggers on unmount only.
   useEffect(() => {
     const pending = pendingCompletedDeletesRef.current;
+    const completedRefresh = completedRefreshRef.current;
+    completedRefresh.closed = false;
     return () => {
-      if (pending.size === 0) return;
-      // Snapshot the callback while still mounted, then refresh only once every
-      // DELETE has settled — refreshing while they are still in flight makes the
-      // note list refetch the very items being deleted and render them back.
-      const refresh = onRefreshRef.current;
-      const flushes: Promise<unknown>[] = [];
-      for (const [pendingNoteId, entry] of pending) {
-        clearTimeout(entry.timeoutId);
-        flushes.push(notes.deleteItems(pendingNoteId, [...entry.ids]).catch(err => {
-          console.error('Failed to flush completed-item deletion on close:', err);
-        }));
+      completedRefresh.closed = true;
+      // A refresh still waiting out the settle delay stops waiting: the
+      // dashboard does not reload on close, so this is what brings the note's
+      // card up to date.
+      clearTimeout(completedRefresh.timeoutId);
+      completedRefresh.timeoutId = undefined;
+      if (pending.size > 0) {
+        // The flushed deletes owe a refresh too, but only once every DELETE
+        // has settled — refreshing while they are still in flight makes the
+        // note list refetch the very items being deleted and render them back.
+        completedRefresh.owed = true;
+        completedRefresh.flushing = true;
+        const flushes: Promise<unknown>[] = [];
+        for (const [pendingNoteId, entry] of pending) {
+          clearTimeout(entry.timeoutId);
+          flushes.push(notes.deleteItems(pendingNoteId, [...entry.ids]).catch(err => {
+            console.error('Failed to flush completed-item deletion on close:', err);
+          }));
+        }
+        pending.clear();
+        // Each flush swallows its own rejection, so this never rejects.
+        void Promise.all(flushes).then(() => {
+          completedRefresh.flushing = false;
+          refreshIfSettled();
+        });
       }
-      pending.clear();
-      // Each flush swallows its own rejection, so this never rejects.
-      void Promise.all(flushes).then(() => refresh?.());
+      refreshIfSettled();
     };
-  }, []);
+  }, [refreshIfSettled]);
 
   const commitCompleted = useCallback((completedById: ReadonlyMap<string, boolean>) => {
     const next = applyCompletedValues(itemsRef.current, completedById);
@@ -142,13 +197,18 @@ export function useCompletedItems({
     }
     cancelPendingSave();
 
+    const refreshState = completedRefreshRef.current;
+    refreshState.inFlight += 1;
+    // A new write restarts the settle delay.
+    clearTimeout(refreshState.timeoutId);
+    refreshState.timeoutId = undefined;
     const write = completedWrites.begin(priorById);
     try {
       const serverItems = await request(noteId);
       const completedById = completedWrites.accept(write, serverItems);
       commitCompleted(completedById);
       baseline.syncCompleted(completedById);
-      onRefresh?.();
+      refreshState.owed = true;
       flashSaved();
       return true;
     } catch (error) {
@@ -158,8 +218,13 @@ export function useCompletedItems({
       return false;
     } finally {
       completedWrites.end(write);
+      refreshState.inFlight -= 1;
+      if (refreshState.inFlight === 0 && refreshState.owed) {
+        if (refreshState.closed) refreshIfSettled();
+        else refreshState.timeoutId = setTimeout(runRefresh, COMPLETED_REFRESH_SETTLE_MS);
+      }
     }
-  }, [baseline, cancelPendingSave, commitCompleted, completedWrites, flashSaved, markDirty, noteId, onRefresh, showError, t]);
+  }, [baseline, cancelPendingSave, commitCompleted, completedWrites, flashSaved, markDirty, noteId, refreshIfSettled, runRefresh, showError, t]);
 
   // Sets completed on the given items in one bulk request. Resolves false when
   // the request failed and the local state was rolled back, so callers don't
@@ -257,7 +322,7 @@ export function useCompletedItems({
       notes.deleteItems(noteId, [...ids])
         .then((remaining) => {
           finalizeCompletedDeletion(ids, remaining);
-          onRefresh?.();
+          runRefresh();
         })
         .catch((error) => {
           console.error('Failed to delete completed items:', error);
@@ -267,7 +332,7 @@ export function useCompletedItems({
         });
     }, COMPLETED_DELETE_UNDO_MS);
     pendingCompletedDeletesRef.current.set(noteId, { ids, timeoutId });
-  }, [finalizeCompletedDeletion, itemsRef, noteId, onRefresh, showError, t]);
+  }, [finalizeCompletedDeletion, itemsRef, noteId, runRefresh, showError, t]);
 
   const undoDeleteCompletedItems = useCallback(() => {
     const entry = noteId ? pendingCompletedDeletesRef.current.get(noteId) : undefined;

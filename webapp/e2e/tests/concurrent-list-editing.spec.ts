@@ -105,4 +105,48 @@ test.describe('Concurrent list editing', () => {
     await dashboardPage.openNote('Quick Checks');
     await expect(page.getByText('Completed items (3)')).toBeVisible();
   });
+
+  // Every completed write used to refresh the whole dashboard (note list, label
+  // counts, labels and the open note), so ticking through a list cost five
+  // requests a tap and a long list ran into the per-user rate limit (#1147).
+  // A burst of taps now owes one refresh, run once the writes have settled.
+  test('checking items off in quick succession refreshes the dashboard once', async ({ page, dashboardPage, authenticatedUser }) => {
+    void authenticatedUser;
+    const itemTexts = ['Eggs', 'Flour', 'Sugar', 'Butter', 'Milk'];
+    await dashboardPage.createListNote('Rapid Checks', itemTexts);
+    await dashboardPage.openNote('Rapid Checks');
+
+    const toggles: string[] = [];
+    const toggleResponses: string[] = [];
+    const noteListReads: { togglesLanded: number }[] = [];
+    const noteReads: string[] = [];
+    page.on('request', request => {
+      if (request.method() !== 'GET') return;
+      const path = new URL(request.url()).pathname;
+      if (path === '/api/v1/notes') noteListReads.push({ togglesLanded: toggleResponses.length });
+      else if (/^\/api\/v1\/notes\/[^/]+$/.test(path)) noteReads.push(path);
+    });
+    page.on('request', request => {
+      if (request.url().includes('/toggle-completed')) toggles.push(request.url());
+    });
+    page.on('response', response => {
+      if (response.url().includes('/toggle-completed')) toggleResponses.push(response.url());
+    });
+
+    const activeCheckbox = page.locator('[data-testid="list-item-row"] input[type="checkbox"]:not(:checked)');
+    for (let tapped = 1; tapped <= itemTexts.length; tapped++) {
+      // eslint-disable-next-line playwright/no-force-option -- one forced click checks exactly one item before it reflows into the completed section
+      await activeCheckbox.first().click({ force: true });
+      await expect(page.getByText(`Completed items (${tapped})`)).toBeVisible();
+    }
+
+    // The refresh runs once the burst settles, and the card behind the modal
+    // catches up with it.
+    await expect(dashboardPage.noteCard('Rapid Checks')).toContainText(`+${itemTexts.length} completed items`);
+    expect(toggles).toHaveLength(itemTexts.length);
+    expect(noteListReads).toEqual([{ togglesLanded: itemTexts.length }]);
+    expect(noteReads).toHaveLength(1);
+    await expect(page.getByText(`Completed items (${itemTexts.length})`)).toBeVisible();
+    await expect(activeCheckbox).toHaveCount(0);
+  });
 });
