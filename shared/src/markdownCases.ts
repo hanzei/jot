@@ -43,7 +43,23 @@ export const MARKDOWN_CASES: MarkdownCase[] = [
 
   // Code
   { id: 'inline-code', markdown: '`code`', expected: 'inline code' },
-  { id: 'fenced-code', markdown: '```js\nconst a = 1;\n```', expected: 'a code block with block layout' },
+  // A fence naming a language Jot knows is highlighted in the open note
+  // (docs/specs §2.3); anything else is the same block, plain.
+  {
+    id: 'fenced-code',
+    markdown: '```js\nconst a = 1;\n```',
+    expected: 'a code block with block layout, highlighted as JavaScript',
+  },
+  {
+    id: 'fenced-code-unknown-language',
+    markdown: '```brainfuck\n+[->+<]>.\n```',
+    expected: 'a plain code block — not a language Jot highlights',
+  },
+  {
+    id: 'fenced-code-markup',
+    markdown: '```html\n<b class="x">hi</b>\n```',
+    expected: 'highlighted HTML source, shown as text rather than rendered',
+  },
   { id: 'indented-code', markdown: '    indented code', expected: 'a code block with block layout' },
   {
     id: 'task-marker-in-code',

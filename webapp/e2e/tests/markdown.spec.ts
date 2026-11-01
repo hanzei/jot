@@ -116,6 +116,43 @@ test.describe('Markdown note editing', () => {
     await expect(preview.locator('a')).toHaveCount(0);
   });
 
+  // Syntax highlighting (docs/specs/markdown-rendering.md §2.3): in the open
+  // note only, in the shared palette, on the code block's opaque panel. The
+  // per-language token mapping is the shared suite's job; this checks it lands.
+  test('highlights a fenced code block in the note body but not on the card', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createTextNote('```ts\nconst answer: number = 42; // why\n```');
+
+    const card = dashboardPage.noteCardByText('const answer');
+    await expect(card.locator('pre')).toHaveText('const answer: number = 42; // why');
+    await expect(card.locator('pre span')).toHaveCount(0);
+
+    await dashboardPage.openTextNote('const answer');
+    const code = page.getByRole('dialog').getByTestId('note-content-preview').locator('pre code');
+    await expect(code).toHaveText('const answer: number = 42; // why');
+    await expect(code.locator('.code-keyword')).toHaveText('const');
+    await expect(code.locator('.code-type')).toHaveText('number');
+    await expect(code.locator('.code-literal')).toHaveText('42');
+    await expect(code.locator('.code-comment')).toHaveText('// why');
+
+    // What the browser actually draws: CODE_PALETTE.light's keyword (#c33d43)
+    // and panel (#f3f4f6). The e2e project cannot import @jot/shared;
+    // codeHighlightStyles.test.ts pins index.css to the palette itself.
+    await expect(code.locator('.code-keyword')).toHaveCSS('color', 'rgb(195, 61, 67)');
+    await expect(code.locator('.code-comment')).toHaveCSS('font-style', 'italic');
+    await expect(page.getByRole('dialog').locator('pre')).toHaveCSS('background-color', 'rgb(243, 244, 246)');
+  });
+
+  test('renders a fence in an unknown language as plain code', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createTextNote('```brainfuck\n+[->+<]>.\n```');
+    await dashboardPage.openTextNote('+[->+<]>.');
+
+    const code = page.getByRole('dialog').getByTestId('note-content-preview').locator('pre code');
+    await expect(code).toHaveText('+[->+<]>.');
+    await expect(code.locator('span')).toHaveCount(0);
+  });
+
   // List-item text renders the inline subset (docs/specs/markdown-rendering.md
   // §2.1). The card is the display surface; the editor row deliberately still
   // shows source, which is what the second test below pins.

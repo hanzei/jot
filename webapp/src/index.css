@@ -164,13 +164,41 @@ body {
   .markdown-content code {
     @apply font-mono bg-black/5 dark:bg-white/10 rounded px-1 text-[0.9em];
   }
+  /* An opaque panel rather than the translucent tint inline code uses: the
+     token colours below only hold their contrast against a background they
+     know, and a tint lets the note colour through. Both values, and every token
+     colour, are CODE_PALETTE in shared/src/codeHighlight.ts — mobile draws the
+     same ones, and src/utils/__tests__/codeHighlightStyles.test.ts fails if
+     this file drifts from it. */
   .markdown-content pre {
-    @apply bg-black/5 dark:bg-white/10 rounded p-2 mb-2 last:mb-0 overflow-x-auto;
+    @apply bg-[#f3f4f6] dark:bg-[#111827] rounded p-2 mb-2 last:mb-0 overflow-x-auto;
   }
   /* The block already carries the tint and padding; the inner <code> would
      otherwise stack a second background on top of it. */
   .markdown-content pre code {
     @apply bg-transparent rounded-none p-0;
+  }
+  /* Syntax-highlighted tokens (docs/specs/markdown-rendering.md §2.3). */
+  .markdown-content .code-keyword {
+    @apply text-[#c33d43] dark:text-[#ff8484];
+  }
+  .markdown-content .code-type {
+    @apply text-[#b05200] dark:text-[#f4902c];
+  }
+  .markdown-content .code-string {
+    @apply text-[#007f18] dark:text-[#53bf5c];
+  }
+  .markdown-content .code-attribute {
+    @apply text-[#007794] dark:text-[#00b9d8];
+  }
+  .markdown-content .code-literal {
+    @apply text-[#0068dd] dark:text-[#49b0ff];
+  }
+  .markdown-content .code-title {
+    @apply text-[#9442d9] dark:text-[#d78aff];
+  }
+  .markdown-content .code-comment {
+    @apply italic text-[#656d78] dark:text-[#88919c];
   }
   .markdown-content hr {
     @apply border-t border-gray-300 dark:border-gray-600 my-3;

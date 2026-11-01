@@ -1,8 +1,9 @@
 import React, { memo, useMemo } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
-import { type BlockNode } from '@jot/shared';
+import { CODE_ITALIC_SCOPES, highlightCode, type BlockNode, type CodeRun } from '@jot/shared';
 import { blockMarkdownNodes } from '../utils/markdown';
+import { codeHighlighter } from '../utils/codeHighlighter';
 import {
   fullMarkdownStyles,
   headingStyle,
@@ -28,6 +29,27 @@ interface RenderContext {
   textStyles: MarkdownTextStyles;
   /** Body colour at this depth — a blockquote renders its contents muted. */
   color: string;
+}
+
+/**
+ * A highlighted block's tokens, as Text nested in the block's own Text — so the
+ * whole block still wraps and selects as one, and plain runs stay bare strings
+ * that inherit the block's colour.
+ */
+function renderCodeRuns(runs: CodeRun[], theme: MarkdownTheme): React.ReactNode[] {
+  return runs.map(({ text, scope }, index) =>
+    scope === null ? text : (
+      <Text
+        key={index}
+        style={[
+          { color: theme.code.scopes[scope] },
+          CODE_ITALIC_SCOPES.has(scope) && styles.codeItalic,
+        ]}
+      >
+        {text}
+      </Text>
+    ),
+  );
 }
 
 function renderBlocks(nodes: BlockNode[], ctx: RenderContext, keyPrefix = ''): React.ReactNode[] {
@@ -57,14 +79,18 @@ function renderBlocks(nodes: BlockNode[], ctx: RenderContext, keyPrefix = ''): R
           </Text>
         );
 
-      case 'code':
+      case 'code': {
+        // A language Jot does not highlight, or none, renders the same block
+        // plain (docs/specs/markdown-rendering.md §2.3).
+        const runs = highlightCode(codeHighlighter, node.text, node.lang);
         return (
-          <View key={key} style={[styles.code, { backgroundColor: ctx.theme.tint }]}>
+          <View key={key} style={[styles.code, { backgroundColor: ctx.theme.code.panel }]}>
             <Text style={[ctx.textStyles.body, styles.codeText, { color: ctx.color }]}>
-              {node.text}
+              {runs ? renderCodeRuns(runs, ctx.theme) : node.text}
             </Text>
           </View>
         );
+      }
 
       case 'blockquote':
         return (
@@ -129,6 +155,7 @@ const styles = StyleSheet.create({
   codeText: {
     fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }),
   },
+  codeItalic: { fontStyle: 'italic' },
   blockquote: {
     borderLeftWidth: 2,
     paddingLeft: 10,
