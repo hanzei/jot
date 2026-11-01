@@ -119,6 +119,29 @@ test.describe('Completed-item suggestions', () => {
     await dashboardPage.expectListItemValue(1, 'Milk');
   });
 
+  test('a failed revive keeps the typed row and the item checked', async ({ page, dashboardPage, authenticatedUser }) => {
+    void authenticatedUser;
+    await dashboardPage.createListNote('Basket', ['Milk']);
+    await dashboardPage.openNote('Basket');
+    await rowCheckbox(page, 0).check();
+    await expect(page.getByText('Completed items (1)')).toBeVisible();
+
+    await page.route('**/api/v1/notes/*/items/*/toggle-completed', (route) =>
+      route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"boom"}' }));
+
+    await dashboardPage.addListItem('mil');
+    await suggestion(page, 'Milk').click();
+
+    await expect(page.getByText('Failed to save changes. Please try again.')).toBeVisible();
+    await expect(page.getByText('Completed items (1)')).toBeVisible();
+    await dashboardPage.expectListItemValue(0, 'mil');
+
+    // Nothing was revived, and the typed row was not deleted behind the error.
+    await expect.poll(async () =>
+      (await serverItems(page, 'Basket')).map((it) => `${it.text}:${it.completed}`).sort(),
+    ).toEqual(['Milk:true', 'mil:false']);
+  });
+
   test('editing an existing item offers no suggestions', async ({ page, dashboardPage, authenticatedUser }) => {
     void authenticatedUser;
     await dashboardPage.createListNote('Pantry', ['Milk', 'Bread']);

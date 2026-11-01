@@ -515,6 +515,69 @@ describe('useNoteDraft', () => {
       expect(notes.updateItem).not.toHaveBeenCalled();
     });
 
+    it('leaves a held completed flag out of the save until the hold is released', async () => {
+      const note = createMockNote({ id: '1', note_type: 'list', title: 'List' });
+      const { result } = renderDraft({ note });
+      adopt(result.current, note, [listItem('a', { completed: true })]);
+
+      let release!: () => void;
+      act(() => {
+        release = result.current.holdItemCompleted(['a']);
+        result.current.commitItems([listItem('a', { completed: false, text: 'renamed' })]);
+      });
+      await act(async () => {
+        await result.current.autoSaveNote();
+      });
+
+      // The text still saves; the flag the toggle owns does not.
+      expect(notes.updateItem).toHaveBeenCalledTimes(1);
+      expect(notes.updateItem).toHaveBeenCalledWith('1', 'a', { text: 'renamed' });
+
+      // Once released, a flag that still differs from the baseline is an
+      // ordinary unsaved change again.
+      vi.mocked(notes.updateItem).mockClear();
+      act(() => release());
+      await act(async () => {
+        await result.current.autoSaveNote();
+      });
+      expect(notes.updateItem).toHaveBeenCalledWith('1', 'a', { completed: false });
+    });
+
+    it('does not roll back a completed flag synced while a text patch was in flight', async () => {
+      const note = createMockNote({ id: '1', note_type: 'list', title: 'List' });
+      const { result } = renderDraft({ note });
+      adopt(result.current, note, [listItem('a', { completed: false })]);
+
+      let finishPatch!: () => void;
+      vi.mocked(notes.updateItem).mockImplementationOnce((_noteId, itemId, data) =>
+        new Promise((resolve) => { finishPatch = () => resolve({ id: itemId, ...data } as never); }));
+
+      act(() => {
+        result.current.commitItems([listItem('a', { completed: false, text: 'renamed' })]);
+      });
+      let saving!: Promise<void>;
+      act(() => { saving = result.current.autoSaveNote(); });
+
+      // A toggle checks "a" and reconciles while the text patch is on the wire.
+      act(() => {
+        result.current.commitItems([listItem('a', { completed: true, text: 'renamed' })]);
+        result.current.baseline.syncCompleted(new Map([['a', true]]));
+      });
+      await act(async () => {
+        finishPatch();
+        await saving;
+      });
+
+      // The text patch's snapshot (completed: false) must not overwrite the
+      // synced flag, or a later pass — the loop runs one for the commit above —
+      // would PATCH "a" checked as though it were an unsaved change.
+      await act(async () => {
+        await result.current.autoSaveNote();
+      });
+      expect(notes.updateItem).toHaveBeenCalledTimes(1);
+      expect(notes.updateItem).toHaveBeenCalledWith('1', 'a', { text: 'renamed' });
+    });
+
     it('baseline.applyBulkDeletion drops ids from the baseline and updates parent/completed for survivors', async () => {
       const note = createMockNote({ id: '1', note_type: 'list', title: 'List' });
       const { result } = renderDraft({ note });

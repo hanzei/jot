@@ -79,11 +79,17 @@ const orderChanged = (savedOrder: readonly string[], curOrder: readonly string[]
  * An empty list emits no reorder (the server rejects an empty one); its deletes
  * already say everything. Callers still set their saved order to the current
  * order once every operation has succeeded.
+ *
+ * `heldCompleted` names items whose completed flag an in-flight toggle request
+ * owns (see {@link createCompletedHolds}). Their flag is left out of any patch:
+ * the toggle endpoint applies the parent/child cascade atomically, whereas a
+ * PATCH unchecking a parent would make the server uncheck all its children.
  */
 export function diffItems(
   savedItems: ReadonlyMap<string, ItemSnapshot>,
   savedOrder: readonly string[],
   items: readonly ListItem[],
+  heldCompleted: ReadonlySet<string> = NO_HELD_IDS,
 ): ItemDiffOp[] {
   const ops: ItemDiffOp[] = [];
   const curIds = new Set<string>();
@@ -95,9 +101,12 @@ export function diffItems(
       ops.push({ kind: 'create', itemId: it.id, request: createItemRequest(it), snapshot: itemSnapshot(it) });
       continue;
     }
-    const patch = itemPatch(snap, it);
+    // A held item's completed flag belongs to the in-flight toggle: diff it as
+    // if unchanged, so the patch neither sends nor records it.
+    const view = heldCompleted.has(it.id) ? { ...it, completed: snap.completed } : it;
+    const patch = itemPatch(snap, view);
     if (Object.keys(patch).length > 0) {
-      ops.push({ kind: 'patch', itemId: it.id, patch, snapshot: itemSnapshot(it) });
+      ops.push({ kind: 'patch', itemId: it.id, patch, snapshot: itemSnapshot(view) });
     }
   }
 
@@ -111,6 +120,63 @@ export function diffItems(
   }
   return ops;
 }
+
+const NO_HELD_IDS: ReadonlySet<string> = new Set();
+
+/**
+ * The baseline entry after a patch op succeeds: only the fields the patch
+ * actually sent move to the op's snapshot; the rest keep their current
+ * baseline value. Taking the whole snapshot instead would roll back anything
+ * advanced while the request was in flight — notably the completed flags a
+ * toggle reconciled from the server — and the next save would re-send them.
+ */
+export const advanceSnapshot = (
+  current: ItemSnapshot | undefined,
+  op: { patch: PatchNoteItemRequest; snapshot: ItemSnapshot },
+): ItemSnapshot => {
+  if (!current) return op.snapshot;
+  return {
+    text: op.patch.text !== undefined ? op.snapshot.text : current.text,
+    completed: op.patch.completed !== undefined ? op.snapshot.completed : current.completed,
+    parentId: op.patch.parent_id !== undefined ? op.snapshot.parentId : current.parentId,
+    assigned_to: op.patch.assigned_to !== undefined ? op.snapshot.assigned_to : current.assigned_to,
+  };
+};
+
+/**
+ * Tracks which items' completed flags are owned by an in-flight toggle
+ * request, for {@link diffItems}'s `heldCompleted`. An editor holds the ids a
+ * toggle touches (the item, plus its children or its parent) from just before
+ * the request until it has reconciled the response into the baseline, so an
+ * autosave pass that runs meanwhile does not PATCH the optimistic flags. Holds
+ * are counted, so overlapping toggles on the same item each keep it held.
+ */
+export interface CompletedHolds {
+  /** Holds `ids`; the returned function releases them (idempotently). */
+  hold: (ids: readonly string[]) => () => void;
+  /** The ids currently held. */
+  held: () => ReadonlySet<string>;
+}
+
+export const createCompletedHolds = (): CompletedHolds => {
+  const counts = new Map<string, number>();
+  return {
+    hold: (ids) => {
+      for (const id of ids) counts.set(id, (counts.get(id) ?? 0) + 1);
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        for (const id of ids) {
+          const n = (counts.get(id) ?? 0) - 1;
+          if (n > 0) counts.set(id, n);
+          else counts.delete(id);
+        }
+      };
+    },
+    held: () => new Set(counts.keys()),
+  };
+};
 
 /**
  * True when the items differ from the baseline in any way a save would send —

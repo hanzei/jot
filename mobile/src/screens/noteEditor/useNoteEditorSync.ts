@@ -4,7 +4,9 @@ import type { TFunction } from 'i18next';
 import {
   DEFAULT_NOTE_COLOR,
   VALIDATION,
+  advanceSnapshot,
   buildScalarPatch,
+  createCompletedHolds,
   diffItems,
   type CreateNoteRequest,
   type Note,
@@ -101,6 +103,12 @@ export interface NoteEditorSync {
    * effect held off for its duration. See `itemWritesInFlightRef` for why.
    */
   withItemWriteInFlight: <T>(op: () => Promise<T>) => Promise<T>;
+  /**
+   * Holds the given items' completed flags out of the save diff for the
+   * duration of a toggle request; call the returned function once its response
+   * is reconciled into the baseline (or it failed).
+   */
+  holdItemCompleted: (ids: readonly string[]) => () => void;
 
   exitSavePrompt: ExitSavePrompt | null;
   isExitRetrying: boolean;
@@ -190,6 +198,9 @@ export function useNoteEditorSync({
   // it. A counter rather than a boolean, since rows can be checked off faster
   // than the requests come back.
   const itemWritesInFlightRef = useRef(0);
+  // Completed flags owned by an in-flight toggle request, which the save diff
+  // must not PATCH (see createCompletedHolds).
+  const completedHoldsRef = useRef(createCompletedHolds());
   const requiresHydrationRef = useRef(initialNoteId !== null);
 
   // Auto-dismiss sync toast after 4 seconds
@@ -331,7 +342,7 @@ export function useNoteEditorSync({
     // Advance the baseline incrementally after each successful op so a later
     // failure does not re-send already-applied ops on the next retry (which
     // would re-create items and get stuck on 409 Conflict).
-    for (const op of diffItems(base, savedOrderRef.current, currentItems)) {
+    for (const op of diffItems(base, savedOrderRef.current, currentItems, completedHoldsRef.current.held())) {
       switch (op.kind) {
         case 'create':
           try {
@@ -345,7 +356,7 @@ export function useNoteEditorSync({
           break;
         case 'patch':
           await updateItemRef.current({ noteId: currentNoteId, itemId: op.itemId, data: op.patch });
-          base.set(op.itemId, op.snapshot);
+          base.set(op.itemId, advanceSnapshot(base.get(op.itemId), op));
           break;
         case 'delete':
           await deleteItemRef.current({ noteId: currentNoteId, itemId: op.itemId });
@@ -402,7 +413,11 @@ export function useNoteEditorSync({
         }
       };
 
-      const captureBaseline = () => {
+      // `items` is false after a list save: persistItemDiff has already advanced
+      // the item baseline op by op, and re-snapshotting `currentItems` (read
+      // before the save's awaits) would roll back completed flags a toggle
+      // reconciled meanwhile — and record held optimistic ones as saved.
+      const captureBaseline = ({ items = true }: { items?: boolean } = {}) => {
         savedScalarsRef.current = {
           title: currentTitle,
           content: currentContent,
@@ -411,6 +426,7 @@ export function useNoteEditorSync({
           color: currentColor,
           checked_items_collapsed: currentCollapsed,
         };
+        if (!items) return;
         savedItemsRef.current = new Map(currentItems.map((it) => [it.id, itemSnapshot(it)]));
         savedOrderRef.current = currentItems.map((it) => it.id);
       };
@@ -463,7 +479,7 @@ export function useNoteEditorSync({
         }
 
         clearPendingUnlessEditedMidSave();
-        captureBaseline();
+        captureBaseline({ items: currentNoteType !== 'list' });
         if (!isMountedRef.current || unmounting) return true;
         setSaveError(null);
       }
@@ -545,6 +561,11 @@ export function useNoteEditorSync({
   // the effect already treats a note arriving mid-save: the write's own success
   // invalidates the note reads, so the refetch right behind it carries both the
   // write and anything remote that landed meanwhile.
+  const holdItemCompleted = useCallback(
+    (ids: readonly string[]): (() => void) => completedHoldsRef.current.hold(ids),
+    [],
+  );
+
   const withItemWriteInFlight = useCallback(async <T,>(op: () => Promise<T>): Promise<T> => {
     itemWritesInFlightRef.current += 1;
     try {
@@ -720,6 +741,7 @@ export function useNoteEditorSync({
     isClosingRef,
     saveInFlightRef,
     withItemWriteInFlight,
+    holdItemCompleted,
     exitSavePrompt,
     isExitRetrying,
     handleExitRetry,

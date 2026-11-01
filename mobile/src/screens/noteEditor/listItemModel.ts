@@ -5,6 +5,7 @@ import {
   itemHasChildren,
   moveItemIntoSlot,
   normalizeItemOrder,
+  undoMoveItemIntoSlot,
   type ListItem,
   type NoteItem,
   type NoteType,
@@ -23,7 +24,7 @@ const INDENT_PX = VALIDATION.INDENT_PX_PER_LEVEL;
 // that have no webapp equivalent.
 export type LocalItem = ListItem;
 
-export { applyCompletedCascade, dropTargetParentId, itemHasChildren, moveItemIntoSlot, normalizeItemOrder };
+export { applyCompletedCascade, dropTargetParentId, itemHasChildren, moveItemIntoSlot, normalizeItemOrder, undoMoveItemIntoSlot };
 
 export function toLocalItems(serverItems: NoteItem[]): LocalItem[] {
   return [...serverItems]

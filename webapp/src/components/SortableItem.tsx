@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { X, UserPlus, GripVertical } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, itemSuggestions, type User, type Collaborator } from '@jot/shared';
 import LetterAvatar from '@/components/LetterAvatar';
 import AssigneePicker from '@/components/AssigneePicker';
 import { indentOf, itemTextareaId, type ListItem } from '@/utils/noteItems';
@@ -91,12 +91,8 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
-  // Whether the row was empty when the caret entered it. Accepting a
-  // suggestion consumes the row being typed in, so suggestions are offered only
-  // on a row that started empty — a new row, never an existing item being
-  // edited, whose id, assignee and history the swap would discard. Captured at
-  // focus rather than read from the saved baseline, which autosave advances
-  // while the user is still typing into a new row.
+  // Whether the row was empty when the caret entered it, which decides whether
+  // it offers suggestions at all (see SuggestionRow in @jot/shared).
   const [startedEmpty, setStartedEmpty] = useState(false);
   // Focused and editing are the same state, deliberately: the row shows its
   // Markdown rendered until you put the caret in it, and shows source for
@@ -217,20 +213,10 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
     textarea.setSelectionRange(offset, offset);
   }, [captureSwapHeight, item.text, rendered.nodes]);
 
-  const suggestions = useMemo(() => {
-    const trimmed = item.text.trim();
-    if (!trimmed || !startedEmpty || hasChildren) return [];
-    const q = trimmed.toLowerCase();
-    const results: string[] = [];
-    for (const text of completedItemTexts) {
-      const lower = text.toLowerCase();
-      if (lower.includes(q) && lower !== q) {
-        results.push(text);
-        if (results.length === 5) break;
-      }
-    }
-    return results;
-  }, [item.text, completedItemTexts, startedEmpty, hasChildren]);
+  const suggestions = useMemo(
+    () => itemSuggestions(item.text, completedItemTexts, { startedEmpty, hasChildren }),
+    [item.text, completedItemTexts, startedEmpty, hasChildren],
+  );
 
   // A highlight must not outlive the list it points into. `suggestions` is
   // derived from `completedItemTexts`, which changes whenever an item is

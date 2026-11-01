@@ -167,3 +167,40 @@ export const moveItemIntoSlot = (items: ListItem[], slotId: string, itemId: stri
   if (!placed) next.push(moved);
   return normalizeItemOrder(next);
 };
+
+// Inserts row into list (in place) right after its nearest predecessor in
+// `original` that list still holds, or at the start when none does.
+const reinsertAfterOriginalPredecessor = (list: ListItem[], original: readonly ListItem[], row: ListItem): void => {
+  let insertAt = 0;
+  const originalIndex = original.findIndex(item => item.id === row.id);
+  for (let j = originalIndex - 1; j >= 0; j--) {
+    const anchor = original[j];
+    if (!anchor) continue;
+    const at = list.findIndex(item => item.id === anchor.id);
+    if (at >= 0) {
+      insertAt = at + 1;
+      break;
+    }
+  }
+  list.splice(insertAt, 0, row);
+};
+
+// undoMoveItemIntoSlot reverses moveItemIntoSlot after the revive it was part
+// of failed: slotRow (the typed row, as it was) and the moved item each go back
+// after their nearest predecessor in `original` (the list before the move) that
+// is still present. The item is taken from `items`, so edits made to it
+// meanwhile survive. Returns the input unchanged when the item is gone or the
+// slot row is already back.
+export const undoMoveItemIntoSlot = (
+  items: ListItem[],
+  original: readonly ListItem[],
+  slotRow: ListItem,
+  itemId: string,
+): ListItem[] => {
+  const moved = items.find(item => item.id === itemId);
+  if (!moved || items.some(item => item.id === slotRow.id)) return items;
+  const next = items.filter(item => item.id !== itemId);
+  reinsertAfterOriginalPredecessor(next, original, slotRow);
+  reinsertAfterOriginalPredecessor(next, original, moved);
+  return normalizeItemOrder(next);
+};

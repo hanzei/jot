@@ -3,7 +3,7 @@ import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Users, Check
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, distinctCompletedTexts, findSuggestedItem, generateId, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
 import { renderMarkdown, inlineMarkdownToText } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -32,6 +32,7 @@ import {
   moveItemIntoSlot,
   normalizeItemOrder,
   precedingTopLevelId,
+  undoMoveItemIntoSlot,
   type ListItem,
 } from '@/utils/noteItems';
 import type {
@@ -214,7 +215,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     conflict, overwriteConflict,
     setSavedBaseline, markScalarSaved, applyDraftScalars, isDirty, hasUnflushedWork, baseline,
     reportSaveFailure, autoSaveNote, scheduleAutoSave, cancelPendingSave, flushSave,
-    beginExclusiveSave, endExclusiveSave, isSaving, requestAnotherSavePass, isMounted,
+    beginExclusiveSave, endExclusiveSave, isSaving, requestAnotherSavePass, holdItemCompleted, isMounted,
   } = useNoteDraft({ note, onRefresh, showError });
 
   useEffect(() => {
@@ -360,15 +361,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     // Items mid-undo-window are completed but hidden from view until their
     // deferred bulk delete lands (or is undone), mirroring image removal.
     const completedItems = items.filter(item => item.completed && !hiddenCompletedItemIds.has(item.id));
-    const seen = new Set<string>();
-    const completedItemTexts: string[] = [];
-    for (const item of completedItems) {
-      const trimmed = item.text.trim();
-      if (trimmed && !seen.has(trimmed.toLowerCase())) {
-        seen.add(trimmed.toLowerCase());
-        completedItemTexts.push(trimmed);
-      }
-    }
+    const completedItemTexts = distinctCompletedTexts(completedItems);
     return { uncompletedItems, completedItems, completedItemTexts };
   }, [items, hiddenCompletedItemIds]);
 
@@ -1136,11 +1129,12 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
   // the completed flags the server reports — never replacing the whole list, so
   // unsaved edits and not-yet-created items are preserved. Items keep their slot
   // in the single ordered array, so unchecking returns an item to where it was.
-  const handleItemCompletedToggle = async (itemId: string, completed: boolean) => {
-    if (isReadOnly) return;
+  // Resolves false only when the request failed and the flags were reverted.
+  const handleItemCompletedToggle = async (itemId: string, completed: boolean): Promise<boolean> => {
+    if (isReadOnly) return true;
     const before = itemsRef.current;
     const target = before.find(item => item.id === itemId);
-    if (!target || target.completed === completed) return;
+    if (!target || target.completed === completed) return true;
 
     // Remember the pre-toggle completed state of just the items this toggle
     // touches (the target and, for a parent, its children — or, for a child
@@ -1160,9 +1154,14 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
 
     // A not-yet-persisted note has no server-side item to toggle; the bulk
     // create on save carries the completed flags instead.
-    if (!note?.id) return;
+    if (!note?.id) return true;
 
     cancelPendingSave();
+    // Until the response is reconciled into the baseline, an autosave pass
+    // (one already running, or one queued by an edit meanwhile) must not PATCH
+    // these optimistic flags: the server cascades a PATCHed parent to all its
+    // children, which is not what this toggle does.
+    const releaseHold = holdItemCompleted([...revertCompleted.keys()]);
 
     try {
       const serverItems = await notes.toggleItemCompleted(note.id, itemId, completed);
@@ -1175,6 +1174,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
       baseline.syncCompleted(completedById);
       onRefresh?.();
       flashSaved();
+      return true;
     } catch (error) {
       console.error('Failed to toggle item:', error);
       // Revert only the toggled completed flags; leave any concurrent edits.
@@ -1183,6 +1183,9 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
         return original === undefined ? item : { ...item, completed: original };
       }));
       showError(t('note.failedSaveChanges'));
+      return false;
+    } finally {
+      releaseHold();
     }
   };
 
@@ -1324,9 +1327,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
   // keeping its assignment and group, and removes the typed row.
   const acceptSuggestion = (currentItemId: string, suggestionText: string) => {
     if (isReadOnly) return;
-    const completedItem = completedItems.find(
-      item => item.text.trim().toLowerCase() === suggestionText.toLowerCase()
-    );
+    const completedItem = findSuggestedItem(completedItems, suggestionText);
 
     if (!completedItem) {
       // No matching completed item — fall back to just updating the text
@@ -1346,8 +1347,15 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     // its result. Saving only afterwards keeps the diff from re-sending the
     // cascaded flags as PATCHes — on the server, PATCHing a parent unchecked
     // also unchecks every one of its children.
-    commitItems(moveItemIntoSlot(itemsRef.current, currentItemId, completedItem.id));
-    void handleItemCompletedToggle(completedItem.id, false).finally(() => {
+    const original = itemsRef.current;
+    const typedRow = original.find(item => item.id === currentItemId);
+    commitItems(moveItemIntoSlot(original, currentItemId, completedItem.id));
+    void handleItemCompletedToggle(completedItem.id, false).then((ok) => {
+      // A failed toggle re-checked the item; put the typed row back too, so
+      // the save below doesn't delete what the user typed for nothing.
+      if (!ok && typedRow) {
+        commitItems(undoMoveItemIntoSlot(itemsRef.current, original, typedRow, completedItem.id));
+      }
       autoSaveNote();
     });
 

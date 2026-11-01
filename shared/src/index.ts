@@ -1,6 +1,7 @@
 export * from './types';
 export * from './ids';
 export * from './listItems';
+export * from './itemSuggestions';
 export * from './listPaste';
 export * from './constants';
 export * from './collaborators';

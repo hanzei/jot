@@ -12,6 +12,8 @@ import * as Haptics from 'expo-haptics';
 import type { TFunction } from 'i18next';
 import {
   VALIDATION,
+  distinctCompletedTexts,
+  findSuggestedItem,
   generateId,
   splitPasteIntoItems,
   truncateToCodePoints,
@@ -30,8 +32,9 @@ import {
   dropTargetParentId,
   indentLevelFromDrag,
   itemHasChildren,
-  normalizeItemOrder,
   moveItemIntoSlot,
+  normalizeItemOrder,
+  undoMoveItemIntoSlot,
   type ItemSnapshot,
   type LocalItem,
 } from './listItemModel';
@@ -91,6 +94,11 @@ export interface UseListItemEditingParams {
    * the optimistic one.
    */
   withItemWriteInFlight: <T>(op: () => Promise<T>) => Promise<T>;
+  /**
+   * Holds items' completed flags out of the save diff while a toggle request
+   * owns them; the returned function releases the hold.
+   */
+  holdItemCompleted: (ids: readonly string[]) => () => void;
   /** The editor's scroll container, kept scrolled to the focused row. */
   scrollViewRef: React.RefObject<ScrollView | null>;
   /** Opens the assignee picker for a row (the picker's state lives in the screen). */
@@ -174,6 +182,7 @@ export function useListItemEditing({
   savedOrderRef,
   withPendingIndicator,
   withItemWriteInFlight,
+  holdItemCompleted,
   scrollViewRef,
   openAssigneePicker,
   confirm,
@@ -272,8 +281,9 @@ export function useListItemEditing({
     return generateId();
   }
 
+  // Resolves false only when the request failed and the flags were reverted.
   const handleItemCompletedToggle = useCallback(
-    async (itemId: string, completed: boolean) => {
+    async (itemId: string, completed: boolean): Promise<boolean> => {
       // itemsRef.current is the authoritative latest state here: each branch
       // below writes the new array back to it synchronously, so a rapid
       // follow-up toggle (fired before React re-renders) composes on the most
@@ -283,7 +293,7 @@ export function useListItemEditing({
       // rollback and save baseline (issue: mobile item flicker).
       const before = itemsRef.current;
       const target = before.find((item) => item.id === itemId);
-      if (!target || target.completed === completed) return;
+      if (!target || target.completed === completed) return true;
 
       // Capture the prior completed state of just the items this toggle touches
       // (the item plus, for a top-level item, its children — or, for a child
@@ -324,16 +334,21 @@ export function useListItemEditing({
       const currentNoteId = noteIdRef.current;
       if (!currentNoteId) {
         markDirtyAndScheduleUpdate();
-        return;
+        return true;
       }
 
       // Cancel any pending debounced save to avoid a race with the toggle API call
       cancelScheduledSave();
+      // Until the response is reconciled into the baseline, a save that runs
+      // meanwhile (one queued by an edit to another row) must not PATCH these
+      // optimistic flags: the server cascades a PATCHed parent to all its
+      // children, which is not what this toggle does.
+      const releaseHold = holdItemCompleted([...priorCompletedById.keys()]);
 
       // The request and the reconcile that follows it both run inside the
       // in-flight window: until the reconciled state is set, a note re-read
       // still describes this item as it was before the tap.
-      await withItemWriteInFlight(async () => {
+      return withItemWriteInFlight(async () => {
         try {
           const serverItems = await toggleItemCompletedRef.current({
             noteId: currentNoteId,
@@ -364,6 +379,7 @@ export function useListItemEditing({
               if (snap) savedItemsRef.current.set(id, { ...snap, completed });
             }
           }
+          return true;
         } catch {
           // Revert only the items this toggle changed, restoring their prior
           // completed values, so a concurrent toggle's optimistic state survives.
@@ -375,10 +391,13 @@ export function useListItemEditing({
           itemsRef.current = reverted;
           setItems(reverted);
           setSaveError('note.failedSaveChanges');
+          return false;
+        } finally {
+          releaseHold();
         }
       });
     },
-    [cancelScheduledSave, itemsRef, markDirtyAndScheduleUpdate, noteIdRef, savedItemsRef, setItems, setSaveError, withItemWriteInFlight],
+    [cancelScheduledSave, holdItemCompleted, itemsRef, markDirtyAndScheduleUpdate, noteIdRef, savedItemsRef, setItems, setSaveError, withItemWriteInFlight],
   );
 
   // Unchecks every currently-completed item in one bulk request (overflow
@@ -687,9 +706,7 @@ export function useListItemEditing({
   const handleAcceptSuggestion = useCallback(
     (itemId: string, suggestionText: string) => {
       const current = itemsRef.current;
-      const completedItem = current.find(
-        (item) => item.completed && item.text.trim().toLowerCase() === suggestionText.toLowerCase(),
-      );
+      const completedItem = findSuggestedItem(current, suggestionText);
 
       if (!completedItem) {
         const updated = current.map((item) => (item.id === itemId ? { ...item, text: suggestionText } : item));
@@ -705,10 +722,18 @@ export function useListItemEditing({
       // to its result. Saving only afterwards keeps the diff from re-sending
       // the cascaded flags as PATCHes — on the server, PATCHing a parent
       // unchecked also unchecks every one of its children.
+      const typedRow = current.find((item) => item.id === itemId);
       const moved = moveItemIntoSlot(current, itemId, completedItem.id);
       itemsRef.current = moved;
       setItems(moved);
-      void handleItemCompletedToggle(completedItem.id, false).finally(() => {
+      void handleItemCompletedToggle(completedItem.id, false).then((ok) => {
+        // A failed toggle re-checked the item; put the typed row back too, so
+        // the save below doesn't delete what the user typed for nothing.
+        if (!ok && typedRow) {
+          const restored = undoMoveItemIntoSlot(itemsRef.current, current, typedRow, completedItem.id);
+          itemsRef.current = restored;
+          setItems(restored);
+        }
         markDirtyAndScheduleUpdate();
       });
 
@@ -759,18 +784,7 @@ export function useListItemEditing({
   const uncheckedItems = useMemo(() => items.filter((item) => !item.completed), [items]);
   const checkedItems = useMemo(() => items.filter((item) => item.completed), [items]);
 
-  const completedItemTexts = useMemo(() => {
-    const seen = new Set<string>();
-    const texts: string[] = [];
-    for (const item of checkedItems) {
-      const trimmed = item.text.trim();
-      if (trimmed && !seen.has(trimmed.toLowerCase())) {
-        seen.add(trimmed.toLowerCase());
-        texts.push(trimmed);
-      }
-    }
-    return texts;
-  }, [checkedItems]);
+  const completedItemTexts = useMemo(() => distinctCompletedTexts(checkedItems), [checkedItems]);
 
   // Refs to avoid recreating handleListReorder on every items change
   const checkedItemsRef = useRef(checkedItems);

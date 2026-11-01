@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyCompletedCascade, dropTargetParentId, groupNoteItems, itemHasChildren, moveItemIntoSlot, normalizeItemOrder, type ListItem } from '../listItems';
+import { applyCompletedCascade, dropTargetParentId, groupNoteItems, itemHasChildren, moveItemIntoSlot, normalizeItemOrder, undoMoveItemIntoSlot, type ListItem } from '../listItems';
 
 // Terse builder so each case reads as the structure under test rather than as
 // six fields of boilerplate per item.
@@ -225,6 +225,48 @@ describe('moveItemIntoSlot', () => {
   it('returns the input unchanged for an unknown item id', () => {
     const items = [item('typing'), item('milk', { completed: true })];
     expect(moveItemIntoSlot(items, 'typing', 'nope')).toBe(items);
+  });
+});
+
+describe('undoMoveItemIntoSlot', () => {
+  const original = () => [
+    item('a'),
+    item('typing', { text: 'mil' }),
+    item('b'),
+    item('milk', { completed: true }),
+  ];
+
+  it('restores the list the move started from', () => {
+    const before = original();
+    const moved = moveItemIntoSlot(before, 'typing', 'milk');
+    const undone = undoMoveItemIntoSlot(moved, before, before[1]!, 'milk');
+    expect(ids(undone)).toEqual(['a', 'typing', 'b', 'milk']);
+    expect(undone.find(it => it.id === 'typing')?.text).toBe('mil');
+  });
+
+  it('puts a child back in its group and the typed row back in its own place', () => {
+    const before = [
+      item('a'),
+      item('typing'),
+      item('p'),
+      item('p1', { parentId: 'p', completed: true }),
+    ];
+    const moved = moveItemIntoSlot(before, 'typing', 'p1');
+    const undone = undoMoveItemIntoSlot(moved, before, before[1]!, 'p1');
+    expect(ids(undone)).toEqual(['a', 'typing', 'p', 'p1']);
+  });
+
+  it('keeps edits made to the moved item meanwhile', () => {
+    const before = original();
+    const moved = moveItemIntoSlot(before, 'typing', 'milk')
+      .map(it => (it.id === 'milk' ? { ...it, text: 'Milk 2L' } : it));
+    const undone = undoMoveItemIntoSlot(moved, before, before[1]!, 'milk');
+    expect(undone.find(it => it.id === 'milk')?.text).toBe('Milk 2L');
+  });
+
+  it('returns the input unchanged when the slot row is already present', () => {
+    const before = original();
+    expect(undoMoveItemIntoSlot(before, before, before[1]!, 'milk')).toBe(before);
   });
 });
 

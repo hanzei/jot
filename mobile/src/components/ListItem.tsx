@@ -24,7 +24,7 @@ import { getEffectiveColors } from '../theme/colors';
 import { isReduceMotionEnabledSync } from '../utils/layoutAnimation';
 import { inlineMarkdownNodes, inlineMarkdownToText } from '../utils/inlineMarkdown';
 import { sourceOffsetAtPoint, type RenderedTextLine } from '../utils/inlineCaret';
-import { inlineRendersAsSource, VALIDATION, type Collaborator, type TextSelection } from '@jot/shared';
+import { inlineRendersAsSource, itemSuggestions, VALIDATION, type Collaborator, type TextSelection } from '@jot/shared';
 
 /**
  * The row's caret, reachable from the note editor. The editor's formatting bar
@@ -147,12 +147,8 @@ function ListItem({
   const { colors } = useTheme();
   const { t } = useTranslation();
   const [showSuggestions, setShowSuggestions] = useState(false);
-  // Whether the row was empty when the caret entered it. Accepting a
-  // suggestion consumes the row being typed in, so suggestions are offered only
-  // on a row that started empty — a new row, never an existing item being
-  // edited, whose id, assignee and history the swap would discard. Captured at
-  // focus rather than read from the saved baseline, which autosave advances
-  // while the user is still typing into a new row.
+  // Whether the row was empty when the caret entered it, which decides whether
+  // it offers suggestions at all (see SuggestionRow in @jot/shared).
   const [startedEmpty, setStartedEmpty] = useState(false);
   // The delete (x) button is only shown while this row is focused (the "selected"
   // row), so users are less likely to delete an item they didn't mean to.
@@ -263,19 +259,10 @@ function ListItem({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only; popOnMount/checkScale are fixed for this row's lifetime
   }, []);
 
-  const suggestions = useMemo(() => {
-    if (!completedItemTexts || !text.trim() || !startedEmpty || hasChildren) return [];
-    const q = text.trim().toLowerCase();
-    const results: string[] = [];
-    for (const s of completedItemTexts) {
-      const lower = s.toLowerCase();
-      if (lower.includes(q) && lower !== q) {
-        results.push(s);
-        if (results.length === 5) break;
-      }
-    }
-    return results;
-  }, [text, completedItemTexts, startedEmpty, hasChildren]);
+  const suggestions = useMemo(
+    () => (completedItemTexts ? itemSuggestions(text, completedItemTexts, { startedEmpty, hasChildren }) : []),
+    [text, completedItemTexts, startedEmpty, hasChildren],
+  );
 
   // Links are inert in an editable row and live in a read-only one, so only the
   // editable row's nodes are built here — `InlineMarkdown` owns the read-only

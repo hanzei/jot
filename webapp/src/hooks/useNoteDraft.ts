@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next';
 import {
   DEFAULT_NOTE_COLOR,
   VALIDATION,
+  advanceSnapshot,
   buildScalarPatch,
+  createCompletedHolds,
   diffItems,
   itemSnapshot,
   itemsDiffer,
@@ -110,6 +112,9 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
   // so edits made during the save are not lost.
   const pendingSaveRef = useRef(false);
   const savingRef = useRef(false);
+  // Completed flags owned by an in-flight toggle request, which the save diff
+  // must not PATCH (see createCompletedHolds).
+  const completedHoldsRef = useRef(createCompletedHolds());
 
   useEffect(() => {
     noteIdRef.current = note?.id ?? null;
@@ -236,7 +241,7 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
   // retry — which would otherwise re-create items and get stuck on 409 Conflict.
   const persistItemDiff = useCallback(async (noteId: string, listItems: ListItem[]) => {
     const base = savedItemsRef.current;
-    for (const op of diffItems(base, savedOrderRef.current, listItems)) {
+    for (const op of diffItems(base, savedOrderRef.current, listItems, completedHoldsRef.current.held())) {
       switch (op.kind) {
         case 'create':
           try {
@@ -249,7 +254,7 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
           break;
         case 'patch':
           await notes.updateItem(noteId, op.itemId, op.patch);
-          base.set(op.itemId, op.snapshot);
+          base.set(op.itemId, advanceSnapshot(base.get(op.itemId), op));
           break;
         case 'delete':
           await notes.deleteItem(noteId, op.itemId);
@@ -383,6 +388,14 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
     pendingSaveRef.current = true;
   }, []);
 
+  // Holds the given items' completed flags out of the save diff for the
+  // duration of a toggle request; call the returned function once its response
+  // is reconciled into the baseline (or it failed).
+  const holdItemCompleted = useCallback(
+    (ids: readonly string[]): (() => void) => completedHoldsRef.current.hold(ids),
+    [],
+  );
+
   // The two baseline mutations the completed-item bulk actions need, handed
   // over as named operations so that hook never touches the diff refs directly.
   const baseline = useMemo<CompletedItemsBaseline>(() => ({
@@ -431,7 +444,7 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
     // Save pipeline
     reportSaveFailure,
     autoSaveNote, scheduleAutoSave, cancelPendingSave, flushSave,
-    beginExclusiveSave, endExclusiveSave, isSaving, requestAnotherSavePass,
+    beginExclusiveSave, endExclusiveSave, isSaving, requestAnotherSavePass, holdItemCompleted,
     isMounted,
   };
 }

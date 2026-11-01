@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
+  advanceSnapshot,
   buildScalarPatch,
+  createCompletedHolds,
   createItemRequest,
   diffItems,
   itemSnapshot,
@@ -125,6 +127,88 @@ describe('diffItems', () => {
       { kind: 'delete', itemId: 'a' },
       { kind: 'delete', itemId: 'b' },
     ]);
+  });
+});
+
+describe('diffItems with held completed flags', () => {
+  it('leaves a held completed flag out of the patch and its snapshot', () => {
+    const before = [item('p', { completed: true }), item('c', { parentId: 'p', completed: true })];
+    const { saved, order } = baselineOf(before);
+    // The optimistic cascade of unchecking "c": both flags flipped locally.
+    const after = [item('p'), item('c', { parentId: 'p', text: 'renamed' })];
+
+    const ops = diffItems(saved, order, after, new Set(['p', 'c']));
+
+    // "p" has nothing else to send; "c" still sends its text, but not the flag.
+    expect(ops).toEqual([
+      { kind: 'patch', itemId: 'c', patch: { text: 'renamed' }, snapshot: { text: 'renamed', completed: true, parentId: 'p', assigned_to: '' } },
+    ]);
+  });
+
+  it('diffs unheld items as usual', () => {
+    const { saved, order } = baselineOf([item('a', { completed: true })]);
+    const ops = diffItems(saved, order, [item('a')], new Set(['other']));
+    expect(ops).toEqual([
+      { kind: 'patch', itemId: 'a', patch: { completed: false }, snapshot: itemSnapshot(item('a')) },
+    ]);
+  });
+});
+
+describe('advanceSnapshot', () => {
+  const snap = (overrides: Partial<ItemSnapshot> = {}): ItemSnapshot => ({
+    text: 'a', completed: false, parentId: null, assigned_to: '', ...overrides,
+  });
+
+  it('moves only the fields the patch sent', () => {
+    // The baseline's completed flag was reconciled by a toggle while a text
+    // patch computed from older state was in flight; the patch must not roll
+    // it back.
+    const current = snap({ completed: true });
+    const op = { patch: { text: 'b' }, snapshot: snap({ text: 'b', completed: false }) };
+    expect(advanceSnapshot(current, op)).toEqual(snap({ text: 'b', completed: true }));
+  });
+
+  it('moves every sent field, including an empty parent_id', () => {
+    const current = snap({ parentId: 'p' });
+    const op = {
+      patch: { completed: true, parent_id: '', assigned_to: 'u1' },
+      snapshot: snap({ completed: true, parentId: null, assigned_to: 'u1' }),
+    };
+    expect(advanceSnapshot(current, op)).toEqual(snap({ completed: true, parentId: null, assigned_to: 'u1' }));
+  });
+
+  it('takes the op snapshot for an item missing from the baseline', () => {
+    const op = { patch: { text: 'b' }, snapshot: snap({ text: 'b' }) };
+    expect(advanceSnapshot(undefined, op)).toBe(op.snapshot);
+  });
+});
+
+describe('createCompletedHolds', () => {
+  it('holds ids until released', () => {
+    const holds = createCompletedHolds();
+    const release = holds.hold(['a', 'b']);
+    expect([...holds.held()].sort()).toEqual(['a', 'b']);
+    release();
+    expect(holds.held().size).toBe(0);
+  });
+
+  it('keeps an id held while any overlapping hold is open', () => {
+    const holds = createCompletedHolds();
+    const first = holds.hold(['a']);
+    const second = holds.hold(['a', 'b']);
+    first();
+    expect([...holds.held()].sort()).toEqual(['a', 'b']);
+    second();
+    expect(holds.held().size).toBe(0);
+  });
+
+  it('ignores a second release of the same hold', () => {
+    const holds = createCompletedHolds();
+    const first = holds.hold(['a']);
+    holds.hold(['a']);
+    first();
+    first();
+    expect([...holds.held()]).toEqual(['a']);
   });
 });
 
