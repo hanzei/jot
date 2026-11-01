@@ -463,6 +463,39 @@ describe('useCompletedItems', () => {
       expect(onRefresh).toHaveBeenCalledTimes(1);
     });
 
+    // Closing flushes the deferred delete while a write may still be in flight;
+    // whichever lands last runs the one refresh, never one mid-delete.
+    describe.each([
+      { order: 'write first', writeFirst: true },
+      { order: 'delete first', writeFirst: false },
+    ])('closing with a deferred delete and a write both in flight ($order)', ({ writeFirst }) => {
+      it('refreshes once, after both have landed', async () => {
+        let resolveDelete: (value: NoteItem[]) => void = () => {};
+        vi.mocked(notes.deleteItems).mockImplementationOnce(() => new Promise((resolve) => { resolveDelete = resolve; }));
+        const onRefresh = vi.fn();
+        const { result, unmount } = renderHook(() => useHarness({ note: noteWithCheckedItems(), initialItems: activeAndDoneItems(), onRefresh }));
+
+        act(() => {
+          result.current.handleDeleteCompletedItems();
+        });
+        const held = heldWrite();
+        const done = write(result, held.request);
+        unmount();
+        expect(notes.deleteItems).toHaveBeenCalledWith('1', ['c1', 'c2']);
+
+        const landFirst = writeFirst ? () => held.release() : () => resolveDelete([]);
+        const landSecond = writeFirst ? () => resolveDelete([]) : () => held.release();
+        landFirst();
+        await vi.advanceTimersByTimeAsync(COMPLETED_REFRESH_SETTLE_MS);
+        expect(onRefresh).not.toHaveBeenCalled();
+
+        landSecond();
+        await done;
+        await vi.advanceTimersByTimeAsync(COMPLETED_REFRESH_SETTLE_MS);
+        expect(onRefresh).toHaveBeenCalledTimes(1);
+      });
+    });
+
     it('lets a landed deferred delete cover the refresh a write owes', async () => {
       const onRefresh = vi.fn();
       const { result } = renderHook(() => useHarness({ note: noteWithCheckedItems(), initialItems: activeAndDoneItems(), onRefresh }));
