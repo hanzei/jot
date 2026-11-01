@@ -20,3 +20,4 @@ export * from './apiError';
 export * from './itemDiff';
 export * from './labelSearch';
 export * from './noteShareNotice';
+export * from './completedWrites';

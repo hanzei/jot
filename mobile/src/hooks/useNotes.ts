@@ -21,7 +21,7 @@ import {
 } from '../api/notes';
 import { shareNote, unshareNote } from '../api/users';
 import { useOfflineNote } from './useOfflineNotes';
-import { DEFAULT_NOTE_COLOR, generateId, textToListNote, listToText, checkConvertToListCaps, applyCompletedCascade, patchTouchesSharedContent, type ListItem } from '@jot/shared';
+import { DEFAULT_NOTE_COLOR, generateId, textToListNote, listToText, checkConvertToListCaps, applyCompletedCascade, completedCascadeScope, createCompletedWriteTracker, patchTouchesSharedContent, type ListItem } from '@jot/shared';
 import type {
   Note,
   NoteItem,
@@ -104,25 +104,50 @@ function applyToggleToItems(items: NoteItem[], itemId: string, completed: boolea
 }
 
 /**
- * Applies a completed-toggle cascade to the note's rows in SQLite, returning the
- * ids it changed so a permanent failure can put them back.
+ * Which in-flight toggle last wrote each local item row (item ids are globally
+ * unique, so one tracker serves every note). The toggle response is the note's
+ * full item list as of that one write, so it still reports a row tapped after
+ * it as unchecked; only the rows a toggle is still the latest write to may take
+ * their value from its response. See completedWrites in @jot/shared.
+ */
+const localCompletedWrites = createCompletedWriteTracker();
+
+/**
+ * Applies a completed-toggle cascade to the note's rows in SQLite and records
+ * the write in `localCompletedWrites`. Returns its token, plus the ids it
+ * changed so a permanent failure can put them back. The caller must
+ * `localCompletedWrites.end(write)` once the toggle settles.
  *
- * Every id the cascade yields is one whose value actually flips, so the whole
- * set moves to `completed` in one grouped write and reverting is the same call
- * with `!completed` — no per-id transaction, and no window where a re-read can
- * catch a parent checked but its children not.
+ * Every changed id is one whose value actually flips, so the whole set moves to
+ * `completed` in one grouped write and reverting is the same call with
+ * `!completed` — no per-id transaction, and no window where a re-read can catch
+ * a parent checked but its children not.
  */
 async function applyToggleToLocalItems(
   db: SQLiteDatabase,
   noteId: string,
   itemId: string,
   completed: boolean,
-): Promise<string[]> {
+): Promise<{ write: number; changedIds: string[] }> {
   const note = await getLocalNote(db, noteId);
-  if (!note || note.note_type !== 'list' || !note.items) return [];
-  const ids = collectToggleCascade(note.items, itemId, completed);
-  await setLocalItemsCompleted(db, noteId, ids, completed);
-  return ids;
+  if (!note || note.note_type !== 'list' || !note.items) {
+    return { write: localCompletedWrites.begin([]), changedIds: [] };
+  }
+  const scope = completedCascadeScope(
+    note.items.map((i) => ({ id: i.id, parentId: i.parent_id })),
+    itemId,
+    completed,
+  );
+  // Claimed before the write is awaited, so taps claim rows in the order made.
+  const write = localCompletedWrites.begin(scope);
+  const changedIds = collectToggleCascade(note.items, itemId, completed);
+  try {
+    await setLocalItemsCompleted(db, noteId, changedIds, completed);
+  } catch (err) {
+    localCompletedWrites.end(write);
+    throw err;
+  }
+  return { write, changedIds };
 }
 
 /**
@@ -1399,41 +1424,47 @@ export function useToggleNoteItemCompleted() {
       // comes back for the length of one round trip before the response
       // re-checks it. Writing first makes the local rows agree with the
       // optimistic cache for the whole flight, so a re-read is a no-op.
-      const cascadeIds = await applyToggleToLocalItems(db, noteId, itemId, completed);
+      const { write, changedIds } = await applyToggleToLocalItems(db, noteId, itemId, completed);
+      const owned = (id: string) => localCompletedWrites.owns(write, id);
 
-      // Queue instead of calling online while the note's create is still pending:
-      // it drains FIFO first (#475), and a direct call would 404 and drop the edit.
-      const pendingCreate = await isNotePendingCreate(db, noteId);
-      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
-        try {
-          const serverItems = await toggleItemCompleted(noteId, itemId, completed);
-          for (const item of serverItems) {
-            await patchLocalItem(db, noteId, item.id, { completed: item.completed });
-          }
-          return serverItems;
-        } catch (err) {
-          // Transient failure: fall through to the offline path so the toggle is
-          // queued for replay instead of being lost. A permanent one takes the
-          // local rows back with it, mirroring the cache rollback in onError —
-          // otherwise the pre-flight write above would outlive the failed toggle.
+      try {
+        // Queue instead of calling online while the note's create is still pending:
+        // it drains FIFO first (#475), and a direct call would 404 and drop the edit.
+        const pendingCreate = await isNotePendingCreate(db, noteId);
+        if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
           try {
-            rethrowIfNotQueueable(err);
-          } catch (permanent) {
-            await setLocalItemsCompleted(db, noteId, cascadeIds, !completed);
-            throw permanent;
+            const serverItems = await toggleItemCompleted(noteId, itemId, completed);
+            for (const item of serverItems) {
+              if (!owned(item.id)) continue;
+              await patchLocalItem(db, noteId, item.id, { completed: item.completed });
+            }
+            return serverItems;
+          } catch (err) {
+            // Transient failure: fall through to the offline path so the toggle is
+            // queued for replay instead of being lost. A permanent one takes the
+            // local rows back with it, mirroring the cache rollback in onError —
+            // otherwise the pre-flight write above would outlive the failed toggle.
+            try {
+              rethrowIfNotQueueable(err);
+            } catch (permanent) {
+              await setLocalItemsCompleted(db, noteId, changedIds.filter(owned), !completed);
+              throw permanent;
+            }
           }
         }
-      }
 
-      // Offline (or a transient online failure): the cascade is already in the
-      // local DB, so only the replay op is left to enqueue.
-      await enqueueOperation(db, {
-        operation: 'toggleItemCompleted',
-        endpoint: `/notes/${noteId}/items/${itemId}/toggle-completed`,
-        method: 'POST',
-        body: { completed } as Record<string, unknown>,
-      });
-      return [];
+        // Offline (or a transient online failure): the cascade is already in the
+        // local DB, so only the replay op is left to enqueue.
+        await enqueueOperation(db, {
+          operation: 'toggleItemCompleted',
+          endpoint: `/notes/${noteId}/items/${itemId}/toggle-completed`,
+          method: 'POST',
+          body: { completed } as Record<string, unknown>,
+        });
+        return [];
+      } finally {
+        localCompletedWrites.end(write);
+      }
     },
     // Revert the optimistic toggle if the write ultimately fails.
     onError: (_err, { noteId }, context) => rollbackOptimisticNote(queryClient, noteId, context),

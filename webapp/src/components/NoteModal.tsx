@@ -3,7 +3,7 @@ import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Users, Check
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, completedCascadeScope, createCompletedWriteTracker, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
 import { renderMarkdown, inlineMarkdownToText } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -403,6 +403,8 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
   // derivation of note.id.
   const [isCoarsePointer] = useState(() => window.matchMedia('(pointer: coarse)').matches);
   const [appOrigin] = useState(() => window.location.origin);
+  // Which in-flight toggle last wrote each item; see completedWrites in @jot/shared.
+  const [completedWrites] = useState(createCompletedWriteTracker);
   const noteDeepLinkHref = note?.id && isCoarsePointer
     ? buildMobileDeepLink(`/notes/${note.id}`, appOrigin)
     : null;
@@ -1122,9 +1124,16 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
   // handleItemCompletedToggle checks/unchecks an item through the dedicated
   // toggle-completed endpoint so a parent's children cascade atomically in one
   // request. It applies an optimistic local cascade first, then reconciles only
-  // the completed flags the server reports — never replacing the whole list, so
-  // unsaved edits and not-yet-created items are preserved. Items keep their slot
-  // in the single ordered array, so unchecking returns an item to where it was.
+  // the completed flags of the items this toggle wrote — never replacing the
+  // whole list, so unsaved edits and not-yet-created items are preserved. Items
+  // keep their slot in the single ordered array, so unchecking returns an item
+  // to where it was.
+  //
+  // The response carries the note's full item list as of this write, which
+  // still reports any item tapped after it as unchecked. Each flag is therefore
+  // taken from the response only while this toggle is still the latest write to
+  // that item (completedWrites), so checking rows off in quick succession never
+  // puts an already-checked row back in the active list.
   const handleItemCompletedToggle = async (itemId: string, completed: boolean) => {
     if (isReadOnly) return;
     const before = itemsRef.current;
@@ -1135,14 +1144,10 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     // touches (the target and, for a parent, its children — or, for a child
     // being unchecked, its parent), so an error reverts only those flags
     // without clobbering edits made to other items meanwhile.
-    const revertCompleted = new Map<string, boolean>([[target.id, target.completed]]);
-    if (target.parentId === null) {
-      for (const item of before) {
-        if (item.parentId === itemId) revertCompleted.set(item.id, item.completed);
-      }
-    } else if (!completed) {
-      const parent = before.find(item => item.id === target.parentId);
-      if (parent) revertCompleted.set(parent.id, parent.completed);
+    const scope = completedCascadeScope(before, itemId, completed);
+    const revertCompleted = new Map<string, boolean>();
+    for (const item of before) {
+      if (scope.includes(item.id)) revertCompleted.set(item.id, item.completed);
     }
 
     commitItems(applyCompletedCascade(before, itemId, completed));
@@ -1153,9 +1158,13 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
 
     cancelPendingSave();
 
+    const write = completedWrites.begin(scope);
     try {
       const serverItems = await notes.toggleItemCompleted(note.id, itemId, completed);
-      const completedById = new Map(serverItems.map(item => [item.id, item.completed]));
+      const completedById = new Map<string, boolean>();
+      for (const item of serverItems) {
+        if (completedWrites.owns(write, item.id)) completedById.set(item.id, item.completed);
+      }
       commitItems(itemsRef.current.map(item => {
         const serverCompleted = completedById.get(item.id);
         return serverCompleted === undefined ? item : { ...item, completed: serverCompleted };
@@ -1166,12 +1175,15 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
       flashSaved();
     } catch (error) {
       console.error('Failed to toggle item:', error);
-      // Revert only the toggled completed flags; leave any concurrent edits.
+      // Revert only the toggled completed flags no later toggle has taken
+      // over; leave any concurrent edits.
       commitItems(itemsRef.current.map(item => {
         const original = revertCompleted.get(item.id);
-        return original === undefined ? item : { ...item, completed: original };
+        return original === undefined || !completedWrites.owns(write, item.id) ? item : { ...item, completed: original };
       }));
       showError(t('note.failedSaveChanges'));
+    } finally {
+      completedWrites.end(write);
     }
   };
 

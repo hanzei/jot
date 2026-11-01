@@ -1266,6 +1266,50 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
     });
 
+    // The response is the note's full item list as of that one write, so the
+    // response to an earlier tap still reports a later-tapped row unchecked.
+    // Writing every item from it back to SQLite unchecked the later row locally
+    // — and kept it that way when the stale response was the last to land.
+    it('useToggleNoteItemCompleted writes back only the items it is still the latest write to', async () => {
+      const twoItemNote = {
+        ...listNote,
+        items: [
+          { ...listNote.items[0]!, id: 'a', parent_id: null, completed: false },
+          { ...listNote.items[0]!, id: 'b', parent_id: null, completed: false, position: 1 },
+        ],
+      };
+      const { wrapper, queryClient } = createWrapperWithClient();
+      queryClient.setQueryData(noteLocalQueryKey('n1'), twoItemNote);
+      mockNoteQueries.getLocalNote
+        .mockResolvedValueOnce(twoItemNote as never)
+        .mockResolvedValueOnce(twoItemNote as never);
+
+      const first = deferred<unknown[]>();
+      const second = deferred<unknown[]>();
+      mockNotesApi.toggleItemCompleted.mockReset();
+      mockNotesApi.toggleItemCompleted
+        .mockReturnValueOnce(first.promise as never)
+        .mockReturnValueOnce(second.promise as never);
+
+      const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
+      const tapA = result.current.mutateAsync({ noteId: 'n1', itemId: 'a', completed: true });
+      await waitFor(() => expect(mockNotesApi.toggleItemCompleted).toHaveBeenCalledTimes(1));
+      const tapB = result.current.mutateAsync({ noteId: 'n1', itemId: 'b', completed: true });
+      await waitFor(() => expect(mockNotesApi.toggleItemCompleted).toHaveBeenCalledTimes(2));
+
+      // B's response lands first; A's, read before B's write, lands last.
+      second.resolve([{ id: 'a', completed: true }, { id: 'b', completed: true }]);
+      await tapB;
+      first.resolve([{ id: 'a', completed: true }, { id: 'b', completed: false }]);
+      await tapA;
+
+      expect(mockNoteQueries.patchLocalItem).not.toHaveBeenCalledWith(
+        expect.anything(), 'n1', 'b', { completed: false },
+      );
+      expect(mockNoteQueries.patchLocalItem).toHaveBeenCalledWith(expect.anything(), 'n1', 'a', { completed: true });
+      expect(mockNoteQueries.patchLocalItem).toHaveBeenCalledWith(expect.anything(), 'n1', 'b', { completed: true });
+    });
+
     it('useToggleNoteItemCompleted takes the local rows back on a permanent failure', async () => {
       const { wrapper, queryClient } = createWrapperWithClient();
       queryClient.setQueryData(noteLocalQueryKey('n1'), listNote);

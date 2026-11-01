@@ -2000,6 +2000,65 @@ describe('NoteModal', () => {
       expect(screen.getByDisplayValue('Child A')).toBeInTheDocument();
     });
 
+    // The endpoint returns the note's full item list as of its own write, so a
+    // response to an earlier tap still reports a later-tapped item unchecked.
+    // Applying that whole list put the later item back in the active list until
+    // its own response landed — the "checked rows come back" bug.
+    it('checking items in quick succession keeps each checked while earlier responses land', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [
+          item('a', { text: 'A', position: 0 }),
+          item('b', { text: 'B', position: 1 }),
+          item('c', { text: 'C', position: 2 }),
+        ],
+      });
+      const responses = new Map<string, (items: { id: string; completed: boolean }[]) => void>();
+      const hold = (_noteId: string, itemId: string) =>
+        new Promise(resolve => { responses.set(itemId, resolve); });
+      mockToggleItemCompleted.mockImplementationOnce(hold).mockImplementationOnce(hold).mockImplementationOnce(hold);
+      renderNoteModal({ ...defaultProps, note: listNote });
+
+      // Tap A, then B, then C; each optimistic check moves the row out of the
+      // active list, so the next unchecked row is always the first checkbox.
+      for (const id of ['a', 'b', 'c']) {
+        fireEvent.click(screen.getAllByRole('checkbox')[0]!);
+        await act(async () => {});
+        expect(mockToggleItemCompleted).toHaveBeenLastCalledWith('1', id, true);
+      }
+      expect(screen.getByText('Completed items (3)')).toBeInTheDocument();
+
+      // A's response was read before B's and C's writes reached the server.
+      await act(async () => {
+        responses.get('a')!([
+          { id: 'a', completed: true },
+          { id: 'b', completed: false },
+          { id: 'c', completed: false },
+        ]);
+      });
+      expect(screen.getByText('Completed items (3)')).toBeInTheDocument();
+
+      // Responses can also land out of order: C's before B's.
+      await act(async () => {
+        responses.get('c')!([
+          { id: 'a', completed: true },
+          { id: 'b', completed: true },
+          { id: 'c', completed: true },
+        ]);
+      });
+      await act(async () => {
+        responses.get('b')!([
+          { id: 'a', completed: true },
+          { id: 'b', completed: true },
+          { id: 'c', completed: false },
+        ]);
+      });
+      await vi.runAllTimersAsync();
+      expect(screen.getByText('Completed items (3)')).toBeInTheDocument();
+      const checkboxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
+      expect(checkboxes.every(cb => cb.checked)).toBe(true);
+    });
+
     it('shows a ghost parent above a completed child whose parent is still active', async () => {
       const listNote = createMockNote({
         note_type: 'list',
