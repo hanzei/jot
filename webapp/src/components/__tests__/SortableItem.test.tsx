@@ -331,6 +331,11 @@ describe('SortableItem rendered/source swap', () => {
       expect(link).toHaveAttribute('rel', 'noopener noreferrer');
     });
 
+    it('encodes the target exactly as the rendered link would', () => {
+      renderRow('[café](<https://example.com/a café>)', { readOnly: false });
+      expect(openLink()).toHaveAttribute('href', 'https://example.com/a%20caf%C3%A9');
+    });
+
     it('is offered on completed rows too', () => {
       renderRow('https://example.com', { isCompleted: true });
       expect(openLink()).toHaveAttribute('href', 'https://example.com');

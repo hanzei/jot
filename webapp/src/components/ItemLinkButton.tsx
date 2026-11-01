@@ -4,7 +4,7 @@ import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import type { InlineLink } from '@jot/shared';
 
 interface ItemLinkButtonProps {
-  /** The row's links, from `inlineLinks`. Renders nothing when empty. */
+  /** The row's links, from `itemLinks`. Renders nothing when empty. */
   links: InlineLink[];
 }
 
@@ -13,16 +13,6 @@ const BUTTON_CLASSES =
   // graphical control on whatever colour the note has, and needs 3:1 against
   // the worst swatch (WCAG 1.4.11).
   'w-5 h-5 flex-shrink-0 flex items-center justify-center rounded text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500';
-
-/** A link's host, for telling apart menu entries whose labels look alike. */
-function hostOf(href: string): string {
-  try {
-    const url = new URL(href);
-    return url.protocol === 'mailto:' ? url.pathname : url.host;
-  } catch {
-    return href;
-  }
-}
 
 /**
  * The editable list-item row's way to its links.
@@ -73,10 +63,11 @@ export default function ItemLinkButton({ links }: ItemLinkButtonProps) {
       </MenuButton>
       <MenuItems
         // Anchored, so it renders in a portal and cannot be clipped by the
-        // modal's scrolling item list.
-        anchor="bottom end"
+        // modal's scrolling item list. The gap goes through the anchor rather
+        // than a margin, which would survive a flip to above the button.
+        anchor={{ to: 'bottom end', gap: 4 }}
         data-testid="list-item-links-menu"
-        className="z-50 mt-1 w-64 max-w-[calc(100vw-2rem)] rounded-md border border-gray-200 bg-white py-1 shadow-lg ring-1 ring-black/5 focus:outline-none dark:border-slate-600 dark:bg-slate-800"
+        className="z-50 w-64 max-w-[calc(100vw-2rem)] rounded-md border border-gray-200 bg-white py-1 shadow-lg ring-1 ring-black/5 focus:outline-none dark:border-slate-600 dark:bg-slate-800"
       >
         {links.map((link) => (
           <MenuItem key={link.href}>
@@ -87,8 +78,8 @@ export default function ItemLinkButton({ links }: ItemLinkButtonProps) {
               className="block px-4 py-2 text-sm text-gray-700 data-[focus]:bg-gray-100 dark:text-gray-200 dark:data-[focus]:bg-slate-700"
             >
               <span className="block truncate">{link.label}</span>
-              {link.label !== link.href && (
-                <span className="block truncate text-xs text-gray-600 dark:text-gray-300">{hostOf(link.href)}</span>
+              {link.host !== null && (
+                <span className="block truncate text-xs text-gray-600 dark:text-gray-300">{link.host}</span>
               )}
             </a>
           </MenuItem>

@@ -267,21 +267,21 @@ describe('normalizeInlineTokens', () => {
 describe('inlineLinks', () => {
   it('lists each link with its flattened label, in reading order', () => {
     expect(inlineLinks(lex('see [**the** docs](https://a.example) and https://b.example'))).toEqual([
-      { href: 'https://a.example', label: 'the docs' },
-      { href: 'https://b.example', label: 'https://b.example' },
+      { href: 'https://a.example', label: 'the docs', host: 'a.example' },
+      { href: 'https://b.example', label: 'https://b.example', host: null },
     ]);
   });
 
   it('finds links nested inside formatting', () => {
     expect(inlineLinks(lex('**[a](https://a.example)** ~~[b](mailto:b@example.com)~~'))).toEqual([
-      { href: 'https://a.example', label: 'a' },
-      { href: 'mailto:b@example.com', label: 'b' },
+      { href: 'https://a.example', label: 'a', host: 'a.example' },
+      { href: 'mailto:b@example.com', label: 'b', host: 'b@example.com' },
     ]);
   });
 
   it('lists a repeated target once, under its first label', () => {
     expect(inlineLinks(lex('[one](https://a.example) [two](https://a.example)'))).toEqual([
-      { href: 'https://a.example', label: 'one' },
+      { href: 'https://a.example', label: 'one', host: 'a.example' },
     ]);
   });
 
@@ -291,5 +291,23 @@ describe('inlineLinks', () => {
 
   it('is empty for text without links', () => {
     expect(inlineLinks(lex('buy **milk**'))).toEqual([]);
+  });
+
+  describe('host', () => {
+    const hostOf = (markdown: string) => inlineLinks(lex(markdown)).map((link) => link.host);
+
+    it('is lower case, without credentials, keeping a port', () => {
+      expect(hostOf('[a](https://user:pw@Example.COM:8443/x?y#z)')).toEqual(['example.com:8443']);
+    });
+
+    it('is a mailto address without its query', () => {
+      expect(hostOf('[mail](mailto:a@b.example?subject=Hi)')).toEqual(['a@b.example']);
+    });
+
+    it('is null where the label already says it', () => {
+      // A bare URL, a `www.` autolink and an autolinked email address each label
+      // themselves with exactly what the host line would repeat.
+      expect(hostOf('https://a.example www.b.example c@d.example')).toEqual([null, null, null]);
+    });
   });
 });

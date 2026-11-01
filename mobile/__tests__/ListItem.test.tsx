@@ -222,6 +222,21 @@ describe('ListItem', () => {
       });
     });
 
+    describe('open-link sheet state', () => {
+      it('does not reopen by itself after the item drops to one link and back', async () => {
+        const twoLinks = '[a](https://a.example) [b](https://b.example)';
+        const utils = await render(<ListItem text={twoLinks} completed={false} />);
+        await fireEvent.press(utils.getByTestId('list-item-open-link'));
+        expect(utils.getAllByTestId('item-links-sheet-link')).toHaveLength(2);
+
+        // A collaborator's edit removes a link while the sheet is open, then
+        // another adds one back.
+        await utils.rerender(<ListItem text="[a](https://a.example)" completed={false} />);
+        await utils.rerender(<ListItem text={twoLinks} completed={false} />);
+        expect(utils.queryAllByTestId('item-links-sheet-link')).toHaveLength(0);
+      });
+    });
+
     it('mounts in source form when it mounts asking for the caret', async () => {
       // The editor arms `autoFocus` on a freshly added item and on the row it is
       // restoring focus to after a drag reorder remounts it. Mounting rendered

@@ -184,6 +184,24 @@ export function flattenInlineNodes(nodes: InlineNode[]): string {
 export interface InlineLink {
   href: string;
   label: string;
+  /**
+   * Where the link goes, for telling apart entries whose labels look alike —
+   * the host, or the address of a `mailto:`. Null when the label already says
+   * it: a bare URL, a `www.` autolink, an autolinked email address.
+   */
+  host: string | null;
+}
+
+/**
+ * A link target's host (lower case, no credentials), or a `mailto:`'s address
+ * without its query. Parsed by hand rather than with `URL`, which Hermes only
+ * partly implements, so both clients get the same answer.
+ */
+function linkHost(href: string): string {
+  const mailto = /^mailto:([^?]*)/i.exec(href);
+  if (mailto) return mailto[1] ?? href;
+  const authority = /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/?#]*@)?([^/?#]+)/i.exec(href);
+  return authority?.[1]?.toLowerCase() ?? href;
 }
 
 /**
@@ -208,7 +226,9 @@ export function inlineLinks(nodes: InlineNode[]): InlineLink[] {
       if (node.type === 'link') {
         if (!seen.has(node.href)) {
           seen.add(node.href);
-          links.push({ href: node.href, label: flattenInlineNodes(node.children) });
+          const label = flattenInlineNodes(node.children);
+          const host = linkHost(node.href);
+          links.push({ href: node.href, label, host: label === node.href || label === host ? null : host });
         }
       } else if (node.type === 'strong' || node.type === 'em' || node.type === 'del') {
         walk(node.children);

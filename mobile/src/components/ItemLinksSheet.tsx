@@ -1,23 +1,15 @@
-import { useContext } from 'react';
 import { Modal, View, Text, TouchableOpacity, Pressable, StyleSheet } from 'react-native';
-import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { ExternalLink } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import type { InlineLink } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
+import { useDeviceSafeAreaInsets } from './ContentSafeArea';
+import { openUrl } from '../utils/openUrl';
 
 interface ItemLinksSheetProps {
   visible: boolean;
   links: InlineLink[];
   onClose: () => void;
-  onOpen: (href: string) => void;
-}
-
-/** A link's host, for telling apart entries whose labels look alike. */
-function hostOf(href: string): string {
-  if (href.startsWith('mailto:')) return href.slice('mailto:'.length);
-  const match = /^[a-z]+:\/\/([^/?#]+)/i.exec(href);
-  return match?.[1] ?? href;
 }
 
 /**
@@ -25,14 +17,20 @@ function hostOf(href: string): string {
  * there is more than one to choose from (docs/specs/markdown-rendering.md §1.2).
  * Laid out like AddImageActionSheet.
  */
-export default function ItemLinksSheet({ visible, links, onClose, onOpen }: ItemLinksSheetProps) {
+export default function ItemLinksSheet({ visible, links, onClose }: ItemLinksSheetProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
+  // A Modal renders above the connectivity banners, so it takes the device's
+  // insets rather than the content area's (mobile/CLAUDE.md).
+  const insets = useDeviceSafeAreaInsets();
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={[styles.overlay, { backgroundColor: colors.overlay }]} onPress={onClose}>
+      <Pressable
+        style={[styles.overlay, { backgroundColor: colors.overlay }]}
+        onPress={onClose}
+        testID="item-links-sheet-overlay"
+      >
         <View style={[styles.sheet, { backgroundColor: colors.sheetBackground, paddingBottom: insets.bottom + 8 }]}>
           <Pressable>
             <View style={[styles.handle, { backgroundColor: colors.handleColor }]} />
@@ -44,7 +42,7 @@ export default function ItemLinksSheet({ visible, links, onClose, onOpen }: Item
                 style={styles.row}
                 onPress={() => {
                   onClose();
-                  onOpen(link.href);
+                  void openUrl(link.href);
                 }}
                 testID="item-links-sheet-link"
                 accessibilityRole="link"
@@ -55,9 +53,9 @@ export default function ItemLinksSheet({ visible, links, onClose, onOpen }: Item
                   <Text style={[styles.label, { color: colors.text }]} numberOfLines={1}>
                     {link.label}
                   </Text>
-                  {link.label !== link.href && (
+                  {link.host !== null && (
                     <Text style={[styles.host, { color: colors.textSecondary }]} numberOfLines={1}>
-                      {hostOf(link.href)}
+                      {link.host}
                     </Text>
                   )}
                 </View>

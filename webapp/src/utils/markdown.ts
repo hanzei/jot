@@ -5,10 +5,12 @@ import {
   normalizeBlockTokens,
   normalizeInlineTokens,
   flattenInlineNodes,
+  inlineLinks,
   inlineRendersAsSource,
   BLOCK_LEXER_OPTIONS,
   INLINE_LEXER_OPTIONS,
   type BlockNode,
+  type InlineLink,
   type InlineNode,
 } from '@jot/shared';
 
@@ -261,6 +263,19 @@ export function renderInlineItem(
     nodes,
     formatted: !inlineRendersAsSource(nodes, text),
   };
+}
+
+/**
+ * The links an editable row's open-link control offers, with each target
+ * normalized exactly as the rendered link would be — so the control and a live
+ * link to the same target never disagree, and one the renderer refuses is not
+ * offered either.
+ */
+export function itemLinks(nodes: InlineNode[]): InlineLink[] {
+  return inlineLinks(nodes).flatMap((link) => {
+    const href = safeLinkHref(link.href);
+    return href === null ? [] : [{ ...link, href }];
+  });
 }
 
 /**

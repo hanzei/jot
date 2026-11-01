@@ -287,19 +287,20 @@ function ListItem({
   // through a button of their own instead. A read-only row's links already work,
   // and `nodes` is empty for one, so it gets none.
   const links = useMemo(() => inlineLinks(nodes), [nodes]);
+  const onlyLink = links.length === 1 ? links[0] : undefined;
   const [showLinksSheet, setShowLinksSheet] = useState(false);
+  // The sheet unmounts once the item is down to one link (an edit, or a
+  // collaborator's over SSE). Left set, it would pop back open by itself the
+  // moment a second link appeared.
+  if (showLinksSheet && links.length < 2) setShowLinksSheet(false);
   const handleOpenLinkPress = useCallback(() => {
-    const [only] = links;
-    if (!only) return;
-    if (links.length === 1) {
-      void openUrl(only.href);
+    if (onlyLink) {
+      void openUrl(onlyLink.href);
     } else {
       setShowLinksSheet(true);
     }
-  }, [links]);
+  }, [onlyLink]);
   const closeLinksSheet = useCallback(() => setShowLinksSheet(false), []);
-  const openLinkLabel =
-    links.length === 1 && links[0] ? t('note.openItemLink', { label: links[0].label }) : t('note.openItemLinks');
 
   // A drag must not change the row's height, so the form is frozen while one is
   // in flight: whatever the row was showing when the finger went down is what it
@@ -560,8 +561,10 @@ function ListItem({
               style={styles.openLinkBtn}
               hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
               testID="list-item-open-link"
-              accessibilityRole={links.length === 1 ? 'link' : 'button'}
-              accessibilityLabel={openLinkLabel}
+              accessibilityRole={onlyLink ? 'link' : 'button'}
+              accessibilityLabel={
+                onlyLink ? t('note.openItemLink', { label: onlyLink.label }) : t('note.openItemLinks')
+              }
             >
               <ExternalLink size={OPEN_LINK_ICON_SIZE} color={effectiveIconMuted} />
             </TouchableOpacity>
@@ -644,12 +647,7 @@ function ListItem({
         )}
       </View>
       {links.length > 1 && (
-        <ItemLinksSheet
-          visible={showLinksSheet}
-          links={links}
-          onClose={closeLinksSheet}
-          onOpen={(href) => void openUrl(href)}
-        />
+        <ItemLinksSheet visible={showLinksSheet} links={links} onClose={closeLinksSheet} />
       )}
     </View>
   );
