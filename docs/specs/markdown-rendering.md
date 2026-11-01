@@ -511,14 +511,9 @@ allowed by construction**, which is why no renderer re-checks the scheme: the
 normalizer has already turned every other link into its own label.
 
 `shared/src/inlineMarkdown.ts` **declares the marked token fields it reads
-structurally and imports nothing from `marked`** — not even types. Both consumers
-compile `shared/src` with their own tsc and resolution runs from `shared/`
-(mobile's `@jot/shared` is a symlink and resolution follows the realpath), while
-CI installs dependencies in `webapp/` and `mobile/` only. So `shared/node_modules`
-does not exist during a consumer's typecheck and even a type-only import fails to
-resolve — the same trap as the `@babel/runtime` note in `CLAUDE.md`. `marked`
-stays a devDependency of `shared/` for its own test suite, which `shared-ci.yml`
-does install, and is a real dependency of both consumers, which do the lexing.
+structurally and imports nothing from `marked`** — not even types; the doc comment
+on `InlineMarkdownToken` explains why. The consumers depend on `marked` and do the
+lexing.
 
 ### What the card preview substitutes
 
