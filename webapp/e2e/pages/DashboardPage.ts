@@ -110,6 +110,14 @@ export class DashboardPage {
     return this.page.locator('[data-testid="list-item-rendered"]').nth(index);
   }
 
+  /**
+   * The row's "open link" control — an anchor for one link, a menu button for
+   * several. Absent on a row with no link (docs/specs/markdown-rendering.md §1.2).
+   */
+  listItemOpenLink(index: number): Locator {
+    return this.listItemRow(index).getByTestId('list-item-open-link');
+  }
+
   async focusListItem(index: number) {
     await this.listItemInput(index).focus();
   }

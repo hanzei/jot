@@ -36,7 +36,8 @@ renders exactly as the surrounding text.
 The open note is unaffected: the webapp's modal preview and mobile's editor both
 render live links, which is where a reader who wants the link already is. An
 *editable* list-item row is the one other place a link stays inert, for a
-different reason — §1.2.
+different reason, and it reaches its targets through a button of its own
+instead — §1.2.
 
 Both clients render the same feature set from the same source string, so a note
 written on a phone reads identically in a browser and the other way round.
@@ -94,6 +95,29 @@ Four consequences, each of which is a trap avoided rather than a preference:
   by a different route. A read-only row has no caret to place, so its links work
   and it drops the hidden field entirely rather than leaving a focusable copy
   of the text behind the rendered one.
+
+  **The targets are reached through a separate control instead.** An editable
+  row with at least one link Jot follows gets an "open link" button (↗) among
+  its trailing controls. It is a second target rather than a second meaning for
+  the text, so the rule above still holds. Two alternatives were rejected:
+  modifier-click (undiscoverable, and absent on touch and from the keyboard) and
+  a dialog asking "edit or open?" on every click on a link, which taxes editing,
+  the common case, to make the rare one possible and never appears for a row
+  reached by keyboard.
+
+  - **Always visible**, unlike the row's hover- or focus-gated delete and assign
+    controls. The label carries no link styling, so the icon is the only sign
+    the item has a link at all.
+  - **One link** opens directly. On the webapp the button *is* an `<a
+    target="_blank">`, so middle-click and "copy link address" work; on mobile
+    it calls `openUrl`.
+  - **Several links** open a list to choose from — a menu on the webapp, a
+    bottom sheet on mobile — with each entry's label and host. A target that
+    appears twice is listed once (`inlineLinks`).
+  - **Completed rows get it too**; a ticked item's link is no less useful.
+  - **Read-only rows do not**: their links already work.
+  - The accessible name is "Open link: {label}", from the flattened label, for
+    the same reason as the checkbox label below (§5).
 - **Completed rows render like any other**, `~~strike~~` and all, which §2.1
   already accepted for display surfaces. A struck word inside an already-struck
   row is indistinguishable; that is the cost of the subset staying a subset.
@@ -472,6 +496,8 @@ one client only is exactly the kind of drift this spec exists to prevent.
 | Webapp node-to-HTML renderer + tag allowlist | `webapp/src/utils/markdown.ts` |
 | Webapp item renderer | `webapp/src/components/InlineMarkdown.tsx` |
 | Webapp editable-row swap (§1.2) | `webapp/src/components/SortableItem.tsx` |
+| Shared link list for the open-link control (§1.2) | `inlineLinks` in `shared/src/inlineMarkdown.ts` |
+| Webapp open-link control | `webapp/src/components/ItemLinkButton.tsx` |
 | Shared rendered-offset → source-offset map | `inlineSourceOffset` in `shared/src/inlineMarkdown.ts` |
 | Webapp click point → rendered offset | `webapp/src/utils/inlineCaret.ts` |
 | Mobile block lexing entry point | `mobile/src/utils/markdown.ts` |
@@ -479,7 +505,8 @@ one client only is exactly the kind of drift this spec exists to prevent.
 | Mobile card preview renderer | `mobile/src/components/MarkdownPreview.tsx` |
 | Mobile item lexing + plain-text flattening | `mobile/src/utils/inlineMarkdown.ts` |
 | Mobile item renderer | `mobile/src/components/InlineMarkdown.tsx` |
-| Mobile editable-row swap (§1.2) | `mobile/src/components/ListItem.tsx` |
+| Mobile editable-row swap and open-link button (§1.2) | `mobile/src/components/ListItem.tsx` |
+| Mobile several-links sheet | `mobile/src/components/ItemLinksSheet.tsx` |
 | Mobile tap point → rendered offset | `mobile/src/utils/inlineCaret.ts` |
 | Card links-as-text switch | `links` option on both clients' renderers |
 | Mobile inline leaf rendering (shared by all three) | `mobile/src/components/inlineNodes.tsx` |
@@ -751,7 +778,9 @@ since it is a state machine rather than a rendering:
 `mobile/__tests__/ListItem.test.tsx` for which form is showing and that the
 field survives it, `webapp/src/utils/__tests__/inlineCaret.test.ts` and
 `mobile/__tests__/inlineCaret.test.ts` for the point-to-caret mapping — the
-half of it that exists without a layout engine.
+half of it that exists without a layout engine. The same two row suites cover
+the open-link button (present, absent, one link, several), and `markdown.spec.ts`
+follows it into a real popup and menu.
 
 The formatting bars (§5.1) are covered per client too, since what they write is
 already tested at the shared transforms and what is left is per-surface wiring:

@@ -491,6 +491,48 @@ test.describe('Markdown in list-item rows', () => {
     await expect(dashboardPage.listItemRendered(0).locator('a')).toHaveCount(0);
   });
 
+  test('opens an editable row\'s link from its own button', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createListNote('Open Link Note', ['see [docs](https://example.com/docs)', 'buy milk']);
+    await dashboardPage.openNote('Open Link Note');
+
+    // The label is plain text, so the button is the only cue — and it is shown
+    // without hover, unlike the row's other controls.
+    await expect(dashboardPage.listItemOpenLink(0)).toBeVisible();
+    await expect(dashboardPage.listItemOpenLink(1)).toHaveCount(0);
+    await expect(dashboardPage.listItemOpenLink(0)).toHaveAccessibleName('Open link: docs');
+
+    // Stubbed, so the test never leaves for the network.
+    await page.context().route('https://example.com/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'text/html', body: '<title>docs</title>' }),
+    );
+    const popupPromise = page.waitForEvent('popup');
+    await dashboardPage.listItemOpenLink(0).click();
+    const popup = await popupPromise;
+    expect(popup.url()).toBe('https://example.com/docs');
+    await popup.close();
+
+    // Opening it was not a click on the text: the row did not enter edit mode.
+    await expect(dashboardPage.listItemRendered(0)).toHaveText('see docs');
+  });
+
+  test('offers a menu when an item has several links', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createListNote('Two Links Note', ['[a](https://a.example.com) or https://b.example.com']);
+    await dashboardPage.openNote('Two Links Note');
+
+    await dashboardPage.listItemOpenLink(0).click();
+    const menu = page.getByRole('menu');
+    await expect(menu.getByRole('menuitem')).toHaveCount(2);
+    await expect(menu.getByRole('menuitem').nth(0)).toHaveAttribute('href', 'https://a.example.com');
+    await expect(menu.getByRole('menuitem').nth(1)).toHaveAttribute('href', 'https://b.example.com');
+
+    // Escape closes the menu without closing the note.
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    await expect(dashboardPage.listItemRow(0)).toBeVisible();
+  });
+
   test('Ctrl+B and Ctrl+I format a list item, and Ctrl+Shift+B is left to the browser', async ({ page, dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createListNote('Shortcut Note', ['buy milk today']);

@@ -180,6 +180,46 @@ export function flattenInlineNodes(nodes: InlineNode[]): string {
   return out;
 }
 
+/** A link an item's text carries, as its target and its visible label. */
+export interface InlineLink {
+  href: string;
+  label: string;
+}
+
+/**
+ * The links in a node tree, in reading order, one per distinct target.
+ *
+ * For the editable list-item row's "open link" control
+ * (docs/specs/markdown-rendering.md §1.2): that row renders its links as plain
+ * text, so this is the only way to reach their targets from it. Every `href`
+ * here is already allowed — `normalizeInlineTokens` turns a link Jot refuses
+ * into its label, so it never becomes a link node — and callers need no scheme
+ * check of their own.
+ *
+ * A target that appears twice is listed once, under its first label: a menu
+ * offering the same destination twice is noise, not a choice.
+ */
+export function inlineLinks(nodes: InlineNode[]): InlineLink[] {
+  const links: InlineLink[] = [];
+  const seen = new Set<string>();
+
+  function walk(list: InlineNode[]): void {
+    for (const node of list) {
+      if (node.type === 'link') {
+        if (!seen.has(node.href)) {
+          seen.add(node.href);
+          links.push({ href: node.href, label: flattenInlineNodes(node.children) });
+        }
+      } else if (node.type === 'strong' || node.type === 'em' || node.type === 'del') {
+        walk(node.children);
+      }
+    }
+  }
+
+  walk(nodes);
+  return links;
+}
+
 /** How many characters of visible text a node contributes. */
 function renderedLength(node: InlineNode): number {
   switch (node.type) {

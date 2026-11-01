@@ -1,7 +1,7 @@
 import React from 'react';
-import { render, fireEvent, act } from '@testing-library/react-native';
+import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
 import type { TestInstance } from 'test-renderer';
-import { Animated, Platform, StyleSheet, type TextInput } from 'react-native';
+import { Animated, Linking, Platform, StyleSheet, type TextInput } from 'react-native';
 import { VALIDATION } from '@jot/shared';
 import ListItem from '../src/components/ListItem';
 import * as layoutAnimation from '../src/utils/layoutAnimation';
@@ -172,6 +172,54 @@ describe('ListItem', () => {
         <ListItem text="see [docs](https://example.com)" completed={false} editable={false} />,
       );
       expect(tappableTexts(readOnly.getByTestId('list-item-text-readonly'))).toEqual(['docs']);
+    });
+
+    describe('open-link button', () => {
+      function stubLinking() {
+        jest.spyOn(Linking, 'canOpenURL').mockResolvedValue(true);
+        return jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+      }
+
+      it('opens the single link of an editable row', async () => {
+        const openURL = stubLinking();
+        const { getByTestId } = await render(<ListItem text="see [docs](https://example.com/a)" completed={false} />);
+
+        const button = getByTestId('list-item-open-link');
+        expect(button.props.accessibilityLabel).toBe('Open link: docs');
+        await fireEvent.press(button);
+        await waitFor(() => expect(openURL).toHaveBeenCalledWith('https://example.com/a'));
+      });
+
+      it('is shown without focus, and on completed rows', async () => {
+        const { getByTestId } = await render(<ListItem text="https://example.com" completed={true} />);
+        expect(getByTestId('list-item-open-link')).toBeTruthy();
+      });
+
+      it('is absent without a link Jot follows, and on a read-only row', async () => {
+        const plain = await render(<ListItem text="buy **milk** [call](tel:123)" completed={false} />);
+        expect(plain.queryByTestId('list-item-open-link')).toBeNull();
+
+        const readOnly = await render(
+          <ListItem text="see [docs](https://example.com)" completed={false} editable={false} />,
+        );
+        expect(readOnly.queryByTestId('list-item-open-link')).toBeNull();
+      });
+
+      it('offers a sheet of every distinct link when there are several', async () => {
+        const openURL = stubLinking();
+        const { getByTestId, getAllByTestId, queryAllByTestId } = await render(
+          <ListItem text="[a](https://a.example) [b](https://b.example) [again](https://a.example)" completed={false} />,
+        );
+
+        expect(queryAllByTestId('item-links-sheet-link')).toHaveLength(0);
+        await fireEvent.press(getByTestId('list-item-open-link'));
+        const entries = getAllByTestId('item-links-sheet-link');
+        expect(entries.map((entry) => entry.props.accessibilityLabel)).toEqual(['Open link: a', 'Open link: b']);
+
+        await fireEvent.press(entries[1]!);
+        await waitFor(() => expect(openURL).toHaveBeenCalledWith('https://b.example'));
+        expect(queryAllByTestId('item-links-sheet-link')).toHaveLength(0);
+      });
     });
 
     it('mounts in source form when it mounts asking for the caret', async () => {

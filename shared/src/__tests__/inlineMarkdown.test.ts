@@ -5,6 +5,7 @@ import {
   flattenInlineNodes,
   inlineSourceOffset,
   inlineRendersAsSource,
+  inlineLinks,
   INLINE_LEXER_OPTIONS,
   type InlineNode,
 } from '../inlineMarkdown';
@@ -260,5 +261,35 @@ describe('normalizeInlineTokens', () => {
     it('treats code as a rendering change even when the characters match', () => {
       expect(inlineRendersAsSource(lex('`a`'), '`a`')).toBe(false);
     });
+  });
+});
+
+describe('inlineLinks', () => {
+  it('lists each link with its flattened label, in reading order', () => {
+    expect(inlineLinks(lex('see [**the** docs](https://a.example) and https://b.example'))).toEqual([
+      { href: 'https://a.example', label: 'the docs' },
+      { href: 'https://b.example', label: 'https://b.example' },
+    ]);
+  });
+
+  it('finds links nested inside formatting', () => {
+    expect(inlineLinks(lex('**[a](https://a.example)** ~~[b](mailto:b@example.com)~~'))).toEqual([
+      { href: 'https://a.example', label: 'a' },
+      { href: 'mailto:b@example.com', label: 'b' },
+    ]);
+  });
+
+  it('lists a repeated target once, under its first label', () => {
+    expect(inlineLinks(lex('[one](https://a.example) [two](https://a.example)'))).toEqual([
+      { href: 'https://a.example', label: 'one' },
+    ]);
+  });
+
+  it('omits links whose scheme Jot does not follow', () => {
+    expect(inlineLinks(lex('[call](tel:123) [x](javascript:alert(1)) [rel](/dashboard)'))).toEqual([]);
+  });
+
+  it('is empty for text without links', () => {
+    expect(inlineLinks(lex('buy **milk**'))).toEqual([]);
   });
 });

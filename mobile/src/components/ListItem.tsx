@@ -14,17 +14,19 @@ import {
   type TextInput as TextInputType,
 } from 'react-native';
 import { TouchableOpacity } from 'react-native-gesture-handler';
-import { GripVertical, Square, SquareCheck, UserPlus, X } from 'lucide-react-native';
+import { ExternalLink, GripVertical, Square, SquareCheck, UserPlus, X } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import UserAvatar from './UserAvatar';
 import InlineMarkdown from './InlineMarkdown';
+import ItemLinksSheet from './ItemLinksSheet';
 import { renderInlineNodes } from './inlineNodes';
 import { useTheme } from '../theme/ThemeContext';
 import { getEffectiveColors } from '../theme/colors';
 import { isReduceMotionEnabledSync } from '../utils/layoutAnimation';
 import { inlineMarkdownNodes, inlineMarkdownToText } from '../utils/inlineMarkdown';
 import { sourceOffsetAtPoint, type RenderedTextLine } from '../utils/inlineCaret';
-import { inlineRendersAsSource, itemSuggestions, VALIDATION, type Collaborator, type TextSelection } from '@jot/shared';
+import { openUrl } from '../utils/openUrl';
+import { inlineLinks, inlineRendersAsSource, itemSuggestions, VALIDATION, type Collaborator, type TextSelection } from '@jot/shared';
 
 /**
  * The row's caret, reachable from the note editor. The editor's formatting bar
@@ -108,6 +110,12 @@ export const DRAG_HANDLE_WIDTH = DRAG_HANDLE_ICON_SIZE + DRAG_HANDLE_PADDING * 2
 const DELETE_BTN_ICON_SIZE = 22;
 const DELETE_BTN_PADDING = 4;
 const DELETE_BTN_WIDTH = DELETE_BTN_ICON_SIZE + DELETE_BTN_PADDING * 2;
+
+// The open-link button sits in the same row as the checkbox and delete button,
+// so it keeps their 30pt height (icon + 4 padding each side): a taller one would
+// make rows with a link taller than rows without.
+const OPEN_LINK_ICON_SIZE = 20;
+const OPEN_LINK_BTN_PADDING = 5;
 
 // Delay before hiding focus-gated controls (delete/assign) and suggestions on
 // blur, so a tap on those controls — which blurs the input first — still lands
@@ -274,6 +282,24 @@ function ListItem({
   // always-live input it has always had and pays for none of this.
   const formatted = useMemo(() => nodes.length > 0 && !inlineRendersAsSource(nodes, text), [nodes, text]);
   const wantsRendered = formatted && !isEditing;
+
+  // The other half of inert links: the editable row's targets are reached
+  // through a button of their own instead. A read-only row's links already work,
+  // and `nodes` is empty for one, so it gets none.
+  const links = useMemo(() => inlineLinks(nodes), [nodes]);
+  const [showLinksSheet, setShowLinksSheet] = useState(false);
+  const handleOpenLinkPress = useCallback(() => {
+    const [only] = links;
+    if (!only) return;
+    if (links.length === 1) {
+      void openUrl(only.href);
+    } else {
+      setShowLinksSheet(true);
+    }
+  }, [links]);
+  const closeLinksSheet = useCallback(() => setShowLinksSheet(false), []);
+  const openLinkLabel =
+    links.length === 1 && links[0] ? t('note.openItemLink', { label: links[0].label }) : t('note.openItemLinks');
 
   // A drag must not change the row's height, so the form is frozen while one is
   // in flight: whatever the row was showing when the finger went down is what it
@@ -526,6 +552,20 @@ function ListItem({
           ) : (
             <InlineMarkdown text={text} testID="list-item-text-readonly" style={[styles.itemText, textTone]} />
           )}
+          {links.length > 0 && (
+            // Always shown, not gated on focus like delete: the label carries no
+            // link styling, so this icon is the only sign the item has a link.
+            <TouchableOpacity
+              onPress={handleOpenLinkPress}
+              style={styles.openLinkBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+              testID="list-item-open-link"
+              accessibilityRole={links.length === 1 ? 'link' : 'button'}
+              accessibilityLabel={openLinkLabel}
+            >
+              <ExternalLink size={OPEN_LINK_ICON_SIZE} color={effectiveIconMuted} />
+            </TouchableOpacity>
+          )}
           {showAssignUI && assignedTo ? (
             <TouchableOpacity
               {...(!completed && onAssignPress && { onPress: onAssignPress })}
@@ -603,6 +643,14 @@ function ListItem({
           </ScrollView>
         )}
       </View>
+      {links.length > 1 && (
+        <ItemLinksSheet
+          visible={showLinksSheet}
+          links={links}
+          onClose={closeLinksSheet}
+          onOpen={(href) => void openUrl(href)}
+        />
+      )}
     </View>
   );
 }
@@ -692,6 +740,10 @@ const styles = StyleSheet.create({
   deleteBtnSpacer: {
     width: DELETE_BTN_WIDTH,
     marginLeft: 'auto',
+  },
+  openLinkBtn: {
+    padding: OPEN_LINK_BTN_PADDING,
+    marginLeft: 4,
   },
   assignBtn: {
     padding: 4,
