@@ -15,6 +15,11 @@ import type { DashboardPage } from '../pages/DashboardPage';
 test.describe('Completed-item suggestions', () => {
   type ApiItem = { id: string; text: string; completed: boolean; parent_id: string | null };
 
+  // One click, not .check(): once checked, the item moves to the completed
+  // section and row 0 becomes the next item, which .check() would then see
+  // unchecked and click too.
+  const checkFirstItem = (dashboardPage: DashboardPage) => dashboardPage.listItemCheckbox(0).click();
+
   const suggestion = (page: Page, text: string) =>
     page.getByRole('listbox', { name: 'Suggestions from completed items' })
       .getByRole('option', { name: text, exact: true });
@@ -38,7 +43,7 @@ test.describe('Completed-item suggestions', () => {
     await page.keyboard.press('Tab');
     await dashboardPage.listItemInput(2).focus();
     await page.keyboard.press('Tab');
-    await dashboardPage.listItemCheckbox(0).check();
+    await checkFirstItem(dashboardPage);
     await expect(page.getByText('Completed items (3)')).toBeVisible();
   };
 
@@ -96,7 +101,7 @@ test.describe('Completed-item suggestions', () => {
     void authenticatedUser;
     await dashboardPage.createListNote('Errands', ['Milk']);
     await dashboardPage.openNote('Errands');
-    await dashboardPage.listItemCheckbox(0).check();
+    await checkFirstItem(dashboardPage);
     await expect(page.getByText('Completed items (1)')).toBeVisible();
 
     // With nothing highlighted, Enter keeps its normal add-item behavior.
@@ -106,8 +111,10 @@ test.describe('Completed-item suggestions', () => {
     await dashboardPage.expectListItemCount(3);
     await expect(page.getByText('Completed items (1)')).toBeVisible();
 
-    // Enter focused a fresh row. Arrow down highlights the suggestion there,
-    // and Enter then revives Milk in that row's place.
+    // Enter focused a fresh row (deferred, so wait for it before typing).
+    // Arrow down highlights the suggestion there, and Enter then revives Milk
+    // in that row's place.
+    await dashboardPage.expectListItemFocused(1);
     await page.keyboard.type('mil');
     await expect(suggestion(page, 'Milk')).toBeVisible();
     await page.keyboard.press('ArrowDown');
@@ -121,7 +128,7 @@ test.describe('Completed-item suggestions', () => {
     void authenticatedUser;
     await dashboardPage.createListNote('Basket', ['Milk']);
     await dashboardPage.openNote('Basket');
-    await dashboardPage.listItemCheckbox(0).check();
+    await checkFirstItem(dashboardPage);
     await expect(page.getByText('Completed items (1)')).toBeVisible();
 
     await failRequests(page, '**/api/v1/notes/*/items/*/toggle-completed', 'POST', {
@@ -145,7 +152,7 @@ test.describe('Completed-item suggestions', () => {
     void authenticatedUser;
     await dashboardPage.createListNote('Pantry', ['Milk', 'Bread']);
     await dashboardPage.openNote('Pantry');
-    await dashboardPage.listItemCheckbox(0).check();
+    await checkFirstItem(dashboardPage);
     await expect(page.getByText('Completed items (1)')).toBeVisible();
 
     // Accepting would consume "Bread", so retyping it must not offer "Milk".
