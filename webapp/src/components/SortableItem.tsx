@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { X, UserPlus, GripVertical } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, itemSuggestions, type User, type Collaborator } from '@jot/shared';
 import LetterAvatar from '@/components/LetterAvatar';
 import AssigneePicker from '@/components/AssigneePicker';
 import { indentOf, itemTextareaId, type ListItem } from '@/utils/noteItems';
@@ -59,6 +59,11 @@ export interface SortableItemProps {
   usersById?: Map<string, User> | undefined;
   onAssignItem?: (itemId: string, userId: string) => void;
   completedItemTexts?: string[];
+  /**
+   * Whether other items are nested under this one. Accepting a suggestion
+   * replaces the row, which would orphan them, so such a row offers none.
+   */
+  hasChildren?: boolean;
   onAcceptSuggestion?: (currentItemId: string, suggestionText: string) => void;
   /**
    * Fires as the row gains and loses the caret — the same transition that swaps
@@ -81,11 +86,14 @@ export interface SortableItemProps {
 // per-row delete control. Owns only its own transient UI state (which popovers
 // are open, which suggestion is highlighted); every mutation is delegated back
 // to NoteModal, which holds the item model.
-export default function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isCompleted = false, readOnly = false, onKeyDown, onPaste, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem, completedItemTexts = [], onAcceptSuggestion, onEditingChange, keepSourceVisible = false }: SortableItemProps) {
+export default function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isCompleted = false, readOnly = false, onKeyDown, onPaste, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem, completedItemTexts = [], hasChildren = false, onAcceptSuggestion, onEditingChange, keepSourceVisible = false }: SortableItemProps) {
   const { t } = useTranslation();
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+  // Whether the row was empty when the caret entered it, which decides whether
+  // it offers suggestions at all (see SuggestionRow in @jot/shared).
+  const [startedEmpty, setStartedEmpty] = useState(false);
   // Focused and editing are the same state, deliberately: the row shows its
   // Markdown rendered until you put the caret in it, and shows source for
   // exactly as long as the caret is there. That is what keeps every keystroke
@@ -205,20 +213,10 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
     textarea.setSelectionRange(offset, offset);
   }, [captureSwapHeight, item.text, rendered.nodes]);
 
-  const suggestions = useMemo(() => {
-    const trimmed = item.text.trim();
-    if (!trimmed) return [];
-    const q = trimmed.toLowerCase();
-    const results: string[] = [];
-    for (const text of completedItemTexts) {
-      const lower = text.toLowerCase();
-      if (lower.includes(q) && lower !== q) {
-        results.push(text);
-        if (results.length === 5) break;
-      }
-    }
-    return results;
-  }, [item.text, completedItemTexts]);
+  const suggestions = useMemo(
+    () => itemSuggestions(item.text, completedItemTexts, { startedEmpty, hasChildren }),
+    [item.text, completedItemTexts, startedEmpty, hasChildren],
+  );
 
   // A highlight must not outlive the list it points into. `suggestions` is
   // derived from `completedItemTexts`, which changes whenever an item is
@@ -337,7 +335,13 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
               if (e.target.value.trim()) setShowSuggestions(true);
               setSelectedSuggestionIndex(-1);
             }}
-            onFocus={readOnly ? undefined : () => {
+            onFocus={readOnly ? undefined : (e) => {
+              // Coming back from the dropdown (Shift+Tab off an option) is the
+              // same editing session — the blur above kept it open — so keep
+              // what the row started as rather than re-reading the typed text.
+              if (!suggestionsRef.current?.contains(e.relatedTarget as Node | null)) {
+                setStartedEmpty(e.currentTarget.value.trim() === '');
+              }
               captureSwapHeight();
               setIsEditing(true);
               onEditingChange?.(item.id, true);

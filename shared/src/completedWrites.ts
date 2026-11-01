@@ -58,6 +58,8 @@ export interface CompletedWriteTracker {
   fail(write: number): Map<string, boolean>;
   /** Settles a write. Idempotent, so it is safe in a `finally` after fail(). */
   end(write: number): void;
+  /** The items some in-flight write still claims; see diffItems' `heldCompleted`. */
+  claimed(): ReadonlySet<string>;
 }
 
 interface Claim {
@@ -178,6 +180,9 @@ export const createCompletedWriteTracker = (): CompletedWriteTracker => {
     },
     end(write) {
       release(write, false);
+    },
+    claimed() {
+      return new Set(claimsById.keys());
     },
   };
 };

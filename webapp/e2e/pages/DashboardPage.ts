@@ -81,7 +81,11 @@ export class DashboardPage {
     const existingCount = await inputs.count();
     await this.page.click('button:has-text("Add item")');
     await expect(inputs).toHaveCount(existingCount + 1);
-    await inputs.nth(existingCount).fill(text);
+    // "Add item" focuses the new row. Fill that rather than the last input:
+    // with checked items present the last input is a completed row.
+    const added = this.page.locator('[data-testid="list-item-input"]:focus');
+    await expect(added).toHaveValue('');
+    await added.fill(text);
   }
 
   listItemInput(index: number): Locator {
@@ -90,6 +94,10 @@ export class DashboardPage {
 
   listItemRow(index: number): Locator {
     return this.page.locator('[data-testid="list-item-row"]').nth(index);
+  }
+
+  listItemCheckbox(index: number): Locator {
+    return this.listItemRow(index).locator('input[type="checkbox"]');
   }
 
   /**

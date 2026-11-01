@@ -1,7 +1,8 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { ScrollView } from 'react-native';
 import { act, renderHook } from '@testing-library/react-native';
 import type { TFunction } from 'i18next';
+import { createCompletedWriteTracker } from '@jot/shared';
 import { useEditorDoc } from '../src/screens/noteEditor/useEditorDoc';
 import { useListItemEditing } from '../src/screens/noteEditor/useListItemEditing';
 import type { ItemSnapshot, LocalItem } from '../src/screens/noteEditor/listItemModel';
@@ -45,6 +46,7 @@ function useHarness() {
   const savedItemsRef = useRef<Map<string, ItemSnapshot>>(new Map());
   const savedOrderRef = useRef<string[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
+  const [completedWrites] = useState(createCompletedWriteTracker);
   const editing = useListItemEditing({
     doc: doc.handle,
     items: doc.items,
@@ -57,13 +59,14 @@ function useHarness() {
     withPendingIndicator: (fn) => fn(),
     // The refresh guard lives in useNoteEditorSync; the screen tests cover it.
     withItemWriteInFlight: (op) => op(),
+    completedWrites,
     scrollViewRef,
     openAssigneePicker,
     confirm: mockConfirm,
     showToast: mockShowToast,
     t,
   });
-  return { doc, editing, savedItemsRef, savedOrderRef };
+  return { doc, editing, savedItemsRef, savedOrderRef, completedWrites };
 }
 
 /** Mounts the harness and seeds it with `items` as the last-saved baseline. */
@@ -159,6 +162,84 @@ describe('useListItemEditing — accepting a completed-item suggestion', () => {
     expect(ids(items)).toEqual(['done', 'other']);
     expect(items[0]!.completed).toBe(false);
   });
+
+  it('un-completes the checked parent of a restored child, as unchecking it would', async () => {
+    const { result } = await mountWith([
+      item('typing', { text: 'soc' }),
+      item('packing', { completed: true }),
+      item('socks', { text: 'Socks', parentId: 'packing', completed: true }),
+      item('shirts', { parentId: 'packing', completed: true }),
+    ]);
+
+    await act(async () => { result.current.editing.handleAcceptSuggestion('typing', 'Socks'); });
+
+    const byId = new Map(result.current.doc.items.map((it) => [it.id, it]));
+    expect(byId.get('socks')!.completed).toBe(false);
+    expect(byId.get('packing')!.completed).toBe(false);
+    expect(byId.get('shirts')!.completed).toBe(true);
+  });
+
+  it('unchecks through the toggle endpoint and advances the baseline before saving', async () => {
+    const { result } = await mountWith([
+      item('typing', { text: 'soc' }),
+      item('packing', { completed: true }),
+      item('socks', { text: 'Socks', parentId: 'packing', completed: true }),
+      item('shirts', { parentId: 'packing', completed: true }),
+    ]);
+    mockToggleItemCompleted.mockResolvedValue([
+      { id: 'packing', completed: false },
+      { id: 'socks', completed: false },
+      { id: 'shirts', completed: true },
+    ]);
+
+    await act(async () => { result.current.editing.handleAcceptSuggestion('typing', 'Socks'); });
+
+    expect(mockToggleItemCompleted).toHaveBeenCalledWith({ noteId: 'note-1', itemId: 'socks', completed: false });
+    // The cascaded parent is already in the baseline, so the save that follows
+    // does not PATCH it unchecked — which the server would cascade to "shirts".
+    const baseline = result.current.savedItemsRef.current;
+    expect(baseline.get('packing')!.completed).toBe(false);
+    expect(baseline.get('socks')!.completed).toBe(false);
+    expect(markDirty).toHaveBeenCalled();
+    expect(mockToggleItemCompleted.mock.invocationCallOrder[0]!)
+      .toBeLessThan(markDirty.mock.invocationCallOrder[0]!);
+  });
+
+  it('puts the typed row back when the uncheck request fails', async () => {
+    const { result } = await mountWith([
+      item('a'),
+      item('typing', { text: 'mil' }),
+      item('milk', { text: 'Milk', completed: true }),
+    ]);
+    mockToggleItemCompleted.mockRejectedValue(new Error('server down'));
+
+    await act(async () => { result.current.editing.handleAcceptSuggestion('typing', 'Milk'); });
+
+    const items = result.current.doc.items;
+    expect(ids(items)).toEqual(['a', 'typing', 'milk']);
+    expect(items[1]!.text).toBe('mil');
+    expect(items[2]!.completed).toBe(true);
+    expect(setSaveError).toHaveBeenCalledWith('note.failedSaveChanges');
+    expect(result.current.completedWrites.claimed().size).toBe(0);
+  });
+
+  it('settles a restored child back under its parent rather than at the typed row', async () => {
+    const { result } = await mountWith([
+      item('produce'),
+      item('apples', { parentId: 'produce' }),
+      item('bread'),
+      item('typing', { text: 'ban' }),
+      item('bananas', { text: 'Bananas', parentId: 'produce', completed: true }),
+    ]);
+
+    await act(async () => { result.current.editing.handleAcceptSuggestion('typing', 'Bananas'); });
+
+    const items = result.current.doc.items;
+    // Typed below "bread", but a child must stay contiguous with its group.
+    expect(ids(items)).toEqual(['produce', 'apples', 'bananas', 'bread']);
+    expect(items.map((it) => it.position)).toEqual([0, 1, 2, 3]);
+    expect(items[2]!.parentId).toBe('produce');
+  });
 });
 
 describe('useListItemEditing — toggling a row completed', () => {
@@ -169,6 +250,19 @@ describe('useListItemEditing — toggling a row completed', () => {
     item('child', { parentId: 'parent' }),
     item('other'),
   ];
+
+  it('claims the flags it changes, so the save diff leaves them, until the response is reconciled', async () => {
+    const { result } = await mountWith(cascadeItems());
+    let resolveToggle!: (items: { id: string; completed: boolean }[]) => void;
+    mockToggleItemCompleted.mockReturnValue(new Promise((resolve) => { resolveToggle = resolve; }));
+
+    await act(async () => { result.current.editing.listItemHandlers.onToggle('parent', true); });
+
+    expect([...result.current.completedWrites.claimed()].sort()).toEqual(['child', 'parent']);
+
+    await act(async () => { resolveToggle([{ id: 'parent', completed: true }, { id: 'child', completed: true }]); });
+    expect(result.current.completedWrites.claimed().size).toBe(0);
+  });
 
   it('reconciles from the server response and advances the baseline for the rows it returned', async () => {
     const { result } = await mountWith(cascadeItems());

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  advanceSnapshot,
   buildScalarPatch,
   createItemRequest,
   diffItems,
@@ -82,7 +83,7 @@ describe('diffItems', () => {
     const { saved, order } = baselineOf([item('a', { text: 'old', completed: false })]);
     const ops = diffItems(saved, order, [item('a', { text: 'new', completed: false })]);
     expect(ops).toEqual([
-      { kind: 'patch', itemId: 'a', patch: { text: 'new' }, snapshot: itemSnapshot(item('a', { text: 'new' })) },
+      { kind: 'patch', itemId: 'a', patch: { text: 'new' } },
     ]);
   });
 
@@ -90,7 +91,7 @@ describe('diffItems', () => {
     const { saved, order } = baselineOf([item('p'), item('c', { parentId: 'p' })]);
     const ops = diffItems(saved, order, [item('p'), item('c')]);
     expect(ops).toEqual([
-      { kind: 'patch', itemId: 'c', patch: { parent_id: '' }, snapshot: itemSnapshot(item('c')) },
+      { kind: 'patch', itemId: 'c', patch: { parent_id: '' } },
     ]);
   });
 
@@ -125,6 +126,50 @@ describe('diffItems', () => {
       { kind: 'delete', itemId: 'a' },
       { kind: 'delete', itemId: 'b' },
     ]);
+  });
+});
+
+describe('diffItems with held completed flags', () => {
+  it('leaves a held completed flag out of the patch', () => {
+    const before = [item('p', { completed: true }), item('c', { parentId: 'p', completed: true })];
+    const { saved, order } = baselineOf(before);
+    // The optimistic cascade of unchecking "c": both flags flipped locally.
+    const after = [item('p'), item('c', { parentId: 'p', text: 'renamed' })];
+
+    const ops = diffItems(saved, order, after, new Set(['p', 'c']));
+
+    // "p" has nothing else to send; "c" still sends its text, but not the flag.
+    expect(ops).toEqual([
+      { kind: 'patch', itemId: 'c', patch: { text: 'renamed' } },
+    ]);
+  });
+
+  it('diffs unheld items as usual', () => {
+    const { saved, order } = baselineOf([item('a', { completed: true })]);
+    const ops = diffItems(saved, order, [item('a')], new Set(['other']));
+    expect(ops).toEqual([
+      { kind: 'patch', itemId: 'a', patch: { completed: false } },
+    ]);
+  });
+});
+
+describe('advanceSnapshot', () => {
+  const snap = (overrides: Partial<Omit<ListItem, 'id'>> = {}): ItemSnapshot => itemSnapshot(item('a', overrides));
+
+  it('moves only the fields the patch sent', () => {
+    // The baseline's completed flag was reconciled by a toggle while a text
+    // patch computed from older state was in flight; the patch must not roll
+    // it back.
+    expect(advanceSnapshot(snap({ completed: true }), { text: 'b' })).toEqual(snap({ text: 'b', completed: true }));
+  });
+
+  it("moves every sent field, mapping parent_id '' to top level", () => {
+    const patch = { completed: true, parent_id: '', assigned_to: 'u1' };
+    expect(advanceSnapshot(snap({ parentId: 'p' }), patch)).toEqual(snap({ completed: true, assigned_to: 'u1' }));
+  });
+
+  it('keeps the parent for a null parent_id, which means unchanged', () => {
+    expect(advanceSnapshot(snap({ parentId: 'p' }), { parent_id: null })).toEqual(snap({ parentId: 'p' }));
   });
 });
 

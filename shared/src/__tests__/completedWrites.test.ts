@@ -130,6 +130,18 @@ describe('createCompletedWriteTracker', () => {
     expect(tracker.fail(uncheck)).toEqual(new Map([['a', false]]));
   });
 
+  it('lists the items in-flight writes claim until each settles', () => {
+    const tracker = createCompletedWriteTracker();
+    const first = tracker.begin(prior({ a: false, b: false }));
+    const second = tracker.begin(prior({ a: true }));
+    expect([...tracker.claimed()].sort()).toEqual(['a', 'b']);
+    tracker.end(first);
+    expect([...tracker.claimed()]).toEqual(['a']);
+    tracker.fail(second);
+    tracker.end(second);
+    expect(tracker.claimed().size).toBe(0);
+  });
+
   it('reports whether a later write has claimed an item since', () => {
     const tracker = createCompletedWriteTracker();
     const first = tracker.begin(prior({ a: false, b: false }));
