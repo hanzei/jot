@@ -107,14 +107,6 @@ A formatting-only commit goes in `.git-blame-ignore-revs`.
 
 ### `@jot/shared`
 
-Mobile's Jest compiles `shared/src` with `babel-preset-expo`, which lowers array
-destructuring, object rest, `async` functions, and classes to
-`@babel/runtime/helpers/*` requires. `shared/` has no `node_modules`, so those
-resolve only through the `@babel/runtime` entry in `mobile/jest.config.js`'s
-`moduleNameMapper`; if it goes, **every** mobile suite fails to load with an
-error pointing at an unrelated import. Run `task test-mobile` after touching
-`shared/src`, not just `task test-shared`.
-
 Domain types live in `shared/src/types.ts`; do not duplicate them in a client.
 
 ## Dependency Updates
