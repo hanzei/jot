@@ -12,7 +12,6 @@ import {
 } from '../api/labels';
 import { getNotes } from '../api/notes';
 import {
-  saveNote,
   renameLabelInLocalNotes,
   deleteLabelFromLocalNotes,
   addLabelToLocalNote,
@@ -26,7 +25,7 @@ import {
   generateClientLabelId,
   isNotePendingCreate,
 } from '../db/noteQueries';
-import { enqueueOperation, rethrowIfNotQueueable, saveServerNotes, saveServerLabels, getPendingLabelIds } from '../db/syncQueue';
+import { enqueueOperation, rethrowIfNotQueueable, saveServerNotes, saveServerResponseNote, saveServerLabels, getPendingLabelIds } from '../db/syncQueue';
 import { isClosedDatabaseError } from '../db/errors';
 import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from './useNetworkStatus';
@@ -290,7 +289,7 @@ export function useAddLabelToNote() {
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           const updatedNote = await addLabelToNote(noteId, trimmed);
-          await saveNote(db, updatedNote);
+          await saveServerResponseNote(db, updatedNote);
           // The server may have minted a brand-new label; persist it to the store
           // so it shows in the drawer immediately (#691).
           const normalized = trimmed.toLowerCase();
@@ -344,7 +343,7 @@ export function useRemoveLabelFromNote() {
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           const updatedNote = await removeLabelFromNote(noteId, labelId);
-          await saveNote(db, updatedNote);
+          await saveServerResponseNote(db, updatedNote);
           return updatedNote;
         } catch (err) {
           // Transient failure: fall through to the offline path so the edit is

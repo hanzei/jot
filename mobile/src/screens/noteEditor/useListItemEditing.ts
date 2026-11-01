@@ -12,9 +12,14 @@ import * as Haptics from 'expo-haptics';
 import type { TFunction } from 'i18next';
 import {
   VALIDATION,
+  applyCompletedValues,
+  completedCascadeScope,
+  completedPriorById,
+  createCompletedWriteTracker,
   generateId,
   splitPasteIntoItems,
   truncateToCodePoints,
+  type ServerCompletedItem,
 } from '@jot/shared';
 import {
   useDeleteCompletedItems,
@@ -195,6 +200,62 @@ export function useListItemEditing({
   // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   deleteCompletedItemsRef.current = deleteCompletedItemsMutation.mutateAsync;
 
+  // Which in-flight completed writes claim which items; see completedWrites in
+  // @jot/shared. Every item-action response's completed flags go through it.
+  const [completedWrites] = useState(createCompletedWriteTracker);
+
+  // Persists a completed-flag change already applied to the editor. `priorById`
+  // holds the value each changed item had before it; `request` sends the write
+  // and resolves to the note's full item list, or to [] when it was queued
+  // offline. Runs inside the item-write in-flight window, so until the
+  // reconciled state is set no note re-read is applied over it.
+  const persistCompletedWrite = useCallback(async (
+    priorById: ReadonlyMap<string, boolean>,
+    request: () => Promise<ServerCompletedItem[]>,
+  ): Promise<void> => {
+    const applyItems = (completedById: ReadonlyMap<string, boolean>) => {
+      const next = applyCompletedValues(itemsRef.current, completedById);
+      if (next === itemsRef.current) return;
+      itemsRef.current = next;
+      setItems(next);
+    };
+    // Advance the baseline so the diff engine does not re-patch completed
+    const syncBaseline = (completedById: ReadonlyMap<string, boolean>) => {
+      for (const entry of completedById) {
+        const snap = savedItemsRef.current.get(entry[0]);
+        if (snap) savedItemsRef.current.set(entry[0], { ...snap, completed: entry[1] });
+      }
+    };
+    const write = completedWrites.begin(priorById);
+    try {
+      const serverItems = await request();
+      if (serverItems.length > 0) {
+        // Online: the response is the note's full item list as of this write, so
+        // it still reports any row tapped after this one unchecked — apply only
+        // what the gate says it may still decide, composing on the latest state
+        // so a concurrent write's optimistic change is preserved.
+        const completedById = completedWrites.accept(write, serverItems);
+        applyItems(completedById);
+        syncBaseline(completedById);
+      } else {
+        // Offline: the local DB already holds the change; advance the baseline
+        // for the items no later write has taken over.
+        const decided = new Map<string, boolean>();
+        for (const entry of priorById) {
+          if (completedWrites.decides(write, entry[0])) decided.set(entry[0], !entry[1]);
+        }
+        syncBaseline(decided);
+      }
+    } catch {
+      // Revert only the items no later write has taken over, so a concurrent
+      // write's optimistic state survives.
+      applyItems(completedWrites.fail(write));
+      setSaveError('note.failedSaveChanges');
+    } finally {
+      completedWrites.end(write);
+    }
+  }, [completedWrites, itemsRef, savedItemsRef, setItems, setSaveError]);
+
   // Id of the item the user just checked off, so its completed-section row pops
   // on mount. Cleared shortly after so a later collapse/expand doesn't re-pop.
   const [popItemId, setPopItemId] = useState<string | null>(null);
@@ -284,24 +345,13 @@ export function useListItemEditing({
       const target = before.find((item) => item.id === itemId);
       if (!target || target.completed === completed) return;
 
-      // Capture the prior completed state of just the items this toggle touches
+      // Capture the prior completed state of just the items this toggle changes
       // (the item plus, for a top-level item, its children — or, for a child
       // being unchecked, its parent) from that latest state. Used to advance
       // the save baseline and to revert precisely on failure — without
       // clobbering any other item whose state may change before this async
       // call settles.
-      const cascadeToChildren = target.parentId === null;
-      const uncompleteParent = target.parentId !== null && !completed;
-      const priorCompletedById = new Map(
-        before
-          .filter(
-            (item) =>
-              item.id === itemId ||
-              (cascadeToChildren && item.parentId === itemId) ||
-              (uncompleteParent && item.id === target.parentId),
-          )
-          .map((item) => [item.id, item.completed]),
-      );
+      const priorById = completedPriorById(before, completedCascadeScope(before, itemId, completed), completed);
 
       // Optimistic cascade applied immediately, with a subtle settle as the
       // item moves between the active list and the completed section.
@@ -332,52 +382,10 @@ export function useListItemEditing({
       // The request and the reconcile that follows it both run inside the
       // in-flight window: until the reconciled state is set, a note re-read
       // still describes this item as it was before the tap.
-      await withItemWriteInFlight(async () => {
-        try {
-          const serverItems = await toggleItemCompletedRef.current({
-            noteId: currentNoteId,
-            itemId,
-            completed,
-          });
-          if (serverItems.length > 0) {
-            // Online: reconcile only completed flags from server response,
-            // composing on (and writing back) the latest state so a concurrent
-            // toggle's optimistic change is preserved.
-            const completedById = new Map(serverItems.map((item) => [item.id, item.completed]));
-            const reconciled = itemsRef.current.map((item) => {
-              const serverCompleted = completedById.get(item.id);
-              return serverCompleted === undefined ? item : { ...item, completed: serverCompleted };
-            });
-            itemsRef.current = reconciled;
-            setItems(reconciled);
-            // Advance the baseline so the diff engine does not re-patch completed
-            for (const [id, comp] of completedById) {
-              const snap = savedItemsRef.current.get(id);
-              if (snap) savedItemsRef.current.set(id, { ...snap, completed: comp });
-            }
-          } else {
-            // Offline: cascade was applied to local DB; advance baseline here too
-            for (const [id, prior] of priorCompletedById) {
-              if (prior === completed) continue;
-              const snap = savedItemsRef.current.get(id);
-              if (snap) savedItemsRef.current.set(id, { ...snap, completed });
-            }
-          }
-        } catch {
-          // Revert only the items this toggle changed, restoring their prior
-          // completed values, so a concurrent toggle's optimistic state survives.
-          const reverted = itemsRef.current.map((item) =>
-            priorCompletedById.has(item.id)
-              ? { ...item, completed: priorCompletedById.get(item.id)! }
-              : item,
-          );
-          itemsRef.current = reverted;
-          setItems(reverted);
-          setSaveError('note.failedSaveChanges');
-        }
-      });
+      await withItemWriteInFlight(() => persistCompletedWrite(priorById, () =>
+        toggleItemCompletedRef.current({ noteId: currentNoteId, itemId, completed })));
     },
-    [cancelScheduledSave, itemsRef, markDirtyAndScheduleUpdate, noteIdRef, savedItemsRef, setItems, setSaveError, withItemWriteInFlight],
+    [cancelScheduledSave, itemsRef, markDirtyAndScheduleUpdate, noteIdRef, persistCompletedWrite, setItems, withItemWriteInFlight],
   );
 
   // Unchecks every currently-completed item in one bulk request (overflow
@@ -399,37 +407,10 @@ export function useListItemEditing({
       return;
     }
 
-    await withItemWriteInFlight(() => withPendingIndicator(async () => {
-      try {
-        const serverItems = await uncheckAllItemsRef.current({ noteId, itemIds: ids });
-        if (serverItems.length > 0) {
-          const completedById = new Map(serverItems.map((item) => [item.id, item.completed]));
-          const reconciled = itemsRef.current.map((item) => {
-            const c = completedById.get(item.id);
-            return c === undefined ? item : { ...item, completed: c };
-          });
-          itemsRef.current = reconciled;
-          setItems(reconciled);
-          for (const [id, comp] of completedById) {
-            const snap = savedItemsRef.current.get(id);
-            if (snap) savedItemsRef.current.set(id, { ...snap, completed: comp });
-          }
-        } else {
-          // Offline: the local write already applied the uncheck; advance the
-          // save baseline so the diff engine does not re-patch it later.
-          for (const id of ids) {
-            const snap = savedItemsRef.current.get(id);
-            if (snap) savedItemsRef.current.set(id, { ...snap, completed: false });
-          }
-        }
-      } catch {
-        const reverted = itemsRef.current.map((item) => (ids.includes(item.id) ? { ...item, completed: true } : item));
-        itemsRef.current = reverted;
-        setItems(reverted);
-        setSaveError('note.failedSaveChanges');
-      }
-    }));
-  }, [itemsRef, markDirtyAndScheduleUpdate, noteIdRef, savedItemsRef, setItems, setSaveError, withItemWriteInFlight, withPendingIndicator]);
+    await withItemWriteInFlight(() => withPendingIndicator(() =>
+      persistCompletedWrite(new Map(ids.map((id) => [id, true])), () =>
+        uncheckAllItemsRef.current({ noteId, itemIds: ids }))));
+  }, [itemsRef, markDirtyAndScheduleUpdate, noteIdRef, persistCompletedWrite, setItems, withItemWriteInFlight, withPendingIndicator]);
 
   // Deletes every currently-completed item after a confirm dialog (overflow
   // menu); mobile has no in-editor undo-bar equivalent to the web's

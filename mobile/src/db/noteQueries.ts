@@ -3,6 +3,7 @@ import { deleteFileIfExists } from '../utils/fs';
 import type { Note, NoteItem, NoteUnread, GetNotesParams, Label, NoteShare, NoteImage, ShareHistorySource } from '@jot/shared';
 import { getStrongRandomBytes } from '../utils/random';
 import { withSerializedTransaction } from './transaction';
+import { localCompletedWrites } from './localCompletedWrites';
 import { isLocalModeActive } from '../store/localMode';
 
 interface NoteRow {
@@ -139,7 +140,12 @@ async function getItemsForNote(db: SQLiteDatabase, noteId: string): Promise<Note
 // markers are always set and cleared by their own explicit UPDATEs
 // (markNotePendingCreate / clearNotePendingCreate / markNoteSyncFailed /
 // clearNoteSyncFailed).
-async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
+async function saveNoteInTx(
+  db: SQLiteDatabase,
+  note: Note,
+  serverSnapshot = false,
+  keepLocalCompletedIds?: ReadonlySet<string>,
+): Promise<void> {
   const title = note.note_type === 'list' ? note.title : '';
   const content = note.note_type === 'text' ? note.content : '';
   const checkedItemsCollapsed = note.note_type === 'list' ? (note.checked_items_collapsed ? 1 : 0) : 0;
@@ -200,20 +206,26 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
     // identity) rather than being torn down and recreated on every sync, the
     // same reasoning that motivated the upsert itself over `INSERT OR
     // REPLACE` above.
+    //
+    // A server snapshot's completed flags go through localCompletedWrites: an
+    // item a toggle still in flight is writing keeps its local value, and a
+    // stale one takes the newest value seen.
+    const completedById = serverSnapshot ? localCompletedWrites.accept(null, items) : null;
     for (const item of items) {
+      const completed = completedBinding(completedById, item, keepLocalCompletedIds);
       await db.runAsync(
         `INSERT INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            note_id = excluded.note_id,
            text = excluded.text,
-           completed = excluded.completed,
+           completed = CASE WHEN ? THEN note_items.completed ELSE excluded.completed END,
            position = excluded.position,
            parent_id = excluded.parent_id,
            assigned_to = excluded.assigned_to,
            created_at = excluded.created_at,
            updated_at = excluded.updated_at`,
-        [item.id, note.id, item.text, item.completed ? 1 : 0, item.position, item.parent_id ?? null, item.assigned_to ?? '', item.created_at ?? '', item.updated_at ?? ''],
+        [item.id, note.id, item.text, completed.value, item.position, item.parent_id ?? null, item.assigned_to ?? '', item.created_at ?? '', item.updated_at ?? '', completed.keepLocal],
       );
     }
     if (items.length > 0) {
@@ -241,11 +253,39 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
  */
 interface SaveNoteOptions {
   skipNoteIds?: ReadonlySet<string>;
+  /**
+   * The notes are server snapshots, so their items' completed flags go through
+   * localCompletedWrites rather than overwriting a toggle still in flight. Set
+   * only by the server-snapshot writers in syncQueue.ts (saveServerNote,
+   * saveServerResponseNote and friends); a raw saveNote is a local write.
+   */
+  serverSnapshot?: boolean;
+  /** Items that keep their local completed value whatever the snapshot says. */
+  keepLocalCompletedIds?: ReadonlySet<string>;
+}
+
+/**
+ * The completed binding for a server item under the completed-write gate:
+ * `keepLocal` is 1 when the gate withholds the item (an existing row keeps its
+ * local value), and `value` is what to write otherwise — the gate's value, or
+ * the item's own when no gate applies.
+ */
+function completedBinding(
+  completedById: ReadonlyMap<string, boolean> | null,
+  item: { id: string; completed: boolean },
+  keepLocalIds?: ReadonlySet<string>,
+): { keepLocal: 0 | 1; value: 0 | 1 } {
+  const gated = completedById?.get(item.id);
+  const keepLocal = (completedById !== null && gated === undefined) || keepLocalIds?.has(item.id) === true;
+  return {
+    keepLocal: keepLocal ? 1 : 0,
+    value: (gated ?? item.completed) ? 1 : 0,
+  };
 }
 
 export async function saveNote(db: SQLiteDatabase, note: Note, options?: SaveNoteOptions): Promise<void> {
   if (options?.skipNoteIds?.has(note.id)) return;
-  await withSerializedTransaction(db, () => saveNoteInTx(db, note));
+  await withSerializedTransaction(db, () => saveNoteInTx(db, note, options?.serverSnapshot, options?.keepLocalCompletedIds));
 }
 
 /**
@@ -255,16 +295,16 @@ export async function saveNote(db: SQLiteDatabase, note: Note, options?: SaveNot
 async function saveNotesInTx(
   db: SQLiteDatabase,
   notes: Note[],
-  skipNoteIds?: ReadonlySet<string>,
+  options?: SaveNoteOptions,
 ): Promise<void> {
   for (const note of notes) {
-    if (skipNoteIds?.has(note.id)) continue;
-    await saveNoteInTx(db, note);
+    if (options?.skipNoteIds?.has(note.id)) continue;
+    await saveNoteInTx(db, note, options?.serverSnapshot);
   }
 }
 
 export async function saveNotes(db: SQLiteDatabase, notes: Note[], options?: SaveNoteOptions): Promise<void> {
-  await withSerializedTransaction(db, () => saveNotesInTx(db, notes, options?.skipNoteIds));
+  await withSerializedTransaction(db, () => saveNotesInTx(db, notes, options));
 }
 
 export async function getLocalNotes(db: SQLiteDatabase, params?: GetNotesParams): Promise<Note[]> {
@@ -930,7 +970,7 @@ export async function reconcileServerNotesScope(
   const skipNoteIds = options?.skipNoteIds;
   const serverIds = new Set(serverNotes.map((n) => n.id));
   await withSerializedTransaction(db, async () => {
-    await saveNotesInTx(db, serverNotes, skipNoteIds);
+    await saveNotesInTx(db, serverNotes, options);
     await removeLocalNotesNotInTx(db, serverIds, params, skipNoteIds);
   });
 }
@@ -941,6 +981,18 @@ export async function reconcileServerNotesScope(
 
 async function touchLocalNote(db: SQLiteDatabase, noteId: string): Promise<void> {
   await db.runAsync('UPDATE notes SET updated_at = ? WHERE id = ?', [new Date().toISOString(), noteId]);
+}
+
+/**
+ * touchLocalNote, but only when a write actually changed `changedRows` rows —
+ * the server likewise bumps a note only when an item write changed something
+ * (touchNoteIfChangedTx), so a no-op does not move it in "last modified" order.
+ * Only meaningful for statements whose row count implies a change: a DELETE,
+ * or an UPDATE that excludes rows already at the new value (SQLite counts
+ * every row an UPDATE matches, changed or not).
+ */
+async function touchLocalNoteIfChanged(db: SQLiteDatabase, noteId: string, changedRows: number): Promise<void> {
+  if (changedRows > 0) await touchLocalNote(db, noteId);
 }
 
 export interface LocalItemInput {
@@ -1007,8 +1059,8 @@ export async function patchLocalItem(db: SQLiteDatabase, noteId: string, itemId:
 
 export async function deleteLocalItem(db: SQLiteDatabase, noteId: string, itemId: string): Promise<void> {
   await withSerializedTransaction(db, async () => {
-    await db.runAsync('DELETE FROM note_items WHERE id = ? AND note_id = ?', [itemId, noteId]);
-    await touchLocalNote(db, noteId);
+    const result = await db.runAsync('DELETE FROM note_items WHERE id = ? AND note_id = ?', [itemId, noteId]);
+    await touchLocalNoteIfChanged(db, noteId, result.changes);
   });
 }
 
@@ -1025,21 +1077,28 @@ export async function reorderLocalItems(db: SQLiteDatabase, noteId: string, item
 export async function setLocalItemsCompleted(db: SQLiteDatabase, noteId: string, itemIds: string[], completed: boolean): Promise<void> {
   if (itemIds.length === 0) return;
   const now = new Date().toISOString();
+  const value = completed ? 1 : 0;
+  const placeholders = itemIds.map(() => '?').join(', ');
   await withSerializedTransaction(db, async () => {
-    for (const id of itemIds) {
-      await db.runAsync('UPDATE note_items SET completed = ?, updated_at = ? WHERE id = ? AND note_id = ?', [completed ? 1 : 0, now, id, noteId]);
-    }
-    await touchLocalNote(db, noteId);
+    // One statement, and only rows not already at the value: callers often pass
+    // a whole note's worth of ids of which few, if any, actually change.
+    const result = await db.runAsync(
+      `UPDATE note_items SET completed = ?, updated_at = ? WHERE note_id = ? AND completed != ? AND id IN (${placeholders})`,
+      [value, now, noteId, value, ...itemIds],
+    );
+    await touchLocalNoteIfChanged(db, noteId, result.changes);
   });
 }
 
 export async function deleteLocalItems(db: SQLiteDatabase, noteId: string, itemIds: string[]): Promise<void> {
   if (itemIds.length === 0) return;
   await withSerializedTransaction(db, async () => {
+    let deleted = 0;
     for (const id of itemIds) {
-      await db.runAsync('DELETE FROM note_items WHERE id = ? AND note_id = ?', [id, noteId]);
+      const result = await db.runAsync('DELETE FROM note_items WHERE id = ? AND note_id = ?', [id, noteId]);
+      deleted += result.changes;
     }
-    await touchLocalNote(db, noteId);
+    await touchLocalNoteIfChanged(db, noteId, deleted);
   });
 }
 
@@ -1050,6 +1109,7 @@ export interface ServerItemInput {
   position: number;
   parent_id: string | null;
   assigned_to: string;
+  updated_at?: string;
 }
 
 /**
@@ -1061,14 +1121,26 @@ export interface ServerItemInput {
  * device was offline) can't linger indefinitely — patching only the rows
  * present in the response would leave such a row behind forever.
  */
-export async function reconcileLocalItems(db: SQLiteDatabase, noteId: string, items: ServerItemInput[]): Promise<void> {
+export async function reconcileLocalItems(
+  db: SQLiteDatabase,
+  noteId: string,
+  items: ServerItemInput[],
+  write: number | null = null,
+  keepLocalCompletedIds?: ReadonlySet<string>,
+): Promise<void> {
   const now = new Date().toISOString();
+  // The completed flags go through localCompletedWrites: `write` is the token of
+  // the local write this list answers, or null for one it does not (a queue
+  // drain's replay, a bulk delete). `keepLocalCompletedIds` keeps the local value
+  // of items a queued op has yet to replay. Every other field is taken as reported.
+  const completedById = localCompletedWrites.accept(write, items);
   await withSerializedTransaction(db, async () => {
     for (const item of items) {
+      const completed = completedBinding(completedById, item, keepLocalCompletedIds);
       await db.runAsync(
-        `UPDATE note_items SET text = ?, completed = ?, position = ?, parent_id = ?, assigned_to = ?, updated_at = ?
+        `UPDATE note_items SET text = ?, completed = CASE WHEN ? THEN completed ELSE ? END, position = ?, parent_id = ?, assigned_to = ?, updated_at = ?
          WHERE id = ? AND note_id = ?`,
-        [item.text, item.completed ? 1 : 0, item.position, item.parent_id, item.assigned_to, now, item.id, noteId],
+        [item.text, completed.keepLocal, completed.value, item.position, item.parent_id, item.assigned_to, now, item.id, noteId],
       );
       // No-ops (via INSERT OR IGNORE) unless the UPDATE above matched zero rows,
       // i.e. this item doesn't exist locally yet (e.g. created on another
@@ -1076,7 +1148,7 @@ export async function reconcileLocalItems(db: SQLiteDatabase, noteId: string, it
       await db.runAsync(
         `INSERT OR IGNORE INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [item.id, noteId, item.text, item.completed ? 1 : 0, item.position, item.parent_id, item.assigned_to, now, now],
+        [item.id, noteId, item.text, completed.value, item.position, item.parent_id, item.assigned_to, now, now],
       );
     }
     if (items.length > 0) {

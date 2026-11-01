@@ -6,6 +6,7 @@ import {
   buildScalarPatch,
   diffItems,
   itemSnapshot,
+  createCompletedWriteTracker,
   itemsDiffer,
   patchTouchesSharedContent,
   type ItemSnapshot,
@@ -385,6 +386,11 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
 
   // The two baseline mutations the completed-item bulk actions need, handed
   // over as named operations so that hook never touches the diff refs directly.
+  // Which in-flight completed writes claim which items; every server item
+  // snapshot's completed flags — write responses and adopted notes alike — go
+  // through it (see completedWrites in @jot/shared).
+  const [completedWrites] = useState(createCompletedWriteTracker);
+
   const baseline = useMemo<CompletedItemsBaseline>(() => ({
     syncCompleted: (completedById) => {
       for (const [id, comp] of completedById) {
@@ -427,7 +433,7 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
     // Stale-write conflict (409 on base_version)
     conflict, overwriteConflict,
     // Baseline
-    setSavedBaseline, markScalarSaved, applyDraftScalars, isDirty, hasUnflushedWork, baseline,
+    setSavedBaseline, markScalarSaved, applyDraftScalars, isDirty, hasUnflushedWork, baseline, completedWrites,
     // Save pipeline
     reportSaveFailure,
     autoSaveNote, scheduleAutoSave, cancelPendingSave, flushSave,

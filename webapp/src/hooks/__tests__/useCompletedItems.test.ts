@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import type { Note, NoteItem } from '@jot/shared';
+import { createCompletedWriteTracker, type Note, type NoteItem } from '@jot/shared';
 import { useCompletedItems, COMPLETED_DELETE_UNDO_MS, type CompletedItemsBaseline } from '../useCompletedItems';
 import type { ListItem } from '@/utils/noteItems';
 import { notes } from '@/utils/api';
@@ -72,6 +72,7 @@ const useHarness = ({ note = null, initialItems, onRefresh, showError = vi.fn() 
     itemsRef,
     commitItems,
     baseline,
+    completedWrites: useState(createCompletedWriteTracker)[0],
     cancelPendingSave: useCallback(() => {}, []),
     markDirty: useCallback(() => {}, []),
     flashSaved: useCallback(() => {}, []),

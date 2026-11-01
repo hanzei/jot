@@ -2000,6 +2000,101 @@ describe('NoteModal', () => {
       expect(screen.getByDisplayValue('Child A')).toBeInTheDocument();
     });
 
+    // The endpoint returns the note's full item list as of its own write, so a
+    // response to an earlier tap still reports a later-tapped item unchecked.
+    // Applying that whole list put the later item back in the active list until
+    // its own response landed — the "checked rows come back" bug.
+    it('checking items in quick succession keeps each checked while earlier responses land', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [
+          item('a', { text: 'A', position: 0 }),
+          item('b', { text: 'B', position: 1 }),
+          item('c', { text: 'C', position: 2 }),
+        ],
+      });
+      const responses = new Map<string, (items: { id: string; completed: boolean; updated_at: string }[]) => void>();
+      // Server timestamps: t0 is every item's creation, tA..tC each tap's write.
+      const [t0, tA, tB, tC] = ['00', '01', '02', '03'].map(s => `2026-01-01T00:00:${s}Z`) as [string, string, string, string];
+      const hold = (_noteId: string, itemId: string) =>
+        new Promise(resolve => { responses.set(itemId, resolve); });
+      mockToggleItemCompleted.mockImplementationOnce(hold).mockImplementationOnce(hold).mockImplementationOnce(hold);
+      renderNoteModal({ ...defaultProps, note: listNote });
+
+      // Tap A, then B, then C; each optimistic check moves the row out of the
+      // active list, so the next unchecked row is always the first checkbox.
+      for (const id of ['a', 'b', 'c']) {
+        fireEvent.click(screen.getAllByRole('checkbox')[0]!);
+        await act(async () => {});
+        expect(mockToggleItemCompleted).toHaveBeenLastCalledWith('1', id, true);
+      }
+      expect(screen.getByText('Completed items (3)')).toBeInTheDocument();
+
+      // A's response was read before B's and C's writes reached the server.
+      await act(async () => {
+        responses.get('a')!([
+          { id: 'a', completed: true, updated_at: tA },
+          { id: 'b', completed: false, updated_at: t0 },
+          { id: 'c', completed: false, updated_at: t0 },
+        ]);
+      });
+      expect(screen.getByText('Completed items (3)')).toBeInTheDocument();
+
+      // Responses can also land out of order: C's before B's, whose snapshot
+      // predates C's write.
+      await act(async () => {
+        responses.get('c')!([
+          { id: 'a', completed: true, updated_at: tA },
+          { id: 'b', completed: true, updated_at: tB },
+          { id: 'c', completed: true, updated_at: tC },
+        ]);
+      });
+      await act(async () => {
+        responses.get('b')!([
+          { id: 'a', completed: true, updated_at: tA },
+          { id: 'b', completed: true, updated_at: tB },
+          { id: 'c', completed: false, updated_at: t0 },
+        ]);
+      });
+      await vi.runAllTimersAsync();
+      expect(screen.getByText('Completed items (3)')).toBeInTheDocument();
+      const checkboxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
+      expect(checkboxes.every(cb => cb.checked)).toBe(true);
+    });
+
+    // Two overlapping writes to one item that both fail must unwind to where the
+    // item was before either — not stop at the first write's optimistic value,
+    // which also left the editor dirty against its baseline.
+    it('checking then unchecking an item, with both requests failing, leaves it unchecked', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [item('a', { text: 'A', position: 0 }), item('b', { text: 'B', position: 1 })],
+      });
+      const rejects: Array<(error: Error) => void> = [];
+      const hold = () => new Promise((_resolve, reject) => { rejects.push(reject); });
+      mockToggleItemCompleted.mockImplementationOnce(hold).mockImplementationOnce(hold);
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      renderNoteModal({ ...defaultProps, note: listNote });
+
+      // Check A (first active checkbox), then uncheck it (now the last checkbox).
+      fireEvent.click(screen.getAllByRole('checkbox')[0]!);
+      await act(async () => {});
+      const afterCheck = screen.getAllByRole('checkbox');
+      fireEvent.click(afterCheck[afterCheck.length - 1]!);
+      await act(async () => {});
+      expect(mockToggleItemCompleted).toHaveBeenNthCalledWith(1, '1', 'a', true);
+      expect(mockToggleItemCompleted).toHaveBeenNthCalledWith(2, '1', 'a', false);
+
+      // The uncheck fails first, then the check.
+      await act(async () => { rejects[1]!(new Error('offline')); });
+      await act(async () => { rejects[0]!(new Error('offline')); });
+      await vi.runAllTimersAsync();
+
+      expect(screen.queryByText(/Completed items/)).not.toBeInTheDocument();
+      const checkboxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
+      expect(checkboxes.some(cb => cb.checked)).toBe(false);
+    });
+
     it('shows a ghost parent above a completed child whose parent is still active', async () => {
       const listNote = createMockNote({
         note_type: 'list',
