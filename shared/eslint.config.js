@@ -28,6 +28,26 @@ export default [
       '@typescript-eslint/consistent-type-imports': ['error', { disallowTypeAnnotations: false }],
     },
   },
+  // `shared/` has no runtime dependencies, so library code may import only
+  // relative paths. Both clients compile `shared/src` with their own tsc, and
+  // resolution starts from `shared/`, where CI never installs `node_modules`: a
+  // package import — even `import type` — resolves locally (bootstrap installs
+  // `shared/node_modules`) and fails only in the webapp and mobile workflows.
+  // The regex matches any specifier not starting with `.`, i.e. every bare one.
+  // Tests are exempt: vitest runs them, and `shared-ci.yml` installs their
+  // dependencies (`marked`, `vitest`).
+  {
+    files: ['src/**/*.ts'],
+    ignores: ['src/__tests__/**'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [{
+          regex: '^[^.]',
+          message: 'shared/ has no runtime dependencies and CI does not install shared/node_modules, so a package import (even type-only) breaks both clients\' typecheck. Use a relative import, or declare the type structurally — see InlineMarkdownToken in src/inlineMarkdown.ts.',
+        }],
+      }],
+    },
+  },
   // This config file itself. Without a block naming it, it matched no
   // configuration carrying rules and ESLint linted it against nothing — which
   // is how its own imports went semicolon-less under a config that mandates
