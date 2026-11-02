@@ -555,9 +555,8 @@ func FileServer(r chi.Router, path string, root *os.Root) {
 	fsys := root.FS()
 	fileServer := http.FileServerFS(fsys)
 
-	// The webapp is one large JS chunk (about 1.2 MB minified, 360 KB gzipped),
-	// and on a slow connection its transfer is most of first-load time (#1164).
-	// Compress the text formats a build contains; images are already compressed.
+	// Gzip the build's text formats: on a slow connection, transferring the JS
+	// bundle is most of first-load time (#1164). Images are already compressed.
 	compressor := middleware.NewCompressor(5,
 		"text/html", "text/css", "text/plain", "text/javascript",
 		"application/javascript", "application/json", "application/manifest+json",
@@ -616,11 +615,8 @@ func FileServer(r chi.Router, path string, root *os.Root) {
 	})
 }
 
-// encodedRangeStripper sits beneath the compressor and drops the
-// "Accept-Ranges: bytes" that http.ServeContent sets once the compressor has
-// marked the response encoded: ranges are only served over the uncompressed
-// bytes, so a client resuming a gzipped download from its byte count would
-// splice plain bytes onto a gzip prefix.
+// encodedRangeStripper drops the "Accept-Ranges: bytes" http.ServeContent sets
+// once the compressor has encoded the response; ranges are only served uncompressed.
 type encodedRangeStripper struct{ http.ResponseWriter }
 
 func (w encodedRangeStripper) WriteHeader(code int) {
