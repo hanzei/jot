@@ -1,3 +1,4 @@
+import { CODE_PALETTE, type CodePalette } from '@jot/shared';
 import type { ThemeColors } from '../theme/colors';
 
 // Text metrics and colours for the two text-note Markdown surfaces: the editor
@@ -13,11 +14,14 @@ import type { ThemeColors } from '../theme/colors';
 /**
  * The colours a Markdown surface needs beyond its text colour.
  *
- * `rule` and `tint` are translucent rather than palette entries because the same
- * note body renders on three different backgrounds — the editor, a white card
- * and a coloured card — and an opaque grey that reads correctly on one of them
- * disappears on another. The webapp solves it the same way (`bg-black/5
- * dark:bg-white/10` in .markdown-content).
+ * `rule` is translucent rather than a palette entry because the same note body
+ * renders on three different backgrounds — the editor, a white card and a
+ * coloured card — and an opaque grey that reads correctly on one of them
+ * disappears on another.
+ *
+ * `code` is the exception, opaque on purpose: its token colours only hold
+ * their contrast on a panel they know (CODE_PALETTE in
+ * shared/src/codeHighlight.ts, which the webapp's index.css copies).
  */
 export interface MarkdownTheme {
   text: string;
@@ -25,8 +29,8 @@ export interface MarkdownTheme {
   muted: string;
   /** Horizontal rules and the blockquote bar. */
   rule: string;
-  /** Code-block background. */
-  tint: string;
+  /** A code block's panel and its token colours. */
+  code: CodePalette;
   link: string;
 }
 
@@ -46,7 +50,7 @@ export function markdownTheme(
       text: '#1a1a1a',
       muted: '#555',
       rule: 'rgba(0,0,0,0.2)',
-      tint: 'rgba(0,0,0,0.05)',
+      code: CODE_PALETTE.light,
       link: colors.primary,
     };
   }
@@ -55,7 +59,7 @@ export function markdownTheme(
     text: colors.text,
     muted: colors.textSecondary,
     rule: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.2)',
-    tint: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+    code: isDark ? CODE_PALETTE.dark : CODE_PALETTE.light,
     link: colors.primary,
   };
 }

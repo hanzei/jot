@@ -11,6 +11,7 @@ export * from './text';
 export * from './markdown';
 export * from './inlineMarkdown';
 export * from './blockMarkdown';
+export * from './codeHighlight';
 export * from './markdownCases';
 export * from './markdownEdits';
 export * from './noteConversion';

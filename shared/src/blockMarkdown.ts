@@ -11,6 +11,7 @@
 // Native components on mobile. The feature set itself is specified in
 // docs/specs/markdown-rendering.md.
 
+import { codeLanguage } from './codeHighlight';
 import {
   normalizeInlineTokens,
   type InlineMarkdownToken,
@@ -39,6 +40,8 @@ export interface BlockMarkdownToken extends InlineMarkdownToken {
   /** Whether list items hold block content — see the `loose` note on `BlockNode`. */
   loose?: boolean;
   items?: BlockMarkdownToken[];
+  /** A code fence's info string; absent on an indented block. */
+  lang?: string;
 }
 
 /**
@@ -51,7 +54,8 @@ export interface BlockMarkdownToken extends InlineMarkdownToken {
 export type BlockNode =
   | { type: 'paragraph'; children: InlineNode[] }
   | { type: 'heading'; depth: number; children: InlineNode[] }
-  | { type: 'code'; text: string }
+  /** `lang` is the fence's language, normalized by `codeLanguage`. */
+  | { type: 'code'; text: string; lang: string | null }
   | { type: 'blockquote'; children: BlockNode[] }
   | { type: 'list'; ordered: boolean; start: number; loose: boolean; items: BlockNode[][] }
   | { type: 'hr' };
@@ -152,9 +156,9 @@ export function normalizeBlockTokens(tokens: BlockMarkdownToken[]): BlockNode[] 
         break;
 
       case 'code':
-        // The language tag is deliberately dropped — no syntax highlighting
-        // (docs/specs §6).
-        nodes.push({ type: 'code', text: token.text ?? '' });
+        // The language is kept for highlighting (codeHighlight.ts); whether it
+        // is one Jot highlights is decided at render time.
+        nodes.push({ type: 'code', text: token.text ?? '', lang: codeLanguage(token.lang) });
         break;
 
       case 'blockquote':

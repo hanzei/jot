@@ -85,6 +85,8 @@ function renderBlocks(
         );
 
       case 'code':
+        // Never highlighted on a card, here or on the webapp (docs/specs
+        // §2.3): six clamped lines, and the dashboard would pay for every note.
         return (
           <Text key={key} style={[styles.code, { color: ctx.color }]}>
             {node.text}

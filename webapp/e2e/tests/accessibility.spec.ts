@@ -20,6 +20,25 @@ import type { Page } from '@playwright/test';
 
 const THEMES = ['light', 'dark'] as const;
 
+/** CODE_SCOPES from @jot/shared, which the e2e project cannot import. */
+const CODE_SCOPES = ['keyword', 'type', 'string', 'attribute', 'literal', 'title', 'comment'] as const;
+
+/** One fence per grammar family, between them covering every token scope. */
+const HIGHLIGHTED_CODE_NOTE = [
+  '```ts',
+  '// A11y code sample',
+  // Short lines on purpose: a block wide enough to scroll is a separate,
+  // pre-existing finding (scrollable-region-focusable), not a contrast one.
+  'export function greet(n: string): number {',
+  '  return this.count + 42;',
+  '}',
+  '```',
+  '',
+  '```html',
+  '<a href="https://example.com">x</a>',
+  '```',
+].join('\n');
+
 /** Every swatch in the note colour picker, by its accessible name. */
 const NOTE_COLOURS = [
   'Coral', 'Yellow', 'Lime', 'Teal', 'Periwinkle',
@@ -213,6 +232,30 @@ for (const theme of THEMES) {
 
         await expect(saveStatus.getByText(/Last edited/)).toBeVisible();
         await expectNoViolations(page);
+      }
+    });
+
+    // Highlighted code sits on an opaque panel whatever the note colour, which
+    // is what lets one palette per theme pass everywhere — this checks that
+    // claim against every colour, with every token scope on screen.
+    test('highlighted code has no WCAG A/AA violations in any note colour', async ({ page, authenticatedUser, dashboardPage }) => {
+      void authenticatedUser;
+      test.setTimeout(120_000);
+      await dashboardPage.goto();
+      await dashboardPage.createTextNote(HIGHLIGHTED_CODE_NOTE);
+      await dashboardPage.openTextNote('A11y code sample');
+      await expectTheme(page, theme);
+
+      const preview = '[role="dialog"] [data-testid="note-content-preview"]';
+      for (const scope of CODE_SCOPES) {
+        await expect(page.locator(`${preview} [data-code="${scope}"]`).first(), scope).toBeVisible();
+      }
+
+      const saveStatus = page.getByTestId('note-save-status');
+      for (const colour of NOTE_COLOURS) {
+        await dashboardPage.setNoteColorFromModal(colour);
+        await expect(saveStatus.getByText('Saved')).toBeVisible();
+        await expectNoViolations(page, { include: [preview] });
       }
     });
 
