@@ -12,8 +12,7 @@ import {
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
-
-const ZERO_INSETS = { top: 0, right: 0, bottom: 0, left: 0 };
+import { ZERO_INSETS } from './ContentSafeArea';
 
 /** Space kept below the last row, on top of the bottom safe-area inset. */
 const BOTTOM_GAP = 8;
@@ -23,7 +22,7 @@ interface BottomSheetProps {
   onClose: () => void;
   /** Rendered as the sheet's heading. Omit when the content draws its own header. */
   title?: string;
-  /** Set on the `Modal`; the dismissing backdrop gets `${testID}-backdrop`. */
+  /** Set on the `Modal`; the backdrop gets `${testID}-backdrop` and the sheet `${testID}-sheet`. */
   testID?: string;
   /** Caps the sheet's height (e.g. `'70%'`) for sheets whose content scrolls. */
   maxHeight?: DimensionValue;
@@ -59,39 +58,39 @@ export default function BottomSheet({
   const { colors } = useTheme();
   const insets = useContext(SafeAreaInsetsContext) ?? ZERO_INSETS;
 
-  const backdrop = (
-    <Pressable
-      style={[styles.overlay, { backgroundColor: colors.overlay }]}
-      onPress={onClose}
-      testID={testID ? `${testID}-backdrop` : undefined}
-    >
-      {/* A Pressable without onPress swallows every tap on the sheet,
-          padding included, so only the backdrop dismisses it. */}
-      <Pressable
-        style={[
-          styles.sheet,
-          {
-            backgroundColor: colors.sheetBackground,
-            paddingBottom: insets.bottom + BOTTOM_GAP,
-            maxHeight,
-          },
-        ]}
-      >
-        <View style={[styles.handle, { backgroundColor: colors.handleColor }]} />
-        {title ? <Text style={[styles.title, { color: colors.text }]}>{title}</Text> : null}
-        {children}
-      </Pressable>
-      {avoidKeyboard && Platform.OS === 'android' ? <AndroidKeyboardSpacer /> : null}
-    </Pressable>
-  );
-
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} testID={testID}>
-      {avoidKeyboard ? (
-        <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          {backdrop}
-        </KeyboardAvoidingView>
-      ) : backdrop}
+      {/* With `enabled={false}` this is a plain View. */}
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        enabled={avoidKeyboard}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <Pressable
+          style={[styles.overlay, { backgroundColor: colors.overlay }]}
+          onPress={onClose}
+          testID={testID ? `${testID}-backdrop` : undefined}
+        >
+          {/* A Pressable without onPress swallows every tap on the sheet,
+              padding included, so only the backdrop dismisses it. */}
+          <Pressable
+            testID={testID ? `${testID}-sheet` : undefined}
+            style={[
+              styles.sheet,
+              {
+                backgroundColor: colors.sheetBackground,
+                paddingBottom: insets.bottom + BOTTOM_GAP,
+                maxHeight,
+              },
+            ]}
+          >
+            <View style={[styles.handle, { backgroundColor: colors.handleColor }]} />
+            {title ? <Text style={[styles.title, { color: colors.text }]}>{title}</Text> : null}
+            {children}
+          </Pressable>
+          {avoidKeyboard && Platform.OS === 'android' ? <AndroidKeyboardSpacer /> : null}
+        </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

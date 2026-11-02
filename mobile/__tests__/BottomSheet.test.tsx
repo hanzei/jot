@@ -10,31 +10,19 @@ jest.mock('../src/theme/ThemeContext', () => ({
   }),
 }));
 
-type Instance = ReturnType<RenderResult['getByTestId']>;
-
-function sheetPaddingBottom(backdrop: Instance): unknown {
-  // The sheet is the backdrop's first child view.
-  const sheet = backdrop.children[0] as Instance;
+function sheetPaddingBottom(sheet: ReturnType<RenderResult['getByTestId']>): unknown {
   return StyleSheet.flatten(sheet.props.style as StyleProp<ViewStyle>).paddingBottom;
 }
 
 describe('BottomSheet', () => {
-  it('pads the bottom by the safe-area inset plus a fixed gap', async () => {
+  // 34 is a home-indicator inset; 0 is a device without one.
+  it.each([[34, 42], [0, 8]])('pads the bottom by the inset (%i) plus a fixed gap', async (bottom, expected) => {
     const { getByTestId } = await render(
-      <SafeAreaInsetsContext.Provider value={{ top: 0, right: 0, bottom: 34, left: 0 }}>
+      <SafeAreaInsetsContext.Provider value={{ top: 0, right: 0, bottom, left: 0 }}>
         <BottomSheet visible onClose={jest.fn()} testID="sheet"><Text>Row</Text></BottomSheet>
       </SafeAreaInsetsContext.Provider>,
     );
-    expect(sheetPaddingBottom(getByTestId('sheet-backdrop'))).toBe(42);
-  });
-
-  it('keeps the same gap on a device without a home indicator', async () => {
-    const { getByTestId } = await render(
-      <SafeAreaInsetsContext.Provider value={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-        <BottomSheet visible onClose={jest.fn()} testID="sheet"><Text>Row</Text></BottomSheet>
-      </SafeAreaInsetsContext.Provider>,
-    );
-    expect(sheetPaddingBottom(getByTestId('sheet-backdrop'))).toBe(8);
+    expect(sheetPaddingBottom(getByTestId('sheet-sheet'))).toBe(expected);
   });
 
   // RNTL bubbles a press to the nearest onPress, so it cannot show the inner

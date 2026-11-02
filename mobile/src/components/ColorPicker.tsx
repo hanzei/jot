@@ -53,7 +53,6 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
 
 const styles = StyleSheet.create({
   palette: {
-    paddingBottom: 8,
     gap: 10,
   },
   colorCircle: {

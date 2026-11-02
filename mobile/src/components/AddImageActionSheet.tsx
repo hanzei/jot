@@ -102,7 +102,6 @@ export default function AddImageActionSheet({ visible, onClose, onPick, onPermis
 
   return (
     <BottomSheet visible={visible} onClose={onClose} title={t('images.addImage')} testID="add-image-sheet">
-
       <TouchableOpacity style={styles.row} onPress={handleCamera} testID="add-image-camera" accessibilityRole="button">
         <Camera size={22} color={colors.icon} />
         <Text style={[styles.rowText, { color: colors.text }]}>{t('images.camera')}</Text>
