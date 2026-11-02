@@ -1,11 +1,11 @@
-import { useCallback, useContext } from 'react';
-import { Modal, View, Text, TouchableOpacity, Pressable, StyleSheet } from 'react-native';
-import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
+import { useCallback } from 'react';
+import { Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Camera, Folder, Images } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { useTheme } from '../theme/ThemeContext';
+import BottomSheet from './BottomSheet';
 import type { ImageUploadFile } from '../api/images';
 
 interface AddImageActionSheetProps {
@@ -52,7 +52,6 @@ function assetToFile(asset: {
 export default function AddImageActionSheet({ visible, onClose, onPick, onPermissionDenied, remainingSlots }: AddImageActionSheetProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
 
   const handleCamera = useCallback(async () => {
     onClose();
@@ -102,56 +101,27 @@ export default function AddImageActionSheet({ visible, onClose, onPick, onPermis
   }, [onClose, onPick]);
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={[styles.overlay, { backgroundColor: colors.overlay }]} onPress={onClose}>
-        <View style={[styles.sheet, { backgroundColor: colors.sheetBackground, paddingBottom: insets.bottom + 8 }]}>
-          <Pressable>
-            <View style={[styles.handle, { backgroundColor: colors.handleColor }]} />
-            <Text style={[styles.title, { color: colors.text }]}>{t('images.addImage')}</Text>
+    <BottomSheet visible={visible} onClose={onClose} title={t('images.addImage')} testID="add-image-sheet">
 
-            <TouchableOpacity style={styles.row} onPress={handleCamera} testID="add-image-camera" accessibilityRole="button">
-              <Camera size={22} color={colors.icon} />
-              <Text style={[styles.rowText, { color: colors.text }]}>{t('images.camera')}</Text>
-            </TouchableOpacity>
+      <TouchableOpacity style={styles.row} onPress={handleCamera} testID="add-image-camera" accessibilityRole="button">
+        <Camera size={22} color={colors.icon} />
+        <Text style={[styles.rowText, { color: colors.text }]}>{t('images.camera')}</Text>
+      </TouchableOpacity>
 
-            <TouchableOpacity style={styles.row} onPress={handleLibrary} testID="add-image-library" accessibilityRole="button">
-              <Images size={22} color={colors.icon} />
-              <Text style={[styles.rowText, { color: colors.text }]}>{t('images.photoLibrary')}</Text>
-            </TouchableOpacity>
+      <TouchableOpacity style={styles.row} onPress={handleLibrary} testID="add-image-library" accessibilityRole="button">
+        <Images size={22} color={colors.icon} />
+        <Text style={[styles.rowText, { color: colors.text }]}>{t('images.photoLibrary')}</Text>
+      </TouchableOpacity>
 
-            <TouchableOpacity style={styles.row} onPress={handleFiles} testID="add-image-files" accessibilityRole="button">
-              <Folder size={22} color={colors.icon} />
-              <Text style={[styles.rowText, { color: colors.text }]}>{t('images.files')}</Text>
-            </TouchableOpacity>
-          </Pressable>
-        </View>
-      </Pressable>
-    </Modal>
+      <TouchableOpacity style={styles.row} onPress={handleFiles} testID="add-image-files" accessibilityRole="button">
+        <Folder size={22} color={colors.icon} />
+        <Text style={[styles.rowText, { color: colors.text }]}>{t('images.files')}</Text>
+      </TouchableOpacity>
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    padding: 16,
-  },
-  handle: {
-    width: 40,
-    height: 5,
-    borderRadius: 2.5,
-    alignSelf: 'center',
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
