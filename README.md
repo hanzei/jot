@@ -713,7 +713,9 @@ go build -o jot main.go
 ./jot
 ```
 
-The binary will serve both API and frontend from port 8080.
+The binary will serve both API and frontend from port 8080. It gzips the
+frontend's text assets (HTML, JS, CSS, JSON, SVG) itself, so a reverse proxy in
+front does not need to compress them.
 
 ### Environment Setup
 

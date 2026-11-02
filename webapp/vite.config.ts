@@ -133,5 +133,9 @@ export default defineConfig(({ mode }) => ({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     exclude: ['node_modules/**', 'e2e/**'],
+    // Vitest replaces every CSS import with an empty string unless it is listed
+    // here — `?raw` included. codeHighlightStyles.test.ts reads index.css raw
+    // to pin its highlight colours to the shared palette.
+    css: { include: [/src\/index\.css/] },
   },
 }));

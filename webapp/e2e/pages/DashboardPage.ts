@@ -1,6 +1,6 @@
 import type { Page, Locator } from '@playwright/test';
 import { expect } from '@playwright/test';
-import { confirmDialog } from './dialogs';
+import { confirmDialog, expectDialogSettled } from './dialogs';
 
 const escapeForRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -201,11 +201,19 @@ export class DashboardPage {
   // out. Keyboard activation needs no positional stability; and the open button
   // is pointer-events-none (a pointer click falls through to the card), so it is
   // also the interaction that actually targets the control. Mirrors openNoteMenu.
+  //
+  // Returns once the modal has finished entering. Until then its panel is
+  // scaled to 95% (data-closed), even under reduced motion, so a forced click
+  // inside it aims at a point that moves when the scale lifts. The settled
+  // check passes vacuously before the dialog exists, hence the attached wait.
   private async activateNoteCard(card: Locator) {
     await expect(card).toBeVisible();
     const openButton = card.locator('[data-note-card="true"]');
     await openButton.focus();
     await this.page.keyboard.press('Enter');
+    const dialog = this.page.getByRole('dialog').last();
+    await expect(dialog).toBeAttached();
+    await expectDialogSettled(dialog);
   }
 
   async closeNoteModal() {
