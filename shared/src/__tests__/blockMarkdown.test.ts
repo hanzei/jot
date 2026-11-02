@@ -45,7 +45,7 @@ function summarize(nodes: BlockNode[]): string {
         case 'heading':
           return `h${node.depth}(${inline(node.children)})`;
         case 'code':
-          return `pre(${JSON.stringify(node.text)})`;
+          return `pre${node.lang ? `:${node.lang}` : ''}(${JSON.stringify(node.text)})`;
         case 'blockquote':
           return `quote[${summarize(node.children)}]`;
         case 'hr':
@@ -77,7 +77,9 @@ const conformance: Record<string, string> = {
   'heading-6-bold': 'h6("Sixth heading")',
 
   'inline-code': 'p(code("code"))',
-  'fenced-code': 'pre("const a = 1;")',
+  'fenced-code': 'pre:js("const a = 1;")',
+  'fenced-code-unknown-language': 'pre:brainfuck("+[->+<]>.")',
+  'fenced-code-markup': 'pre:html("<b class=\\"x\\">hi</b>")',
   'indented-code': 'pre("indented code")',
   // The checkbox swap is structural, not textual, so it cannot reach inside a
   // fence — which is what the positional markdown-it version kept getting wrong.

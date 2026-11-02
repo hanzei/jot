@@ -223,7 +223,7 @@ reach it differently.
 | `####`, `#####`, `######` | Headings, rendered as **bold body-size text** |
 | `**bold**`, `*italic*`, `~~strike~~` | Rendered |
 | `` `inline code` `` | Rendered |
-| Fenced and indented code | Rendered **with block layout** |
+| Fenced and indented code | Rendered **with block layout**; a fence naming a known language is syntax highlighted (§2.3) |
 | Bullet and ordered lists | Rendered |
 | `- [ ]` / `- [x]` | Rendered as ☐ / ☑, **non-interactive** |
 | Blockquotes | Rendered |
@@ -238,7 +238,8 @@ scheme at all (`/dashboard`, `example.com`). Notes are shareable, so the target
 of a link can come from a collaborator, and following it is a navigation the
 reader did not choose.
 
-Syntax highlighting inside code blocks is deliberately absent (§6).
+A fenced block that names one of ten languages is syntax highlighted in the
+open note; everything else about it is unchanged (§2.3).
 
 ### 2.1 The list-item subset
 
@@ -384,6 +385,56 @@ offline apply/enqueue — so an oversized conversion is never written to local
 SQLite or queued for replay, and `NoteEditorScreen` maps the thrown error to
 the same two messages via `Alert.alert`.
 
+### 2.3 Syntax highlighting in code blocks
+
+A fence whose info string names a known language renders highlighted **in the
+open note** — the webapp's modal preview and mobile's editor read mode — on both
+clients, in the same colours.
+
+| Fence | Behaviour |
+|---|---|
+| ` ```js `, ` ```TypeScript `, ` ```py title="x" ` | Highlighted. The language is the info string's first word, case-insensitive |
+| ` ```brainfuck ` | Plain monospace — a language Jot does not ship |
+| ` ``` ` with no language, or an indented block | Plain monospace — nothing is guessed |
+| Any fence, on a note card | Plain monospace, on both clients |
+
+**The languages** are `bash`, `css`, `go`, `javascript`, `json`, `python`,
+`sql`, `typescript`, `xml` and `yaml`, plus each grammar's own aliases (`js`,
+`ts`, `py`, `sh`, `html`, `yml`, …). The list is `HIGHLIGHT_LANGUAGES` in
+`shared/src/codeHighlight.ts`. It is short because every grammar ships in both
+bundles — the ten cost the webapp about 23 KB gzipped — and there is no
+auto-detection, which runs every grammar and still mislabels prose.
+
+**Seven token kinds, one palette per text colour.** highlight.js's few dozen
+scopes collapse to keyword, type, string, attribute, literal, title and comment
+(`CodeScope`); comments are italic as well as coloured. The colours are
+`CODE_PALETTE`: one set for dark-on-light text, one for light-on-dark. Which one
+a block takes follows its text, not the app theme — a coloured note on mobile
+keeps its light swatch in dark mode, so its code is drawn in the light set.
+
+**A code block sits on an opaque panel.** It used to be a translucent tint,
+which lets the note colour through. A palette that holds 4.5:1 on all ten
+swatches — coral is the worst — comes out nearly as dark as body text, so the
+highlighting all but disappears. On one known panel per text colour, the shared
+suite can check every token colour against the only background it ever gets.
+Plain code on the panel takes the palette's own text colour too — inside a
+blockquote it would otherwise inherit the quote's muted grey, which falls just
+short of 4.5:1 there. A faint translucent border edges the panel, because the
+light panel is the Gray swatch's own colour and would vanish into a Gray note.
+Inline code keeps its tint; it is never highlighted.
+
+**Cards stay plain.** A card is six clamped lines, the dashboard would pay for
+highlighting every note on it, and the tokens would be too small to read there
+anyway — the same reasoning, on both clients, as cards not linking (§1.1).
+With nothing to highlight a card needs no panel either: its code keeps the
+translucent tint and the card's text colour (`.markdown-card` on the webapp;
+mobile's card draws no box at all, §5).
+
+**A failure renders plain.** The highlighter's output is read back into runs and
+checked to reassemble the source exactly; if it does not, or highlight.js
+throws, the block renders as it would with no language. No content is ever lost
+to highlighting.
+
 ---
 
 ## 3. How unsupported formatting is handled
@@ -468,6 +519,9 @@ one client only is exactly the kind of drift this spec exists to prevent.
 | Shared block normalizer (§2) | `shared/src/blockMarkdown.ts` |
 | Shared inline-subset normalizer (§2.1) | `shared/src/inlineMarkdown.ts` |
 | Shared text ↔ list conversion (§2.2) | `shared/src/noteConversion.ts` |
+| Shared highlighting policy: languages, scopes, palette (§2.3) | `shared/src/codeHighlight.ts` |
+| Each client's highlight.js instance | `utils/codeHighlighter.ts` in `webapp/src` and `mobile/src` |
+| Webapp token colours + code panel (a copy of `CODE_PALETTE`) | `.markdown-content` in `webapp/src/index.css` |
 | Shared conformance corpora (both test suites) | `shared/src/markdownCases.ts` |
 | Webapp node-to-HTML renderer + tag allowlist | `webapp/src/utils/markdown.ts` |
 | Webapp item renderer | `webapp/src/components/InlineMarkdown.tsx` |
@@ -482,6 +536,7 @@ one client only is exactly the kind of drift this spec exists to prevent.
 | Mobile editable-row swap (§1.2) | `mobile/src/components/ListItem.tsx` |
 | Mobile tap point → rendered offset | `mobile/src/utils/inlineCaret.ts` |
 | Card links-as-text switch | `links` option on both clients' renderers |
+| Card no-highlighting switch | `highlight` option on the webapp renderer; mobile's card renderer has no highlighting |
 | Mobile inline leaf rendering (shared by all three) | `mobile/src/components/inlineNodes.tsx` |
 | Mobile text metrics + colours | `mobile/src/utils/markdownStyles.ts` |
 
@@ -526,7 +581,7 @@ dropped, so the card shows the same content as the editor:
 
 | Block | Editor | Card |
 |---|---|---|
-| Code block | Monospace in a tinted box | Monospace, no tint |
+| Code block | Monospace on an opaque panel, highlighted (§2.3) | Monospace, no panel, plain |
 | Blockquote | A bar down the left | Muted text colour |
 | Bullet / ordered item | A marker column | A `•` or `1.` prefix plus a space; nested items indented by spaces |
 | Horizontal rule | A hairline View | A short run of `─` |
@@ -596,6 +651,26 @@ here so the next person does not have to rediscover them.
   both clients skip it. It is the one token type that is neither rendered nor
   degraded to source, and it is not an exception to §3: there is no source left
   to show once the reference has been substituted.
+- **`shared/` cannot import highlight.js**, for the same reason it does not
+  import `marked`: it has no runtime dependencies, and a package import there
+  breaks both clients' typecheck in CI. So the policy lives in
+  `shared/src/codeHighlight.ts`, and each client builds its own instance from a
+  `Record<HighlightLanguage, LanguageFn>` — a language added to the shared list
+  fails to compile on a client until that client imports its grammar.
+- **Runs come from highlight.js's HTML, not its token tree.** The tree is
+  private API; `lowlight`, the usual wrapper around it, pins its own
+  highlight.js minor and would ship a second copy. The HTML is public and closed
+  — `<span class="…">`, `</span>`, and five escaped characters — so a scan reads
+  it without an HTML parser, which mobile does not have.
+- **Webapp tokens carry `data-code`, not `class`.** A token is
+  `<span data-code="keyword">`, styled by an attribute selector in `index.css`.
+  DOMPurify keeps `data-*` attributes by default, so only `span` joins the
+  allowlist; allowing `class` instead would have let anything reaching the
+  sanitizer borrow the app's own utility classes, and needed a hook to stop it.
+- **Hermes is not what Jest runs.** Two grammars (`python`, `xml`) build regexes
+  with Unicode property escapes. Every regex the ten grammars produce was checked
+  against the app's own `hermesc`; on a device, a grammar that still failed
+  would cost only its highlighting, since a failure renders plain.
 
 ---
 
@@ -723,9 +798,9 @@ is on both bars but has no keyboard shortcut on either surface.
   `content` — a much larger feature than rendering.
 - **Block Markdown in list items.** Not a gap to be filled later — §2.1 explains
   why an item cannot hold it.
-- **Syntax highlighting** in code blocks. The webapp allowlist drops the
-  `class="language-js"` attribute `marked` emits, so the language tag is parsed
-  and ignored on both clients.
+- **Syntax highlighting beyond §2.3**: more languages, guessing a language, or
+  highlighting on cards and in inline code. Each costs bundle size or
+  dashboard render time on both clients; §2.3 says why the line is where it is.
 
 ---
 
@@ -744,6 +819,16 @@ the other. Adding a case breaks both suites until both are updated.
 
 `shared/src/__tests__/inlineMarkdown.test.ts` covers the item corpus a third
 time, at the normalizer, where the policy actually lives.
+
+Syntax highlighting (§2.3) adds three cases to `MARKDOWN_CASES` and a suite of
+its own, `shared/src/__tests__/codeHighlight.test.ts`, which runs the shared
+policy against the real grammars: every language highlights and reassembles
+its source exactly, aliases resolve, the token mapping holds, failures fall back
+to plain, and every palette colour holds 4.5:1 on its panel. The webapp's copy
+of the palette in `index.css` is pinned to `CODE_PALETTE` by
+`webapp/src/utils/__tests__/codeHighlightStyles.test.ts`, and
+`e2e/tests/accessibility.spec.ts` scans highlighted code in every note colour
+in both themes.
 
 The editable row's swap (§1.2) is covered per client rather than by the corpus,
 since it is a state machine rather than a rendering:

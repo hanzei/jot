@@ -8,9 +8,12 @@ import {
   inlineRendersAsSource,
   BLOCK_LEXER_OPTIONS,
   INLINE_LEXER_OPTIONS,
+  highlightCode,
   type BlockNode,
+  type CodeRun,
   type InlineNode,
 } from '@jot/shared';
+import { getCodeHighlighter } from './codeHighlighter';
 
 // Jot's Markdown feature set is specified in docs/specs/markdown-rendering.md.
 //
@@ -62,6 +65,10 @@ const ALLOWED_TAGS = [
   'ul', 'ol', 'li',
   'blockquote', 'code', 'pre', 'hr',
   'a',
+  // Highlighted code tokens, carrying their scope as `data-code`. DOMPurify
+  // keeps `data-*` attributes by default, and unlike `class` one cannot borrow
+  // the app's own utility styles.
+  'span',
 ];
 // `start` is only meaningful on <ol>, and without it an ordered list beginning
 // at 3 renders as 1 here while mobile numbers it correctly — a divergence this
@@ -77,6 +84,7 @@ const ALLOWED_ATTR = ['href', 'target', 'rel', 'start'];
  */
 const NO_LINK_TAGS = ALLOWED_TAGS.filter((tag) => tag !== 'a');
 
+
 export interface MarkdownRenderOptions {
   /**
    * Whether links render as links. Note cards pass `false`: the whole card is
@@ -85,6 +93,13 @@ export interface MarkdownRenderOptions {
    * handlers fire. See docs/specs/markdown-rendering.md §1.1.
    */
   links?: boolean;
+  /**
+   * Whether a fenced block naming a known language is syntax highlighted. Note
+   * cards pass `false`, as mobile's card does: a card is six clamped lines, and
+   * the dashboard would pay for highlighting every note on it.
+   * See docs/specs/markdown-rendering.md §2.3.
+   */
+  highlight?: boolean;
 }
 
 /**
@@ -97,17 +112,25 @@ export interface MarkdownRenderOptions {
  * CommonMark's distinction, carried on the list node so this does not have to
  * guess it back from the shape of the item.
  */
-function renderListItem(blocks: BlockNode[], loose: boolean): string {
+function renderListItem(blocks: BlockNode[], loose: boolean, highlight: boolean): string {
   return blocks
     .map((block) =>
       !loose && block.type === 'paragraph'
         ? renderInlineNodes(block.children)
-        : renderBlockNode(block),
+        : renderBlockNode(block, highlight),
     )
     .join('');
 }
 
-function renderBlockNode(node: BlockNode): string {
+function renderCodeRuns(runs: CodeRun[]): string {
+  return runs
+    .map(({ text, scope }) =>
+      scope === null ? escapeHtml(text) : `<span data-code="${scope}">${escapeHtml(text)}</span>`,
+    )
+    .join('');
+}
+
+function renderBlockNode(node: BlockNode, highlight: boolean): string {
   switch (node.type) {
     case 'paragraph':
       return `<p>${renderInlineNodes(node.children)}</p>\n`;
@@ -117,19 +140,22 @@ function renderBlockNode(node: BlockNode): string {
       // document outline for assistive technology.
       return `<h${node.depth}>${renderInlineNodes(node.children)}</h${node.depth}>\n`;
 
-    case 'code':
-      // No <br> substitution and no language class: newlines are significant
-      // inside <pre>, and the language tag is dropped (docs/specs §6).
-      return `<pre><code>${escapeHtml(node.text)}</code></pre>\n`;
+    case 'code': {
+      // No <br> substitution: newlines are significant inside <pre>. No
+      // language class either — the tokens carry their own, and an unknown
+      // language renders plain (docs/specs §2.3).
+      const runs = highlight ? highlightCode(getCodeHighlighter(), node.text, node.lang) : null;
+      return `<pre><code>${runs ? renderCodeRuns(runs) : escapeHtml(node.text)}</code></pre>\n`;
+    }
 
     case 'blockquote':
-      return `<blockquote>\n${renderBlockNodes(node.children)}</blockquote>\n`;
+      return `<blockquote>\n${renderBlockNodes(node.children, highlight)}</blockquote>\n`;
 
     case 'list': {
       const tag = node.ordered ? 'ol' : 'ul';
       const start = node.ordered && node.start !== 1 ? ` start="${node.start}"` : '';
       const items = node.items
-        .map((item) => `<li>${renderListItem(item, node.loose)}</li>\n`)
+        .map((item) => `<li>${renderListItem(item, node.loose, highlight)}</li>\n`)
         .join('');
       return `<${tag}${start}>\n${items}</${tag}>\n`;
     }
@@ -139,14 +165,17 @@ function renderBlockNode(node: BlockNode): string {
   }
 }
 
-function renderBlockNodes(nodes: BlockNode[]): string {
-  return nodes.map(renderBlockNode).join('');
+function renderBlockNodes(nodes: BlockNode[], highlight: boolean): string {
+  return nodes.map((node) => renderBlockNode(node, highlight)).join('');
 }
 
-export function renderMarkdown(content: string, { links = true }: MarkdownRenderOptions = {}): string {
+export function renderMarkdown(
+  content: string,
+  { links = true, highlight = true }: MarkdownRenderOptions = {},
+): string {
   if (!content.trim()) return '';
   const nodes = normalizeBlockTokens(Lexer.lex(content, BLOCK_LEXER_OPTIONS));
-  return DOMPurify.sanitize(renderBlockNodes(nodes), {
+  return DOMPurify.sanitize(renderBlockNodes(nodes, highlight), {
     ALLOWED_TAGS: links ? ALLOWED_TAGS : NO_LINK_TAGS,
     ALLOWED_ATTR,
   });

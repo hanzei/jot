@@ -33,8 +33,21 @@ const conformance: Record<string, () => void> = {
   'inline-code': () => expect(render('inline-code')).toContain('<code>code</code>'),
   'fenced-code': () => {
     const html = render('fenced-code');
-    expect(html).toContain('<pre><code>');
-    expect(html).toContain('const a = 1;');
+    expect(html).toContain(
+      '<pre><code><span data-code="keyword">const</span> a = <span data-code="literal">1</span>;</code></pre>',
+    );
+    expect(text(html).trim()).toBe('const a = 1;');
+  },
+  'fenced-code-unknown-language': () => {
+    expect(render('fenced-code-unknown-language')).toBe('<pre><code>+[-&gt;+&lt;]&gt;.</code></pre>\n');
+  },
+  'fenced-code-markup': () => {
+    const html = render('fenced-code-markup');
+    expect(html).toContain('<span data-code="keyword">b</span>');
+    expect(html).toContain('<span data-code="attribute">class</span>');
+    // The source shows as text; nothing in it became an element.
+    expect(text(html).trim()).toBe('<b class="x">hi</b>');
+    expect(html).not.toContain('<b');
   },
   'indented-code': () => {
     const html = render('indented-code');
@@ -205,6 +218,33 @@ describe('renderMarkdown', () => {
 
   it('plain text passes through safely', () => {
     expect(renderMarkdown('hello world')).toContain('hello world');
+  });
+
+  // docs/specs/markdown-rendering.md §2.3. The corpus pins what a highlighted
+  // block looks like; these pin where highlighting does and does not happen.
+  describe('syntax highlighting', () => {
+    it('is off with highlight: false, which note cards pass', () => {
+      const source = MARKDOWN_CASES.find((c) => c.id === 'fenced-code')!.markdown;
+      expect(renderMarkdown(source, { highlight: false })).toBe('<pre><code>const a = 1;</code></pre>\n');
+    });
+
+    it('reaches a fence nested in a list or a blockquote', () => {
+      for (const source of ['- item\n\n  ```js\n  let x;\n  ```', '> ```js\n> let x;\n> ```']) {
+        expect(renderMarkdown(source), source).toContain('<span data-code="keyword">let</span>');
+      }
+    });
+
+    it('leaves inline code alone, language or not', () => {
+      expect(renderMarkdown('`const a = 1;`')).toContain('<code>const a = 1;</code>');
+    });
+
+    // DOMPurify keeps `data-*` with a custom ALLOWED_ATTR; this pins that the
+    // tokens survive the sanitizer, and that no class is ever emitted.
+    it('marks tokens with data-code, never class', () => {
+      const html = renderMarkdown('```js\nconst a = 1;\n```');
+      expect(html).toContain('<span data-code="keyword">const</span>');
+      expect(html).not.toContain('class=');
+    });
   });
 
   // Note cards render links as text: the card is one control that opens the
