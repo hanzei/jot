@@ -208,6 +208,15 @@ function linkHost(href: string): string {
 }
 
 /**
+ * Whether a link's label already spells out where it goes — an autolink, or a
+ * label that is the URL. marked normalizes autolinked `www.example.com` and
+ * `someone@example.com` to `http://` and `mailto:` targets, so those count too.
+ */
+export function linkLabelIsTarget(label: string, href: string): boolean {
+  return href === label || href === `http://${label}` || href === `mailto:${label}`;
+}
+
+/**
  * The links in a node tree, in reading order, one per distinct target.
  *
  * For the editable list-item row's "open link" control
@@ -219,19 +228,32 @@ function linkHost(href: string): string {
  *
  * A target that appears twice is listed once, under its first label: a menu
  * offering the same destination twice is noise, not a choice.
+ *
+ * `normalizeHref` lets a client rewrite each target the way its renderer does
+ * (the webapp encodes it for an `href` attribute) before duplicates are
+ * judged, so two spellings of one target still count once; returning null
+ * drops the link.
  */
-export function inlineLinks(nodes: InlineNode[]): InlineLink[] {
+export function inlineLinks(
+  nodes: InlineNode[],
+  normalizeHref: (href: string) => string | null = (href) => href,
+): InlineLink[] {
   const links: InlineLink[] = [];
   const seen = new Set<string>();
 
   function walk(list: InlineNode[]): void {
     for (const node of list) {
       if (node.type === 'link') {
-        if (!seen.has(node.href)) {
-          seen.add(node.href);
+        const href = normalizeHref(node.href);
+        if (href !== null && !seen.has(href)) {
+          seen.add(href);
           const label = flattenInlineNodes(node.children);
           const host = linkHost(node.href);
-          links.push({ href: node.href, label, host: label === node.href || label === host ? null : host });
+          // Compared against the source target, which is what the label was
+          // written from. A label that is the host is covered too: a second
+          // line repeating it says nothing.
+          const shown = linkLabelIsTarget(label, node.href) || label === host;
+          links.push({ href, label, host: shown ? null : host });
         }
       } else if (node.type === 'strong' || node.type === 'em' || node.type === 'del') {
         walk(node.children);

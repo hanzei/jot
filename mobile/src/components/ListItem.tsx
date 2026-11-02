@@ -110,14 +110,18 @@ export const DRAG_HANDLE_WIDTH = DRAG_HANDLE_ICON_SIZE + DRAG_HANDLE_PADDING * 2
 const DELETE_BTN_ICON_SIZE = 22;
 const DELETE_BTN_PADDING = 4;
 const DELETE_BTN_WIDTH = DELETE_BTN_ICON_SIZE + DELETE_BTN_PADDING * 2;
-export const DELETE_BTN_HIT_SLOP = { top: 8, bottom: 8, left: 0, right: 8 };
 
 // The open-link button sits in the same row as the checkbox and delete button,
 // so it keeps their 30pt height (icon + 4 padding each side): a taller one would
 // make rows with a link taller than rows without.
 const OPEN_LINK_ICON_SIZE = 20;
 const OPEN_LINK_BTN_PADDING = 5;
-export const OPEN_LINK_BTN_HIT_SLOP = { top: 8, bottom: 8, left: 4, right: 0 };
+
+// The trailing buttons can sit flush — delete's `marginLeft: 'auto'` leaves no
+// gap when the text fills the row — so no button's slop reaches toward its left
+// neighbour: a tap aimed at the link or assign button must not remove the item.
+const DELETE_BTN_HIT_SLOP = { top: 8, bottom: 8, left: 0, right: 8 };
+const OPEN_LINK_BTN_HIT_SLOP = { top: 8, bottom: 8, left: 4, right: 0 };
 
 // Delay before hiding focus-gated controls (delete/assign) and suggestions on
 // blur, so a tap on those controls — which blurs the input first — still lands
@@ -287,8 +291,8 @@ function ListItem({
 
   // The other half of inert links: the editable row's targets are reached
   // through a button of their own instead. A read-only row's links already work,
-  // and `nodes` is empty for one, so it gets none.
-  const links = useMemo(() => inlineLinks(nodes), [nodes]);
+  // so it gets none.
+  const links = useMemo(() => (editable ? inlineLinks(nodes) : []), [editable, nodes]);
   const onlyLink = links.length === 1 ? links[0] : undefined;
   const [showLinksSheet, setShowLinksSheet] = useState(false);
   // The sheet unmounts once the item is down to one link (an edit, or a
@@ -561,8 +565,6 @@ function ListItem({
             <TouchableOpacity
               onPress={handleOpenLinkPress}
               style={styles.openLinkBtn}
-              // No right slop, for the same reason delete has no left one: the
-              // two can sit flush, and overlapping targets make a tap ambiguous.
               hitSlop={OPEN_LINK_BTN_HIT_SLOP}
               testID="list-item-open-link"
               accessibilityRole={onlyLink ? 'link' : 'button'}
@@ -610,11 +612,6 @@ function ListItem({
                 // Keep the tap target generous even though the button's own padding
                 // is small — a smaller footprint keeps the row height stable when
                 // this button appears on focus (see deleteBtn style note).
-                //
-                // Grown on every side but the left. `marginLeft: 'auto'` leaves
-                // no gap when the text fills the row, so a left slop would reach
-                // over whatever sits beside it — the open-link or assign button —
-                // and a tap aimed at that would remove the item instead.
                 hitSlop={DELETE_BTN_HIT_SLOP}
                 testID="list-item-delete"
                 accessibilityLabel={t('note.removeItem')}

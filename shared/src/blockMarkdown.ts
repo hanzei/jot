@@ -15,6 +15,7 @@ import {
   normalizeInlineTokens,
   type InlineMarkdownToken,
   type InlineNode,
+  linkLabelIsTarget,
 } from './inlineMarkdown';
 
 /**
@@ -279,11 +280,3 @@ function inlinePlainText(nodes: InlineNode[]): string {
   return out;
 }
 
-/**
- * Whether a link's label already spells out where it goes — an autolink, or a
- * label that is the URL. marked normalizes autolinked `www.example.com` and
- * `someone@example.com` to `http://` and `mailto:` targets, so those count too.
- */
-function linkLabelIsTarget(label: string, href: string): boolean {
-  return href === label || href === `http://${label}` || href === `mailto:${label}`;
-}

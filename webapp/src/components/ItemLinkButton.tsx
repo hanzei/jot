@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
@@ -12,7 +13,7 @@ const BUTTON_CLASSES =
   // gray-500, not gray-400, for the same reason as the row's drag grip: it is a
   // graphical control on whatever colour the note has, and needs 3:1 against
   // the worst swatch (WCAG 1.4.11).
-  'w-5 h-5 flex-shrink-0 flex items-center justify-center rounded text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500';
+  'ml-1 w-5 h-5 flex-shrink-0 flex items-center justify-center rounded text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500';
 
 /**
  * The editable list-item row's way to its links.
@@ -27,10 +28,11 @@ const BUTTON_CLASSES =
  * status-bar preview all work. Several open a menu of anchors rather than
  * guessing which one was meant.
  */
-export default function ItemLinkButton({ links }: ItemLinkButtonProps) {
+function ItemLinkButton({ links }: ItemLinkButtonProps) {
   const { t } = useTranslation();
   const [only] = links;
   if (!only) return null;
+  const icon = <ExternalLink className="h-4 w-4" aria-hidden="true" />;
 
   if (links.length === 1) {
     return (
@@ -44,22 +46,22 @@ export default function ItemLinkButton({ links }: ItemLinkButtonProps) {
         // Keeps the caret in the row's textarea: the click is a navigation, not a
         // reason to collapse the row being edited.
         onMouseDown={(e) => e.preventDefault()}
-        className={`ml-1 ${BUTTON_CLASSES}`}
+        className={BUTTON_CLASSES}
       >
-        <ExternalLink className="h-4 w-4" aria-hidden="true" />
+        {icon}
       </a>
     );
   }
 
   return (
-    <Menu as="div" className="relative ml-1 flex-shrink-0">
+    <Menu as="div" className="flex-shrink-0">
       <MenuButton
         aria-label={t('note.openItemLinks')}
         title={t('note.openItemLinks')}
         data-testid="list-item-open-link"
         className={BUTTON_CLASSES}
       >
-        <ExternalLink className="h-4 w-4" aria-hidden="true" />
+        {icon}
       </MenuButton>
       <MenuItems
         // Anchored, so it renders in a portal and cannot be clipped by the
@@ -67,7 +69,9 @@ export default function ItemLinkButton({ links }: ItemLinkButtonProps) {
         // than a margin, which would survive a flip to above the button.
         anchor={{ to: 'bottom end', gap: 4 }}
         data-testid="list-item-links-menu"
-        className="z-50 w-64 max-w-[calc(100vw-2rem)] rounded-md border border-gray-200 bg-white py-1 shadow-lg ring-1 ring-black/5 focus:outline-none dark:border-slate-600 dark:bg-slate-800"
+        // The panel classes match the note's other menus (NoteModal's overflow
+        // menu), entrance transition and dark ring included.
+        className="z-50 w-64 max-w-[calc(100vw-2rem)] origin-top-right rounded-md border border-gray-200 bg-white py-1 shadow-lg ring-1 ring-black/5 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:ring-slate-600/20 transition duration-100 ease-out starting:scale-95 starting:opacity-0 motion-reduce:transition-none"
       >
         {links.map((link) => (
           <MenuItem key={link.href}>
@@ -88,3 +92,8 @@ export default function ItemLinkButton({ links }: ItemLinkButtonProps) {
     </Menu>
   );
 }
+
+// Memoized: SortableItem re-renders every row on each keystroke anywhere in the
+// note, and a several-links row holds a Headless UI Menu whose hooks run even
+// while it is closed. `links` only changes identity when the row's text does.
+export default memo(ItemLinkButton);

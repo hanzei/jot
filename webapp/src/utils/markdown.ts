@@ -267,21 +267,11 @@ export function renderInlineItem(
 
 /**
  * The links an editable row's open-link control offers, with each target
- * normalized exactly as the rendered link would be — so the control and a live
- * link to the same target never disagree, and one the renderer refuses is not
- * offered either.
- *
- * Deduplicated again after normalizing: `<https://a.example/a b>` and
- * `https://a.example/a%20b` are distinct sources but the same target.
+ * encoded exactly as the rendered link's — so the control and a live link to
+ * the same target never disagree, and one the renderer refuses is not offered.
  */
 export function itemLinks(nodes: InlineNode[]): InlineLink[] {
-  const seen = new Set<string>();
-  return inlineLinks(nodes).flatMap((link) => {
-    const href = safeLinkHref(link.href);
-    if (href === null || seen.has(href)) return [];
-    seen.add(href);
-    return [{ ...link, href }];
-  });
+  return inlineLinks(nodes, safeLinkHref);
 }
 
 /**

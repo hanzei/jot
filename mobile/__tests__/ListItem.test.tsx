@@ -3,7 +3,7 @@ import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
 import type { TestInstance } from 'test-renderer';
 import { Animated, Linking, Platform, StyleSheet, type TextInput } from 'react-native';
 import { VALIDATION } from '@jot/shared';
-import ListItem, { DELETE_BTN_HIT_SLOP, OPEN_LINK_BTN_HIT_SLOP } from '../src/components/ListItem';
+import ListItem from '../src/components/ListItem';
 import * as layoutAnimation from '../src/utils/layoutAnimation';
 import type { Collaborator } from '@jot/shared';
 
@@ -198,10 +198,8 @@ describe('ListItem', () => {
         );
         await fireEvent(getByTestId('list-item-text'), 'focus');
 
-        expect(getByTestId('list-item-open-link').props.hitSlop).toEqual(OPEN_LINK_BTN_HIT_SLOP);
-        expect(getByTestId('list-item-delete').props.hitSlop).toEqual(DELETE_BTN_HIT_SLOP);
-        expect(OPEN_LINK_BTN_HIT_SLOP.right).toBe(0);
-        expect(DELETE_BTN_HIT_SLOP.left).toBe(0);
+        expect(getByTestId('list-item-open-link').props.hitSlop.right).toBe(0);
+        expect(getByTestId('list-item-delete').props.hitSlop.left).toBe(0);
       });
 
       it('is shown without focus, and on completed rows', async () => {
