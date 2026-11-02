@@ -612,9 +612,25 @@ func FileServer(r chi.Router, path string, root *os.Root) {
 			serveStatic(w, req)
 			return
 		}
-		compressed.ServeHTTP(w, req)
+		compressed.ServeHTTP(encodedRangeStripper{w}, req)
 	})
 }
+
+// encodedRangeStripper sits beneath the compressor and drops the
+// "Accept-Ranges: bytes" that http.ServeContent sets once the compressor has
+// marked the response encoded: ranges are only served over the uncompressed
+// bytes, so a client resuming a gzipped download from its byte count would
+// splice plain bytes onto a gzip prefix.
+type encodedRangeStripper struct{ http.ResponseWriter }
+
+func (w encodedRangeStripper) WriteHeader(code int) {
+	if w.Header().Get("Content-Encoding") != "" {
+		w.Header().Del("Accept-Ranges")
+	}
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w encodedRangeStripper) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request) (int, any, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

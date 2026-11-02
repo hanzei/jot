@@ -100,6 +100,7 @@ func TestFileServerCompression(t *testing.T) {
 		assert.Equal(t, "gzip", rec.Header().Get("Content-Encoding"))
 		assert.Contains(t, rec.Header().Values("Vary"), "Accept-Encoding")
 		assert.Empty(t, rec.Header().Get("Content-Length"))
+		assert.Empty(t, rec.Header().Get("Accept-Ranges"))
 		assert.Less(t, rec.Body.Len(), len(bundle))
 		assert.Equal(t, bundle, gunzip(t, rec))
 	})
@@ -117,6 +118,7 @@ func TestFileServerCompression(t *testing.T) {
 		rec := get(t, "/assets/app.js", nil)
 		assert.Equal(t, http.StatusOK, rec.Code)
 		assert.Empty(t, rec.Header().Get("Content-Encoding"))
+		assert.Equal(t, "bytes", rec.Header().Get("Accept-Ranges"))
 		assert.Equal(t, bundle, rec.Body.String())
 	})
 
