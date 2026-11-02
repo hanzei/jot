@@ -65,23 +65,22 @@ export default function BottomSheet({
       onPress={onClose}
       testID={testID ? `${testID}-backdrop` : undefined}
     >
-      <View
+      {/* A Pressable without onPress swallows every tap on the sheet,
+          padding included, so only the backdrop dismisses it. */}
+      <Pressable
         style={[
           styles.sheet,
           {
             backgroundColor: colors.sheetBackground,
             paddingBottom: insets.bottom + BOTTOM_GAP,
+            maxHeight,
           },
-          maxHeight !== undefined && { maxHeight },
         ]}
       >
-        {/* Swallows taps on the sheet so only the backdrop dismisses it. */}
-        <Pressable style={styles.content}>
-          <View style={[styles.handle, { backgroundColor: colors.handleColor }]} />
-          {title ? <Text style={[styles.title, { color: colors.text }]}>{title}</Text> : null}
-          {children}
-        </Pressable>
-      </View>
+        <View style={[styles.handle, { backgroundColor: colors.handleColor }]} />
+        {title ? <Text style={[styles.title, { color: colors.text }]}>{title}</Text> : null}
+        {children}
+      </Pressable>
       {avoidKeyboard && Platform.OS === 'android' ? <AndroidKeyboardSpacer /> : null}
     </Pressable>
   );
@@ -114,10 +113,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 16,
     paddingTop: 16,
     paddingHorizontal: 16,
-  },
-  // Lets scrolling content shrink to fit a `maxHeight`-capped sheet.
-  content: {
-    flexShrink: 1,
   },
   handle: {
     width: 40,
