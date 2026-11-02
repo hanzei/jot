@@ -1,9 +1,10 @@
+import { useContext } from 'react';
 import { Modal, View, Text, TouchableOpacity, Pressable, StyleSheet } from 'react-native';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { ExternalLink } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import type { InlineLink } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
-import { useDeviceSafeAreaInsets } from './ContentSafeArea';
 import { openUrl } from '../utils/openUrl';
 
 interface ItemLinksSheetProps {
@@ -20,9 +21,9 @@ interface ItemLinksSheetProps {
 export default function ItemLinksSheet({ visible, links, onClose }: ItemLinksSheetProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
-  // A Modal renders above the connectivity banners, so it takes the device's
-  // insets rather than the content area's (mobile/CLAUDE.md).
-  const insets = useDeviceSafeAreaInsets();
+  // Only the bottom inset is used, which banners never change — so the content
+  // insets, as `useDeviceSafeAreaInsets` itself asks bottom sheets to use.
+  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
