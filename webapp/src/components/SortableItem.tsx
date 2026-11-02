@@ -305,7 +305,7 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
         disabled={readOnly}
         onChange={(e) => onUpdateListItem(index, 'completed', e.target.checked)}
         aria-label={t('note.itemCompleted')}
-        className={`h-4 w-4 text-blue-600 rounded mt-0.5 flex-shrink-0 ${readOnly ? 'cursor-default' : ''}`}
+        className={`h-4 w-4 text-blue-600 rounded mt-1 flex-shrink-0 ${readOnly ? 'cursor-default' : ''}`}
       />
       <div className="flex flex-1 items-start min-w-0">
         <div ref={textColumnRef} className="relative min-w-0 flex-1">

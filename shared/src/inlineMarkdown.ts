@@ -27,7 +27,8 @@ import { formatLiteralImage, isAllowedLinkHref } from './markdown';
  * is a symlink and resolution follows the realpath, so a lookup never reaches the
  * consumer's `node_modules`. CI installs dependencies in `webapp/` and `mobile/`
  * only, so `shared/node_modules` does not exist there and even a *type-only*
- * `import from 'marked'` fails to resolve for both consumers.
+ * `import from 'marked'` fails to resolve for both consumers. `no-restricted-imports`
+ * in `shared/eslint.config.js` rejects any package import outside `__tests__/`.
  *
  * marked's `Token` union is structurally assignable to this, so callers pass
  * `Lexer.lexInline(...)` output directly with no cast.
