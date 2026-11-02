@@ -555,7 +555,15 @@ func FileServer(r chi.Router, path string, root *os.Root) {
 	fsys := root.FS()
 	fileServer := http.FileServerFS(fsys)
 
-	r.Get(path, func(w http.ResponseWriter, req *http.Request) {
+	// The webapp is one large JS chunk (about 1.2 MB minified, 360 KB gzipped),
+	// and on a slow connection its transfer is most of first-load time (#1164).
+	// Compress the text formats a build contains; images are already compressed.
+	compressor := middleware.NewCompressor(5,
+		"text/html", "text/css", "text/plain", "text/javascript",
+		"application/javascript", "application/json", "application/manifest+json",
+		"image/svg+xml",
+	)
+	serveStatic := func(w http.ResponseWriter, req *http.Request) {
 		rctx := chi.RouteContext(req.Context())
 		pathPrefix := strings.TrimSuffix(rctx.RoutePattern(), "/*")
 
@@ -594,6 +602,17 @@ func FileServer(r chi.Router, path string, root *os.Root) {
 		// File exists, serve it via the traversal-safe FS
 		fs := http.StripPrefix(pathPrefix, fileServer)
 		fs.ServeHTTP(w, req)
+	}
+	compressed := compressor.Handler(http.HandlerFunc(serveStatic))
+
+	r.Get(path, func(w http.ResponseWriter, req *http.Request) {
+		// A range answer's Content-Range counts uncompressed bytes, so gzipping
+		// it would hand the client a body that does not match its headers.
+		if req.Header.Get("Range") != "" {
+			serveStatic(w, req)
+			return
+		}
+		compressed.ServeHTTP(w, req)
 	})
 }
 
