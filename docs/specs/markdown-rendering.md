@@ -417,11 +417,18 @@ which lets the note colour through. A palette that holds 4.5:1 on all ten
 swatches — coral is the worst — comes out nearly as dark as body text, so the
 highlighting all but disappears. On one known panel per text colour, the shared
 suite can check every token colour against the only background it ever gets.
+Plain code on the panel takes the palette's own text colour too — inside a
+blockquote it would otherwise inherit the quote's muted grey, which falls just
+short of 4.5:1 there. A faint translucent border edges the panel, because the
+light panel is the Gray swatch's own colour and would vanish into a Gray note.
 Inline code keeps its tint; it is never highlighted.
 
 **Cards stay plain.** A card is six clamped lines, the dashboard would pay for
 highlighting every note on it, and the tokens would be too small to read there
 anyway — the same reasoning, on both clients, as cards not linking (§1.1).
+With nothing to highlight a card needs no panel either: its code keeps the
+translucent tint and the card's text colour (`.markdown-card` on the webapp;
+mobile's card draws no box at all, §5).
 
 **A failure renders plain.** The highlighter's output is read back into runs and
 checked to reassemble the source exactly; if it does not, or highlight.js

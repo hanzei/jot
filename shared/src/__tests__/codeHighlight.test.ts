@@ -170,8 +170,9 @@ function contrast(a: string, b: string): number {
 describe('CODE_PALETTE', () => {
   // The panel is what makes this the whole check: a code block's background is
   // always one of these two, whatever the note colour (see CODE_PALETTE).
-  it.each(['light', 'dark'] as const)('%s: every token colour holds 4.5:1 on its panel', (theme) => {
-    const { panel, scopes } = CODE_PALETTE[theme];
+  it.each(['light', 'dark'] as const)('%s: plain code and every token colour hold 4.5:1 on the panel', (theme) => {
+    const { panel, text, scopes } = CODE_PALETTE[theme];
+    expect(contrast(text, panel)).toBeGreaterThanOrEqual(4.5);
     for (const scope of CODE_SCOPES) {
       expect({ scope, ratio: contrast(scopes[scope], panel) >= 4.5 }).toEqual({ scope, ratio: true });
     }

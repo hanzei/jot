@@ -84,8 +84,13 @@ function renderBlocks(nodes: BlockNode[], ctx: RenderContext, keyPrefix = ''): R
         // plain (docs/specs/markdown-rendering.md §2.3).
         const runs = highlightCode(getCodeHighlighter(), node.text, node.lang);
         return (
-          <View key={key} style={[styles.code, { backgroundColor: ctx.theme.code.panel }]}>
-            <Text style={[ctx.textStyles.body, styles.codeText, { color: ctx.color }]}>
+          <View
+            key={key}
+            style={[styles.code, { backgroundColor: ctx.theme.code.panel, borderColor: ctx.theme.code.border }]}
+          >
+            {/* The palette's text, not ctx.color: a blockquote's muted colour
+                does not hold 4.5:1 on the panel. */}
+            <Text style={[ctx.textStyles.body, styles.codeText, { color: ctx.theme.code.text }]}>
               {runs ? renderCodeRuns(runs, ctx.theme) : node.text}
             </Text>
           </View>
@@ -149,6 +154,7 @@ const styles = StyleSheet.create({
   blocks: { gap: 8 },
   code: {
     borderRadius: 4,
+    borderWidth: 1,
     paddingHorizontal: 8,
     paddingVertical: 6,
   },

@@ -1,4 +1,4 @@
-import { CODE_PALETTE, type CodeScope } from '@jot/shared';
+import { CODE_PALETTE, type CodePalette } from '@jot/shared';
 import type { ThemeColors } from '../theme/colors';
 
 // Text metrics and colours for the two text-note Markdown surfaces: the editor
@@ -30,7 +30,7 @@ export interface MarkdownTheme {
   /** Horizontal rules and the blockquote bar. */
   rule: string;
   /** A code block's panel and its token colours. */
-  code: { panel: string; scopes: Readonly<Record<CodeScope, string>> };
+  code: CodePalette;
   link: string;
 }
 

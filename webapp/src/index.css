@@ -171,7 +171,13 @@ body {
      same ones, and src/utils/__tests__/codeHighlightStyles.test.ts fails if
      this file drifts from it. */
   .markdown-content pre {
-    @apply bg-[#f3f4f6] dark:bg-[#111827] rounded p-2 mb-2 last:mb-0 overflow-x-auto;
+    @apply bg-[#f3f4f6] dark:bg-[#111827] text-[#111827] dark:text-[#f9fafb] border border-[rgba(0,0,0,0.1)] dark:border-[rgba(255,255,255,0.15)] rounded p-2 mb-2 last:mb-0 overflow-x-auto;
+  }
+  /* Cards are never highlighted (§2.3), so their code keeps the translucent
+     tint that follows the note colour, and the card's own text colour. Must
+     follow the rule above: same specificity, so order decides. */
+  .markdown-card pre {
+    @apply bg-black/5 dark:bg-white/10 text-inherit border-0;
   }
   /* The block already carries the panel and padding; the inner <code> would
      otherwise stack a second background on top of it. */

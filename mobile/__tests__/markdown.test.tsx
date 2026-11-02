@@ -373,6 +373,12 @@ describe('syntax highlighting', () => {
     expect(style.fontStyle).toBe('italic');
   });
 
+  it('edges the panel and draws plain code in the palette text, even in a blockquote', async () => {
+    const tree = (await render(<Markdown content={'> ```\n> quoted code\n> ```'} />)).toJSON() as RenderedNode;
+    expect(styleFor(tree, 'quoted code').color).toBe(CODE_PALETTE.light.text);
+    expect(boxes(tree, (s) => s.borderColor === CODE_PALETTE.light.border)).toHaveLength(1);
+  });
+
   it('leaves the card preview plain', async () => {
     const tree = await renderPreview('fenced-code');
     expect(visibleText(tree)).toContain('const a = 1;');

@@ -57,6 +57,14 @@ export interface CodeRun {
   scope: CodeScope | null;
 }
 
+/** One theme's code-block colours; see CODE_PALETTE. */
+export interface CodePalette {
+  panel: string;
+  text: string;
+  border: string;
+  scopes: Readonly<Record<CodeScope, string>>;
+}
+
 /**
  * Token colours, per theme, and the panel a code block sits on.
  *
@@ -65,6 +73,11 @@ export interface CodeRun {
  * ends up indistinguishable from body text. On one known panel it only has to
  * hold against that panel (`shared/src/__tests__/codeHighlight.test.ts`).
  *
+ * `text` is plain code on the panel — a block inside a blockquote keeps it
+ * rather than the quote's muted colour, which does not hold 4.5:1 there.
+ * `border` is the panel's edge, translucent so it reads on any note colour —
+ * including Gray, whose swatch is the light panel's own colour.
+ *
  * `light` is for dark-on-light text and `dark` for light-on-dark, which is not
  * the same question as the app theme: mobile keeps a note's light swatch in
  * dark mode, so a coloured note there takes `light`.
@@ -72,6 +85,8 @@ export interface CodeRun {
 export const CODE_PALETTE = {
   light: {
     panel: '#f3f4f6',
+    text: '#111827',
+    border: 'rgba(0,0,0,0.1)',
     scopes: {
       keyword: '#c33d43',
       type: '#b05200',
@@ -84,6 +99,8 @@ export const CODE_PALETTE = {
   },
   dark: {
     panel: '#111827',
+    text: '#f9fafb',
+    border: 'rgba(255,255,255,0.15)',
     scopes: {
       keyword: '#ff8484',
       type: '#f4902c',
@@ -94,7 +111,7 @@ export const CODE_PALETTE = {
       comment: '#88919c',
     },
   },
-} as const satisfies Record<'light' | 'dark', { panel: string; scopes: Record<CodeScope, string> }>;
+} as const satisfies Record<'light' | 'dark', CodePalette>;
 
 /**
  * Scopes drawn in italic as well as colour. A comment is the one token that

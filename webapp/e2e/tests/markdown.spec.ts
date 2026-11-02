@@ -126,6 +126,10 @@ test.describe('Markdown note editing', () => {
     const card = dashboardPage.noteCardByText('const answer');
     await expect(card.locator('pre')).toHaveText('const answer: number = 42; // why');
     await expect(card.locator('pre span')).toHaveCount(0);
+    // A card keeps the translucent tint, not the panel. Asserted as "not the
+    // panel" because Tailwind emits the tint in oklab, not rgb.
+    await expect(card.locator('pre')).not.toHaveCSS('background-color', 'rgb(243, 244, 246)');
+    await expect(card.locator('pre')).toHaveCSS('border-top-width', '0px');
 
     await dashboardPage.openTextNote('const answer');
     const code = noteEditorPage.preview().locator('pre code');
@@ -142,6 +146,7 @@ test.describe('Markdown note editing', () => {
     await expect(token('keyword')).toHaveCSS('color', 'rgb(195, 61, 67)');
     await expect(token('comment')).toHaveCSS('font-style', 'italic');
     await expect(page.getByRole('dialog').locator('pre')).toHaveCSS('background-color', 'rgb(243, 244, 246)');
+    await expect(page.getByRole('dialog').locator('pre')).toHaveCSS('border-top-width', '1px');
   });
 
   test('renders a fence in an unknown language as plain code', async ({ dashboardPage, noteEditorPage }) => {

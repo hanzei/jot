@@ -17,10 +17,14 @@ function applied(selector: string): string[] {
 }
 
 describe('code highlight styles in index.css', () => {
-  it('puts code blocks on the shared panel colours', () => {
+  it('puts code blocks on the shared panel, text and border colours', () => {
     expect(applied('pre')).toEqual(expect.arrayContaining([
       `bg-[${CODE_PALETTE.light.panel}]`,
       `dark:bg-[${CODE_PALETTE.dark.panel}]`,
+      `text-[${CODE_PALETTE.light.text}]`,
+      `dark:text-[${CODE_PALETTE.dark.text}]`,
+      `border-[${CODE_PALETTE.light.border}]`,
+      `dark:border-[${CODE_PALETTE.dark.border}]`,
     ]));
   });
 
