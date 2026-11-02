@@ -39,16 +39,7 @@ export type HighlightLanguage = (typeof HIGHLIGHT_LANGUAGES)[number];
  * colours stay distinguishable from each other at the contrast `CODE_PALETTE`
  * has to hold, and a renderer that keys on this union cannot miss one.
  */
-export type CodeScope =
-  | 'keyword'
-  | 'type'
-  | 'string'
-  | 'attribute'
-  | 'literal'
-  | 'title'
-  | 'comment';
-
-export const CODE_SCOPES: readonly CodeScope[] = [
+export const CODE_SCOPES = [
   'keyword',
   'type',
   'string',
@@ -56,7 +47,9 @@ export const CODE_SCOPES: readonly CodeScope[] = [
   'literal',
   'title',
   'comment',
-];
+] as const;
+
+export type CodeScope = (typeof CODE_SCOPES)[number];
 
 /** A stretch of code drawn one way. `null` is plain code text. */
 export interface CodeRun {
