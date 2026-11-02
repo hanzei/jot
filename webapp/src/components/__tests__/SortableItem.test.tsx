@@ -336,6 +336,13 @@ describe('SortableItem rendered/source swap', () => {
       expect(openLink()).toHaveAttribute('href', 'https://example.com/a%20caf%C3%A9');
     });
 
+    it('offers one entry for two spellings of the same target', () => {
+      renderRow('[a](<https://example.com/a b>) [b](https://example.com/a%20b)');
+      const link = openLink()!;
+      expect(link.tagName).toBe('A');
+      expect(link).toHaveAttribute('href', 'https://example.com/a%20b');
+    });
+
     it('is offered on completed rows too', () => {
       renderRow('https://example.com', { isCompleted: true });
       expect(openLink()).toHaveAttribute('href', 'https://example.com');

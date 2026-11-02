@@ -304,6 +304,10 @@ describe('inlineLinks', () => {
       expect(hostOf('[mail](mailto:a@b.example?subject=Hi)')).toEqual(['a@b.example']);
     });
 
+    it('falls back to the target for a mailto with no address', () => {
+      expect(hostOf('[mail](mailto:?subject=Hi)')).toEqual(['mailto:?subject=Hi']);
+    });
+
     it('is null where the label already says it', () => {
       // A bare URL, a `www.` autolink and an autolinked email address each label
       // themselves with exactly what the host line would repeat.

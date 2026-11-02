@@ -200,7 +200,9 @@ export interface InlineLink {
  */
 function linkHost(href: string): string {
   const mailto = /^mailto:([^?]*)/i.exec(href);
-  if (mailto) return mailto[1] ?? href;
+  // `||`, not `??`: the group always matches, but `mailto:?subject=x` matches it
+  // empty, and an empty host line says nothing.
+  if (mailto) return mailto[1] || href;
   const authority = /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/?#]*@)?([^/?#]+)/i.exec(href);
   return authority?.[1]?.toLowerCase() ?? href;
 }

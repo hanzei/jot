@@ -47,6 +47,9 @@ export default function ItemLinksSheet({ visible, links, onClose }: ItemLinksShe
                 testID="item-links-sheet-link"
                 accessibilityRole="link"
                 accessibilityLabel={t('note.openItemLink', { label: link.label })}
+                // The label replaces the row's children for a screen reader, so
+                // the host line that tells look-alike labels apart goes here.
+                accessibilityHint={link.host ?? undefined}
               >
                 <ExternalLink size={22} color={colors.icon} />
                 <View style={styles.rowText}>

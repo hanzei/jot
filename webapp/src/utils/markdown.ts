@@ -270,11 +270,17 @@ export function renderInlineItem(
  * normalized exactly as the rendered link would be — so the control and a live
  * link to the same target never disagree, and one the renderer refuses is not
  * offered either.
+ *
+ * Deduplicated again after normalizing: `<https://a.example/a b>` and
+ * `https://a.example/a%20b` are distinct sources but the same target.
  */
 export function itemLinks(nodes: InlineNode[]): InlineLink[] {
+  const seen = new Set<string>();
   return inlineLinks(nodes).flatMap((link) => {
     const href = safeLinkHref(link.href);
-    return href === null ? [] : [{ ...link, href }];
+    if (href === null || seen.has(href)) return [];
+    seen.add(href);
+    return [{ ...link, href }];
   });
 }
 
