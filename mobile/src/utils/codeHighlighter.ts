@@ -38,4 +38,13 @@ function createHighlighter(): CodeHighlighter {
   return instance;
 }
 
-export const codeHighlighter = createHighlighter();
+let instance: CodeHighlighter | null = null;
+
+/**
+ * Built on first use rather than at import: registering runs every grammar's
+ * factory, and the dashboard imports the renderer without ever highlighting.
+ */
+export function getCodeHighlighter(): CodeHighlighter {
+  instance ??= createHighlighter();
+  return instance;
+}

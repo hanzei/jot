@@ -94,7 +94,9 @@ function boxes(
   );
 }
 
-const hasTint = (node: RenderedNode) => boxes(node, (s) => s.backgroundColor !== undefined).length;
+const hasPanel = (node: RenderedNode) => boxes(node, (s) => s.backgroundColor !== undefined).length;
+
+const light = CODE_PALETTE.light.scopes;
 
 const TOKEN_COLOURS: ReadonlySet<unknown> = new Set([
   ...Object.values(CODE_PALETTE.light.scopes),
@@ -113,8 +115,6 @@ function codeTokens(node: RenderedNode): [string, unknown][] {
     node.type === 'Text' && TOKEN_COLOURS.has(style.color) ? [[visibleText(node), style.color]] : [];
   return own.concat((node.children ?? []).flatMap((child) => codeTokens(child as RenderedNode)));
 }
-
-const light = CODE_PALETTE.light.scopes;
 const hasBar = (node: RenderedNode) => boxes(node, (s) => Number(s.borderLeftWidth) > 0).length;
 const hasRule = (node: RenderedNode) => boxes(node, (s) => s.height === 1).length;
 
@@ -151,7 +151,7 @@ const conformance: Record<string, () => Promise<void>> = {
     expect(styleFor(tree, 'const a = 1;').fontFamily).toBeTruthy();
     // Block layout: the panel a fenced block sits in, which inline code has no
     // equivalent of.
-    expect(hasTint(tree)).toBe(1);
+    expect(hasPanel(tree)).toBe(1);
     expect(codeTokens(tree)).toEqual([['const', light.keyword], ['1', light.literal]]);
     // A token inherits the block's monospace font from the Text around it.
     expect(styleFor(tree, 'const').fontFamily).toBe(styleFor(tree, 'const a = 1;').fontFamily);
@@ -159,7 +159,7 @@ const conformance: Record<string, () => Promise<void>> = {
   'fenced-code-unknown-language': async () => {
     const tree = await renderCase('fenced-code-unknown-language');
     expect(visibleText(tree)).toBe('+[->+<]>.');
-    expect(hasTint(tree)).toBe(1);
+    expect(hasPanel(tree)).toBe(1);
     expect(codeTokens(tree)).toEqual([]);
   },
   'fenced-code-markup': async () => {
@@ -174,12 +174,12 @@ const conformance: Record<string, () => Promise<void>> = {
   'indented-code': async () => {
     const tree = await renderCase('indented-code');
     expect(styleFor(tree, 'indented code').fontFamily).toBeTruthy();
-    expect(hasTint(tree)).toBe(1);
+    expect(hasPanel(tree)).toBe(1);
   },
   'task-marker-in-code': async () => {
     const tree = await renderCase('task-marker-in-code');
     expect(visibleText(tree)).toBe('- [x] not a checkbox');
-    expect(hasTint(tree)).toBe(1);
+    expect(hasPanel(tree)).toBe(1);
   },
 
   'bullet-list': async () => expect(visibleText(await renderCase('bullet-list'))).toBe('•item'),

@@ -663,15 +663,15 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
   // HTML-escaped version of the raw content so it is never silently hidden.
   // Skipped while the textarea replaces the preview: it would otherwise lex and
   // syntax-highlight the whole note on every keystroke for nothing on screen.
-  const showContentPreview = !(isEditingContent && !isReadOnly);
+  const isEditingText = isEditingContent && !isReadOnly;
   const renderedContent = useMemo(() => {
-    if (!showContentPreview || !content?.trim()) return '';
+    if (isEditingText || !content?.trim()) return '';
     const md = renderMarkdown(content);
     if (md) return md;
     return content.replace(/[&<>"']/g, (c) => (
       { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c] ?? c
     ));
-  }, [content, showContentPreview]);
+  }, [content, isEditingText]);
 
   // Mobile snaps indent level to the nearest INDENT_PX_PER_LEVEL step (rounding),
   // so it takes half a step — 12px — to commit to nesting. The desktop drag has no
@@ -2038,7 +2038,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
             {/* Content based on type */}
             {noteType === 'text' ? (
               <>
-                {!showContentPreview ? (
+                {isEditingText ? (
                   <textarea
                     ref={contentRef}
                     id={contentTextareaId}

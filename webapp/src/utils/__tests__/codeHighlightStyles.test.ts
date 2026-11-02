@@ -24,8 +24,8 @@ describe('code highlight styles in index.css', () => {
     ]));
   });
 
-  it.each(CODE_SCOPES)('colours .code-%s from the shared palette', (scope) => {
-    const classes = applied(`.code-${scope}`);
+  it.each(CODE_SCOPES)('colours data-code="%s" from the shared palette', (scope) => {
+    const classes = applied(`[data-code="${scope}"]`);
     expect(classes).toEqual(expect.arrayContaining([
       `text-[${CODE_PALETTE.light.scopes[scope]}]`,
       `dark:text-[${CODE_PALETTE.dark.scopes[scope]}]`,

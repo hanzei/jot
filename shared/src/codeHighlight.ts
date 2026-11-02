@@ -231,7 +231,7 @@ function codeRunsFromHtml(html: string): CodeRun[] | null {
       if (stack.length === 1) return null;
       stack.pop();
     } else {
-      const text = whole.replace(/&(?:amp|lt|gt|quot|#x27);/g, (entity) => HTML_ENTITIES[entity] ?? entity);
+      const text = whole.replace(/&#?\w+;/g, (entity) => HTML_ENTITIES[entity] ?? entity);
       const last = runs[runs.length - 1];
       if (last && last.scope === current) last.text += text;
       else runs.push({ text, scope: current });

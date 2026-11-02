@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Platform } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { CODE_ITALIC_SCOPES, highlightCode, type BlockNode, type CodeRun } from '@jot/shared';
 import { blockMarkdownNodes } from '../utils/markdown';
-import { codeHighlighter } from '../utils/codeHighlighter';
+import { getCodeHighlighter } from '../utils/codeHighlighter';
 import {
   fullMarkdownStyles,
   headingStyle,
@@ -17,7 +17,7 @@ import { renderInlineNodes } from './inlineNodes';
 // specified in docs/specs/markdown-rendering.md and the parsing lives in
 // utils/markdown.ts; this file is only layout.
 //
-// Every block that needs a box of its own — a code block's tint, the blockquote
+// Every block that needs a box of its own — a code block's panel, the blockquote
 // bar, a list's marker column — is a <View>, and the text inside it is a <Text>.
 // A View nested *inside* a Text breaks wrapping on React Native, so the two
 // levels never interleave: a block owns Views, and everything below the block
@@ -82,7 +82,7 @@ function renderBlocks(nodes: BlockNode[], ctx: RenderContext, keyPrefix = ''): R
       case 'code': {
         // A language Jot does not highlight, or none, renders the same block
         // plain (docs/specs/markdown-rendering.md §2.3).
-        const runs = highlightCode(codeHighlighter, node.text, node.lang);
+        const runs = highlightCode(getCodeHighlighter(), node.text, node.lang);
         return (
           <View key={key} style={[styles.code, { backgroundColor: ctx.theme.code.panel }]}>
             <Text style={[ctx.textStyles.body, styles.codeText, { color: ctx.color }]}>

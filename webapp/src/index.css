@@ -173,31 +173,31 @@ body {
   .markdown-content pre {
     @apply bg-[#f3f4f6] dark:bg-[#111827] rounded p-2 mb-2 last:mb-0 overflow-x-auto;
   }
-  /* The block already carries the tint and padding; the inner <code> would
+  /* The block already carries the panel and padding; the inner <code> would
      otherwise stack a second background on top of it. */
   .markdown-content pre code {
     @apply bg-transparent rounded-none p-0;
   }
   /* Syntax-highlighted tokens (docs/specs/markdown-rendering.md §2.3). */
-  .markdown-content .code-keyword {
+  .markdown-content [data-code="keyword"] {
     @apply text-[#c33d43] dark:text-[#ff8484];
   }
-  .markdown-content .code-type {
+  .markdown-content [data-code="type"] {
     @apply text-[#b05200] dark:text-[#f4902c];
   }
-  .markdown-content .code-string {
+  .markdown-content [data-code="string"] {
     @apply text-[#007f18] dark:text-[#53bf5c];
   }
-  .markdown-content .code-attribute {
+  .markdown-content [data-code="attribute"] {
     @apply text-[#007794] dark:text-[#00b9d8];
   }
-  .markdown-content .code-literal {
+  .markdown-content [data-code="literal"] {
     @apply text-[#0068dd] dark:text-[#49b0ff];
   }
-  .markdown-content .code-title {
+  .markdown-content [data-code="title"] {
     @apply text-[#9442d9] dark:text-[#d78aff];
   }
-  .markdown-content .code-comment {
+  .markdown-content [data-code="comment"] {
     @apply italic text-[#656d78] dark:text-[#88919c];
   }
   .markdown-content hr {

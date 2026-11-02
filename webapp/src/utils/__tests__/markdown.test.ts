@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { MARKDOWN_CASES } from '@jot/shared';
-import { renderMarkdown, sanitizeBlockHtml } from '../markdown';
+import { renderMarkdown } from '../markdown';
 
 /** The words a reader sees, with the markup removed. */
 function text(html: string): string {
@@ -34,7 +34,7 @@ const conformance: Record<string, () => void> = {
   'fenced-code': () => {
     const html = render('fenced-code');
     expect(html).toContain(
-      '<pre><code><span class="code-keyword">const</span> a = <span class="code-literal">1</span>;</code></pre>',
+      '<pre><code><span data-code="keyword">const</span> a = <span data-code="literal">1</span>;</code></pre>',
     );
     expect(text(html).trim()).toBe('const a = 1;');
   },
@@ -43,8 +43,8 @@ const conformance: Record<string, () => void> = {
   },
   'fenced-code-markup': () => {
     const html = render('fenced-code-markup');
-    expect(html).toContain('<span class="code-keyword">b</span>');
-    expect(html).toContain('<span class="code-attribute">class</span>');
+    expect(html).toContain('<span data-code="keyword">b</span>');
+    expect(html).toContain('<span data-code="attribute">class</span>');
     // The source shows as text; nothing in it became an element.
     expect(text(html).trim()).toBe('<b class="x">hi</b>');
     expect(html).not.toContain('<b');
@@ -230,7 +230,7 @@ describe('renderMarkdown', () => {
 
     it('reaches a fence nested in a list or a blockquote', () => {
       for (const source of ['- item\n\n  ```js\n  let x;\n  ```', '> ```js\n> let x;\n> ```']) {
-        expect(renderMarkdown(source), source).toContain('<span class="code-keyword">let</span>');
+        expect(renderMarkdown(source), source).toContain('<span data-code="keyword">let</span>');
       }
     });
 
@@ -238,15 +238,12 @@ describe('renderMarkdown', () => {
       expect(renderMarkdown('`const a = 1;`')).toContain('<code>const a = 1;</code>');
     });
 
-    // Raw HTML in a note is literal text before it reaches the sanitizer, so
-    // this is the sanitizer's own rule, fed markup directly.
-    it('lets class through only as a highlight class on a span', () => {
-      const html = sanitizeBlockHtml(
-        '<span class="fixed inset-0">a</span><span class="code-keyword">b</span>'
-          + '<p class="code-keyword">c</p><span class="code-keyword fixed">d</span>',
-        true,
-      );
-      expect(html).toBe('<span>a</span><span class="code-keyword">b</span><p>c</p><span>d</span>');
+    // DOMPurify keeps `data-*` with a custom ALLOWED_ATTR; this pins that the
+    // tokens survive the sanitizer, and that no class is ever emitted.
+    it('marks tokens with data-code, never class', () => {
+      const html = renderMarkdown('```js\nconst a = 1;\n```');
+      expect(html).toContain('<span data-code="keyword">const</span>');
+      expect(html).not.toContain('class=');
     });
   });
 

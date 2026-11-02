@@ -60,12 +60,6 @@ const SAMPLES: Record<HighlightLanguage, string> = {
   yaml: '# c\nkey: value\nlist:\n  - 1\n  - "two"\nanchor: &a {x: true}',
 };
 
-describe('the highlighter instance', () => {
-  it('registers exactly the shared language list', () => {
-    expect([...highlighter.listLanguages()].sort()).toEqual([...HIGHLIGHT_LANGUAGES].sort());
-  });
-});
-
 describe('codeLanguage', () => {
   it.each([
     ['js', 'js'],

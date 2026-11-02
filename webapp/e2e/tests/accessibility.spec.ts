@@ -229,7 +229,7 @@ for (const theme of THEMES) {
 
       const preview = '[role="dialog"] [data-testid="note-content-preview"]';
       for (const scope of CODE_SCOPES) {
-        await expect(page.locator(`${preview} .code-${scope}`).first(), scope).toBeVisible();
+        await expect(page.locator(`${preview} [data-code="${scope}"]`).first(), scope).toBeVisible();
       }
 
       const saveStatus = page.getByTestId('note-save-status');

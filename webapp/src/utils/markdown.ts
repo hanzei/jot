@@ -8,14 +8,12 @@ import {
   inlineRendersAsSource,
   BLOCK_LEXER_OPTIONS,
   INLINE_LEXER_OPTIONS,
-  CODE_SCOPES,
   highlightCode,
   type BlockNode,
   type CodeRun,
-  type CodeScope,
   type InlineNode,
 } from '@jot/shared';
-import { codeHighlighter } from './codeHighlighter';
+import { getCodeHighlighter } from './codeHighlighter';
 
 // Jot's Markdown feature set is specified in docs/specs/markdown-rendering.md.
 //
@@ -67,8 +65,9 @@ const ALLOWED_TAGS = [
   'ul', 'ol', 'li',
   'blockquote', 'code', 'pre', 'hr',
   'a',
-  // Highlighted code tokens. `class` is allowed on them alone, and only with a
-  // value from CODE_CLASSES — see blockPurifier.
+  // Highlighted code tokens, carrying their scope as `data-code`. DOMPurify
+  // keeps `data-*` attributes by default, and unlike `class` one cannot borrow
+  // the app's own utility styles.
   'span',
 ];
 // `start` is only meaningful on <ol>, and without it an ordered list beginning
@@ -85,30 +84,6 @@ const ALLOWED_ATTR = ['href', 'target', 'rel', 'start'];
  */
 const NO_LINK_TAGS = ALLOWED_TAGS.filter((tag) => tag !== 'a');
 
-/** The class a highlighted token carries; index.css colours each one. */
-function codeClass(scope: CodeScope): string {
-  return `code-${scope}`;
-}
-
-const CODE_CLASSES: ReadonlySet<string> = new Set(CODE_SCOPES.map(codeClass));
-
-/**
- * The sanitizer for text-note content: DOMPurify plus one rule, that `class`
- * survives only as a highlighted token's class on a `<span>`.
- *
- * Allowing `class` outright would let anything that reached the sanitizer
- * borrow the app's own styles — a `fixed inset-0` span laid over the page. Raw
- * HTML in a note is already degraded to text before it gets here
- * (blockMarkdown.ts), so this is the net, not the mechanism. A private instance
- * keeps the hook off the global DOMPurify that list-item text uses.
- */
-const blockPurifier = DOMPurify(window);
-const BLOCK_ALLOWED_ATTR = [...ALLOWED_ATTR, 'class'];
-blockPurifier.addHook('uponSanitizeAttribute', (node, data) => {
-  if (data.attrName === 'class' && !(node.nodeName === 'SPAN' && CODE_CLASSES.has(data.attrValue))) {
-    data.keepAttr = false;
-  }
-});
 
 export interface MarkdownRenderOptions {
   /**
@@ -150,7 +125,7 @@ function renderListItem(blocks: BlockNode[], loose: boolean, highlight: boolean)
 function renderCodeRuns(runs: CodeRun[]): string {
   return runs
     .map(({ text, scope }) =>
-      scope === null ? escapeHtml(text) : `<span class="${codeClass(scope)}">${escapeHtml(text)}</span>`,
+      scope === null ? escapeHtml(text) : `<span data-code="${scope}">${escapeHtml(text)}</span>`,
     )
     .join('');
 }
@@ -169,7 +144,7 @@ function renderBlockNode(node: BlockNode, highlight: boolean): string {
       // No <br> substitution: newlines are significant inside <pre>. No
       // language class either — the tokens carry their own, and an unknown
       // language renders plain (docs/specs §2.3).
-      const runs = highlight ? highlightCode(codeHighlighter, node.text, node.lang) : null;
+      const runs = highlight ? highlightCode(getCodeHighlighter(), node.text, node.lang) : null;
       return `<pre><code>${runs ? renderCodeRuns(runs) : escapeHtml(node.text)}</code></pre>\n`;
     }
 
@@ -200,14 +175,9 @@ export function renderMarkdown(
 ): string {
   if (!content.trim()) return '';
   const nodes = normalizeBlockTokens(Lexer.lex(content, BLOCK_LEXER_OPTIONS));
-  return sanitizeBlockHtml(renderBlockNodes(nodes, highlight), links);
-}
-
-/** Exported for its tests: `renderMarkdown` never hands it raw note HTML. */
-export function sanitizeBlockHtml(html: string, links: boolean): string {
-  return blockPurifier.sanitize(html, {
+  return DOMPurify.sanitize(renderBlockNodes(nodes, highlight), {
     ALLOWED_TAGS: links ? ALLOWED_TAGS : NO_LINK_TAGS,
-    ALLOWED_ATTR: BLOCK_ALLOWED_ATTR,
+    ALLOWED_ATTR,
   });
 }
 

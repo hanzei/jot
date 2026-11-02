@@ -655,12 +655,11 @@ here so the next person does not have to rediscover them.
   highlight.js minor and would ship a second copy. The HTML is public and closed
   — `<span class="…">`, `</span>`, and five escaped characters — so a scan reads
   it without an HTML parser, which mobile does not have.
-- **The webapp sanitizer now allows `class`, on one condition.** Highlighted
-  tokens are `<span class="code-keyword">` and so on, so `span` and `class` are
-  on the allowlist — but a hook on a private DOMPurify instance drops any
-  `class` that is not exactly one token class on a `<span>`. Allowing `class`
-  outright would let anything reaching the sanitizer borrow the app's own
-  utility classes. Raw HTML never reaches it as markup (§3), so this is the net.
+- **Webapp tokens carry `data-code`, not `class`.** A token is
+  `<span data-code="keyword">`, styled by an attribute selector in `index.css`.
+  DOMPurify keeps `data-*` attributes by default, so only `span` joins the
+  allowlist; allowing `class` instead would have let anything reaching the
+  sanitizer borrow the app's own utility classes, and needed a hook to stop it.
 - **Hermes is not what Jest runs.** Two grammars (`python`, `xml`) build regexes
   with Unicode property escapes. Every regex the ten grammars produce was checked
   against the app's own `hermesc`; on a device, a grammar that still failed
