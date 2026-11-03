@@ -294,6 +294,8 @@
     "menuOptions": "Notitieopties",
     "assignItem": "Item toewijzen",
     "removeItem": "Item verwijderen",
+    "openItemLink": "Link openen: {{label}}",
+    "openItemLinks": "Een link openen",
     "unassign": "Toewijzing opheffen",
     "assignedTo": "Toegewezen aan {{name}}",
     "changeColor": "Notitiekl",

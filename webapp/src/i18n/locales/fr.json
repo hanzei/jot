@@ -500,6 +500,8 @@
     "menuOptions": "Options de la note",
     "assignItem": "Assigner l'élément",
     "removeItem": "Supprimer l'élément",
+    "openItemLink": "Ouvrir le lien : {{label}}",
+    "openItemLinks": "Ouvrir un lien",
     "unassign": "Désassigner",
     "assignedTo": "Assigné à {{name}}",
     "completedSuggestions": "Suggestions d'éléments terminés",

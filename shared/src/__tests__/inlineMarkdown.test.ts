@@ -5,6 +5,7 @@ import {
   flattenInlineNodes,
   inlineSourceOffset,
   inlineRendersAsSource,
+  inlineLinks,
   INLINE_LEXER_OPTIONS,
   type InlineNode,
 } from '../inlineMarkdown';
@@ -259,6 +260,58 @@ describe('normalizeInlineTokens', () => {
 
     it('treats code as a rendering change even when the characters match', () => {
       expect(inlineRendersAsSource(lex('`a`'), '`a`')).toBe(false);
+    });
+  });
+});
+
+describe('inlineLinks', () => {
+  it('lists each link with its flattened label, in reading order', () => {
+    expect(inlineLinks(lex('see [**the** docs](https://a.example) and https://b.example'))).toEqual([
+      { href: 'https://a.example', label: 'the docs', host: 'a.example' },
+      { href: 'https://b.example', label: 'https://b.example', host: null },
+    ]);
+  });
+
+  it('finds links nested inside formatting', () => {
+    expect(inlineLinks(lex('**[a](https://a.example)** ~~[b](mailto:b@example.com)~~'))).toEqual([
+      { href: 'https://a.example', label: 'a', host: 'a.example' },
+      { href: 'mailto:b@example.com', label: 'b', host: 'b@example.com' },
+    ]);
+  });
+
+  it('lists a repeated target once, under its first label', () => {
+    expect(inlineLinks(lex('[one](https://a.example) [two](https://a.example)'))).toEqual([
+      { href: 'https://a.example', label: 'one', host: 'a.example' },
+    ]);
+  });
+
+  it('omits links whose scheme Jot does not follow', () => {
+    expect(inlineLinks(lex('[call](tel:123) [x](javascript:alert(1)) [rel](/dashboard)'))).toEqual([]);
+  });
+
+  it('is empty for text without links', () => {
+    expect(inlineLinks(lex('buy **milk**'))).toEqual([]);
+  });
+
+  describe('host', () => {
+    const hostOf = (markdown: string) => inlineLinks(lex(markdown)).map((link) => link.host);
+
+    it('is lower case, without credentials, keeping a port', () => {
+      expect(hostOf('[a](https://user:pw@Example.COM:8443/x?y#z)')).toEqual(['example.com:8443']);
+    });
+
+    it('is a mailto address without its query', () => {
+      expect(hostOf('[mail](mailto:a@b.example?subject=Hi)')).toEqual(['a@b.example']);
+    });
+
+    it('falls back to the target for a mailto with no address', () => {
+      expect(hostOf('[mail](mailto:?subject=Hi)')).toEqual(['mailto:?subject=Hi']);
+    });
+
+    it('is null where the label already says it', () => {
+      // A bare URL, a `www.` autolink and an autolinked email address each label
+      // themselves with exactly what the host line would repeat.
+      expect(hostOf('https://a.example www.b.example c@d.example')).toEqual([null, null, null]);
     });
   });
 });

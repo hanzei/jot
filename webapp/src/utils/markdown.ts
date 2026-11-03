@@ -5,12 +5,14 @@ import {
   normalizeBlockTokens,
   normalizeInlineTokens,
   flattenInlineNodes,
+  inlineLinks,
   inlineRendersAsSource,
   BLOCK_LEXER_OPTIONS,
   INLINE_LEXER_OPTIONS,
   highlightCode,
   type BlockNode,
   type CodeRun,
+  type InlineLink,
   type InlineNode,
 } from '@jot/shared';
 import { getCodeHighlighter } from './codeHighlighter';
@@ -290,6 +292,15 @@ export function renderInlineItem(
     nodes,
     formatted: !inlineRendersAsSource(nodes, text),
   };
+}
+
+/**
+ * The links an editable row's open-link control offers, with each target
+ * encoded exactly as the rendered link's — so the control and a live link to
+ * the same target never disagree, and one the renderer refuses is not offered.
+ */
+export function itemLinks(nodes: InlineNode[]): InlineLink[] {
+  return inlineLinks(nodes, safeLinkHref);
 }
 
 /**

@@ -157,6 +157,25 @@ for (const theme of THEMES) {
       await expectNoViolations(page);
     });
 
+    test('list rows with links, and the links menu, have no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage }) => {
+      void authenticatedUser;
+      await dashboardPage.goto();
+      // One row per form of the open-link control: an anchor, and a menu button.
+      await dashboardPage.createListNote('A11y Links Note', [
+        'see [docs](https://example.com/docs)',
+        '[a](https://a.example.com) or [b](https://b.example.com)',
+      ]);
+      await dashboardPage.openNote('A11y Links Note');
+      await expect(dashboardPage.listItemOpenLink(0)).toBeVisible();
+      await expectTheme(page, theme);
+      await expectNoViolations(page);
+
+      // The open menu is portalled out of the row, so it is its own scan.
+      await dashboardPage.listItemOpenLink(1).click();
+      await expect(page.getByRole('menu')).toBeVisible();
+      await expectNoViolations(page);
+    });
+
     test('read-only bin note modal has no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage }) => {
       void authenticatedUser;
       await dashboardPage.goto();

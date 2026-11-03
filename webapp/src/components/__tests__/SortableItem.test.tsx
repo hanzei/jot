@@ -312,4 +312,64 @@ describe('SortableItem rendered/source swap', () => {
     expect(renderedView()!.textContent).toBe('docs');
     expect(renderedView()).toHaveAttribute('aria-hidden', 'true');
   });
+
+  describe('open-link button', () => {
+    const openLink = () => screen.queryByTestId('list-item-open-link');
+
+    it('is absent when the item has no link Jot follows', () => {
+      renderRow('buy **milk** [call](tel:123)');
+      expect(openLink()).not.toBeInTheDocument();
+    });
+
+    it('is a real anchor to the single link of an editable row', () => {
+      renderRow('see [docs](https://example.com/a)');
+
+      const link = openLink()!;
+      expect(link.tagName).toBe('A');
+      expect(link).toHaveAttribute('href', 'https://example.com/a');
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    });
+
+    it('encodes the target exactly as the rendered link would', () => {
+      renderRow('[café](<https://example.com/a café>)', { readOnly: false });
+      expect(openLink()).toHaveAttribute('href', 'https://example.com/a%20caf%C3%A9');
+    });
+
+    it('offers one entry for two spellings of the same target', () => {
+      renderRow('[a](<https://example.com/a b>) [b](https://example.com/a%20b)');
+      const link = openLink()!;
+      expect(link.tagName).toBe('A');
+      expect(link).toHaveAttribute('href', 'https://example.com/a%20b');
+    });
+
+    it('is offered on completed rows too', () => {
+      renderRow('https://example.com', { isCompleted: true });
+      expect(openLink()).toHaveAttribute('href', 'https://example.com');
+    });
+
+    it('stays visible while the row shows its source', () => {
+      renderRow('[docs](https://example.com)');
+      fireEvent.focus(textarea()!);
+      expect(openLink()).toBeInTheDocument();
+    });
+
+    it('is not added to a read-only row, whose links already work', () => {
+      renderRow('[docs](https://example.com)', { readOnly: true });
+      expect(openLink()).not.toBeInTheDocument();
+    });
+
+    it('opens a menu of every distinct link when there are several', async () => {
+      renderRow('[a](https://a.example) [b](https://b.example) [again](https://a.example)');
+
+      const button = openLink()!;
+      expect(button.tagName).toBe('BUTTON');
+      fireEvent.click(button);
+
+      const menu = await screen.findByTestId('list-item-links-menu');
+      const anchors = [...menu.querySelectorAll('a')];
+      expect(anchors.map((a) => a.getAttribute('href'))).toEqual(['https://a.example', 'https://b.example']);
+      expect(anchors.every((a) => a.getAttribute('target') === '_blank')).toBe(true);
+    });
+  });
 });

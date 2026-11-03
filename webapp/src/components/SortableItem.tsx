@@ -4,8 +4,9 @@ import { useTranslation } from 'react-i18next';
 import { VALIDATION, itemSuggestions, type User, type Collaborator } from '@jot/shared';
 import LetterAvatar from '@/components/LetterAvatar';
 import AssigneePicker from '@/components/AssigneePicker';
+import ItemLinkButton from '@/components/ItemLinkButton';
 import { indentOf, itemTextareaId, type ListItem } from '@/utils/noteItems';
-import { renderInlineItem } from '@/utils/markdown';
+import { itemLinks, renderInlineItem } from '@/utils/markdown';
 import { sourceOffsetAtPoint } from '@/utils/inlineCaret';
 import { canAnimate } from '@/utils/motion';
 import { useSortable } from '@dnd-kit/sortable';
@@ -169,6 +170,11 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
   // behind the rendered one, which would be both an extra tab stop and a second
   // announcement of the same item.
   const showTextarea = !(readOnly && showRendered);
+
+  // The other half of inert links: the editable row's targets are reached
+  // through a button of their own instead. A read-only row's links already work,
+  // so it gets none.
+  const links = useMemo(() => (readOnly ? [] : itemLinks(rendered.nodes)), [readOnly, rendered.nodes]);
 
   // Height is measured before the swap and animated to afterwards. The two
   // forms of a row wrap at different points once markers are involved, so a row
@@ -476,6 +482,8 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
             </div>
           )}
         </div>
+
+        <ItemLinkButton links={links} />
 
         {showAssignUI && (() => {
           const assigneeDisplayName = assignedUser

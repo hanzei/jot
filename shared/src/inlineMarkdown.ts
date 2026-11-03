@@ -181,6 +181,90 @@ export function flattenInlineNodes(nodes: InlineNode[]): string {
   return out;
 }
 
+/** A link an item's text carries, as its target and its visible label. */
+export interface InlineLink {
+  href: string;
+  label: string;
+  /**
+   * Where the link goes, for telling apart entries whose labels look alike —
+   * the host, or the address of a `mailto:`. Null when the label already says
+   * it: a bare URL, a `www.` autolink, an autolinked email address.
+   */
+  host: string | null;
+}
+
+/**
+ * A link target's host (lower case, no credentials), or a `mailto:`'s address
+ * without its query. Parsed by hand rather than with `URL`, which Hermes only
+ * partly implements, so both clients get the same answer.
+ */
+function linkHost(href: string): string {
+  const mailto = /^mailto:([^?]*)/i.exec(href);
+  // `||`, not `??`: the group always matches, but `mailto:?subject=x` matches it
+  // empty, and an empty host line says nothing.
+  if (mailto) return mailto[1] || href;
+  const authority = /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/?#]*@)?([^/?#]+)/i.exec(href);
+  return authority?.[1]?.toLowerCase() ?? href;
+}
+
+/**
+ * Whether a link's label already spells out where it goes — an autolink, or a
+ * label that is the URL. marked normalizes autolinked `www.example.com` and
+ * `someone@example.com` to `http://` and `mailto:` targets, so those count too.
+ */
+export function linkLabelIsTarget(label: string, href: string): boolean {
+  return href === label || href === `http://${label}` || href === `mailto:${label}`;
+}
+
+/**
+ * The links in a node tree, in reading order, one per distinct target.
+ *
+ * For the editable list-item row's "open link" control
+ * (docs/specs/markdown-rendering.md §1.2): that row renders its links as plain
+ * text, so this is the only way to reach their targets from it. Every `href`
+ * here is already allowed — `normalizeInlineTokens` turns a link Jot refuses
+ * into its label, so it never becomes a link node — and callers need no scheme
+ * check of their own.
+ *
+ * A target that appears twice is listed once, under its first label: a menu
+ * offering the same destination twice is noise, not a choice.
+ *
+ * `normalizeHref` lets a client rewrite each target the way its renderer does
+ * (the webapp encodes it for an `href` attribute) before duplicates are
+ * judged, so two spellings of one target still count once; returning null
+ * drops the link.
+ */
+export function inlineLinks(
+  nodes: InlineNode[],
+  normalizeHref: (href: string) => string | null = (href) => href,
+): InlineLink[] {
+  const links: InlineLink[] = [];
+  const seen = new Set<string>();
+
+  function walk(list: InlineNode[]): void {
+    for (const node of list) {
+      if (node.type === 'link') {
+        const href = normalizeHref(node.href);
+        if (href !== null && !seen.has(href)) {
+          seen.add(href);
+          const label = flattenInlineNodes(node.children);
+          const host = linkHost(node.href);
+          // Compared against the source target, which is what the label was
+          // written from. A label that is the host is covered too: a second
+          // line repeating it says nothing.
+          const shown = linkLabelIsTarget(label, node.href) || label === host;
+          links.push({ href, label, host: shown ? null : host });
+        }
+      } else if (node.type === 'strong' || node.type === 'em' || node.type === 'del') {
+        walk(node.children);
+      }
+    }
+  }
+
+  walk(nodes);
+  return links;
+}
+
 /** How many characters of visible text a node contributes. */
 function renderedLength(node: InlineNode): number {
   switch (node.type) {
