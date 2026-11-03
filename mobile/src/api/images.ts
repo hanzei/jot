@@ -70,7 +70,3 @@ export async function uploadNoteImage(
     }),
   });
 }
-
-export async function deleteNoteImage(imageId: string): Promise<void> {
-  return jot.images.delete(imageId);
-}

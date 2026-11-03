@@ -1,10 +1,10 @@
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import AboutSection from '../src/screens/settings/AboutSection';
 import { useAuth } from '../src/store/AuthContext';
-import { getAboutInfo } from '../src/api/settings';
 import { getActiveServer } from '../src/store/serverAccounts';
 import { getCurrentLocale } from '../src/i18n/utils';
 import type { User, AboutInfo } from '@jot/shared';
+import { jot } from '../src/api/jot';
 
 // App build info the component reads. Mock the appInfo module boundary rather
 // than expo-constants/process.env so all three fields (version, commit,
@@ -13,6 +13,14 @@ import type { User, AboutInfo } from '@jot/shared';
 const APP_VERSION = '0.1.0';
 const APP_COMMIT = 'abc1234';
 const APP_BUILD_TIME = '2026-07-01T00:00:00Z';
+
+jest.mock('../src/api/jot', () => ({
+  jot: {
+    about: {
+      get: jest.fn(),
+    },
+  },
+}));
 
 jest.mock('../src/utils/appInfo', () => ({
   getAppBuildInfo: () => ({
@@ -26,9 +34,6 @@ jest.mock('../src/store/AuthContext', () => ({
   useAuth: jest.fn(),
 }));
 
-jest.mock('../src/api/settings', () => ({
-  getAboutInfo: jest.fn(),
-}));
 
 jest.mock('../src/api/client', () => ({
   subscribeToClientActiveServerChanges: jest.fn(() => () => {}),
@@ -39,7 +44,7 @@ jest.mock('../src/store/serverAccounts', () => ({
 }));
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
-const mockGetAboutInfo = getAboutInfo as jest.MockedFunction<typeof getAboutInfo>;
+const mockGetAboutInfo = jot.about.get as jest.MockedFunction<typeof jot.about.get>;
 const mockGetActiveServer = getActiveServer as jest.MockedFunction<typeof getActiveServer>;
 
 const baseUser: User = {

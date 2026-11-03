@@ -1,18 +1,11 @@
 import axios from 'axios';
 import { API_BASE_PATH, apiPaths, canonicalizeServerOrigin, UPLOAD_MAX_BYTES, VALIDATION, type ServerConfig } from '@jot/shared';
-import { jot } from './jot';
 
 export const DEFAULT_SERVER_CONFIG: ServerConfig = {
   registration_enabled: true,
   password_min_length: VALIDATION.PASSWORD_MIN_LENGTH,
   upload_max_bytes: UPLOAD_MAX_BYTES,
 };
-
-// GET /config is public (no auth required), so this rides the shared `api`
-// client and its active-server base URL like any other read.
-export async function fetchServerConfig(): Promise<ServerConfig> {
-  return jot.config.get();
-}
 
 // For a server that isn't the active one yet (mid server-setup or
 // local-to-server upgrade flow, see ConnectToServerScreen): hits the given

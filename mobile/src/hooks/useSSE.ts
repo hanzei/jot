@@ -11,7 +11,6 @@ import { isNoteSharedWithUser, type SSEEvent } from '@jot/shared';
 import { useNetworkStatus } from './useNetworkStatus';
 import { markLocalNoteDeleted, permanentDeleteLocalNote, patchLocalNoteImages, upsertLabel } from '../db/noteQueries';
 import { getProtectedNoteIds, saveServerNote } from '../db/syncQueue';
-import { getNote } from '../api/notes';
 import { isSseQuiesced, subscribeToServerSwitchLifecycle } from '../store/serverSwitchLifecycle';
 import { publishProfileIconUpdate } from '../store/profileIconEvents';
 import { publishReconnectResync } from '../store/resyncEvents';
@@ -21,6 +20,7 @@ import {
   noteLocalQueryKey,
   notesLocalQueryScopeKey,
 } from './queryKeys';
+import { jot } from '../api/jot';
 
 /**
  * Receives the events worth surfacing to the user, after they are persisted:
@@ -149,7 +149,7 @@ export function useSSE(
               if (note) {
                 await saveServerNote(db, note);
               } else {
-                await saveServerNote(db, await getNote(note_id));
+                await saveServerNote(db, await jot.notes.getById(note_id));
               }
               persisted = true;
             } catch (err) {
@@ -190,7 +190,7 @@ export function useSSE(
               // bare invalidation, so fetch the canonical note to refresh
               // shared_with/is_shared (deferring to a pending local edit; #487).
               try {
-                await saveServerNote(db, await getNote(note_id));
+                await saveServerNote(db, await jot.notes.getById(note_id));
               } catch (err) {
                 console.warn(`Failed to persist SSE ${event.type} for note id=${note_id}:`, err);
               }

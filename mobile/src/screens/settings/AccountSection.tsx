@@ -4,13 +4,13 @@ import { useTranslation } from 'react-i18next';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useAuth } from '../../store/AuthContext';
 import { useTheme } from '../../theme/ThemeContext';
-import { updateMe } from '../../api/settings';
 import { cacheAuthProfile } from '../../api/client';
 import { enqueueOperation, isQueueableError } from '../../db/syncQueue';
 import { isOnlineWriteAllowed } from '../../api/serverReachability';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { displayMessage, extractApiError } from '../../i18n/utils';
 import { styles } from './styles';
+import { jot } from '../../api/jot';
 
 export default function AccountSection() {
   const { user, settings, setUser, setSettings, isLocalMode } = useAuth();
@@ -88,7 +88,7 @@ export default function AccountSection() {
     }
 
     try {
-      const { user: updatedUser, settings: updatedSettings } = await updateMe(profileUpdate);
+      const { user: updatedUser, settings: updatedSettings } = await jot.users.updateMe(profileUpdate);
       setUser(updatedUser);
       setSettings(updatedSettings);
       void cacheAuthProfile({ user: updatedUser, settings: updatedSettings });

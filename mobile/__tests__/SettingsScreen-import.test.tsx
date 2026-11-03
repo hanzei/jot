@@ -1,42 +1,56 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import SettingsScreen from '../src/screens/SettingsScreen';
 import { useAuth } from '../src/store/AuthContext';
-import { listSessions } from '../src/api/settings';
-import { importFile, getNotes } from '../src/api/notes';
-import { getLabels } from '../src/api/labels';
+import { importFile } from '../src/api/notes';
 import * as DocumentPicker from 'expo-document-picker';
 import i18n from '../src/i18n';
 import { saveLabels, saveNotes } from '../src/db/noteQueries';
 import { apiErrorBody } from './helpers/apiError';
+import { jot } from '../src/api/jot';
 
 const mockInvalidateQueries = jest.fn();
 const SETTINGS_IMPORT_TEST_TIMEOUT_MS = 15_000;
+
+jest.mock('../src/api/jot', () => ({
+  jot: {
+    notes: {
+      getAll: jest.fn(),
+    },
+    labels: {
+      getAll: jest.fn(),
+    },
+    users: {
+      updateMe: jest.fn(),
+      changePassword: jest.fn(),
+      deleteProfileIcon: jest.fn(),
+    },
+    about: {
+      get: jest.fn(),
+    },
+    sessions: {
+      list: jest.fn(),
+      revoke: jest.fn(),
+    },
+    pats: {
+      list: jest.fn().mockResolvedValue([]),
+      create: jest.fn(),
+      revoke: jest.fn(),
+    },
+  },
+}));
 
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: jest.fn(),
 }));
 
 jest.mock('../src/api/settings', () => ({
-  updateMe: jest.fn(),
-  changePassword: jest.fn(),
   uploadProfileIcon: jest.fn(),
-  deleteProfileIcon: jest.fn(),
-  getAboutInfo: jest.fn(),
-  listSessions: jest.fn(),
-  revokeSession: jest.fn(),
-  listPATs: jest.fn().mockResolvedValue([]),
-  createPAT: jest.fn(),
-  revokePAT: jest.fn(),
 }));
 
 jest.mock('../src/api/notes', () => ({
   importFile: jest.fn(),
-  getNotes: jest.fn(),
 }));
 
-jest.mock('../src/api/labels', () => ({
-  getLabels: jest.fn(),
-}));
 
 jest.mock('../src/db/noteQueries', () => ({
   saveNotes: jest.fn(),
@@ -90,10 +104,10 @@ jest.mock('../src/hooks/useServerConfig', () => ({
 }));
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
-const mockListSessions = listSessions as jest.MockedFunction<typeof listSessions>;
+const mockListSessions = jot.sessions.list as jest.MockedFunction<typeof jot.sessions.list>;
 const mockImportFile = importFile as jest.MockedFunction<typeof importFile>;
-const mockGetNotes = getNotes as jest.MockedFunction<typeof getNotes>;
-const mockGetLabels = getLabels as jest.MockedFunction<typeof getLabels>;
+const mockGetNotes = jot.notes.getAll as jest.MockedFunction<typeof jot.notes.getAll>;
+const mockGetLabels = jot.labels.getAll as jest.MockedFunction<typeof jot.labels.getAll>;
 const mockGetDocumentAsync = DocumentPicker.getDocumentAsync as jest.MockedFunction<typeof DocumentPicker.getDocumentAsync>;
 const mockSaveNotes = saveNotes as jest.MockedFunction<typeof saveNotes>;
 const mockSaveLabels = saveLabels as jest.MockedFunction<typeof saveLabels>;

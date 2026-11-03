@@ -8,7 +8,7 @@ import type { LocalIdentity } from './localMode';
 import { disableLocalMode, setLocalModeActive } from './localMode';
 import { initializeServerContext, switchActiveServer } from '../api/client';
 import { addServer, setServerStorageValue } from './serverAccounts';
-import { getNotes } from '../api/notes';
+import { jot } from '../api/jot';
 
 export interface UpgradeSession {
   serverUrl: string;
@@ -526,7 +526,7 @@ const RECONCILE_SCOPES: (GetNotesParams | undefined)[] = [
  */
 export async function runBackgroundReconcileScopes(db: SQLiteDatabase): Promise<void> {
   for (const scope of RECONCILE_SCOPES) {
-    const notes = await getNotes(scope);
+    const notes = await jot.notes.getAll(scope);
     await saveServerNotesScope(db, notes, scope);
   }
 }

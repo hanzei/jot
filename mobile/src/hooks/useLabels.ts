@@ -2,16 +2,6 @@ import { useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import {
-  getLabels,
-  getLabelCounts,
-  createLabel,
-  addLabelToNote,
-  removeLabelFromNote,
-  renameLabel,
-  deleteLabel,
-} from '../api/labels';
-import { getNotes } from '../api/notes';
-import {
   renameLabelInLocalNotes,
   deleteLabelFromLocalNotes,
   addLabelToLocalNote,
@@ -43,6 +33,7 @@ import {
   noteLocalQueryScopeKey,
   notesLocalQueryScopeKey,
 } from './queryKeys';
+import { jot } from '../api/jot';
 
 type LabelSyncScope = { archived?: true; trashed?: true; my_tasks?: true } | undefined;
 
@@ -76,7 +67,7 @@ async function syncLocalNotesAfterLabelMutation(db: SQLiteDatabase) {
 
   for (const scope of scopes) {
     try {
-      const notes = await getNotes(scope);
+      const notes = await jot.notes.getAll(scope);
       // saveServerNotes re-reads the pending set per scope, so an edit queued
       // mid-loop is gated by the scope saved after it, not just a stale snapshot
       // taken before the (multi-fetch) loop began (#487).
@@ -175,7 +166,7 @@ export function useLabels() {
   // (which depends on the fns) doesn't re-run — and re-fetch — on every render.
   const localFn = useCallback(() => getStoredLabels(db), [db]);
   const serverFn = useCallback(async () => {
-    const labels = await getLabels();
+    const labels = await jot.labels.getAll();
     await saveServerLabels(db, labels);
     return labels;
   }, [db]);
@@ -184,7 +175,7 @@ export function useLabels() {
 
 export function useLabelCounts() {
   const db = useSQLiteContext();
-  return useBackgroundSyncQuery(labelCountsQueryKey, () => getLocalLabelCounts(db), getLabelCounts);
+  return useBackgroundSyncQuery(labelCountsQueryKey, () => getLocalLabelCounts(db), jot.labels.getCounts);
 }
 
 /** Build an optimistic, locally-created label for the offline / transient-failure path. */
@@ -234,7 +225,7 @@ export function useCreateLabel() {
       if (!trimmed) throw new LocalizedError('labels.nameRequired', 'Label name must not be empty');
       if (isOnlineWriteAllowed(isConnected)) {
         try {
-          const serverLabel = await createLabel(trimmed);
+          const serverLabel = await jot.labels.create(trimmed);
           // Persist to the canonical label store so the new (empty) label shows in
           // the drawer immediately — it isn't attached to any note yet (#691).
           await upsertLabel(db, serverLabel);
@@ -288,7 +279,7 @@ export function useAddLabelToNote() {
       const pendingCreate = await isNotePendingCreate(db, noteId);
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
-          const updatedNote = await addLabelToNote(noteId, trimmed);
+          const updatedNote = await jot.notes.addLabel(noteId, trimmed);
           await saveServerResponseNote(db, updatedNote);
           // The server may have minted a brand-new label; persist it to the store
           // so it shows in the drawer immediately (#691).
@@ -342,7 +333,7 @@ export function useRemoveLabelFromNote() {
       const pendingCreate = await isNotePendingCreate(db, noteId);
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
-          const updatedNote = await removeLabelFromNote(noteId, labelId);
+          const updatedNote = await jot.notes.removeLabel(noteId, labelId);
           await saveServerResponseNote(db, updatedNote);
           return updatedNote;
         } catch (err) {
@@ -388,13 +379,13 @@ export function useRenameLabel() {
       const trimmed = name.trim();
       if (!trimmed) throw new LocalizedError('labels.nameRequired', 'Label name must not be empty');
       // A label created offline carries a server-valid id (#546) but its queued
-      // createLabel drains FIFO before this rename, so queue rather than calling
+      // jot.labels.create drains FIFO before this rename, so queue rather than calling
       // online against a label the server doesn't know yet — a direct PATCH would
       // 404 (permanent) and drop the rename instead of syncing it.
       const pendingCreate = (await getPendingLabelIds(db)).has(labelId);
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
-          const updatedLabel = await renameLabel(labelId, trimmed);
+          const updatedLabel = await jot.labels.rename(labelId, trimmed);
           await renameStoredLabel(db, labelId, updatedLabel.name);
           try {
             await renameLabelInLocalNotes(db, labelId, updatedLabel.name);
@@ -446,13 +437,13 @@ export function useDeleteLabel() {
     mutationFn: async ({ labelId }: { labelId: string }) => {
       assertSwitchWriteAllowed();
       // A label created offline carries a server-valid id (#546) but its queued
-      // createLabel drains FIFO before this delete, so queue rather than calling
+      // jot.labels.create drains FIFO before this delete, so queue rather than calling
       // online against a label the server doesn't know yet — a direct DELETE would
       // 404 (permanent) and drop the deletion instead of syncing it.
       const pendingCreate = (await getPendingLabelIds(db)).has(labelId);
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
-          await deleteLabel(labelId);
+          await jot.labels.delete(labelId);
           await deleteStoredLabel(db, labelId);
           try {
             await deleteLabelFromLocalNotes(db, labelId);

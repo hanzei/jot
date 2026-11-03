@@ -1,25 +1,5 @@
 import { useMutation, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
-import {
-  getNote,
-  createNote,
-  updateNote,
-  deleteNote,
-  restoreNote,
-  markNoteViewed,
-  duplicateNote,
-  convertNoteType,
-  permanentDeleteNote,
-  reorderNotes,
-  createNoteItem,
-  updateNoteItem,
-  deleteNoteItem,
-  reorderNoteItems,
-  toggleItemCompleted,
-  setItemsCompleted,
-  deleteCompletedItems,
-} from '../api/notes';
-import { shareNote, unshareNote } from '../api/users';
 import { useOfflineNote } from './useOfflineNotes';
 import { apiPaths, DEFAULT_NOTE_COLOR, generateId, textToListNote, listToText, checkConvertToListCaps, applyCompletedValues, completedCascadeScope, patchTouchesSharedContent } from '@jot/shared';
 import type {
@@ -81,6 +61,7 @@ import {
   noteLocalQueryKey,
   notesLocalQueryScopeKey,
 } from './queryKeys';
+import { jot } from '../api/jot';
 
 /**
  * The item ids a completed-toggle changes: the shared `completedCascadeScope`
@@ -295,7 +276,7 @@ export function useCreateNote() {
       assertSwitchWriteAllowed();
       if (isOnlineWriteAllowed(isConnected)) {
         try {
-          const note = await createNote(data);
+          const note = await jot.notes.create(data);
           await saveServerResponseNote(db, note);
           // Labels sent by name may have been minted by the create; store them so
           // the drawer shows them right away (#691).
@@ -487,7 +468,7 @@ export function useUpdateNote() {
           // (#489). A 409 is permanent, so rethrowIfNotQueueable surfaces it.
           const body: UpdateNoteRequest =
             touchesContent && existing ? { ...data, base_version: existing.version } : data;
-          const updatedNote = await updateNote(id, body);
+          const updatedNote = await jot.notes.update(id, body);
           await saveServerResponseNote(db, updatedNote);
           return updatedNote;
         } catch (err) {
@@ -664,7 +645,7 @@ export function useConvertNoteType() {
       const pendingCreate = await isNotePendingCreate(db, id);
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
-          const convertedNote = await convertNoteType(id, { ...data, base_version: existing.version });
+          const convertedNote = await jot.notes.convert(id, { ...data, base_version: existing.version });
           await saveServerResponseNote(db, convertedNote);
           return convertedNote;
         } catch (err) {
@@ -734,7 +715,7 @@ export function useCreateNoteItem() {
       const pendingCreate = await isNotePendingCreate(db, noteId);
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
-          await createNoteItem(noteId, itemWithId);
+          await jot.notes.createItem(noteId, itemWithId);
           await createLocalItem(db, noteId, local);
           return;
         } catch (err) {
@@ -770,7 +751,7 @@ export function useUpdateNoteItem() {
       const pendingCreate = await isNotePendingCreate(db, noteId);
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
-          await updateNoteItem(noteId, itemId, data);
+          await jot.notes.updateItem(noteId, itemId, data);
           await patchLocalItem(db, noteId, itemId, data);
           return;
         } catch (err) {
@@ -806,7 +787,7 @@ export function useDeleteNoteItem() {
       const pendingCreate = await isNotePendingCreate(db, noteId);
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
-          await deleteNoteItem(noteId, itemId);
+          await jot.notes.deleteItem(noteId, itemId);
           await deleteLocalItem(db, noteId, itemId);
           return;
         } catch (err) {
@@ -841,7 +822,7 @@ export function useReorderNoteItems() {
       const pendingCreate = await isNotePendingCreate(db, noteId);
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
-          await reorderNoteItems(noteId, itemIds);
+          await jot.notes.reorderItems(noteId, itemIds);
           await reorderLocalItems(db, noteId, itemIds);
           return;
         } catch (err) {
@@ -878,7 +859,7 @@ export function useDeleteNote() {
       const pendingCreate = await isNotePendingCreate(db, id);
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
-          await deleteNote(id);
+          await jot.notes.delete(id);
           await markLocalNoteDeleted(db, id);
           return;
         } catch (err) {
@@ -917,7 +898,7 @@ export function useDuplicateNote() {
       const pendingCreate = await isNotePendingCreate(db, id);
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
-          const duplicatedNote = await duplicateNote(id);
+          const duplicatedNote = await jot.notes.duplicate(id);
           await saveServerResponseNote(db, duplicatedNote);
           return duplicatedNote;
         } catch (err) {
@@ -1007,7 +988,7 @@ export function useRestoreNote() {
       const pendingCreate = await isNotePendingCreate(db, id);
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
-          await restoreNote(id);
+          await jot.notes.restore(id);
           await markLocalNoteRestored(db, id);
           return;
         } catch (err) {
@@ -1054,7 +1035,7 @@ export function useMarkNoteViewed() {
       // A note created offline is never unread, so no pending-create check.
       if (isOnlineWriteAllowed(isConnected)) {
         try {
-          await markNoteViewed(id);
+          await jot.notes.markViewed(id);
           return;
         } catch (err) {
           rethrowIfNotQueueable(err);
@@ -1091,7 +1072,7 @@ export function usePermanentDeleteNote() {
       const pendingCreate = await isNotePendingCreate(db, id);
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
-          await permanentDeleteNote(id);
+          await jot.notes.delete(id, { permanent: true });
           await permanentDeleteLocalNote(db, id);
           return;
         } catch (err) {
@@ -1205,7 +1186,7 @@ export function useReorderNotes() {
 
       if (isOnlineWriteAllowed(isConnected) && !batchHasPending) {
         try {
-          await reorderNotes(noteIds);
+          await jot.notes.reorder(noteIds);
           return;
         } catch (err) {
           // Transient failure: fall through to the offline path so the reorder
@@ -1285,10 +1266,10 @@ export function useShareNote() {
 
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
-          await shareNote(noteId, user.id);
+          await jot.notes.share(noteId, { user_id: user.id });
           // Fetch updated note so shared_with_json in SQLite reflects server state
           try {
-            const updated = await getNote(noteId);
+            const updated = await jot.notes.getById(noteId);
             await saveServerResponseNote(db, updated);
           } catch { /* share succeeded; note will sync on next background refresh */ }
           return;
@@ -1346,9 +1327,9 @@ export function useUnshareNote() {
 
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
-          await unshareNote(noteId, userId);
+          await jot.notes.unshare(noteId, userId);
           try {
-            const updated = await getNote(noteId);
+            const updated = await jot.notes.getById(noteId);
             await saveServerResponseNote(db, updated);
           } catch { /* unshare succeeded; note will sync on next background refresh */ }
           return;
@@ -1407,7 +1388,7 @@ export function useLeaveNote() {
       // there is for the owner-side writes above.
       if (isOnlineWriteAllowed(isConnected)) {
         try {
-          await unshareNote(noteId, userId);
+          await jot.notes.unshare(noteId, userId);
           // Access is gone now, so there is nothing to re-fetch (a GET would
           // 403/404) — drop the local copy so the note leaves the user's list.
           await permanentDeleteLocalNote(db, noteId);
@@ -1465,7 +1446,7 @@ export function useToggleNoteItemCompleted() {
       return runLocalCompletedWrite(db, queryClient, noteId, isConnected, {
         priorById: new Map(changedIds.map((id) => [id, !completed])),
         writeLocal: () => setLocalItemsCompleted(db, noteId, changedIds, completed),
-        send: () => toggleItemCompleted(noteId, itemId, completed),
+        send: () => jot.notes.toggleItemCompleted(noteId, itemId, completed),
         persist: (write, serverItems, queued) => {
           const completedById = localCompletedWrites.accept(write, serverItems);
           for (const id of queued) completedById.delete(id);
@@ -1510,7 +1491,7 @@ export function useUncheckAllItems() {
       return runLocalCompletedWrite(db, queryClient, noteId, isConnected, {
         priorById: new Map(itemIds.map((id) => [id, true])),
         writeLocal: () => setLocalItemsCompleted(db, noteId, itemIds, false),
-        send: () => setItemsCompleted(noteId, itemIds, false),
+        send: () => jot.notes.setItemsCompleted(noteId, itemIds, false),
         // The server returns the note's full, authoritative item list, so
         // reconcile every field (and prune any local row it no longer contains)
         // rather than just patching `completed`.
@@ -1566,7 +1547,7 @@ export function useDeleteCompletedItems() {
       const pendingCreate = await isNotePendingCreate(db, noteId);
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
-          const serverItems = await deleteCompletedItems(noteId, itemIds);
+          const serverItems = await jot.notes.deleteItems(noteId, itemIds);
           // The server returns the note's full, authoritative remaining item
           // list; reconciling against it (rather than deleting exactly
           // `itemIds`) prunes precisely what the server actually removed.

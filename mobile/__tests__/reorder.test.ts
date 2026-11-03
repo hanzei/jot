@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { reorderNotes } from '../src/api/notes';
+import { jot } from '../src/api/jot';
 
 jest.mock('axios', () => {
   const mockInstance = {
@@ -35,7 +35,7 @@ describe('reorderNotes API', () => {
   it('calls POST /notes/reorder with note_ids payload', async () => {
     mockAxiosInstance.post.mockResolvedValueOnce({});
 
-    await reorderNotes(['id-1', 'id-2', 'id-3']);
+    await jot.notes.reorder(['id-1', 'id-2', 'id-3']);
 
     expect(mockAxiosInstance.post).toHaveBeenCalledWith('/notes/reorder', {
       note_ids: ['id-1', 'id-2', 'id-3'],
@@ -45,6 +45,6 @@ describe('reorderNotes API', () => {
   it('throws on network error', async () => {
     mockAxiosInstance.post.mockRejectedValueOnce(new Error('Network Error'));
 
-    await expect(reorderNotes(['id-1'])).rejects.toThrow('Network Error');
+    await expect(jot.notes.reorder(['id-1'])).rejects.toThrow('Network Error');
   });
 });

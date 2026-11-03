@@ -12,7 +12,6 @@ import { Check, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useAuth } from '../../store/AuthContext';
 import { useTheme } from '../../theme/ThemeContext';
-import { updateMe } from '../../api/settings';
 import { cacheAuthProfile } from '../../api/client';
 import { enqueueOperation, isQueueableError } from '../../db/syncQueue';
 import { isOnlineWriteAllowed } from '../../api/serverReachability';
@@ -22,6 +21,7 @@ import { displayMessage, extractApiError } from '../../i18n/utils';
 import i18n from '../../i18n';
 import type { ThemePreference } from '@jot/shared';
 import { styles } from './styles';
+import { jot } from '../../api/jot';
 
 export default function AppearanceSection() {
   const { user, settings, setSettings, isLocalMode } = useAuth();
@@ -66,7 +66,7 @@ export default function AppearanceSection() {
       // Server known-unreachable: skip the doomed round-trip and enqueue the
       // change for replay instead of eating the write timeout (#716). The
       // enqueue is a local SQLite write and can still fail, so it gets the
-      // same rollback/error handling as the updateMe path below rather than
+      // same rollback/error handling as the jot.users.updateMe path below rather than
       // escaping as an unhandled rejection out of the void-invoked handler.
       try {
         await enqueueOperation(db, {
@@ -88,7 +88,7 @@ export default function AppearanceSection() {
     }
 
     try {
-      const { settings: updatedSettings } = await updateMe({ language });
+      const { settings: updatedSettings } = await jot.users.updateMe({ language });
       setSettings(updatedSettings);
       if (user) void cacheAuthProfile({ user, settings: updatedSettings });
     } catch (err: unknown) {
@@ -131,7 +131,7 @@ export default function AppearanceSection() {
       // Server known-unreachable: skip the doomed round-trip and enqueue the
       // change for replay instead of eating the write timeout (#716). The
       // enqueue is a local SQLite write and can still fail, so it gets the
-      // same rollback/error handling as the updateMe path below rather than
+      // same rollback/error handling as the jot.users.updateMe path below rather than
       // escaping as an unhandled rejection out of the void-invoked handler.
       try {
         await enqueueOperation(db, {
@@ -152,7 +152,7 @@ export default function AppearanceSection() {
     }
 
     try {
-      const { settings: updatedSettings } = await updateMe({ theme });
+      const { settings: updatedSettings } = await jot.users.updateMe({ theme });
       setSettings(updatedSettings);
       if (user) void cacheAuthProfile({ user, settings: updatedSettings });
     } catch (err: unknown) {

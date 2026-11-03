@@ -2,13 +2,21 @@ import React from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { parseCachedConfig, useServerConfig } from '../src/hooks/useServerConfig';
-import { DEFAULT_SERVER_CONFIG, fetchServerConfig } from '../src/api/config';
+import { DEFAULT_SERVER_CONFIG } from '../src/api/config';
 import { getActiveServerId, getStoredServerUrl, subscribeToClientActiveServerChanges } from '../src/api/client';
 import { getServerStorageValue, setServerStorageValue } from '../src/store/serverAccounts';
+import { jot } from '../src/api/jot';
+
+jest.mock('../src/api/jot', () => ({
+  jot: {
+    config: {
+      get: jest.fn(),
+    },
+  },
+}));
 
 jest.mock('../src/api/config', () => ({
   DEFAULT_SERVER_CONFIG: { registration_enabled: true, password_min_length: 10, upload_max_bytes: 26214400 },
-  fetchServerConfig: jest.fn(),
 }));
 jest.mock('../src/api/client', () => ({
   getActiveServerId: jest.fn(),
@@ -20,7 +28,7 @@ jest.mock('../src/store/serverAccounts', () => ({
   setServerStorageValue: jest.fn(),
 }));
 
-const mockFetchServerConfig = fetchServerConfig as jest.MockedFunction<typeof fetchServerConfig>;
+const mockFetchServerConfig = jot.config.get as jest.MockedFunction<typeof jot.config.get>;
 const mockGetActiveServerId = getActiveServerId as jest.MockedFunction<typeof getActiveServerId>;
 const mockGetStoredServerUrl = getStoredServerUrl as jest.MockedFunction<typeof getStoredServerUrl>;
 const mockGetServerStorageValue = getServerStorageValue as jest.MockedFunction<typeof getServerStorageValue>;

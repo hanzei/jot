@@ -1,19 +1,24 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import AccountSection from '../src/screens/settings/AccountSection';
 import { useAuth } from '../src/store/AuthContext';
-import { updateMe } from '../src/api/settings';
 import { cacheAuthProfile } from '../src/api/client';
 import { enqueueOperation } from '../src/db/syncQueue';
 import { markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
 import i18n from '../src/i18n';
+import { jot } from '../src/api/jot';
+
+jest.mock('../src/api/jot', () => ({
+  jot: {
+    users: {
+      updateMe: jest.fn(),
+    },
+  },
+}));
 
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: jest.fn(),
 }));
 
-jest.mock('../src/api/settings', () => ({
-  updateMe: jest.fn(),
-}));
 
 jest.mock('../src/api/client', () => ({
   cacheAuthProfile: jest.fn().mockResolvedValue(undefined),
@@ -25,7 +30,7 @@ jest.mock('../src/db/syncQueue', () => ({
 }));
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
-const mockUpdateMe = updateMe as jest.MockedFunction<typeof updateMe>;
+const mockUpdateMe = jot.users.updateMe as jest.MockedFunction<typeof jot.users.updateMe>;
 const mockCacheAuthProfile = cacheAuthProfile as jest.MockedFunction<typeof cacheAuthProfile>;
 const mockEnqueueOperation = enqueueOperation as jest.MockedFunction<typeof enqueueOperation>;
 

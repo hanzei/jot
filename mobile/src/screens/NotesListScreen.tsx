@@ -15,7 +15,6 @@ import { Archive, Clipboard, CloudOff, FileText, Info, Plus, Search, Tag, Trash2
 import { DrawerActions, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
-import { updateMe } from '../api/settings';
 import { useTranslation } from 'react-i18next';
 import { useReorderNotes } from '../hooks/useNotes';
 import { useOfflineNotes } from '../hooks/useOfflineNotes';
@@ -28,7 +27,6 @@ import NoteCard from '../components/NoteCard';
 import { normalizeNoteSort, sortNotesForDisplay, type Note, type NoteSort } from '@jot/shared';
 import type { RootStackParamList, LayoutRect } from '../navigation/RootNavigator';
 import { isSortWarningDismissed, dismissSortWarning } from '../utils/sortWarningDismissed';
-import { emptyTrash as emptyTrashNotes } from '../api/notes';
 import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
 import { enqueueOperation, isQueueableError } from '../db/syncQueue';
 import { isOnlineWriteAllowed } from '../api/serverReachability';
@@ -46,6 +44,7 @@ import {
   DEFAULT_DASHBOARD_LAYOUT,
   type DashboardLayout,
 } from '../utils/dashboardLayout';
+import { jot } from '../api/jot';
 
 interface NotesListScreenProps {
   variant?: 'notes' | 'archived' | 'trash' | 'my-tasks';
@@ -219,7 +218,7 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
     }
 
     try {
-      const response = await updateMe({ note_sort: nextSort });
+      const response = await jot.users.updateMe({ note_sort: nextSort });
       if (requestId !== sortRequestIdRef.current) {
         return;
       }
@@ -331,7 +330,7 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
     setIsEmptyingTrash(true);
     let serverTrashEmptied = false;
     try {
-      await emptyTrashNotes();
+      await jot.notes.emptyTrash();
       serverTrashEmptied = true;
       const trashedNotes = await getLocalNotes(db, { trashed: true });
       await Promise.all(trashedNotes.map((note) => permanentDeleteLocalNote(db, note.id)));

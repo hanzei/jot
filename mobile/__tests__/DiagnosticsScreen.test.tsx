@@ -15,9 +15,17 @@ import {
   subscribeToServerReachability,
 } from '../src/api/serverReachability';
 import { getSseState, subscribeToSseState } from '../src/api/sseState';
-import { getAboutInfo } from '../src/api/settings';
 import { MAX_ENTRY_DRAIN_ATTEMPTS } from '../src/db/syncQueue';
 import { seedImageUpload } from './helpers/fixtures';
+import { jot } from '../src/api/jot';
+
+jest.mock('../src/api/jot', () => ({
+  jot: {
+    about: {
+      get: jest.fn(),
+    },
+  },
+}));
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ goBack: jest.fn(), navigate: jest.fn() }),
@@ -60,9 +68,6 @@ jest.mock('../src/api/sseState', () => ({
   subscribeToSseState: jest.fn(() => () => {}),
 }));
 
-jest.mock('../src/api/settings', () => ({
-  getAboutInfo: jest.fn(),
-}));
 
 jest.mock('../src/utils/appInfo', () => ({
   getAppBuildInfo: jest.fn(() => ({
@@ -72,7 +77,7 @@ jest.mock('../src/utils/appInfo', () => ({
   })),
 }));
 
-const mockGetAboutInfo = getAboutInfo as jest.MockedFunction<typeof getAboutInfo>;
+const mockGetAboutInfo = jot.about.get as jest.MockedFunction<typeof jot.about.get>;
 const mockUseOfflineContext = useOfflineContext as jest.MockedFunction<typeof useOfflineContext>;
 const mockIsServerReachable = isServerReachable as jest.MockedFunction<typeof isServerReachable>;
 const mockGetServerReachabilityChangedAt =

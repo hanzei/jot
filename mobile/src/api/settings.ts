@@ -1,15 +1,7 @@
 import { Platform } from 'react-native';
 import type { AxiosProgressEvent } from 'axios';
 import { jot } from './jot';
-import type { User, AuthResponse, UpdateMeRequest, ChangePasswordRequest, AboutInfo, ActiveSession, PersonalAccessToken, CreatePATRequest } from '@jot/shared';
-
-export async function updateMe(data: UpdateMeRequest): Promise<AuthResponse> {
-  return jot.users.updateMe(data);
-}
-
-export async function changePassword(data: ChangePasswordRequest): Promise<void> {
-  return jot.users.changePassword(data);
-}
+import type { User } from '@jot/shared';
 
 // Profile-icon uploads can be large on slow cellular, so this is generous —
 // but a half-open / unreachable server must still resolve to an error instead
@@ -50,30 +42,3 @@ export async function uploadProfileIcon(
   });
 }
 
-export async function deleteProfileIcon(): Promise<void> {
-  return jot.users.deleteProfileIcon();
-}
-
-export async function getAboutInfo(): Promise<AboutInfo> {
-  return jot.about.get();
-}
-
-export async function listSessions(): Promise<ActiveSession[]> {
-  return jot.sessions.list();
-}
-
-export async function revokeSession(id: string): Promise<void> {
-  return jot.sessions.revoke(id);
-}
-
-export async function listPATs(): Promise<PersonalAccessToken[]> {
-  return jot.pats.list();
-}
-
-export async function createPAT(data: CreatePATRequest): Promise<PersonalAccessToken> {
-  return jot.pats.create(data);
-}
-
-export async function revokePAT(id: string): Promise<void> {
-  return jot.pats.revoke(id);
-}

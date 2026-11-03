@@ -2,7 +2,7 @@ import axios from 'axios';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import type { NoteImage } from '@jot/shared';
-import { uploadNoteImage, deleteNoteImage, type ImageUploadFile } from '../api/images';
+import { uploadNoteImage, type ImageUploadFile } from '../api/images';
 import { patchLocalNoteImages, isNotePendingCreate } from '../db/noteQueries';
 import { enqueueOperation, rethrowIfNotQueueable } from '../db/syncQueue';
 import { enqueueImageUpload } from '../db/imageUploadQueue';
@@ -12,6 +12,7 @@ import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from './useNetworkStatus';
 import { isLocalModeActive } from '../store/localMode';
 import { noteLocalQueryKey, notesLocalQueryScopeKey, pendingImageUploadsQueryKey } from './queryKeys';
+import { jot } from '../api/jot';
 
 export type UploadNoteImageResult = { status: 'uploaded'; image: NoteImage } | { status: 'queued' };
 
@@ -125,7 +126,7 @@ export function useDeleteNoteImage() {
 
       if (isLocalModeActive() || isOnlineWriteAllowed(isConnected)) {
         try {
-          await deleteNoteImage(imageId);
+          await jot.images.delete(imageId);
           // Same self-echo gap as the upload above, on the removal side.
           await hideImageLocally(db, noteId, imageId);
           return;

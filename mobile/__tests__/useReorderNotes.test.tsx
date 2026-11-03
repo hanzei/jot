@@ -2,18 +2,19 @@ import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useReorderNotes } from '../src/hooks/useNotes';
-import * as notesApi from '../src/api/notes';
 import { saveNotes, getLocalNotePositions, markNotePendingCreate } from '../src/db/noteQueries';
 import { getDefaultTestDb } from './helpers/testDb';
 import { makeTextNote } from './helpers/fixtures';
+import { jot } from '../src/api/jot';
 
-jest.mock('../src/api/notes');
+const mockJot = jest.mocked(jot);
+
+jest.mock('../src/api/jot');
 
 jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
 }));
 
-const mockNotesApi = notesApi as jest.Mocked<typeof notesApi>;
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -52,7 +53,7 @@ describe('useReorderNotes', () => {
   });
 
   it('calls reorderNotes API with note IDs', async () => {
-    mockNotesApi.reorderNotes.mockResolvedValueOnce(undefined);
+    mockJot.notes.reorder.mockResolvedValueOnce(undefined);
 
     const { result } = await renderHook(() => useReorderNotes(), { wrapper: createWrapper() });
 
@@ -60,11 +61,11 @@ describe('useReorderNotes', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(mockNotesApi.reorderNotes).toHaveBeenCalledWith(['id-1', 'id-2', 'id-3']);
+    expect(mockJot.notes.reorder).toHaveBeenCalledWith(['id-1', 'id-2', 'id-3']);
   });
 
   it('handles reorder failure', async () => {
-    mockNotesApi.reorderNotes.mockRejectedValueOnce(new Error('Failed'));
+    mockJot.notes.reorder.mockRejectedValueOnce(new Error('Failed'));
 
     const { result } = await renderHook(() => useReorderNotes(), { wrapper: createWrapper() });
 
@@ -82,14 +83,14 @@ describe('useReorderNotes', () => {
     await saveNotes(db, [makeTextNote({ id: 'a', position: 0 }), makeTextNote({ id: 'b', position: 1 })]);
 
     const pending = deferred<undefined>();
-    mockNotesApi.reorderNotes.mockReturnValueOnce(pending.promise as never);
+    mockJot.notes.reorder.mockReturnValueOnce(pending.promise as never);
 
     const { result } = await renderHook(() => useReorderNotes(), { wrapper: createWrapper() });
     result.current.mutate(['b', 'a']);
 
     // Request is still in flight (pending unresolved), and SQLite already holds
     // the new order.
-    await waitFor(() => expect(mockNotesApi.reorderNotes).toHaveBeenCalledWith(['b', 'a']));
+    await waitFor(() => expect(mockJot.notes.reorder).toHaveBeenCalledWith(['b', 'a']));
     const positions = await getLocalNotePositions(db, ['a', 'b']);
     expect(positions.get('b')).toBe(0);
     expect(positions.get('a')).toBe(1);
@@ -114,7 +115,7 @@ describe('useReorderNotes', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     // The API is skipped and the reorder is queued for replay after the create.
-    expect(mockNotesApi.reorderNotes).not.toHaveBeenCalled();
+    expect(mockJot.notes.reorder).not.toHaveBeenCalled();
     const queued = await db.getAllAsync<{ operation: string; endpoint: string; body: string }>(
       'SELECT operation, endpoint, body FROM sync_queue',
     );
@@ -138,7 +139,7 @@ describe('useReorderNotes', () => {
 
     // Force the offline path (transient network failure) and make the enqueue
     // throw by removing the table it writes to.
-    mockNotesApi.reorderNotes.mockRejectedValueOnce(makeAxiosError(503));
+    mockJot.notes.reorder.mockRejectedValueOnce(makeAxiosError(503));
     await db.execAsync('DROP TABLE sync_queue');
 
     const { result } = await renderHook(() => useReorderNotes(), { wrapper: createWrapper() });
@@ -156,7 +157,7 @@ describe('useReorderNotes', () => {
     await saveNotes(db, [makeTextNote({ id: 'a', position: 0 }), makeTextNote({ id: 'b', position: 1 })]);
 
     // A 409 is permanent, so it surfaces rather than queues.
-    mockNotesApi.reorderNotes.mockRejectedValueOnce(makeAxiosError(409));
+    mockJot.notes.reorder.mockRejectedValueOnce(makeAxiosError(409));
 
     const { result } = await renderHook(() => useReorderNotes(), { wrapper: createWrapper() });
     await result.current.mutateAsync(['b', 'a']).catch(() => {});

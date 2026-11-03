@@ -3,7 +3,15 @@ import type { ServerConfig, User } from '@jot/shared';
 import ChangePasswordSection from '../src/screens/settings/ChangePasswordSection';
 import { useServerConfig } from '../src/hooks/useServerConfig';
 import { useAuth } from '../src/store/AuthContext';
-import { changePassword } from '../src/api/settings';
+import { jot } from '../src/api/jot';
+
+jest.mock('../src/api/jot', () => ({
+  jot: {
+    users: {
+      changePassword: jest.fn(),
+    },
+  },
+}));
 
 jest.mock('../src/hooks/useServerConfig', () => ({
   useServerConfig: jest.fn(),
@@ -13,9 +21,6 @@ jest.mock('../src/store/AuthContext', () => ({
   useAuth: jest.fn(),
 }));
 
-jest.mock('../src/api/settings', () => ({
-  changePassword: jest.fn(),
-}));
 
 jest.mock('react-i18next', () => ({
   __esModule: true,
@@ -24,7 +29,7 @@ jest.mock('react-i18next', () => ({
 
 const mockUseServerConfig = useServerConfig as jest.MockedFunction<typeof useServerConfig>;
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
-const mockChangePassword = changePassword as jest.MockedFunction<typeof changePassword>;
+const mockChangePassword = jot.users.changePassword as jest.MockedFunction<typeof jot.users.changePassword>;
 
 const baseUser: User = {
   id: 'u1',
