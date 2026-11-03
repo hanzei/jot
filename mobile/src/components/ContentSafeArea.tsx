@@ -2,7 +2,7 @@ import { createContext, useContext, useMemo, type PropsWithChildren } from 'reac
 import { SafeAreaInsetsContext, type EdgeInsets } from 'react-native-safe-area-context';
 import { useBannerShown } from '../hooks/useBannerShown';
 
-const ZERO_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
+export const ZERO_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 
 /**
  * The device's real safe-area insets, kept intact for the few overlays that
