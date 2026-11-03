@@ -5,7 +5,7 @@ import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import type { InlineLink } from '@jot/shared';
 
 interface ItemLinkButtonProps {
-  /** The row's links, from `itemLinks`. Renders nothing when empty. */
+  /** The row's links, from `inlineLinks`. Renders nothing when empty. */
   links: InlineLink[];
 }
 

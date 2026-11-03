@@ -232,6 +232,22 @@ describe('ListItem', () => {
         await waitFor(() => expect(openURL).toHaveBeenCalledWith('https://b.example'));
         expect(queryAllByTestId('item-links-sheet-link')).toHaveLength(0);
       });
+
+      it('lists two spellings of one target once, and opens it encoded', async () => {
+        // The shared normalizer encodes every target, so a raw space and its
+        // `%20` are the same address — and the one opened has no raw space,
+        // which iOS would refuse.
+        const openURL = stubLinking();
+        const { getByTestId, queryAllByTestId } = await render(
+          <ListItem text="[a](<https://x.example/a b>) [b](https://x.example/a%20b)" completed={false} />,
+        );
+
+        expect(queryAllByTestId('item-links-sheet-link')).toHaveLength(0);
+        const button = getByTestId('list-item-open-link');
+        expect(button.props.accessibilityLabel).toBe('Open link: a');
+        await fireEvent.press(button);
+        await waitFor(() => expect(openURL).toHaveBeenCalledWith('https://x.example/a%20b'));
+      });
     });
 
     describe('open-link sheet state', () => {

@@ -36,6 +36,27 @@ export function isAllowedLinkHref(href: string): boolean {
 }
 
 /**
+ * A link target encoded as the address a client opens, or null when it cannot
+ * be encoded (a lone surrogate makes `encodeURI` throw).
+ *
+ * This is marked's own `cleanUrl` step: encode, then undo the `%` → `%25`
+ * double-encoding so an already-encoded target (`.../Caf%C3%A9`) round-trips
+ * unchanged. Running it twice is therefore harmless. It also encodes the space
+ * in `<https://example.com/a b>`, which `Linking.openURL` would otherwise be
+ * handed raw, and the quote that would close an `href` attribute early.
+ *
+ * Applied once, in the inline normalizer, so a link node's `href` is already
+ * the final address on both clients and duplicates are judged on it.
+ */
+export function encodeLinkHref(href: string): string | null {
+  try {
+    return encodeURI(href).replace(/%25/g, '%');
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The literal source shown in place of an image, which Jot does not render
  * (images are a separate gallery feature, shown above the note body).
  *

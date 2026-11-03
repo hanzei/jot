@@ -561,13 +561,17 @@ test.describe('Markdown in list-item rows', () => {
 
   test('offers a menu when an item has several links', async ({ page, dashboardPage }) => {
     await dashboardPage.goto();
-    await dashboardPage.createListNote('Two Links Note', ['[a](https://a.example.com) or https://b.example.com']);
+    // The third link is the first one spelled differently: targets are encoded
+    // in the shared normalizer, so it is not offered twice.
+    await dashboardPage.createListNote('Two Links Note', [
+      '[a](https://a.example.com/café) or https://b.example.com or [again](https://a.example.com/caf%C3%A9)',
+    ]);
     await dashboardPage.openNote('Two Links Note');
 
     await dashboardPage.listItemOpenLink(0).click();
     const menu = page.getByRole('menu');
     await expect(menu.getByRole('menuitem')).toHaveCount(2);
-    await expect(menu.getByRole('menuitem').nth(0)).toHaveAttribute('href', 'https://a.example.com');
+    await expect(menu.getByRole('menuitem').nth(0)).toHaveAttribute('href', 'https://a.example.com/caf%C3%A9');
     await expect(menu.getByRole('menuitem').nth(1)).toHaveAttribute('href', 'https://b.example.com');
 
     // Escape closes the menu without closing the note.

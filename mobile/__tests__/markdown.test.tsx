@@ -1,5 +1,5 @@
-import { StyleSheet } from 'react-native';
-import { render } from '@testing-library/react-native';
+import { Linking, StyleSheet } from 'react-native';
+import { act, render, waitFor } from '@testing-library/react-native';
 import { CODE_PALETTE, MARKDOWN_CASES } from '@jot/shared';
 import Markdown from '../src/components/Markdown';
 import MarkdownPreview, { PREVIEW_LINES } from '../src/components/MarkdownPreview';
@@ -49,6 +49,31 @@ function tappableText(node: RenderedNode): string[] {
   return own.concat(
     (node.children ?? []).flatMap((child) => tappableText(child as RenderedNode)),
   );
+}
+
+/**
+ * The URL handed to the OS when the first tappable node is pressed. Mobile
+ * passes a link node's `href` straight to `Linking`, so this is where an
+ * unencoded target would surface.
+ */
+async function openedUrl(node: RenderedNode): Promise<string> {
+  jest.spyOn(Linking, 'canOpenURL').mockResolvedValue(true);
+  const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+  openURL.mockClear();
+  const find = (n: RenderedNode): (() => void) | null => {
+    if (n === null || typeof n === 'string') return null;
+    if (typeof n.props?.onPress === 'function') return n.props.onPress as () => void;
+    for (const child of n.children ?? []) {
+      const hit = find(child as RenderedNode);
+      if (hit) return hit;
+    }
+    return null;
+  };
+  const press = find(node);
+  if (!press) throw new Error('nothing tappable');
+  await act(async () => press());
+  await waitFor(() => expect(openURL).toHaveBeenCalled());
+  return openURL.mock.calls[0]![0];
 }
 
 /**
@@ -212,6 +237,16 @@ const conformance: Record<string, () => Promise<void>> = {
     expect(tappableText(tree)).toEqual([]);
   },
   'mailto-link': async () => expect(tappableText(await renderCase('mailto-link'))).toEqual(['mail']),
+  'link-space-target': async () => {
+    const tree = await renderCase('link-space-target');
+    expect(tappableText(tree)).toEqual(['docs']);
+    expect(await openedUrl(tree)).toBe('https://example.com/a%20b');
+  },
+  'link-non-ascii-target': async () => {
+    const tree = await renderCase('link-non-ascii-target');
+    expect(tappableText(tree)).toEqual(['café']);
+    expect(await openedUrl(tree)).toBe('https://example.com/caf%C3%A9');
+  },
   'tel-link': async () => {
     const tree = await renderCase('tel-link');
     expect(visibleText(tree)).toBe('call');

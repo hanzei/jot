@@ -113,7 +113,7 @@ Four consequences, each of which is a trap avoided rather than a preference:
     it calls `openUrl`.
   - **Several links** open a list to choose from — a menu on the webapp, a
     bottom sheet on mobile — with each entry's label and host. A target that
-    appears twice is listed once (`inlineLinks`).
+    appears twice, in any spelling of it (§2), is listed once (`inlineLinks`).
   - **Completed rows get it too**; a ticked item's link is no less useful.
   - **Read-only rows do not**: their links already work.
   - The accessible name is "Open link: {label}", from the flattened label, for
@@ -261,6 +261,15 @@ renders as its label in plain text, with nothing to tap. So does a link with no
 scheme at all (`/dashboard`, `example.com`). Notes are shareable, so the target
 of a link can come from a collaborator, and following it is a navigation the
 reader did not choose.
+
+**Link targets are encoded in the shared normalizer**, with the same step
+marked's HTML renderer uses (`encodeURI`, then `%25` back to `%`, so an
+already-encoded target is unchanged). A link node's `href` is therefore the
+address both clients open: `[docs](<https://example.com/a b>)` opens
+`https://example.com/a%20b` on the webapp and on mobile, where the target goes
+straight to the OS and iOS refuses a raw space. Duplicates are judged on the
+encoded form, so `<https://x/a b>` and `https://x/a%20b` are one link. A target
+that cannot be encoded renders as its label, like a refused scheme.
 
 A fenced block that names one of ten languages is syntax highlighted in the
 open note; everything else about it is unchanged (§2.3).
@@ -539,7 +548,7 @@ one client only is exactly the kind of drift this spec exists to prevent.
 
 | Concern | File |
 |---|---|
-| Shared link-scheme policy + literal-image format | `shared/src/markdown.ts` |
+| Shared link-scheme policy, link-target encoding + literal-image format | `shared/src/markdown.ts` |
 | Shared block normalizer (§2) | `shared/src/blockMarkdown.ts` |
 | Shared inline-subset normalizer (§2.1) | `shared/src/inlineMarkdown.ts` |
 | Shared text ↔ list conversion (§2.2) | `shared/src/noteConversion.ts` |

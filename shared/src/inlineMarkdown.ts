@@ -16,7 +16,7 @@
 // degrades to, what happens to raw HTML — are made in exactly one place. Only the
 // leaf rendering differs: an HTML string in the webapp, a <Text> tree on mobile.
 
-import { formatLiteralImage, isAllowedLinkHref } from './markdown';
+import { encodeLinkHref, formatLiteralImage, isAllowedLinkHref } from './markdown';
 
 /**
  * The marked token fields this module reads, declared structurally rather than
@@ -116,21 +116,27 @@ function contentOffset(raw: string, content: string): number {
 }
 
 /**
- * Flattens a node list back to its visible text. Used for a link whose target
- * Jot will not follow: the spec renders it as its label, and the label keeps any
- * formatting it had, matching how the webapp's block renderer treats the same
- * case.
+ * A link node, or — for a link whose target Jot will not follow — its label.
+ * The label keeps any formatting it had, matching how the webapp's block
+ * renderer treats the same case.
+ *
+ * The node's `href` is the *encoded* target (`encodeLinkHref`), so both clients
+ * open, and de-duplicate on, the same address. A target that cannot be encoded
+ * is treated like a refused scheme.
  */
 function normalizeLink(token: InlineMarkdownToken, span: InlineSourceSpan | undefined): InlineNode[] {
   const children = normalizeInlineTokens(token.tokens ?? [], childSourceStart(token, span));
-  const href = token.href ?? '';
+  const target = token.href ?? '';
 
-  if (!isAllowedLinkHref(href)) return children;
+  // The scheme is checked on the target as written: encoding turns leading
+  // whitespace into `%20`, which would hide the scheme from the check.
+  const href = isAllowedLinkHref(target) ? encodeLinkHref(target) : null;
+  if (href === null) return children;
 
   // `[](https://example.com)` lexes to a link with no children at all. Rendered
   // faithfully that is an invisible tappable region, so the target becomes its
-  // own label.
-  const label = children.length > 0 ? children : [textNode(href, span)];
+  // own label — as written, not encoded, since it is read rather than opened.
+  const label = children.length > 0 ? children : [textNode(target, span)];
   return [span ? { type: 'link', href, children: label, src: span } : { type: 'link', href, children: label }];
 }
 
@@ -208,12 +214,27 @@ function linkHost(href: string): string {
 }
 
 /**
+ * Undoes `encodeLinkHref` for display, so a host line reads `café.example`
+ * rather than `caf%C3%A9.example`. Malformed escapes are shown as they are.
+ */
+function decodeForDisplay(text: string): string {
+  try {
+    return decodeURI(text);
+  } catch {
+    return text;
+  }
+}
+
+/**
  * Whether a link's label already spells out where it goes — an autolink, or a
  * label that is the URL. marked normalizes autolinked `www.example.com` and
  * `someone@example.com` to `http://` and `mailto:` targets, so those count too.
  */
 export function linkLabelIsTarget(label: string, href: string): boolean {
-  return href === label || href === `http://${label}` || href === `mailto:${label}`;
+  // A link node's `href` is encoded (`encodeLinkHref`) and an autolink's label
+  // is the target as written, so the label is encoded the same way first.
+  const target = encodeLinkHref(label) ?? label;
+  return href === target || href === `http://${target}` || href === `mailto:${target}`;
 }
 
 /**
@@ -227,32 +248,25 @@ export function linkLabelIsTarget(label: string, href: string): boolean {
  * check of their own.
  *
  * A target that appears twice is listed once, under its first label: a menu
- * offering the same destination twice is noise, not a choice.
- *
- * `normalizeHref` lets a client rewrite each target the way its renderer does
- * (the webapp encodes it for an `href` attribute) before duplicates are
- * judged, so two spellings of one target still count once; returning null
- * drops the link.
+ * offering the same destination twice is noise, not a choice. Targets are
+ * compared encoded, as the normalizer leaves them, so `<https://x/a b>` and
+ * `https://x/a%20b` count once.
  */
-export function inlineLinks(
-  nodes: InlineNode[],
-  normalizeHref: (href: string) => string | null = (href) => href,
-): InlineLink[] {
+export function inlineLinks(nodes: InlineNode[]): InlineLink[] {
   const links: InlineLink[] = [];
   const seen = new Set<string>();
 
   function walk(list: InlineNode[]): void {
     for (const node of list) {
       if (node.type === 'link') {
-        const href = normalizeHref(node.href);
-        if (href !== null && !seen.has(href)) {
+        const { href } = node;
+        if (!seen.has(href)) {
           seen.add(href);
           const label = flattenInlineNodes(node.children);
-          const host = linkHost(node.href);
-          // Compared against the source target, which is what the label was
-          // written from. A label that is the host is covered too: a second
-          // line repeating it says nothing.
-          const shown = linkLabelIsTarget(label, node.href) || label === host;
+          const host = decodeForDisplay(linkHost(href));
+          // A label that is the host is covered too: a second line repeating
+          // it says nothing.
+          const shown = linkLabelIsTarget(label, href) || label === host;
           links.push({ href, label, host: shown ? null : host });
         }
       } else if (node.type === 'strong' || node.type === 'em' || node.type === 'del') {

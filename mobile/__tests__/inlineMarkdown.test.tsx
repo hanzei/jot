@@ -1,5 +1,5 @@
-import { Platform } from 'react-native';
-import { render } from '@testing-library/react-native';
+import { Linking, Platform } from 'react-native';
+import { act, render, waitFor } from '@testing-library/react-native';
 import { MARKDOWN_ITEM_CASES } from '@jot/shared';
 import InlineMarkdown from '../src/components/InlineMarkdown';
 
@@ -31,6 +31,31 @@ function tappableText(node: RenderedNode): string[] {
   if (node === null || typeof node === 'string') return [];
   const own = typeof node.props?.onPress === 'function' ? [visibleText(node)] : [];
   return own.concat((node.children ?? []).flatMap((child) => tappableText(child as RenderedNode)));
+}
+
+/**
+ * The URL handed to the OS when the first tappable node is pressed. Mobile
+ * passes a link node's `href` straight to `Linking`, so this is where an
+ * unencoded target would surface.
+ */
+async function openedUrl(node: RenderedNode): Promise<string> {
+  jest.spyOn(Linking, 'canOpenURL').mockResolvedValue(true);
+  const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+  openURL.mockClear();
+  const find = (n: RenderedNode): (() => void) | null => {
+    if (n === null || typeof n === 'string') return null;
+    if (typeof n.props?.onPress === 'function') return n.props.onPress as () => void;
+    for (const child of n.children ?? []) {
+      const hit = find(child as RenderedNode);
+      if (hit) return hit;
+    }
+    return null;
+  };
+  const press = find(node);
+  if (!press) throw new Error('nothing tappable');
+  await act(async () => press());
+  await waitFor(() => expect(openURL).toHaveBeenCalled());
+  return openURL.mock.calls[0]![0];
 }
 
 function flattenStyle(style: unknown): Record<string, unknown>[] {
@@ -90,6 +115,14 @@ const conformance: Record<string, () => Promise<void>> = {
   'item-link-formatted-label': async () => {
     expect(await tappable('item-link-formatted-label')).toEqual(['docs']);
     expect(await bold('item-link-formatted-label')).toContain('docs');
+  },
+  'item-link-space-target': async () => {
+    expect(await tappable('item-link-space-target')).toEqual(['docs']);
+    expect(await openedUrl(await renderCase('item-link-space-target'))).toBe('https://example.com/a%20b');
+  },
+  'item-link-non-ascii-target': async () => {
+    expect(await tappable('item-link-non-ascii-target')).toEqual(['café']);
+    expect(await openedUrl(await renderCase('item-link-non-ascii-target'))).toBe('https://example.com/caf%C3%A9');
   },
   'item-bare-url': async () => {
     expect(await text('item-bare-url')).toBe('see https://example.com');
