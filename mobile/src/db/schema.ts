@@ -278,28 +278,24 @@ const migration7 = async (db: SQLiteDatabase): Promise<void> => {
 const migration8 = async (db: SQLiteDatabase): Promise<void> => {
   const toggleEndpoint = /^\/notes\/([^/]+)\/items\/([^/]+)\/toggle-completed$/;
   for (const table of ['sync_queue', 'dead_letter']) {
-    const rows = await db.getAllAsync<{ id: number; operation: string; endpoint: string; body: string | null }>(
-      `SELECT id, operation, endpoint, body FROM ${table} WHERE operation IN ('toggleItemCompleted', 'uncheckAllItems')`,
+    // Already a set-completed request: only the operation name changes.
+    await db.runAsync(`UPDATE ${table} SET operation = 'setItemsCompleted' WHERE operation = 'uncheckAllItems'`);
+
+    const toggles = await db.getAllAsync<{ id: number; endpoint: string; body: string | null }>(
+      `SELECT id, endpoint, body FROM ${table} WHERE operation = 'toggleItemCompleted'`,
     );
-    for (const row of rows) {
-      let endpoint = row.endpoint;
-      let body = row.body;
+    for (const row of toggles) {
       const match = toggleEndpoint.exec(row.endpoint);
-      if (match) {
-        let completed = false;
-        try {
-          const parsed: unknown = body ? JSON.parse(body) : null;
-          completed = (parsed as { completed?: unknown } | null)?.completed === true;
-        } catch {
-          // Unparseable body: treat as unchecking, the toggle endpoint's own
-          // rejection of a missing value would have dead-lettered it anyway.
-        }
-        endpoint = `/notes/${match[1]}/items/set-completed`;
-        body = JSON.stringify({ item_ids: [match[2]], completed });
+      if (!match) continue;
+      let completed = false;
+      try {
+        completed = (JSON.parse(row.body ?? 'null') as { completed?: unknown } | null)?.completed === true;
+      } catch {
+        // Unparseable body: replay it as an uncheck rather than dropping it.
       }
       await db.runAsync(
         `UPDATE ${table} SET operation = 'setItemsCompleted', endpoint = ?, body = ? WHERE id = ?`,
-        [endpoint, body, row.id],
+        [`/notes/${match[1]}/items/set-completed`, JSON.stringify({ item_ids: [match[2]], completed }), row.id],
       );
     }
   }
