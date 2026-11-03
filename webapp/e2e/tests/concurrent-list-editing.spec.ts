@@ -57,12 +57,12 @@ test.describe('Concurrent list editing', () => {
     // taken right after its own write — but hold the response back until the
     // test releases it, as a slow connection would.
     const held: Array<() => void> = [];
-    await page.route('**/api/v1/notes/*/items/*/toggle-completed', async route => {
+    await page.route('**/api/v1/notes/*/items/set-completed', async route => {
       const response = await route.fetch();
       await new Promise<void>(resolve => { held.push(resolve); });
       await route.fulfill({ response });
     });
-    const toggleLanded = () => page.waitForResponse(res => res.url().includes('/toggle-completed'));
+    const toggleLanded = () => page.waitForResponse(res => res.url().includes('/set-completed'));
 
     const activeCheckbox = page.locator('[data-testid="list-item-row"] input[type="checkbox"]:not(:checked)');
     for (let tapped = 1; tapped <= 3; tapped++) {
@@ -107,7 +107,7 @@ test.describe('Concurrent list editing', () => {
     expect(await maxUnchecked()).toBe(0);
 
     // And the server agrees.
-    await page.unroute('**/api/v1/notes/*/items/*/toggle-completed');
+    await page.unroute('**/api/v1/notes/*/items/set-completed');
     await dashboardPage.closeNoteModal();
     await page.reload();
     await dashboardPage.openNote('Quick Checks');
@@ -135,10 +135,10 @@ test.describe('Concurrent list editing', () => {
       else if (/^\/api\/v1\/notes\/[^/]+$/.test(path)) noteReads.push(path);
     });
     page.on('request', request => {
-      if (request.url().includes('/toggle-completed')) toggles.push(request.url());
+      if (request.url().includes('/set-completed')) toggles.push(request.url());
     });
     page.on('response', response => {
-      if (response.url().includes('/toggle-completed')) toggleResponses.push(response.url());
+      if (response.url().includes('/set-completed')) toggleResponses.push(response.url());
     });
 
     const activeCheckbox = page.locator('[data-testid="list-item-row"] input[type="checkbox"]:not(:checked)');

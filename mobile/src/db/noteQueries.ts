@@ -1114,7 +1114,7 @@ export interface ServerItemInput {
 
 /**
  * Reconciles local item rows for a note against a server-authoritative full
- * item list (returned by toggle-completed/set-completed/delete): upserts
+ * item list (returned by set-completed/delete): upserts
  * every returned item and removes any local row not present in the set, all
  * in one transaction. Used where the response is the complete current truth,
  * so a stale local row (e.g. one deleted by another session while this

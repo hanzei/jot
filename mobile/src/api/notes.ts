@@ -67,17 +67,13 @@ export async function reorderNoteItems(noteId: string, itemIds: string[]): Promi
   await api.post(`/notes/${noteId}/items/reorder`, { item_ids: itemIds });
 }
 
-export async function toggleItemCompleted(noteId: string, itemId: string, completed: boolean): Promise<NoteItem[]> {
-  const res = await api.post(`/notes/${noteId}/items/${itemId}/toggle-completed`, { completed });
-  return res.data;
-}
-
-// Bulk operations over an explicit set of item IDs, mirroring the webapp's
-// setItemsCompleted/deleteItems. The caller passes the exact completed-item
-// ids it captured at action time; each is one atomic server request that
-// returns the note's item list for reconciliation.
-export async function uncheckAllItems(noteId: string, itemIds: string[]): Promise<NoteItem[]> {
-  const res = await api.post(`/notes/${noteId}/items/set-completed`, { item_ids: itemIds, completed: false });
+// Set-completed backs both a single tap ([itemId]) and bulk "uncheck all",
+// mirroring the webapp's setItemsCompleted. The caller passes the exact ids it
+// captured at action time; each call is one atomic server request that applies
+// the parent/child cascade and returns the note's full item list for
+// reconciliation.
+export async function setItemsCompleted(noteId: string, itemIds: string[], completed: boolean): Promise<NoteItem[]> {
+  const res = await api.post(`/notes/${noteId}/items/set-completed`, { item_ids: itemIds, completed });
   return res.data;
 }
 

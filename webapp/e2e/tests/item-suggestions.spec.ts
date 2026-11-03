@@ -131,7 +131,7 @@ test.describe('Completed-item suggestions', () => {
     await checkFirstItem(dashboardPage);
     await expect(page.getByText('Completed items (1)')).toBeVisible();
 
-    await failRequests(page, '**/api/v1/notes/*/items/*/toggle-completed', 'POST', {
+    await failRequests(page, '**/api/v1/notes/*/items/set-completed', 'POST', {
       status: 500, code: 'internal', message: 'internal server error', requestId: 'e2e0123456789abc',
     });
 

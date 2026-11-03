@@ -17,7 +17,7 @@ func TestBulkNoteItemEndpoints(t *testing.T) {
 		noteID, parentID, childAID, childBID, _ := createGroupNote(t, user)
 
 		// Completing the parent cascades to both children.
-		_, err := user.Client.ToggleNoteItemCompleted(t.Context(), noteID, parentID, true)
+		_, err := user.Client.SetNoteItemsCompleted(t.Context(), noteID, []string{parentID}, true)
 		require.NoError(t, err)
 
 		items, err := user.Client.SetNoteItemsCompleted(t.Context(), noteID, []string{parentID, childAID, childBID}, false)
@@ -34,12 +34,29 @@ func TestBulkNoteItemEndpoints(t *testing.T) {
 		noteID, parentID, childAID, childBID, _ := createGroupNote(t, user)
 		ids := []string{parentID, childAID, childBID}
 
-		_, err := user.Client.ToggleNoteItemCompleted(t.Context(), noteID, parentID, true)
+		_, err := user.Client.SetNoteItemsCompleted(t.Context(), noteID, []string{parentID}, true)
 		require.NoError(t, err)
 		_, err = user.Client.SetNoteItemsCompleted(t.Context(), noteID, ids, false)
 		require.NoError(t, err)
 
 		items, err := user.Client.SetNoteItemsCompleted(t.Context(), noteID, ids, true)
+		require.NoError(t, err)
+		assert.True(t, itemByText(t, items, "Parent").Completed)
+		assert.True(t, itemByText(t, items, "Child A").Completed)
+		assert.True(t, itemByText(t, items, "Child B").Completed)
+	})
+
+	t.Run("set-completed repairs a parent whose children disagree with it", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "bulk1c", "password123", false)
+		noteID, parentID, _, _, _ := createGroupNote(t, user)
+
+		// Drift: a completed parent with incomplete children. Re-sending the
+		// parent's current value must still cascade, as the old toggle endpoint
+		// did, even though the parent's own row does not change.
+		ts.exec(t, "UPDATE note_items SET completed = ? WHERE id = ?", true, parentID)
+
+		items, err := user.Client.SetNoteItemsCompleted(t.Context(), noteID, []string{parentID}, true)
 		require.NoError(t, err)
 		assert.True(t, itemByText(t, items, "Parent").Completed)
 		assert.True(t, itemByText(t, items, "Child A").Completed)
@@ -120,7 +137,7 @@ func TestBulkNoteItemEndpoints(t *testing.T) {
 		noteID, parentID, childAID, childBID, _ := createGroupNote(t, owner)
 
 		require.NoError(t, owner.Client.ShareNote(t.Context(), noteID, collaborator.User.ID))
-		_, err := owner.Client.ToggleNoteItemCompleted(t.Context(), noteID, parentID, true)
+		_, err := owner.Client.SetNoteItemsCompleted(t.Context(), noteID, []string{parentID}, true)
 		require.NoError(t, err)
 
 		items, err := collaborator.Client.DeleteNoteItems(t.Context(), noteID, []string{parentID, childAID, childBID})

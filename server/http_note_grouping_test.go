@@ -86,9 +86,9 @@ func TestNoteGrouping(t *testing.T) {
 		user := ts.createTestUser(t, "grpuser3", "password123", false)
 		noteID, parentID, _, _, soloID := createGroupNote(t, user)
 
-		items, err := user.Client.ToggleNoteItemCompleted(t.Context(), noteID, parentID, true)
+		items, err := user.Client.SetNoteItemsCompleted(t.Context(), noteID, []string{parentID}, true)
 		require.NoError(t, err)
-		require.Len(t, items, 4, "toggle returns the note's full item list")
+		require.Len(t, items, 4, "set-completed returns the note's full item list")
 
 		assert.True(t, itemByText(t, items, "Parent").Completed)
 		assert.True(t, itemByText(t, items, "Child A").Completed)
@@ -96,7 +96,7 @@ func TestNoteGrouping(t *testing.T) {
 		assert.False(t, itemByText(t, items, "Solo").Completed, "unrelated top-level item is untouched")
 
 		// Unchecking the parent cascades back to the children.
-		items, err = user.Client.ToggleNoteItemCompleted(t.Context(), noteID, parentID, false)
+		items, err = user.Client.SetNoteItemsCompleted(t.Context(), noteID, []string{parentID}, false)
 		require.NoError(t, err)
 		assert.False(t, itemByText(t, items, "Parent").Completed)
 		assert.False(t, itemByText(t, items, "Child A").Completed)
@@ -110,7 +110,7 @@ func TestNoteGrouping(t *testing.T) {
 		user := ts.createTestUser(t, "grpuser4", "password123", false)
 		noteID, parentID, childAID, _, _ := createGroupNote(t, user)
 
-		items, err := user.Client.ToggleNoteItemCompleted(t.Context(), noteID, childAID, true)
+		items, err := user.Client.SetNoteItemsCompleted(t.Context(), noteID, []string{childAID}, true)
 		require.NoError(t, err)
 
 		assert.True(t, itemByText(t, items, "Child A").Completed)
@@ -126,12 +126,12 @@ func TestNoteGrouping(t *testing.T) {
 		noteID, parentID, childAID, _, _ := createGroupNote(t, user)
 
 		// Complete the whole group (cascades parent -> children).
-		_, err := user.Client.ToggleNoteItemCompleted(t.Context(), noteID, parentID, true)
+		_, err := user.Client.SetNoteItemsCompleted(t.Context(), noteID, []string{parentID}, true)
 		require.NoError(t, err)
 
 		// Unchecking just Child A must also un-complete the parent: a parent can
 		// never stay "done" while one of its children is not.
-		items, err := user.Client.ToggleNoteItemCompleted(t.Context(), noteID, childAID, false)
+		items, err := user.Client.SetNoteItemsCompleted(t.Context(), noteID, []string{childAID}, false)
 		require.NoError(t, err)
 		assert.False(t, itemByText(t, items, "Child A").Completed)
 		assert.True(t, itemByText(t, items, "Child B").Completed, "sibling is untouched")
@@ -143,9 +143,9 @@ func TestNoteGrouping(t *testing.T) {
 		user := ts.createTestUser(t, "grpuser4c", "password123", false)
 		noteID, _, childAID, childBID, _ := createGroupNote(t, user)
 
-		_, err := user.Client.ToggleNoteItemCompleted(t.Context(), noteID, childAID, true)
+		_, err := user.Client.SetNoteItemsCompleted(t.Context(), noteID, []string{childAID}, true)
 		require.NoError(t, err)
-		items, err := user.Client.ToggleNoteItemCompleted(t.Context(), noteID, childBID, true)
+		items, err := user.Client.SetNoteItemsCompleted(t.Context(), noteID, []string{childBID}, true)
 		require.NoError(t, err)
 
 		assert.True(t, itemByText(t, items, "Child A").Completed)
@@ -153,12 +153,12 @@ func TestNoteGrouping(t *testing.T) {
 		assert.False(t, itemByText(t, items, "Parent").Completed, "checking the parent itself is still required")
 	})
 
-	t.Run("patching completed on a child un-completes the parent the same as toggle", func(t *testing.T) {
+	t.Run("patching completed on a child un-completes the parent the same as set-completed", func(t *testing.T) {
 		ts := setupTestServer(t)
 		user := ts.createTestUser(t, "grpuser4d", "password123", false)
 		noteID, parentID, childAID, _, _ := createGroupNote(t, user)
 
-		_, err := user.Client.ToggleNoteItemCompleted(t.Context(), noteID, parentID, true)
+		_, err := user.Client.SetNoteItemsCompleted(t.Context(), noteID, []string{parentID}, true)
 		require.NoError(t, err)
 
 		incomplete := false
@@ -172,7 +172,7 @@ func TestNoteGrouping(t *testing.T) {
 		assert.False(t, itemByText(t, note.Items, "Parent").Completed, "generic patch enforces the same invariant as toggle-completed")
 	})
 
-	t.Run("patching completed on a parent cascades to children the same as toggle", func(t *testing.T) {
+	t.Run("patching completed on a parent cascades to children the same as set-completed", func(t *testing.T) {
 		ts := setupTestServer(t)
 		user := ts.createTestUser(t, "grpuser4e", "password123", false)
 		noteID, parentID, _, _, _ := createGroupNote(t, user)
@@ -256,15 +256,15 @@ func TestNoteGrouping(t *testing.T) {
 		assert.False(t, itemByText(t, updated.Items, "Loner").Completed, "the moved item's own completed flag is untouched")
 	})
 
-	t.Run("toggle without completed field is rejected", func(t *testing.T) {
+	t.Run("set-completed without completed field is rejected", func(t *testing.T) {
 		ts := setupTestServer(t)
 		user := ts.createTestUser(t, "grpuser5b", "password123", false)
 		noteID, parentID, _, _, _ := createGroupNote(t, user)
 
 		// An omitted "completed" must 400 rather than silently decode to false
 		// and uncheck the item.
-		url := ts.HTTPServer.URL + "/api/v1/notes/" + noteID + "/items/" + parentID + "/toggle-completed"
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, strings.NewReader("{}"))
+		url := ts.HTTPServer.URL + "/api/v1/notes/" + noteID + "/items/set-completed"
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, strings.NewReader(`{"item_ids":["`+parentID+`"]}`))
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
 
@@ -274,14 +274,14 @@ func TestNoteGrouping(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
 
-	t.Run("toggle unknown item returns 404", func(t *testing.T) {
+	t.Run("set-completed on an unknown item is ignored and returns the current list", func(t *testing.T) {
 		ts := setupTestServer(t)
 		user := ts.createTestUser(t, "grpuser5", "password123", false)
 		noteID, _, _, _, _ := createGroupNote(t, user)
 
-		_, err := user.Client.ToggleNoteItemCompleted(t.Context(), noteID, "doesnotexist1234567890", true)
-		require.Error(t, err)
-		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
+		items, err := user.Client.SetNoteItemsCompleted(t.Context(), noteID, []string{"doesnotexist1234567890"}, true)
+		require.NoError(t, err)
+		assert.Len(t, items, 4, "stale tap returns the current list so the caller can reconcile")
 	})
 
 	t.Run("reject grandchild parent reference", func(t *testing.T) {
@@ -445,7 +445,7 @@ func TestNoteGrouping(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		_, err = user.Client.ToggleNoteItemCompleted(t.Context(), textNote.ID, "someitemid1234567890ab", true)
+		_, err = user.Client.SetNoteItemsCompleted(t.Context(), textNote.ID, []string{"someitemid1234567890ab"}, true)
 		require.Error(t, err)
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
