@@ -33,7 +33,7 @@ vi.mock('@/utils/api', () => ({
     delete: vi.fn(),
   },
   users: {
-    search: vi.fn().mockResolvedValue([]),
+    list: vi.fn().mockResolvedValue([]),
     updateMe: vi.fn().mockResolvedValue({
       settings: {
         user_id: 'user1',
@@ -362,7 +362,7 @@ describe('Dashboard', () => {
         const searchInput = screen.getByPlaceholderText('Search notes...');
         expect(searchInput).toBeInTheDocument();
         expect(searchInput).toHaveValue('escape query');
-        expect(mockGetAll).toHaveBeenCalledWith(false, 'escape query', false, '', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: 'escape query', trashed: false, label: undefined, my_tasks: false });
       });
 
       const searchInput = screen.getByPlaceholderText('Search notes...');
@@ -370,7 +370,7 @@ describe('Dashboard', () => {
 
       await waitFor(() => {
         expect(searchInput).toHaveValue('');
-        expect(mockGetAll).toHaveBeenLastCalledWith(false, '', false, '', false);
+        expect(mockGetAll).toHaveBeenLastCalledWith({ archived: false, search: '', trashed: false, label: undefined, my_tasks: false });
       });
     });
 
@@ -388,14 +388,14 @@ describe('Dashboard', () => {
       await user.type(searchInput, 'search term');
       
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, 'search term', false, '', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: 'search term', trashed: false, label: undefined, my_tasks: false });
       });
     });
 
     it('fetches and separates archived results when searching', async () => {
       const user = userEvent.setup();
       const mockGetAll = vi.mocked(notes.getAll);
-      mockGetAll.mockImplementation((archived = false) =>
+      mockGetAll.mockImplementation(({ archived = false } = {}) =>
         Promise.resolve(
           archived
             ? [createMockNote({ id: 'arch1', content: 'Archived match', archived: true })]
@@ -414,9 +414,9 @@ describe('Dashboard', () => {
 
       // Both an active (archived=false) and archived (archived=true) fetch happen
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(true, 'match', false, '', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: true, search: 'match', trashed: false, label: undefined, my_tasks: false });
       });
-      expect(mockGetAll).toHaveBeenCalledWith(false, 'match', false, '', false);
+      expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: 'match', trashed: false, label: undefined, my_tasks: false });
 
       // Archived matches surface under a dedicated "Archived" splitter
       await waitFor(() => {
@@ -455,7 +455,7 @@ describe('Dashboard', () => {
       await user.type(searchInput, specialChars);
       
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, specialChars, false, '', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: specialChars, trashed: false, label: undefined, my_tasks: false });
       });
     });
 
@@ -475,7 +475,7 @@ describe('Dashboard', () => {
       fireEvent.change(searchInput, { target: { value: longQuery } });
 
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, longQuery, false, '', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: longQuery, trashed: false, label: undefined, my_tasks: false });
       });
     });
 
@@ -496,7 +496,7 @@ describe('Dashboard', () => {
 
       // Should have been called with the final value
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, 'abc', false, '', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: 'abc', trashed: false, label: undefined, my_tasks: false });
       });
     });
   });
@@ -696,7 +696,7 @@ describe('Dashboard', () => {
       renderDashboard(['/?view=archive']);
 
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: true, search: '', trashed: false, label: undefined, my_tasks: false });
       });
     });
 
@@ -706,7 +706,7 @@ describe('Dashboard', () => {
       renderDashboard(['/?view=archive']);
       
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: true, search: '', trashed: false, label: undefined, my_tasks: false });
       });
     });
 
@@ -728,7 +728,7 @@ describe('Dashboard', () => {
       renderDashboard(['/?view=bin']);
 
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, '', true, '', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: '', trashed: true, label: undefined, my_tasks: false });
       });
 
       expect(await screen.findByText('Notes in the bin are deleted after 7 days')).toBeInTheDocument();
@@ -760,7 +760,7 @@ describe('Dashboard', () => {
       renderDashboard(['/?view=invalid']);
 
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: '', trashed: false, label: undefined, my_tasks: false });
       });
     });
 
@@ -1297,7 +1297,7 @@ describe('Dashboard', () => {
     renderDashboard(['/?label=label-work']);
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false);
+      expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: '', trashed: false, label: 'label-work', my_tasks: false });
     });
   });
 
@@ -1327,13 +1327,13 @@ describe('Dashboard', () => {
     );
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false);
+      expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: '', trashed: false, label: 'label-work', my_tasks: false });
     });
 
     await user.click(screen.getByTestId('go-home'));
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false);
+      expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: '', trashed: false, label: undefined, my_tasks: false });
     });
   });
 
@@ -1363,13 +1363,13 @@ describe('Dashboard', () => {
     );
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false);
+      expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: '', trashed: false, label: 'label-work', my_tasks: false });
     });
 
     await user.click(screen.getByTestId('go-archive'));
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '', false);
+      expect(mockGetAll).toHaveBeenCalledWith({ archived: true, search: '', trashed: false, label: undefined, my_tasks: false });
     });
   });
 
@@ -1387,7 +1387,7 @@ describe('Dashboard', () => {
     renderDashboard(['/?view=archive&label=label-work']);
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false);
+      expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: '', trashed: false, label: 'label-work', my_tasks: false });
     });
   });
 
@@ -1397,7 +1397,7 @@ describe('Dashboard', () => {
     renderDashboard(['/?view=bin&label=label-work']);
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false);
+      expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: '', trashed: false, label: 'label-work', my_tasks: false });
     });
   });
 
@@ -1551,7 +1551,7 @@ describe('Dashboard', () => {
       );
 
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-realtime', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: '', trashed: false, label: 'label-realtime', my_tasks: false });
       });
 
       await waitFor(() => {
@@ -1574,7 +1574,7 @@ describe('Dashboard', () => {
       });
 
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: '', trashed: false, label: undefined, my_tasks: false });
       });
 
       await waitFor(() => {
@@ -1587,7 +1587,7 @@ describe('Dashboard', () => {
     const sharedNote = () => createMockListNote({ id: 'shared-1', user_id: 'owner1', title: 'Trip plan', unread: 'new' });
 
     beforeEach(() => {
-      vi.mocked(users.search).mockResolvedValue([{
+      vi.mocked(users.list).mockResolvedValue([{
         id: 'owner1',
         username: 'alice',
         first_name: 'Alice',
@@ -1614,7 +1614,7 @@ describe('Dashboard', () => {
 
     it('tells the recipient who shared which note, and opens it from the toast', async () => {
       renderDashboard();
-      await waitFor(() => expect(users.search).toHaveBeenCalled());
+      await waitFor(() => expect(users.list).toHaveBeenCalled());
       await waitFor(() => expect(latestSSECallbacks()).toBeDefined());
 
       await act(async () => {
@@ -1752,7 +1752,7 @@ describe('Dashboard', () => {
       renderDashboard(['/?view=my-tasks']);
 
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: '', trashed: false, label: undefined, my_tasks: true });
       });
     });
 

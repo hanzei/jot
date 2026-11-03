@@ -1,15 +1,6 @@
-import { Platform } from 'react-native';
-import api from './client';
-import type { User, AuthResponse, UpdateMeRequest, ChangePasswordRequest, AboutInfo, ActiveSession, PersonalAccessToken, CreatePATRequest, SessionListResponse, PATListResponse } from '@jot/shared';
-
-export async function updateMe(data: UpdateMeRequest): Promise<AuthResponse> {
-  const res = await api.patch('/users/me', data);
-  return res.data;
-}
-
-export async function changePassword(data: ChangePasswordRequest): Promise<void> {
-  await api.put('/users/me/password', data);
-}
+import { jot } from './jot';
+import { percentProgress, rnFilePart } from './upload';
+import type { User } from '@jot/shared';
 
 // Profile-icon uploads can be large on slow cellular, so this is generous —
 // but a half-open / unreachable server must still resolve to an error instead
@@ -26,59 +17,12 @@ export async function uploadProfileIcon(
   const mimeMap: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
   const type = mimeMap[ext] || 'image/jpeg';
 
-  formData.append('file', {
-    uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
-    name: filename,
-    type,
-  } as unknown as Blob);
+  formData.append('file', rnFilePart(uri, filename, type));
 
-  let lastPercent = -1;
-  const res = await api.post('/users/me/profile-icon', formData, {
+  return jot.users.uploadProfileIcon(formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: UPLOAD_ICON_TIMEOUT,
-    ...(onUploadProgress && {
-      onUploadProgress: (progressEvent) => {
-        const percent = progressEvent.total
-          ? Math.round((progressEvent.loaded * 100) / progressEvent.total)
-          : 0;
-        if (percent !== lastPercent) {
-          lastPercent = percent;
-          onUploadProgress(percent);
-        }
-      },
-    }),
+    ...percentProgress(onUploadProgress),
   });
-  return res.data;
 }
 
-export async function deleteProfileIcon(): Promise<void> {
-  await api.delete('/users/me/profile-icon');
-}
-
-export async function getAboutInfo(): Promise<AboutInfo> {
-  const res = await api.get('/about');
-  return res.data;
-}
-
-export async function listSessions(): Promise<ActiveSession[]> {
-  const res = await api.get<SessionListResponse>('/sessions');
-  return res.data.sessions;
-}
-
-export async function revokeSession(id: string): Promise<void> {
-  await api.delete(`/sessions/${id}`);
-}
-
-export async function listPATs(): Promise<PersonalAccessToken[]> {
-  const res = await api.get<PATListResponse>('/pats');
-  return res.data.pats;
-}
-
-export async function createPAT(data: CreatePATRequest): Promise<PersonalAccessToken> {
-  const res = await api.post('/pats', data);
-  return res.data;
-}
-
-export async function revokePAT(id: string): Promise<void> {
-  await api.delete(`/pats/${id}`);
-}

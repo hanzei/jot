@@ -6,8 +6,8 @@ import type { ImageUploadQueueStats } from '../db/imageUploadQueue';
 import { isServerReachable, getServerReachabilityChangedAt } from '../api/serverReachability';
 import { getPersistedLogs } from './logger';
 import { getAppBuildInfo } from './appInfo';
-import { getAboutInfo } from '../api/settings';
 import type { AboutInfo, DiagnosticsCrash } from '@jot/shared';
+import { jot } from '../api/jot';
 
 /** Cap on log entries embedded in a shared diagnostics report, to keep the payload shareable. */
 const SHARED_REPORT_LOG_LIMIT = 500;
@@ -107,7 +107,7 @@ export async function shareDiagnosticsReport(input: DiagnosticsReportInput): Pro
   let serverBuild: AboutInfo | null = null;
   if (input.isConnected !== false && isServerReachable()) {
     try {
-      serverBuild = await getAboutInfo();
+      serverBuild = await jot.about.get();
     } catch {
       serverBuild = null;
     }

@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { User } from '@jot/shared';
-import { getUsers } from '../api/users';
 import { getBaseUrl } from '../api/client';
 import { useAuth } from './AuthContext';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -11,6 +10,7 @@ import { retrySync, SyncAbortedError, SyncCanceller } from '../utils/retryWithBa
 import { refreshIconCacheForUsers } from '../utils/profileIconCache';
 import { subscribeToProfileIconUpdates } from './profileIconEvents';
 import { subscribeToReconnectResync } from './resyncEvents';
+import { jot } from '../api/jot';
 
 interface UsersState {
   usersById: Map<string, User>;
@@ -75,7 +75,7 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
 
       try {
         // Fetch from server (with retry/backoff) and persist to SQLite
-        const users = await retrySync(getUsers, {
+        const users = await retrySync(jot.users.list, {
           isConnected: () => isConnectedRef.current,
           canceller,
         });

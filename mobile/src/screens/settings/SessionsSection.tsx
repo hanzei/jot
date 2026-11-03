@@ -2,13 +2,13 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../theme/ThemeContext';
-import { listSessions, revokeSession } from '../../api/settings';
 import { subscribeToClientActiveServerChanges } from '../../api/client';
 import { getActiveServer } from '../../store/serverAccounts';
 import { displayMessage, getCurrentLocale } from '../../i18n/utils';
 import { useConfirm } from '../../hooks/useConfirm';
 import type { ActiveSession } from '@jot/shared';
 import { styles } from './styles';
+import { jot } from '../../api/jot';
 
 export default function SessionsSection() {
   const { colors } = useTheme();
@@ -43,7 +43,7 @@ export default function SessionsSection() {
           setSessions([]);
           setSessionsError('');
           setSessionsLoading(true);
-          void listSessions()
+          void jot.sessions.list()
             .then((nextSessions) => {
               if (mounted && previousServerUrlRef.current === serverUrl) setSessions(nextSessions);
             })
@@ -77,7 +77,7 @@ export default function SessionsSection() {
   const revokeSessionById = useCallback(async (id: string) => {
     setRevokingId(id);
     try {
-      await revokeSession(id);
+      await jot.sessions.revoke(id);
       if (!isMountedRef.current) return;
       setSessionsError('');
       setSessions(prev => prev.filter(s => s.id !== id));

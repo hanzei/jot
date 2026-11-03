@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ServerConfig, SSOConfig } from '@jot/shared';
-import { DEFAULT_SERVER_CONFIG, fetchServerConfig } from '../api/config';
+import { DEFAULT_SERVER_CONFIG } from '../api/config';
 import { getActiveServerId, getStoredServerUrl, subscribeToClientActiveServerChanges } from '../api/client';
 import { getServerStorageValue, setServerStorageValue } from '../store/serverAccounts';
 import { getCurrentSwitchGenerationId } from '../store/serverSwitchLifecycle';
 import { serverConfigQueryKey } from './queryKeys';
+import { jot } from '../api/jot';
 
 function parseSsoConfig(value: unknown): SSOConfig | undefined {
   if (!value || typeof value !== 'object') {
@@ -102,7 +103,7 @@ export function useServerConfig(): ServerConfig {
         return DEFAULT_SERVER_CONFIG;
       }
 
-      // fetchServerConfig() rides the shared axios client, whose base URL and
+      // jot.config.get() rides the shared axios client, whose base URL and
       // session are mutated in place on a server switch — they aren't bound to
       // this closure's `serverId`. If a switch lands between the cache read
       // below and the network call resolving, the response could belong to a
@@ -125,7 +126,7 @@ export function useServerConfig(): ServerConfig {
       }
 
       try {
-        const fresh = await fetchServerConfig();
+        const fresh = await jot.config.get();
         if (!isStillActive()) {
           return cached;
         }

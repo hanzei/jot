@@ -17,13 +17,18 @@ import { allowConsoleError } from './helpers/consoleGuard';
 const mockGoBack = jest.fn();
 const mockCanGoBack = jest.fn(() => true);
 
+jest.mock('../src/api/jot', () => ({
+  jot: {
+    about: {
+      get: jest.fn(() => Promise.resolve({ version: '0.9.0', commit: 'def5678', build_time: '2026-09-30T08:00:00Z', go_version: 'go1.25.0' })),
+    },
+  },
+}));
+
 jest.mock('../src/theme/ThemeContext', () => ({
   useTheme: () => ({ colors: jest.requireActual('../src/theme/colors').lightColors, isDark: false }),
 }));
 
-jest.mock('../src/api/settings', () => ({
-  getAboutInfo: jest.fn(() => Promise.resolve({ version: '0.9.0', commit: 'def5678', build_time: '2026-09-30T08:00:00Z', go_version: 'go1.25.0' })),
-}));
 
 jest.mock('../src/api/client', () => ({
   getBaseUrl: jest.fn(() => 'https://jot.example.com'),

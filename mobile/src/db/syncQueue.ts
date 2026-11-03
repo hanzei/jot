@@ -1,6 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import axios from 'axios';
 import api from '../api/client';
+import { jot } from '../api/jot';
 import { completedCascadeScope, type GetNotesParams, type Note, type NoteItem } from '@jot/shared';
 import {
   getLocalNote,
@@ -926,8 +927,8 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           const labelName = body?.name as string | undefined;
           if (clientLabelId && labelName) {
             try {
-              const labelsResp = await api.get<Array<{ id: string; name: string }>>('/labels');
-              const serverLabel = (labelsResp.data ?? []).find(
+              const serverLabels = await jot.labels.getAll();
+              const serverLabel = serverLabels.find(
                 (l) => l.name.toLowerCase() === labelName.toLowerCase(),
               );
               if (serverLabel) {
@@ -1113,7 +1114,7 @@ async function reconcileItemsFromResponse(db: SQLiteDatabase, noteId: string, it
 async function reconcileNoteFromServer(db: SQLiteDatabase, noteId: string | undefined): Promise<void> {
   if (!noteId) return;
   try {
-    const data = (await api.get(`/notes/${noteId}`))?.data;
+    const data: unknown = await jot.notes.getById(noteId);
     if (hasStringId(data)) {
       const note = data as Note;
       await updateLocalNoteShares(db, note.id, {

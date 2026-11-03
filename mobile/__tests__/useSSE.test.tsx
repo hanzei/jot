@@ -16,6 +16,14 @@ import {
   notesLocalQueryScopeKey,
 } from '../src/hooks/queryKeys';
 
+jest.mock('../src/api/jot', () => ({
+  jot: {
+    notes: {
+      getById: jest.fn(),
+    },
+  },
+}));
+
 jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
   AppState: {
@@ -45,9 +53,6 @@ jest.mock('../src/db/noteQueries', () => {
   };
 });
 
-jest.mock('../src/api/notes', () => ({
-  getNote: jest.fn(),
-}));
 
 jest.mock('../src/store/profileIconEvents', () => ({
   publishProfileIconUpdate: jest.fn(),
@@ -77,7 +82,7 @@ jest.mock('../src/db/syncQueue', () => {
 const mockSaveServerNote = (jest.requireMock('../src/db/syncQueue') as { saveServerNote: jest.Mock }).saveServerNote;
 const mockMarkLocalNoteDeleted = (jest.requireMock('../src/db/noteQueries') as { markLocalNoteDeleted: jest.Mock }).markLocalNoteDeleted;
 const mockPermanentDeleteLocalNote = (jest.requireMock('../src/db/noteQueries') as { permanentDeleteLocalNote: jest.Mock }).permanentDeleteLocalNote;
-const mockGetNote = (jest.requireMock('../src/api/notes') as { getNote: jest.Mock }).getNote;
+const mockGetNote = (jest.requireMock('../src/api/jot') as { jot: { notes: { getById: jest.Mock } } }).jot.notes.getById;
 const mockPatchLocalNoteImages = (jest.requireMock('../src/db/noteQueries') as { patchLocalNoteImages: jest.Mock }).patchLocalNoteImages;
 const mockUpsertLabel = (jest.requireMock('../src/db/noteQueries') as { upsertLabel: jest.Mock }).upsertLabel;
 const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
