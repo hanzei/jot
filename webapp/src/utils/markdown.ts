@@ -1,18 +1,15 @@
 import { Lexer } from 'marked';
 import DOMPurify from 'dompurify';
 import {
-  isAllowedLinkHref,
   normalizeBlockTokens,
   normalizeInlineTokens,
   flattenInlineNodes,
-  inlineLinks,
   inlineRendersAsSource,
   BLOCK_LEXER_OPTIONS,
   INLINE_LEXER_OPTIONS,
   highlightCode,
   type BlockNode,
   type CodeRun,
-  type InlineLink,
   type InlineNode,
 } from '@jot/shared';
 import { getCodeHighlighter } from './codeHighlighter';
@@ -34,27 +31,6 @@ function escapeHtml(text: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
-}
-
-/**
- * Normalizes a link target for an `href` attribute, or returns null if Jot will
- * not link it.
- *
- * The encode/decode dance is marked's own `cleanUrl`: encode, then undo the
- * '%' → '%25' double-encoding so an already-encoded URL (e.g. .../Caf%C3%A9)
- * round-trips unchanged instead of ending up broken. It also encodes the quote
- * that would otherwise close the attribute early; DOMPurify is the net behind
- * that, not the first line of defence.
- */
-function safeLinkHref(href: string): string | null {
-  // Narrower than DOMPurify's own filtering, which would allow tel: and app
-  // deep links through.
-  if (!isAllowedLinkHref(href)) return null;
-  try {
-    return encodeURI(href).replace(/%25/g, '%');
-  } catch {
-    return null;
-  }
 }
 
 // The effective spec for raw HTML: anything parsed but not listed here has its
@@ -218,13 +194,10 @@ function renderInlineNodes(nodes: InlineNode[]): string {
         html += `<del>${renderInlineNodes(node.children)}</del>`;
         break;
       case 'link': {
-        const label = renderInlineNodes(node.children);
-        // normalizeInlineTokens has already dropped links Jot will not follow,
-        // so this only guards the encodeURI failure path.
-        const safeHref = safeLinkHref(node.href);
-        html += safeHref === null
-          ? label
-          : `<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+        // normalizeInlineTokens has already dropped links Jot will not follow
+        // and encoded the target (`encodeLinkHref`), which also encodes a quote
+        // that would close the attribute; DOMPurify is the net behind that.
+        html += `<a href="${node.href}" target="_blank" rel="noopener noreferrer">${renderInlineNodes(node.children)}</a>`;
         break;
       }
     }
@@ -292,15 +265,6 @@ export function renderInlineItem(
     nodes,
     formatted: !inlineRendersAsSource(nodes, text),
   };
-}
-
-/**
- * The links an editable row's open-link control offers, with each target
- * encoded exactly as the rendered link's — so the control and a live link to
- * the same target never disagree, and one the renderer refuses is not offered.
- */
-export function itemLinks(nodes: InlineNode[]): InlineLink[] {
-  return inlineLinks(nodes, safeLinkHref);
 }
 
 /**

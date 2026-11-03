@@ -5,6 +5,7 @@ import Markdown from '../src/components/Markdown';
 import MarkdownPreview, { PREVIEW_LINES } from '../src/components/MarkdownPreview';
 import { compactMarkdownStyles, fullMarkdownStyles, markdownTheme } from '../src/utils/markdownStyles';
 import { darkColors, lightColors } from '../src/theme/colors';
+import { openedUrl } from './helpers/openedUrl';
 
 // The mobile half of the shared conformance corpus (shared/src/markdownCases.ts);
 // webapp/src/utils/__tests__/markdown.test.ts runs the same list through marked's
@@ -212,6 +213,16 @@ const conformance: Record<string, () => Promise<void>> = {
     expect(tappableText(tree)).toEqual([]);
   },
   'mailto-link': async () => expect(tappableText(await renderCase('mailto-link'))).toEqual(['mail']),
+  'link-space-target': async () => {
+    const tree = await renderCase('link-space-target');
+    expect(tappableText(tree)).toEqual(['docs']);
+    expect(await openedUrl(tree)).toBe('https://example.com/a%20b');
+  },
+  'link-non-ascii-target': async () => {
+    const tree = await renderCase('link-non-ascii-target');
+    expect(tappableText(tree)).toEqual(['café']);
+    expect(await openedUrl(tree)).toBe('https://example.com/caf%C3%A9');
+  },
   'tel-link': async () => {
     const tree = await renderCase('tel-link');
     expect(visibleText(tree)).toBe('call');

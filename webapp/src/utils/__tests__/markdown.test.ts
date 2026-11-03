@@ -94,6 +94,9 @@ const conformance: Record<string, () => void> = {
     expect(html).not.toContain('<a');
   },
   'mailto-link': () => expect(render('mailto-link')).toContain('href="mailto:a@b.com"'),
+  'link-space-target': () => expect(render('link-space-target')).toContain('href="https://example.com/a%20b"'),
+  'link-non-ascii-target': () =>
+    expect(render('link-non-ascii-target')).toContain('href="https://example.com/caf%C3%A9"'),
   'tel-link': () => {
     const html = render('tel-link');
     expect(html).toContain('call');

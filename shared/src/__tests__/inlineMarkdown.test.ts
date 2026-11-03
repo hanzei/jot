@@ -69,6 +69,9 @@ const EXPECTED: Record<string, string> = {
   'item-tel-link': 'text("call")',
   'item-javascript-link': 'text("click")',
   'item-relative-link': 'text("rel")',
+  // Targets are encoded in the normalizer, so the node carries the address opened.
+  'item-link-space-target': 'link(https://example.com/a%20b: text("docs"))',
+  'item-link-non-ascii-target': 'link(https://example.com/caf%C3%A9: text("café"))',
   'item-empty-link-label': 'link(https://example.com: text("https://example.com"))',
 
   // Block syntax stays literal
@@ -144,6 +147,34 @@ describe('normalizeInlineTokens', () => {
 
     it('reads a line break as a word gap', () => {
       expect(flattenInlineNodes(lex('a\nb'))).toBe('a b');
+    });
+  });
+
+  describe('link targets', () => {
+    it('encodes the target, leaving an already-encoded one unchanged', () => {
+      expect(lex('[a](<https://x.example/a b>) [b](https://x.example/caf%C3%A9?q=é)')).toEqual([
+        { type: 'link', href: 'https://x.example/a%20b', children: [{ type: 'text', value: 'a' }] },
+        { type: 'text', value: ' ' },
+        { type: 'link', href: 'https://x.example/caf%C3%A9?q=%C3%A9', children: [{ type: 'text', value: 'b' }] },
+      ]);
+    });
+
+    it('trims whitespace inside an angle-bracket target before encoding it', () => {
+      // Encoded untrimmed, `%20https://…` would be a relative path, not a link out.
+      expect(lex('[a](< https://x.example/a >)')).toEqual([
+        { type: 'link', href: 'https://x.example/a', children: [{ type: 'text', value: 'a' }] },
+      ]);
+    });
+
+    it('renders a target that cannot be encoded as its label', () => {
+      // A lone surrogate makes encodeURI throw.
+      expect(lex('[docs](https://x.example/\uD800)')).toEqual([{ type: 'text', value: 'docs' }]);
+    });
+
+    it('labels an empty-label link with its target as written', () => {
+      expect(lex('[](<https://x.example/a b>)')).toEqual([
+        { type: 'link', href: 'https://x.example/a%20b', children: [{ type: 'text', value: 'https://x.example/a b' }] },
+      ]);
     });
   });
 
@@ -282,6 +313,18 @@ describe('inlineLinks', () => {
   it('lists a repeated target once, under its first label', () => {
     expect(inlineLinks(lex('[one](https://a.example) [two](https://a.example)'))).toEqual([
       { href: 'https://a.example', label: 'one', host: 'a.example' },
+    ]);
+  });
+
+  it('lists two spellings of one target once', () => {
+    expect(inlineLinks(lex('[a](<https://x.example/a b>) [b](https://x.example/a%20b)'))).toEqual([
+      { href: 'https://x.example/a%20b', label: 'a', host: 'x.example' },
+    ]);
+  });
+
+  it('treats a non-ASCII autolink as labelled by its target', () => {
+    expect(inlineLinks(lex('see https://x.example/café'))).toEqual([
+      { href: 'https://x.example/caf%C3%A9', label: 'https://x.example/café', host: null },
     ]);
   });
 

@@ -106,6 +106,9 @@ const conformance: Record<string, string> = {
   'tel-link': 'p("call")',
   'javascript-link': 'p("click")',
   'relative-link': 'p("rel")',
+  // Targets are encoded in the normalizer, so the node carries the address opened.
+  'link-space-target': 'p(link(https://example.com/a%20b: "docs"))',
+  'link-non-ascii-target': 'p(link(https://example.com/caf%C3%A9: "café"))',
 
   image: 'p("![alt text](https://example.com/y.png)")',
   'image-with-title': 'p("![alt](https://example.com/y.png \\"the title\\")")',
@@ -222,6 +225,12 @@ describe('blockNodesToPlainText', () => {
 
   it('indents a loose item\'s later paragraphs under its marker', () => {
     expect(plain('1. first\n\n   more\n\n2. second')).toBe('1. first\n\n   more\n\n2. second');
+  });
+
+  it('spells out a link target only when the label does not already show it', () => {
+    // The target is encoded, the autolink's label is not; they still match.
+    expect(plain('see https://x.example/café')).toBe('see https://x.example/café');
+    expect(plain('[docs](<https://x.example/a b>)')).toBe('docs (https://x.example/a%20b)');
   });
 
   it('prefixes quotes, keeps rules, and drops code fences', () => {
