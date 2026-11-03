@@ -1131,8 +1131,8 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     autoSaveNote();
   };
 
-  // handleItemCompletedToggle checks/unchecks an item through the dedicated
-  // toggle-completed endpoint so a parent's children cascade atomically in one
+  // handleItemCompletedToggle checks/unchecks an item through the
+  // set-completed endpoint so a parent's children cascade atomically in one
   // request. It applies an optimistic local cascade first; writeCompleted then
   // reconciles only the completed flags the response may still decide (the
   // response is the note's full item list as of this write, so it still reports
@@ -1151,7 +1151,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     const priorById = completedPriorById(before, completedCascadeScope(before, itemId, completed), completed);
 
     commitItems(applyCompletedCascade(before, itemId, completed));
-    return writeCompleted(priorById, noteId => notes.toggleItemCompleted(noteId, itemId, completed));
+    return writeCompleted(priorById, noteId => notes.setItemsCompleted(noteId, [itemId], completed));
   };
 
   // Helper function to handle text updates with debouncing

@@ -81,10 +81,10 @@ describe('completed values a queued op has yet to replay', () => {
       ],
     }));
     await insertQueueEntry(db, {
-      operation: 'toggleItemCompleted',
-      endpoint: `/notes/${noteId}/items/${noteId}-p/toggle-completed`,
+      operation: 'setItemsCompleted',
+      endpoint: `/notes/${noteId}/items/set-completed`,
       method: 'POST',
-      body: { completed: true },
+      body: { item_ids: [`${noteId}-p`], completed: true },
     });
     return db;
   }

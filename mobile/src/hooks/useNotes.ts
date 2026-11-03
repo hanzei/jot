@@ -15,8 +15,7 @@ import {
   updateNoteItem,
   deleteNoteItem,
   reorderNoteItems,
-  toggleItemCompleted,
-  uncheckAllItems,
+  setItemsCompleted,
   deleteCompletedItems,
 } from '../api/notes';
 import { shareNote, unshareNote } from '../api/users';
@@ -1465,17 +1464,17 @@ export function useToggleNoteItemCompleted() {
       return runLocalCompletedWrite(db, queryClient, noteId, isConnected, {
         priorById: new Map(changedIds.map((id) => [id, !completed])),
         writeLocal: () => setLocalItemsCompleted(db, noteId, changedIds, completed),
-        send: () => toggleItemCompleted(noteId, itemId, completed),
+        send: () => setItemsCompleted(noteId, [itemId], completed),
         persist: (write, serverItems, queued) => {
           const completedById = localCompletedWrites.accept(write, serverItems);
           for (const id of queued) completedById.delete(id);
           return setLocalCompletedValues(db, noteId, completedById);
         },
         queued: {
-          operation: 'toggleItemCompleted',
-          endpoint: `/notes/${noteId}/items/${itemId}/toggle-completed`,
+          operation: 'setItemsCompleted',
+          endpoint: `/notes/${noteId}/items/set-completed`,
           method: 'POST',
-          body: { completed } as Record<string, unknown>,
+          body: { item_ids: [itemId], completed } as Record<string, unknown>,
         },
       });
     },
@@ -1510,14 +1509,14 @@ export function useUncheckAllItems() {
       return runLocalCompletedWrite(db, queryClient, noteId, isConnected, {
         priorById: new Map(itemIds.map((id) => [id, true])),
         writeLocal: () => setLocalItemsCompleted(db, noteId, itemIds, false),
-        send: () => uncheckAllItems(noteId, itemIds),
+        send: () => setItemsCompleted(noteId, itemIds, false),
         // The server returns the note's full, authoritative item list, so
         // reconcile every field (and prune any local row it no longer contains)
         // rather than just patching `completed`.
         persist: (write, serverItems, queued) => reconcileLocalItems(db, noteId, serverItems, write, queued),
         // Carries the exact ids captured at click time.
         queued: {
-          operation: 'uncheckAllItems',
+          operation: 'setItemsCompleted',
           endpoint: `/notes/${noteId}/items/set-completed`,
           method: 'POST',
           body: { item_ids: itemIds, completed: false } as Record<string, unknown>,

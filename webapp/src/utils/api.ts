@@ -164,17 +164,13 @@ export const notes = {
   reorderItems: (noteId: string, itemIds: string[]): Promise<void> =>
     api.post(`/notes/${noteId}/items/reorder`, { item_ids: itemIds }).then(() => undefined),
 
-  // Toggles an item's completed flag atomically. When the item is a top-level
-  // (parent) item the same value cascades to all of its children server-side, so
-  // checking a group never splits it. Returns the note's full item list for the
-  // caller to reconcile every affected item from one response.
-  toggleItemCompleted: (noteId: string, itemId: string, completed: boolean): Promise<NoteItem[]> =>
-    api.post(`/notes/${noteId}/items/${itemId}/toggle-completed`, { completed }).then(res => res.data),
-
-  // Bulk operations over an explicit set of item IDs. Each is one atomic server
-  // request (rather than a per-item burst) and returns the note's item list for
-  // the caller to reconcile from a single response. Callers pass the exact set
-  // they captured, so an item toggled after the click is never affected.
+  // Set-completed is the one path for a single tap ([itemId]) and for bulk
+  // actions over an explicit set of item IDs. Each call is one atomic server
+  // request (rather than a per-item burst) that applies the parent/child
+  // cascade — checking a top-level item carries to its children, unchecking a
+  // child unchecks its parent — and returns the note's full item list for the
+  // caller to reconcile from a single response. Callers pass the exact set they
+  // captured, so an item toggled after the click is never affected.
   setItemsCompleted: (noteId: string, itemIds: string[], completed: boolean): Promise<NoteItem[]> =>
     api.post(`/notes/${noteId}/items/set-completed`, { item_ids: itemIds, completed }).then(res => res.data),
 

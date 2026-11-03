@@ -43,14 +43,6 @@ type PatchNoteItemRequest struct {
 	AssignedTo *string `json:"assigned_to"`
 }
 
-// ToggleNoteItemCompletedRequest is the body for
-// POST /notes/{id}/items/{item_id}/toggle-completed.
-type ToggleNoteItemCompletedRequest struct {
-	// Completed is a pointer so an omitted field is rejected by the handler
-	// rather than silently decoding to false and unchecking the item.
-	Completed *bool `json:"completed"`
-}
-
 // ReorderNoteItemsRequest is the body for POST /notes/{id}/items/reorder.
 type ReorderNoteItemsRequest struct {
 	ItemIDs []string `json:"item_ids"`
@@ -343,59 +335,6 @@ func (h *NotesHandler) ReorderNoteItems(w http.ResponseWriter, r *http.Request) 
 	return http.StatusNoContent, nil, nil
 }
 
-// ToggleNoteItemCompleted godoc
-//
-//	@Summary		Toggle a list item's completed state, cascading to children
-//	@Description	Sets the item's completed flag. When the item is a top-level (parent) item, the same value cascades to all of its children atomically. Returns the note's full item list.
-//	@Tags			notes
-//	@Security		CookieAuth
-//	@Accept			json
-//	@Produce		json
-//	@Param			id		path		string							true	"Note ID"
-//	@Param			item_id	path		string							true	"Item ID"
-//	@Param			body	body		ToggleNoteItemCompletedRequest	true	"Completed state"
-//	@Success		200		{array}		models.NoteItem
-//	@Failure		400		{object}	apierr.ErrorResponse	"bad request"
-//	@Failure		401		{object}	apierr.ErrorResponse	"unauthorized"
-//	@Failure		404		{object}	apierr.ErrorResponse	"not found"
-//	@Failure		500		{object}	apierr.ErrorResponse	"internal server error"
-//	@Router			/notes/{id}/items/{item_id}/toggle-completed [post]
-func (h *NotesHandler) ToggleNoteItemCompleted(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, authErr := requireUser(r)
-	if authErr != nil {
-		return http.StatusUnauthorized, nil, authErr
-	}
-
-	noteID, idErr := pathID(r, "id", "note")
-	if idErr != nil {
-		return http.StatusBadRequest, nil, idErr
-	}
-	itemID, idErr := pathID(r, "item_id", "item")
-	if idErr != nil {
-		return http.StatusBadRequest, nil, idErr
-	}
-
-	if _, status, err := h.loadListNoteForItemOp(r.Context(), noteID, user.ID); err != nil {
-		return status, nil, err
-	}
-
-	var req ToggleNoteItemCompletedRequest
-	if err := decodeJSONBody(w, r, &req); err != nil {
-		return http.StatusBadRequest, nil, err
-	}
-	if req.Completed == nil {
-		return http.StatusBadRequest, nil, errors.New("completed is required")
-	}
-
-	items, err := h.noteStore.ToggleItemCompleted(r.Context(), noteID, user.ID, itemID, *req.Completed)
-	if err != nil {
-		return storeError(err, "toggle item completed")
-	}
-
-	h.publishItemChangeEvent(r.Context(), noteID, user.ID)
-	return http.StatusOK, items, nil
-}
-
 // validateItemIDs checks that a bulk item-ID list is present, well-formed, and
 // not larger than a note can hold. The cap bounds how many per-item queries a
 // single bulk request can run (a practical guard against accidental overload,
@@ -431,8 +370,8 @@ type DeleteNoteItemsRequest struct {
 
 // SetNoteItemsCompleted godoc
 //
-//	@Summary		Set the completed flag on a set of list items
-//	@Description	Sets completed to the given value on each of the named items (no cascade) and returns the note's full item list. Used for bulk "uncheck all" (completed=false) and its undo (completed=true); callers pass the complete set they want changed.
+//	@Summary		Set the completed flag on one or more list items, cascading to children
+//	@Description	Sets completed to the given value on each of the named items and returns the note's full item list. Each item that is checked or unchecked applies the parent/child cascade: a top-level (parent) item carries the same value to all of its children, and unchecking a child also unchecks its parent. A single tap is a one-element item_ids; bulk "uncheck all" (completed=false) and its undo (completed=true) pass the whole set. IDs that do not belong to the note are ignored, so a stale tap on a since-deleted item returns 200 with the current list.
 //	@Tags			notes
 //	@Security		CookieAuth
 //	@Accept			json
@@ -473,7 +412,7 @@ func (h *NotesHandler) SetNoteItemsCompleted(w http.ResponseWriter, r *http.Requ
 
 	items, err := h.noteStore.SetItemsCompleted(r.Context(), noteID, user.ID, req.ItemIDs, *req.Completed)
 	if err != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("set items completed: %w", err)
+		return storeError(err, "set items completed")
 	}
 
 	h.publishItemChangeEvent(r.Context(), noteID, user.ID)

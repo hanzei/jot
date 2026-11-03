@@ -164,15 +164,6 @@ func (s *NoteStore) ReorderItems(ctx context.Context, noteID, actorID string, it
 	return s.inner.ReorderItems(ctx, noteID, actorID, itemIDs)
 }
 
-func (s *NoteStore) ToggleItemCompleted(ctx context.Context, noteID, actorID, itemID string, completed bool) (_ []NoteItem, err error) {
-	ctx, end := startSpan(ctx, s.instr, "NoteStore.ToggleItemCompleted", &err,
-		attribute.String("note.id", noteID),
-		attribute.String("item.id", itemID),
-	)
-	defer end()
-	return s.inner.ToggleItemCompleted(ctx, noteID, actorID, itemID, completed)
-}
-
 func (s *NoteStore) SetItemsCompleted(ctx context.Context, noteID, actorID string, itemIDs []string, completed bool) (_ []NoteItem, err error) {
 	ctx, end := startSpan(ctx, s.instr, "NoteStore.SetItemsCompleted", &err,
 		attribute.String("note.id", noteID),

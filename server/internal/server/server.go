@@ -471,7 +471,6 @@ func (s *Server) setupRoutes() error {
 			r.Post("/notes/{id}/items/set-completed", s.wrapHandler(s.notesHandler.SetNoteItemsCompleted))
 			r.Post("/notes/{id}/items/delete", s.wrapHandler(s.notesHandler.DeleteNoteItems))
 			r.Patch("/notes/{id}/items/{item_id}", s.wrapHandler(s.notesHandler.UpdateNoteItem))
-			r.Post("/notes/{id}/items/{item_id}/toggle-completed", s.wrapHandler(s.notesHandler.ToggleNoteItemCompleted))
 			r.Delete("/notes/{id}/items/{item_id}", s.wrapHandler(s.notesHandler.DeleteNoteItem))
 
 			r.Post("/notes/{id}/restore", s.wrapHandler(s.notesHandler.RestoreNote))
