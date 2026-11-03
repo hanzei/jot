@@ -578,7 +578,7 @@ describe('drainQueue', () => {
       body: { id: clientId, name: 'Work' },
     });
     mockApi.post.mockRejectedValueOnce(makeAxiosError(409) as never);
-    mockApi.get.mockResolvedValueOnce({ data: [{ id: clientId, name: 'Work' }] } as never);
+    mockApi.get.mockResolvedValueOnce({ data: { labels: [{ id: clientId, name: 'Work' }] } } as never);
 
     const { discardedOperations } = await drainQueue(db);
 
@@ -604,7 +604,7 @@ describe('drainQueue', () => {
       method: 'DELETE',
     });
     mockApi.post.mockRejectedValueOnce(makeAxiosError(409) as never);
-    mockApi.get.mockResolvedValueOnce({ data: [{ id: serverLblId, name: 'Home' }] } as never);
+    mockApi.get.mockResolvedValueOnce({ data: { labels: [{ id: serverLblId, name: 'Home' }] } } as never);
     mockApi.delete.mockResolvedValueOnce({ data: {} } as never);
 
     const { discardedOperations } = await drainQueue(db);
@@ -623,7 +623,7 @@ describe('drainQueue', () => {
       body: { id: 'ClientLblId00000000003', name: 'Gone' },
     });
     mockApi.post.mockRejectedValueOnce(makeAxiosError(409) as never);
-    mockApi.get.mockResolvedValueOnce({ data: [] } as never);
+    mockApi.get.mockResolvedValueOnce({ data: { labels: [] } } as never);
 
     const { discardedOperations } = await drainQueue(db);
 

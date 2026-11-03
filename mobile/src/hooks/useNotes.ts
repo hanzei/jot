@@ -16,12 +16,12 @@ import {
   deleteNoteItem,
   reorderNoteItems,
   toggleItemCompleted,
-  uncheckAllItems,
+  setItemsCompleted,
   deleteCompletedItems,
 } from '../api/notes';
 import { shareNote, unshareNote } from '../api/users';
 import { useOfflineNote } from './useOfflineNotes';
-import { DEFAULT_NOTE_COLOR, generateId, textToListNote, listToText, checkConvertToListCaps, applyCompletedValues, completedCascadeScope, patchTouchesSharedContent } from '@jot/shared';
+import { apiPaths, DEFAULT_NOTE_COLOR, generateId, textToListNote, listToText, checkConvertToListCaps, applyCompletedValues, completedCascadeScope, patchTouchesSharedContent } from '@jot/shared';
 import type {
   Note,
   NoteItem,
@@ -391,7 +391,7 @@ export function useCreateNote() {
       await markNotePendingCreate(db, clientId);
       await enqueueOperation(db, {
         operation: 'create',
-        endpoint: '/notes',
+        endpoint: apiPaths.notes,
         method: 'POST',
         // Carry the pre-assigned item IDs so the server keeps them (no
         // reconciliation) and the local rows stay valid for any per-item edit
@@ -520,7 +520,7 @@ export function useUpdateNote() {
       // replays against the advancing version instead of self-conflicting (#489).
       await enqueueOperation(db, {
         operation: 'update',
-        endpoint: `/notes/${id}`,
+        endpoint: apiPaths.note(id),
         method: 'PATCH',
         body: data as Record<string, unknown>,
       });
@@ -682,7 +682,7 @@ export function useConvertNoteType() {
       await saveNote(db, localConverted);
       await enqueueOperation(db, {
         operation: 'convertNoteType',
-        endpoint: `/notes/${id}/convert`,
+        endpoint: apiPaths.noteConvert(id),
         method: 'POST',
         body: data as unknown as Record<string, unknown>,
       });
@@ -745,7 +745,7 @@ export function useCreateNoteItem() {
       await createLocalItem(db, noteId, local);
       await enqueueOperation(db, {
         operation: 'createItem',
-        endpoint: `/notes/${noteId}/items`,
+        endpoint: apiPaths.noteItems(noteId),
         method: 'POST',
         body: itemWithId as unknown as Record<string, unknown>,
       });
@@ -781,7 +781,7 @@ export function useUpdateNoteItem() {
       await patchLocalItem(db, noteId, itemId, data);
       await enqueueOperation(db, {
         operation: 'updateItem',
-        endpoint: `/notes/${noteId}/items/${itemId}`,
+        endpoint: apiPaths.noteItem(noteId, itemId),
         method: 'PATCH',
         body: data as Record<string, unknown>,
       });
@@ -817,7 +817,7 @@ export function useDeleteNoteItem() {
       await deleteLocalItem(db, noteId, itemId);
       await enqueueOperation(db, {
         operation: 'deleteItem',
-        endpoint: `/notes/${noteId}/items/${itemId}`,
+        endpoint: apiPaths.noteItem(noteId, itemId),
         method: 'DELETE',
       });
     },
@@ -852,7 +852,7 @@ export function useReorderNoteItems() {
       await reorderLocalItems(db, noteId, itemIds);
       await enqueueOperation(db, {
         operation: 'reorderItems',
-        endpoint: `/notes/${noteId}/items/reorder`,
+        endpoint: apiPaths.noteItemsReorder(noteId),
         method: 'POST',
         body: { item_ids: itemIds } as Record<string, unknown>,
       });
@@ -889,7 +889,7 @@ export function useDeleteNote() {
       await markLocalNoteDeleted(db, id);
       await enqueueOperation(db, {
         operation: 'delete',
-        endpoint: `/notes/${id}`,
+        endpoint: apiPaths.note(id),
         method: 'DELETE',
       });
     },
@@ -978,7 +978,7 @@ export function useDuplicateNote() {
       await markNotePendingCreate(db, clientId);
       await enqueueOperation(db, {
         operation: 'duplicate',
-        endpoint: `/notes/${id}/duplicate`,
+        endpoint: apiPaths.noteDuplicate(id),
         method: 'POST',
         body: { id: clientId, ...(itemIds ? { item_ids: itemIds } : {}) } as Record<string, unknown>,
       });
@@ -1018,7 +1018,7 @@ export function useRestoreNote() {
       await markLocalNoteRestored(db, id);
       await enqueueOperation(db, {
         operation: 'restore',
-        endpoint: `/notes/${id}/restore`,
+        endpoint: apiPaths.noteRestore(id),
         method: 'POST',
       });
     },
@@ -1062,7 +1062,7 @@ export function useMarkNoteViewed() {
       }
       await enqueueOperation(db, {
         operation: 'markViewed',
-        endpoint: `/notes/${id}/viewed`,
+        endpoint: apiPaths.noteViewed(id),
         method: 'POST',
         body: { viewed_at: viewedAt },
       });
@@ -1102,7 +1102,7 @@ export function usePermanentDeleteNote() {
       await permanentDeleteLocalNote(db, id);
       await enqueueOperation(db, {
         operation: 'permanentDelete',
-        endpoint: `/notes/${id}?permanent=true`,
+        endpoint: apiPaths.notePermanentDelete(id),
         method: 'DELETE',
       });
     },
@@ -1226,7 +1226,7 @@ export function useReorderNotes() {
       try {
         await enqueueOperation(db, {
           operation: 'reorder',
-          endpoint: '/notes/reorder',
+          endpoint: apiPaths.notesReorder,
           method: 'POST',
           body: { note_ids: noteIds } as Record<string, unknown>,
         });
@@ -1319,7 +1319,7 @@ export function useShareNote() {
       }
       await enqueueOperation(db, {
         operation: 'share',
-        endpoint: `/notes/${noteId}/share`,
+        endpoint: apiPaths.noteShare(noteId),
         method: 'POST',
         body: { user_id: user.id },
       });
@@ -1366,7 +1366,7 @@ export function useUnshareNote() {
       await saveNote(db, { ...note, is_shared: updatedShares.length > 0, shared_with: updatedShares });
       await enqueueOperation(db, {
         operation: 'unshare',
-        endpoint: `/notes/${noteId}/shares/${userId}`,
+        endpoint: apiPaths.noteShareUser(noteId, userId),
         method: 'DELETE',
       });
     },
@@ -1428,7 +1428,7 @@ export function useLeaveNote() {
       await permanentDeleteLocalNote(db, noteId);
       await enqueueOperation(db, {
         operation: 'unshare',
-        endpoint: `/notes/${noteId}/shares/${userId}`,
+        endpoint: apiPaths.noteShareUser(noteId, userId),
         method: 'DELETE',
       });
     },
@@ -1473,7 +1473,7 @@ export function useToggleNoteItemCompleted() {
         },
         queued: {
           operation: 'toggleItemCompleted',
-          endpoint: `/notes/${noteId}/items/${itemId}/toggle-completed`,
+          endpoint: apiPaths.noteItemToggleCompleted(noteId, itemId),
           method: 'POST',
           body: { completed } as Record<string, unknown>,
         },
@@ -1510,7 +1510,7 @@ export function useUncheckAllItems() {
       return runLocalCompletedWrite(db, queryClient, noteId, isConnected, {
         priorById: new Map(itemIds.map((id) => [id, true])),
         writeLocal: () => setLocalItemsCompleted(db, noteId, itemIds, false),
-        send: () => uncheckAllItems(noteId, itemIds),
+        send: () => setItemsCompleted(noteId, itemIds, false),
         // The server returns the note's full, authoritative item list, so
         // reconcile every field (and prune any local row it no longer contains)
         // rather than just patching `completed`.
@@ -1518,7 +1518,7 @@ export function useUncheckAllItems() {
         // Carries the exact ids captured at click time.
         queued: {
           operation: 'uncheckAllItems',
-          endpoint: `/notes/${noteId}/items/set-completed`,
+          endpoint: apiPaths.noteItemsSetCompleted(noteId),
           method: 'POST',
           body: { item_ids: itemIds, completed: false } as Record<string, unknown>,
         },
@@ -1584,7 +1584,7 @@ export function useDeleteCompletedItems() {
       await deleteLocalItems(db, noteId, itemIds);
       await enqueueOperation(db, {
         operation: 'deleteCompletedItems',
-        endpoint: `/notes/${noteId}/items/delete`,
+        endpoint: apiPaths.noteItemsDelete(noteId),
         method: 'POST',
         body: { item_ids: itemIds } as Record<string, unknown>,
       });

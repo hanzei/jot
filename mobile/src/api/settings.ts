@@ -1,14 +1,14 @@
 import { Platform } from 'react-native';
-import api from './client';
-import type { User, AuthResponse, UpdateMeRequest, ChangePasswordRequest, AboutInfo, ActiveSession, PersonalAccessToken, CreatePATRequest, SessionListResponse, PATListResponse } from '@jot/shared';
+import type { AxiosProgressEvent } from 'axios';
+import { jot } from './jot';
+import type { User, AuthResponse, UpdateMeRequest, ChangePasswordRequest, AboutInfo, ActiveSession, PersonalAccessToken, CreatePATRequest } from '@jot/shared';
 
 export async function updateMe(data: UpdateMeRequest): Promise<AuthResponse> {
-  const res = await api.patch('/users/me', data);
-  return res.data;
+  return jot.users.updateMe(data);
 }
 
 export async function changePassword(data: ChangePasswordRequest): Promise<void> {
-  await api.put('/users/me/password', data);
+  return jot.users.changePassword(data);
 }
 
 // Profile-icon uploads can be large on slow cellular, so this is generous —
@@ -33,11 +33,11 @@ export async function uploadProfileIcon(
   } as unknown as Blob);
 
   let lastPercent = -1;
-  const res = await api.post('/users/me/profile-icon', formData, {
+  return jot.users.uploadProfileIcon(formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: UPLOAD_ICON_TIMEOUT,
     ...(onUploadProgress && {
-      onUploadProgress: (progressEvent) => {
+      onUploadProgress: (progressEvent: AxiosProgressEvent) => {
         const percent = progressEvent.total
           ? Math.round((progressEvent.loaded * 100) / progressEvent.total)
           : 0;
@@ -48,37 +48,32 @@ export async function uploadProfileIcon(
       },
     }),
   });
-  return res.data;
 }
 
 export async function deleteProfileIcon(): Promise<void> {
-  await api.delete('/users/me/profile-icon');
+  return jot.users.deleteProfileIcon();
 }
 
 export async function getAboutInfo(): Promise<AboutInfo> {
-  const res = await api.get('/about');
-  return res.data;
+  return jot.about.get();
 }
 
 export async function listSessions(): Promise<ActiveSession[]> {
-  const res = await api.get<SessionListResponse>('/sessions');
-  return res.data.sessions;
+  return jot.sessions.list();
 }
 
 export async function revokeSession(id: string): Promise<void> {
-  await api.delete(`/sessions/${id}`);
+  return jot.sessions.revoke(id);
 }
 
 export async function listPATs(): Promise<PersonalAccessToken[]> {
-  const res = await api.get<PATListResponse>('/pats');
-  return res.data.pats;
+  return jot.pats.list();
 }
 
 export async function createPAT(data: CreatePATRequest): Promise<PersonalAccessToken> {
-  const res = await api.post('/pats', data);
-  return res.data;
+  return jot.pats.create(data);
 }
 
 export async function revokePAT(id: string): Promise<void> {
-  await api.delete(`/pats/${id}`);
+  return jot.pats.revoke(id);
 }

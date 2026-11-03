@@ -109,6 +109,14 @@ A formatting-only commit goes in `.git-blame-ignore-revs`.
 
 Domain types live in `shared/src/types.ts`; do not duplicate them in a client.
 
+REST calls live in `shared/src/api/`: `apiPaths` builds every path and
+`createJotApi(instance)` holds the endpoint functions, bound to each client's
+own axios instance. Add or change an endpoint there, not in
+`webapp/src/utils/api.ts` or `mobile/src/api/`, which keep only what is
+platform-specific (multipart bodies, downloads, mobile's session capture).
+Mobile's sync queue persists `apiPaths` output, so a builder's output must
+never change — `apiPaths.test.ts` pins it.
+
 ## Dependency Updates
 
 **Do not update dependencies by hand** (`go get -u`, `npm update`, editing a

@@ -1,6 +1,7 @@
+import type { AxiosProgressEvent } from 'axios';
 import { Platform } from 'react-native';
-import api from './client';
-import type { NoteImage } from '@jot/shared';
+import { API_BASE_PATH, apiPaths, type NoteImage } from '@jot/shared';
+import { jot } from './jot';
 
 // Trims a trailing slash so callers don't have to know whether baseUrl came
 // from the canonicalized server registry (never trailing-slashed) or straight
@@ -14,13 +15,13 @@ function stripTrailingSlash(baseUrl: string): string {
 // ProfileIconSection.tsx: the native networking layer attaches the session
 // cookie set during login, so no extra auth wiring is needed here.
 export function noteImageUrl(baseUrl: string, imageId: string): string {
-  return `${stripTrailingSlash(baseUrl)}/api/v1/images/${imageId}`;
+  return stripTrailingSlash(baseUrl) + API_BASE_PATH + apiPaths.image(imageId);
 }
 
 // Resized JPEG tile for grid tiles; the lightbox uses noteImageUrl (the
 // original) instead so a closer look never shows a downscaled image.
 export function noteImageThumbnailUrl(baseUrl: string, imageId: string): string {
-  return `${stripTrailingSlash(baseUrl)}/api/v1/images/${imageId}/thumbnail`;
+  return stripTrailingSlash(baseUrl) + API_BASE_PATH + apiPaths.imageThumbnail(imageId);
 }
 
 export interface ImageUploadFile {
@@ -52,12 +53,12 @@ export async function uploadNoteImage(
   } as unknown as Blob);
 
   let lastPercent = -1;
-  const res = await api.post(`/notes/${noteId}/images`, formData, {
+  return jot.images.upload(noteId, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: NOTE_IMAGE_UPLOAD_TIMEOUT_MS,
     ...(signal && { signal }),
     ...(onUploadProgress && {
-      onUploadProgress: (progressEvent) => {
+      onUploadProgress: (progressEvent: AxiosProgressEvent) => {
         const percent = progressEvent.total
           ? Math.round((progressEvent.loaded * 100) / progressEvent.total)
           : 0;
@@ -68,9 +69,8 @@ export async function uploadNoteImage(
       },
     }),
   });
-  return res.data;
 }
 
 export async function deleteNoteImage(imageId: string): Promise<void> {
-  await api.delete(`/images/${imageId}`);
+  return jot.images.delete(imageId);
 }

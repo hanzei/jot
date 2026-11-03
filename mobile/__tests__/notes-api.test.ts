@@ -62,7 +62,7 @@ describe('Notes API', () => {
 
       await getNotes();
 
-      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/notes', { params: undefined });
+      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/notes', { params: {} });
     });
 
     it('passes my_tasks param to GET /notes', async () => {

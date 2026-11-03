@@ -98,7 +98,7 @@ describe('API Module', () => {
       expect(notes.create).toBeDefined();
       expect(notes.update).toBeDefined();
       expect(notes.delete).toBeDefined();
-      expect(users.search).toBeDefined();
+      expect(users.list).toBeDefined();
       expect(admin.getUsers).toBeDefined();
       expect(admin.getStats).toBeDefined();
       expect(admin.createUser).toBeDefined();
@@ -296,9 +296,7 @@ describe('API Module', () => {
 
         const result = await notes.getAll();
 
-        expect(mockGet).toHaveBeenCalledWith('/notes', { 
-          params: { archived: false, search: '', trashed: false }
-        });
+        expect(mockGet).toHaveBeenCalledWith('/notes', { params: {} });
         expect(result).toEqual(mockNotes);
       });
 
@@ -306,11 +304,9 @@ describe('API Module', () => {
         const mockNotes = [{ ...mockNote, archived: true }];
         mockGet.mockResolvedValue({ data: { notes: mockNotes } });
 
-        const result = await notes.getAll(true);
+        const result = await notes.getAll({ archived: true });
 
-        expect(mockGet).toHaveBeenCalledWith('/notes', { 
-          params: { archived: true, search: '', trashed: false }
-        });
+        expect(mockGet).toHaveBeenCalledWith('/notes', { params: { archived: true } });
         expect(result).toEqual(mockNotes);
       });
 
@@ -318,11 +314,9 @@ describe('API Module', () => {
         const mockNotes = [mockNote];
         mockGet.mockResolvedValue({ data: { notes: mockNotes } });
 
-        const result = await notes.getAll(false, 'test query');
+        const result = await notes.getAll({ archived: false, search: 'test query' });
 
-        expect(mockGet).toHaveBeenCalledWith('/notes', { 
-          params: { archived: false, search: 'test query', trashed: false }
-        });
+        expect(mockGet).toHaveBeenCalledWith('/notes', { params: { archived: false, search: 'test query' } });
         expect(result).toEqual(mockNotes);
       });
 
@@ -351,11 +345,9 @@ describe('API Module', () => {
         const specialQuery = '<script>alert("xss")</script>';
         mockGet.mockResolvedValue({ data: { notes: [] } });
 
-        await notes.getAll(false, specialQuery);
+        await notes.getAll({ search: specialQuery });
 
-        expect(mockGet).toHaveBeenCalledWith('/notes', { 
-          params: { archived: false, search: specialQuery, trashed: false }
-        });
+        expect(mockGet).toHaveBeenCalledWith('/notes', { params: { search: specialQuery } });
       });
     });
 
@@ -650,7 +642,7 @@ describe('API Module', () => {
         ];
         mockGet.mockResolvedValue({ data: { users: mockUsers, truncated: false } });
 
-        const result = await users.search();
+        const result = await users.list();
 
         expect(mockGet).toHaveBeenCalledWith('/users');
         expect(result).toEqual(mockUsers);
@@ -659,7 +651,7 @@ describe('API Module', () => {
       it('handles empty users response', async () => {
         mockGet.mockResolvedValue({ data: { users: [], truncated: false } });
 
-        const result = await users.search();
+        const result = await users.list();
 
         expect(result).toEqual([]);
       });
@@ -668,7 +660,7 @@ describe('API Module', () => {
         const error = new Error('Unauthorized');
         mockGet.mockRejectedValue(error);
 
-        await expect(users.search()).rejects.toThrow('Unauthorized');
+        await expect(users.list()).rejects.toThrow('Unauthorized');
       });
     });
   });
@@ -827,7 +819,7 @@ describe('API Module', () => {
       expect(typeof auth.login).toBe('function');
       expect(typeof auth.register).toBe('function');
       expect(typeof notes.getAll).toBe('function');
-      expect(typeof users.search).toBe('function');
+      expect(typeof users.list).toBe('function');
       expect(typeof admin.getUsers).toBe('function');
       expect(typeof admin.getStats).toBe('function');
     });
@@ -863,8 +855,8 @@ describe('API Module', () => {
       // Make concurrent calls
       const promises = [
         notes.getAll(),
-        notes.getAll(true),
-        notes.getAll(false, 'search'),
+        notes.getAll({ archived: true }),
+        notes.getAll({ search: 'search' }),
         notes.getById('1'),
       ];
 
@@ -883,7 +875,7 @@ describe('API Module', () => {
       // Verifies that the API wrappers do not add their own null-checks and pass
       // the values straight to axios (mocked here). Input validation is the
       // caller's responsibility.
-      await notes.getAll(undefined as unknown as boolean, null as unknown as string);
+      await notes.getAll({ search: null as unknown as string });
       await notes.create(null as unknown as CreateNoteRequest);
       await notes.update(undefined as unknown as string, null as unknown as UpdateNoteRequest);
 

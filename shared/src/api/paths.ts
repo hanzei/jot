@@ -1,0 +1,78 @@
+/**
+ * Every REST path the clients call, relative to {@link API_BASE_PATH}.
+ *
+ * Mobile's offline sync queue persists these strings in SQLite and replays
+ * them later, possibly after an app update. A builder's output must therefore
+ * stay byte-for-byte stable: changing one silently re-targets entries already
+ * queued on users' devices. `__tests__/apiPaths.test.ts` pins every one.
+ */
+
+/** Prefix the server mounts the API under; `apiPaths` are relative to it. */
+export const API_BASE_PATH = '/api/v1';
+
+export const apiPaths = {
+  config: '/config',
+  about: '/about',
+
+  login: '/login',
+  register: '/register',
+  logout: '/logout',
+  me: '/me',
+
+  // The login and link flows are browser redirects, not XHR calls.
+  oidcLogin: '/auth/oidc/login',
+  oidcLink: '/auth/oidc/link',
+  oidcUnlink: '/auth/oidc/unlink',
+  oidcNativeExchange: '/auth/oidc/native/exchange',
+  oidcNativeLink: '/auth/oidc/native/link',
+
+  notes: '/notes',
+  notesTrash: '/notes/trash',
+  notesReorder: '/notes/reorder',
+  notesImport: '/notes/import',
+  notesExport: '/notes/export',
+  note: (noteId: string): string => `/notes/${noteId}`,
+  /** `DELETE` target for a permanent delete, query string included, as the sync queue stores it. */
+  notePermanentDelete: (noteId: string): string => `/notes/${noteId}?permanent=true`,
+  noteRestore: (noteId: string): string => `/notes/${noteId}/restore`,
+  noteViewed: (noteId: string): string => `/notes/${noteId}/viewed`,
+  noteDuplicate: (noteId: string): string => `/notes/${noteId}/duplicate`,
+  noteConvert: (noteId: string): string => `/notes/${noteId}/convert`,
+  noteShare: (noteId: string): string => `/notes/${noteId}/share`,
+  noteShares: (noteId: string): string => `/notes/${noteId}/shares`,
+  noteShareUser: (noteId: string, userId: string): string => `/notes/${noteId}/shares/${userId}`,
+  noteLabels: (noteId: string): string => `/notes/${noteId}/labels`,
+  noteLabel: (noteId: string, labelId: string): string => `/notes/${noteId}/labels/${labelId}`,
+  noteImages: (noteId: string): string => `/notes/${noteId}/images`,
+  noteItems: (noteId: string): string => `/notes/${noteId}/items`,
+  noteItem: (noteId: string, itemId: string): string => `/notes/${noteId}/items/${itemId}`,
+  noteItemToggleCompleted: (noteId: string, itemId: string): string => `/notes/${noteId}/items/${itemId}/toggle-completed`,
+  noteItemsReorder: (noteId: string): string => `/notes/${noteId}/items/reorder`,
+  noteItemsSetCompleted: (noteId: string): string => `/notes/${noteId}/items/set-completed`,
+  noteItemsDelete: (noteId: string): string => `/notes/${noteId}/items/delete`,
+
+  labels: '/labels',
+  labelCounts: '/labels/counts',
+  label: (labelId: string): string => `/labels/${labelId}`,
+
+  users: '/users',
+  usersMe: '/users/me',
+  usersMePassword: '/users/me/password',
+  usersMeProfileIcon: '/users/me/profile-icon',
+  usersMeSettings: '/users/me/settings',
+
+  sessions: '/sessions',
+  session: (sessionId: string): string => `/sessions/${sessionId}`,
+
+  pats: '/pats',
+  pat: (patId: string): string => `/pats/${patId}`,
+
+  image: (imageId: string): string => `/images/${imageId}`,
+  imageThumbnail: (imageId: string): string => `/images/${imageId}/thumbnail`,
+
+  adminStats: '/admin/stats',
+  adminUsers: '/admin/users',
+  adminUser: (userId: string): string => `/admin/users/${userId}`,
+  adminUserRole: (userId: string): string => `/admin/users/${userId}/role`,
+  adminUserPassword: (userId: string): string => `/admin/users/${userId}/password`,
+} as const;

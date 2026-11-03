@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { generateId, canonicalizeServerOrigin, parseApiErrorBody } from '@jot/shared';
+import { API_BASE_PATH, apiPaths, generateId, canonicalizeServerOrigin, parseApiErrorBody } from '@jot/shared';
 import type { GetNotesParams } from '@jot/shared';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { getAllLocalNotes } from '../db/noteQueries';
@@ -41,7 +41,7 @@ export interface UpgradeClient {
 /** Build an UpgradeClient for a real server URL and session token. */
 export function makeUpgradeClient(serverUrl: string, sessionToken: string): UpgradeClient {
   const instance = axios.create({
-    baseURL: `${serverUrl}/api/v1`,
+    baseURL: serverUrl + API_BASE_PATH,
     timeout: 15000,
     headers: {
       'Content-Type': 'application/json',
@@ -89,7 +89,7 @@ export async function registerOnServer(
     throw Object.assign(new Error('Invalid server URL'), { code: 'INVALID_URL' as const });
   }
   const res = await axios.post(
-    `${canonical}/api/v1/register`,
+    canonical + API_BASE_PATH + apiPaths.register,
     { username, password },
     {
       timeout: 15000,
@@ -298,7 +298,7 @@ export async function seedReplayQueue(
     for (const label of labelsById.values()) {
       await insertQueueEntry(db, {
         operation: 'createLabel',
-        endpoint: '/labels',
+        endpoint: apiPaths.labels,
         method: 'POST',
         body: { id: label.id, name: label.name },
       });
@@ -337,7 +337,7 @@ export async function seedReplayQueue(
 
       await insertQueueEntry(db, {
         operation: 'create',
-        endpoint: '/notes',
+        endpoint: apiPaths.notes,
         method: 'POST',
         body,
       });
@@ -353,7 +353,7 @@ export async function seedReplayQueue(
       for (const label of note.labels) {
         await insertQueueEntry(db, {
           operation: 'addLabelToNote',
-          endpoint: `/notes/${note.id}/labels/${label.id}`,
+          endpoint: apiPaths.noteLabel(note.id, label.id),
           method: 'POST',
         });
         totalEnqueued++;
@@ -373,7 +373,7 @@ export async function seedReplayQueue(
       if (Object.keys(patch).length > 0) {
         await insertQueueEntry(db, {
           operation: 'update',
-          endpoint: `/notes/${note.id}`,
+          endpoint: apiPaths.note(note.id),
           method: 'PATCH',
           body: patch,
         });
@@ -383,7 +383,7 @@ export async function seedReplayQueue(
       if (note.deleted_at !== null) {
         await insertQueueEntry(db, {
           operation: 'delete',
-          endpoint: `/notes/${note.id}`,
+          endpoint: apiPaths.note(note.id),
           method: 'DELETE',
         });
         totalEnqueued++;
@@ -402,7 +402,7 @@ export async function seedReplayQueue(
 
     await insertQueueEntry(db, {
       operation: 'updateSettings',
-      endpoint: '/users/me',
+      endpoint: apiPaths.usersMe,
       method: 'PATCH',
       body: settingsBody,
     });

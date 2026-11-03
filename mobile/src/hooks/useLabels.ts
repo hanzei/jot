@@ -35,7 +35,7 @@ import { useAuth } from '../store/AuthContext';
 import { isLocalModeActive } from '../store/localMode';
 import { isServerSwitchInProgress } from '../api/client';
 import { LocalizedError } from '../i18n/utils';
-import type { Label } from '@jot/shared';
+import { apiPaths, type Label } from '@jot/shared';
 import {
   labelCountsQueryKey,
   labelsQueryKey,
@@ -213,7 +213,7 @@ export async function resolveLocalLabel(db: SQLiteDatabase, name: string, userId
   const label = buildLocalLabel(name, userId);
   await enqueueOperation(db, {
     operation: 'createLabel',
-    endpoint: '/labels',
+    endpoint: apiPaths.labels,
     method: 'POST',
     body: { id: label.id, name },
   });
@@ -254,7 +254,7 @@ export function useCreateLabel() {
       const localLabel = buildLocalLabel(trimmed, user?.id ?? '');
       await enqueueOperation(db, {
         operation: 'createLabel',
-        endpoint: '/labels',
+        endpoint: apiPaths.labels,
         method: 'POST',
         body: { id: localLabel.id, name: trimmed },
       });
@@ -312,7 +312,7 @@ export function useAddLabelToNote() {
       await addLabelToLocalNote(db, noteId, label);
       await enqueueOperation(db, {
         operation: 'addLabelToNote',
-        endpoint: `/notes/${noteId}/labels`,
+        endpoint: apiPaths.noteLabels(noteId),
         method: 'POST',
         body: { name: trimmed },
       });
@@ -361,7 +361,7 @@ export function useRemoveLabelFromNote() {
       await removeLabelFromLocalNote(db, noteId, labelId);
       await enqueueOperation(db, {
         operation: 'removeLabelFromNote',
-        endpoint: `/notes/${noteId}/labels/${labelId}`,
+        endpoint: apiPaths.noteLabel(noteId, labelId),
         method: 'DELETE',
       });
       return note;
@@ -421,7 +421,7 @@ export function useRenameLabel() {
       await renameLabelInLocalNotes(db, labelId, trimmed);
       await enqueueOperation(db, {
         operation: 'renameLabel',
-        endpoint: `/labels/${labelId}`,
+        endpoint: apiPaths.label(labelId),
         method: 'PATCH',
         body: { name: trimmed },
       });
@@ -479,7 +479,7 @@ export function useDeleteLabel() {
       await deleteLabelFromLocalNotes(db, labelId);
       await enqueueOperation(db, {
         operation: 'deleteLabel',
-        endpoint: `/labels/${labelId}`,
+        endpoint: apiPaths.label(labelId),
         method: 'DELETE',
       });
     },
