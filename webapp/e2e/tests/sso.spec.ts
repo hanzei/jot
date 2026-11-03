@@ -46,6 +46,10 @@ async function mockSsoOnlyLinked(page: Page) {
     });
   });
   await page.route('**/api/v1/users/me', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
     const response = await route.fetch();
     const body = await response.json();
     await route.fulfill({ response, json: { ...body, user: { ...body.user, has_sso_linked: true } } });

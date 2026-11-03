@@ -205,6 +205,11 @@ test.describe('Settings', () => {
       let releaseMe!: () => void;
       const meHeld = new Promise<void>((resolve) => { releaseMe = resolve; });
       await page.route('**/api/v1/users/me', async (route) => {
+        // The PATCH that saves the theme shares this URL and must go through.
+        if (route.request().method() !== 'GET') {
+          await route.continue();
+          return;
+        }
         const response = await route.fetch();
         await meHeld;
         await route.fulfill({ response });
@@ -215,7 +220,9 @@ test.describe('Settings', () => {
 
       await settingsPage.selectTheme('Dark');
       await expect(page.getByText('Theme updated')).toBeVisible();
-      const meAnswered = page.waitForResponse('**/api/v1/users/me');
+      const meAnswered = page.waitForResponse(
+        (resp) => resp.url().endsWith('/api/v1/users/me') && resp.request().method() === 'GET',
+      );
       releaseMe();
       await meAnswered;
 
