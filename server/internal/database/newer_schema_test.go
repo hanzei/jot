@@ -1,7 +1,6 @@
 package database
 
 import (
-	"errors"
 	"fmt"
 	"io/fs"
 	"testing"
@@ -37,7 +36,7 @@ func TestNewRefusesNewerSchema(t *testing.T) {
 
 				_, err = New(driver, dsn)
 				var newer *SchemaNewerError
-				require.True(t, errors.As(err, &newer), "want a SchemaNewerError, got %v", err)
+				require.ErrorAs(t, err, &newer)
 				assert.Equal(t, latest+1, newer.DBVersion)
 				assert.Equal(t, latest, newer.LatestVersion)
 				assert.Contains(t, err.Error(), fmt.Sprintf("version %d", latest+1))
@@ -90,8 +89,8 @@ func latestEmbeddedVersion(t *testing.T, driver string) uint {
 	var want uint
 	for _, e := range entries {
 		var v uint
-		_, err := fmt.Sscanf(e.Name(), "%d_", &v)
-		require.NoError(t, err, e.Name())
+		_, scanErr := fmt.Sscanf(e.Name(), "%d_", &v)
+		require.NoError(t, scanErr, e.Name())
 		want = max(want, v)
 	}
 
