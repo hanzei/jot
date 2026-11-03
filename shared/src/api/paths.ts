@@ -16,7 +16,10 @@ export const API_BASE_PATH = '/api/v1';
  * the active one yet). Without `origin` it is same-origin (`/api/v1/...`).
  */
 export function apiUrl(path: string, origin = ''): string {
-  return origin.replace(/\/+$/, '') + API_BASE_PATH + path;
+  // A loop rather than /\/+$/, which backtracks quadratically on long runs of '/'.
+  let end = origin.length;
+  while (end > 0 && origin[end - 1] === '/') end--;
+  return origin.slice(0, end) + API_BASE_PATH + path;
 }
 
 export const apiPaths = {

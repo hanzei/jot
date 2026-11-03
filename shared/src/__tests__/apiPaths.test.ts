@@ -14,6 +14,7 @@ describe('apiPaths', () => {
     expect(apiUrl('/users/me')).toBe('/api/v1/users/me');
     expect(apiUrl('/users/me', 'https://jot.example.com')).toBe('https://jot.example.com/api/v1/users/me');
     expect(apiUrl('/users/me', 'https://jot.example.com//')).toBe('https://jot.example.com/api/v1/users/me');
+    expect(apiUrl('/users/me', '/'.repeat(100_000) + 'x')).toBe('/'.repeat(100_000) + 'x/api/v1/users/me');
   });
 
   it('pins every path', () => {
