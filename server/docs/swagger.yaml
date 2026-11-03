@@ -349,25 +349,11 @@ definitions:
       skipped:
         type: integer
     type: object
-  handlers.LabelCount:
-    properties:
-      count:
-        type: integer
-      label_id:
-        type: string
-    type: object
-  handlers.LabelCountsResponse:
-    properties:
-      counts:
-        items:
-          $ref: '#/definitions/handlers.LabelCount'
-        type: array
-    type: object
   handlers.LabelListResponse:
     properties:
       labels:
         items:
-          $ref: '#/definitions/models.Label'
+          $ref: '#/definitions/models.LabelWithCount'
         type: array
     type: object
   handlers.LoginRequest:
@@ -503,14 +489,6 @@ definitions:
     properties:
       user_id:
         type: string
-    type: object
-  handlers.ToggleNoteItemCompletedRequest:
-    properties:
-      completed:
-        description: |-
-          Completed is a pointer so an omitted field is rejected by the handler
-          rather than silently decoding to false and unchecking the item.
-        type: boolean
     type: object
   handlers.UpdateNoteRequest:
     properties:
@@ -736,6 +714,24 @@ definitions:
         type: string
       name:
         type: string
+      updated_at:
+        type: string
+      user_id:
+        type: string
+    type: object
+  models.LabelWithCount:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      note_count:
+        description: |-
+          NoteCount is the number of non-trashed, non-archived notes that carry the
+          label for the requesting user.
+        type: integer
       updated_at:
         type: string
       user_id:
@@ -1517,6 +1513,8 @@ paths:
       - notes
   /labels:
     get:
+      description: 'Each label carries note_count: the number of non-trashed, non-archived
+        notes carrying the label for the requesting user.'
       produces:
       - application/json
       responses:
@@ -1658,28 +1656,6 @@ paths:
       summary: Rename a label
       tags:
       - labels
-  /labels/counts:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handlers.LabelCountsResponse'
-        "401":
-          description: unauthorized
-          schema:
-            $ref: '#/definitions/apierr.ErrorResponse'
-        "500":
-          description: internal server error
-          schema:
-            $ref: '#/definitions/apierr.ErrorResponse'
-      security:
-      - CookieAuth: []
-      summary: Get note counts per label for the current user
-      tags:
-      - labels
   /login:
     post:
       consumes:
@@ -1725,28 +1701,6 @@ paths:
       security:
       - CookieAuth: []
       summary: Log out the current user
-      tags:
-      - auth
-  /me:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handlers.AuthResponse'
-        "401":
-          description: unauthorized
-          schema:
-            $ref: '#/definitions/apierr.ErrorResponse'
-        "500":
-          description: internal server error
-          schema:
-            $ref: '#/definitions/apierr.ErrorResponse'
-      security:
-      - CookieAuth: []
-      summary: Get the current authenticated user and settings
       tags:
       - auth
   /notes:
@@ -2249,60 +2203,6 @@ paths:
       summary: Update a single list item
       tags:
       - notes
-  /notes/{id}/items/{item_id}/toggle-completed:
-    post:
-      consumes:
-      - application/json
-      description: Sets the item's completed flag. When the item is a top-level (parent)
-        item, the same value cascades to all of its children atomically. Returns the
-        note's full item list.
-      parameters:
-      - description: Note ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Item ID
-        in: path
-        name: item_id
-        required: true
-        type: string
-      - description: Completed state
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/handlers.ToggleNoteItemCompletedRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/models.NoteItem'
-            type: array
-        "400":
-          description: bad request
-          schema:
-            $ref: '#/definitions/apierr.ErrorResponse'
-        "401":
-          description: unauthorized
-          schema:
-            $ref: '#/definitions/apierr.ErrorResponse'
-        "404":
-          description: not found
-          schema:
-            $ref: '#/definitions/apierr.ErrorResponse'
-        "500":
-          description: internal server error
-          schema:
-            $ref: '#/definitions/apierr.ErrorResponse'
-      security:
-      - CookieAuth: []
-      summary: Toggle a list item's completed state, cascading to children
-      tags:
-      - notes
   /notes/{id}/items/delete:
     post:
       consumes:
@@ -2400,10 +2300,14 @@ paths:
     post:
       consumes:
       - application/json
-      description: Sets completed to the given value on each of the named items (no
-        cascade) and returns the note's full item list. Used for bulk "uncheck all"
-        (completed=false) and its undo (completed=true); callers pass the complete
-        set they want changed.
+      description: 'Sets completed to the given value on each of the named items and
+        returns the note''s full item list. Each item that is checked or unchecked
+        applies the parent/child cascade: a top-level (parent) item carries the same
+        value to all of its children, and unchecking a child also unchecks its parent.
+        A single tap is a one-element item_ids; bulk "uncheck all" (completed=false)
+        and its undo (completed=true) pass the whole set. IDs that do not belong to
+        the note are ignored, so a stale tap on a since-deleted item returns 200 with
+        the current list.'
       parameters:
       - description: Note ID
         in: path
@@ -2443,7 +2347,7 @@ paths:
             $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
-      summary: Set the completed flag on a set of list items
+      summary: Set the completed flag on one or more list items, cascading to children
       tags:
       - notes
   /notes/{id}/labels:
@@ -3123,6 +3027,27 @@ paths:
       tags:
       - users
   /users/me:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.AuthResponse'
+        "401":
+          description: unauthorized
+          schema:
+            $ref: '#/definitions/apierr.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/apierr.ErrorResponse'
+      security:
+      - CookieAuth: []
+      summary: Get the current authenticated user and settings
+      tags:
+      - users
     patch:
       consumes:
       - application/json

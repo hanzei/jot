@@ -434,7 +434,7 @@ func (s *Server) setupRoutes() error {
 			r.Get("/events", s.eventsHandler.ServeSSE)
 
 			r.Get("/about", s.wrapHandler(s.handleAbout))
-			r.Get("/me", s.wrapHandler(s.authHandler.Me))
+			r.Get("/users/me", s.wrapHandler(s.authHandler.Me))
 			r.Patch("/users/me", s.wrapHandler(s.authHandler.UpdateUser))
 			r.Put("/users/me/password", s.wrapHandler(s.authHandler.ChangePassword))
 			r.Post("/users/me/profile-icon", s.wrapHandler(s.authHandler.UploadProfileIcon))
@@ -471,7 +471,6 @@ func (s *Server) setupRoutes() error {
 			r.Post("/notes/{id}/items/set-completed", s.wrapHandler(s.notesHandler.SetNoteItemsCompleted))
 			r.Post("/notes/{id}/items/delete", s.wrapHandler(s.notesHandler.DeleteNoteItems))
 			r.Patch("/notes/{id}/items/{item_id}", s.wrapHandler(s.notesHandler.UpdateNoteItem))
-			r.Post("/notes/{id}/items/{item_id}/toggle-completed", s.wrapHandler(s.notesHandler.ToggleNoteItemCompleted))
 			r.Delete("/notes/{id}/items/{item_id}", s.wrapHandler(s.notesHandler.DeleteNoteItem))
 
 			r.Post("/notes/{id}/restore", s.wrapHandler(s.notesHandler.RestoreNote))
@@ -485,7 +484,6 @@ func (s *Server) setupRoutes() error {
 			r.Delete("/notes/{id}/labels/{label_id}", s.wrapHandler(s.labelsHandler.RemoveLabel))
 
 			r.Get("/labels", s.wrapHandler(s.labelsHandler.GetLabels))
-			r.Get("/labels/counts", s.wrapHandler(s.labelsHandler.GetLabelCounts))
 			r.Post("/labels", s.wrapHandler(s.labelsHandler.CreateLabel))
 			r.Patch("/labels/{id}", s.wrapHandler(s.labelsHandler.RenameLabel))
 			r.Delete("/labels/{id}", s.wrapHandler(s.labelsHandler.DeleteLabel))

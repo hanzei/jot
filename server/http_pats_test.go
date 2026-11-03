@@ -161,7 +161,7 @@ func TestPATs(t *testing.T) {
 
 		pat := createPAT(t, ts, u, "bearer test")
 
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/users/me", nil)
 		require.NoError(t, err)
 		req.Header.Set("Authorization", "Bearer "+pat.Token)
 
@@ -189,7 +189,7 @@ func TestPATs(t *testing.T) {
 		require.Equal(t, http.StatusNoContent, resp.StatusCode)
 
 		// Attempt to use the revoked token.
-		req2, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
+		req2, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/users/me", nil)
 		require.NoError(t, err)
 		req2.Header.Set("Authorization", "Bearer "+rawToken)
 
@@ -211,8 +211,8 @@ func TestPATs(t *testing.T) {
 			token  string
 			status int
 		}{
-			{name: "valid token authenticates", path: "/api/v1/me", token: pat.Token, status: http.StatusOK},
-			{name: "invalid token is rejected", path: "/api/v1/me", token: "not-a-real-token", status: http.StatusUnauthorized},
+			{name: "valid token authenticates", path: "/api/v1/users/me", token: pat.Token, status: http.StatusOK},
+			{name: "invalid token is rejected", path: "/api/v1/users/me", token: "not-a-real-token", status: http.StatusUnauthorized},
 			{name: "session-only endpoint still requires a session", path: "/api/v1/pats", token: pat.Token, status: http.StatusForbidden},
 		}
 		for _, tt := range tests {

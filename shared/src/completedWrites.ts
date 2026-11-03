@@ -1,7 +1,7 @@
 // The one gate every client passes a server item snapshot's `completed` flags
 // through before applying them to its local state.
 //
-// The completed-flag endpoints (toggle-completed, set-completed, delete) answer
+// The completed-flag endpoints (set-completed, delete) answer
 // with the note's *full* item list as the server saw it right after that one
 // write. When rows are checked off faster than requests come back, the response
 // to an earlier tap still reports every later-tapped row unchecked, and

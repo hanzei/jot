@@ -547,10 +547,10 @@ describe('useNotes hooks', () => {
       const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: PENDING_ID, itemId: 'i1', completed: true });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(mockJot.notes.toggleItemCompleted).not.toHaveBeenCalled();
+      expect(mockJot.notes.setItemsCompleted).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'toggleItemCompleted', endpoint: `/notes/${PENDING_ID}/items/i1/toggle-completed` }),
+        expect.objectContaining({ operation: 'setItemsCompleted', endpoint: `/notes/${PENDING_ID}/items/set-completed` }),
       );
     });
 
@@ -561,7 +561,7 @@ describe('useNotes hooks', () => {
       expect(mockJot.notes.setItemsCompleted).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'uncheckAllItems', endpoint: `/notes/${PENDING_ID}/items/set-completed` }),
+        expect.objectContaining({ operation: 'setItemsCompleted', endpoint: `/notes/${PENDING_ID}/items/set-completed` }),
       );
     });
 
@@ -973,7 +973,7 @@ describe('useNotes hooks', () => {
     });
 
     it('useToggleNoteItemCompleted falls back to the local queue on a transient failure', async () => {
-      mockJot.notes.toggleItemCompleted.mockRejectedValueOnce(makeAxiosError(503));
+      mockJot.notes.setItemsCompleted.mockRejectedValueOnce(makeAxiosError(503));
       mockNoteQueries.getLocalNote.mockResolvedValueOnce({
         id: 'n1', note_type: 'list', title: 'L', checked_items_collapsed: false,
         color: '#ffffff', pinned: false, archived: false, position: 0, is_shared: false,
@@ -989,7 +989,11 @@ describe('useNotes hooks', () => {
 
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'toggleItemCompleted', endpoint: '/notes/n1/items/i1/toggle-completed' }),
+        expect.objectContaining({
+          operation: 'setItemsCompleted',
+          endpoint: '/notes/n1/items/set-completed',
+          body: { item_ids: ['i1'], completed: true },
+        }),
       );
     });
 
@@ -1006,7 +1010,7 @@ describe('useNotes hooks', () => {
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
-          operation: 'uncheckAllItems',
+          operation: 'setItemsCompleted',
           endpoint: '/notes/n1/items/set-completed',
           method: 'POST',
           body: { item_ids: ['i1', 'i2'], completed: false },
@@ -1188,8 +1192,8 @@ describe('useNotes hooks', () => {
       queryClient.setQueryData(noteLocalQueryKey('n1'), listNote);
 
       const pending = deferred<unknown[]>();
-      mockJot.notes.toggleItemCompleted.mockReset();
-      mockJot.notes.toggleItemCompleted.mockReturnValueOnce(pending.promise as never);
+      mockJot.notes.setItemsCompleted.mockReset();
+      mockJot.notes.setItemsCompleted.mockReturnValueOnce(pending.promise as never);
 
       const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
       result.current.mutate({ noteId: 'n1', itemId: 'p', completed: true });
@@ -1200,7 +1204,7 @@ describe('useNotes hooks', () => {
         // Toggling a top-level item cascades to its children.
         expect(cached.items.find((i) => i.id === 'c')!.completed).toBe(true);
       });
-      expect(mockJot.notes.toggleItemCompleted).toHaveBeenCalledWith('n1', 'p', true);
+      expect(mockJot.notes.setItemsCompleted).toHaveBeenCalledWith('n1', ['p'], true);
 
       pending.resolve([]);
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -1218,8 +1222,8 @@ describe('useNotes hooks', () => {
       queryClient.setQueryData(noteLocalQueryKey('n1'), completedListNote);
 
       const pending = deferred<unknown[]>();
-      mockJot.notes.toggleItemCompleted.mockReset();
-      mockJot.notes.toggleItemCompleted.mockReturnValueOnce(pending.promise as never);
+      mockJot.notes.setItemsCompleted.mockReset();
+      mockJot.notes.setItemsCompleted.mockReturnValueOnce(pending.promise as never);
 
       const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
       result.current.mutate({ noteId: 'n1', itemId: 'c', completed: false });
@@ -1230,7 +1234,7 @@ describe('useNotes hooks', () => {
         // A parent can never stay "done" while one of its children is not.
         expect(cached.items.find((i) => i.id === 'p')!.completed).toBe(false);
       });
-      expect(mockJot.notes.toggleItemCompleted).toHaveBeenCalledWith('n1', 'c', false);
+      expect(mockJot.notes.setItemsCompleted).toHaveBeenCalledWith('n1', ['c'], false);
 
       pending.resolve([]);
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -1247,8 +1251,8 @@ describe('useNotes hooks', () => {
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(listNote as never);
 
       const pending = deferred<unknown[]>();
-      mockJot.notes.toggleItemCompleted.mockReset();
-      mockJot.notes.toggleItemCompleted.mockReturnValueOnce(pending.promise as never);
+      mockJot.notes.setItemsCompleted.mockReset();
+      mockJot.notes.setItemsCompleted.mockReturnValueOnce(pending.promise as never);
 
       const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
       result.current.mutate({ noteId: 'n1', itemId: 'p', completed: true });
@@ -1259,7 +1263,7 @@ describe('useNotes hooks', () => {
       await waitFor(() => {
         expect(mockNoteQueries.setLocalItemsCompleted).toHaveBeenCalledWith(expect.anything(), 'n1', ['p', 'c'], true);
       });
-      expect(mockJot.notes.toggleItemCompleted).toHaveBeenCalledWith('n1', 'p', true);
+      expect(mockJot.notes.setItemsCompleted).toHaveBeenCalledWith('n1', ['p'], true);
 
       pending.resolve([]);
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -1288,16 +1292,16 @@ describe('useNotes hooks', () => {
 
       const first = deferred<unknown[]>();
       const second = deferred<unknown[]>();
-      mockJot.notes.toggleItemCompleted.mockReset();
-      mockJot.notes.toggleItemCompleted
+      mockJot.notes.setItemsCompleted.mockReset();
+      mockJot.notes.setItemsCompleted
         .mockReturnValueOnce(first.promise as never)
         .mockReturnValueOnce(second.promise as never);
 
       const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
       const tapA = result.current.mutateAsync({ noteId: 'n1', itemId: 'qa', completed: true });
-      await waitFor(() => expect(mockJot.notes.toggleItemCompleted).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(mockJot.notes.setItemsCompleted).toHaveBeenCalledTimes(1));
       const tapB = result.current.mutateAsync({ noteId: 'n1', itemId: 'qb', completed: true });
-      await waitFor(() => expect(mockJot.notes.toggleItemCompleted).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(mockJot.notes.setItemsCompleted).toHaveBeenCalledTimes(2));
 
       // B's response lands first; A's, read before B's write, lands last.
       second.resolve([{ id: 'qa', completed: true, updated_at: tA }, { id: 'qb', completed: true, updated_at: tB }]);
@@ -1325,16 +1329,16 @@ describe('useNotes hooks', () => {
 
       const check = deferred<unknown[]>();
       const uncheck = deferred<unknown[]>();
-      mockJot.notes.toggleItemCompleted.mockReset();
-      mockJot.notes.toggleItemCompleted
+      mockJot.notes.setItemsCompleted.mockReset();
+      mockJot.notes.setItemsCompleted
         .mockReturnValueOnce(check.promise as never)
         .mockReturnValueOnce(uncheck.promise as never);
 
       const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
       const tapCheck = result.current.mutateAsync({ noteId: 'n1', itemId: 'qz', completed: true }).catch(() => {});
-      await waitFor(() => expect(mockJot.notes.toggleItemCompleted).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(mockJot.notes.setItemsCompleted).toHaveBeenCalledTimes(1));
       const tapUncheck = result.current.mutateAsync({ noteId: 'n1', itemId: 'qz', completed: false }).catch(() => {});
-      await waitFor(() => expect(mockJot.notes.toggleItemCompleted).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(mockJot.notes.setItemsCompleted).toHaveBeenCalledTimes(2));
 
       // The check fails first: the uncheck still decides the row, so nothing reverts.
       check.reject(makeAxiosError(404));
@@ -1364,13 +1368,13 @@ describe('useNotes hooks', () => {
       queryClient.setQueryData(noteLocalQueryKey('n1'), note);
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(note as never);
       await insertQueueEntry(globalThis.testDb, {
-        operation: 'uncheckAllItems',
+        operation: 'setItemsCompleted',
         endpoint: '/notes/n1/items/set-completed',
         method: 'POST',
         body: { item_ids: ['wq'], completed: false },
       });
-      mockJot.notes.toggleItemCompleted.mockReset();
-      mockJot.notes.toggleItemCompleted.mockResolvedValueOnce([
+      mockJot.notes.setItemsCompleted.mockReset();
+      mockJot.notes.setItemsCompleted.mockResolvedValueOnce([
         { id: 'wq', completed: true, updated_at: '2026-01-01T00:00:00Z' },
         { id: 'wt', completed: true, updated_at: '2026-01-01T00:00:01Z' },
       ] as never);
@@ -1389,8 +1393,8 @@ describe('useNotes hooks', () => {
       const { wrapper, queryClient } = createWrapperWithClient();
       queryClient.setQueryData(noteLocalQueryKey('n1'), listNote);
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(listNote as never);
-      mockJot.notes.toggleItemCompleted.mockReset();
-      mockJot.notes.toggleItemCompleted.mockRejectedValueOnce(makeAxiosError(404));
+      mockJot.notes.setItemsCompleted.mockReset();
+      mockJot.notes.setItemsCompleted.mockRejectedValueOnce(makeAxiosError(404));
 
       const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
       await result.current.mutateAsync({ noteId: 'n1', itemId: 'p', completed: true }).catch(() => {});
@@ -1425,7 +1429,7 @@ describe('useNotes hooks', () => {
       queryClient.setQueryData(noteLocalQueryKey('n1'), listNote);
       // The cached note is a read of the local row, which the revert is keyed on.
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(listNote as never);
-      mockJot.notes.toggleItemCompleted.mockRejectedValueOnce(makeAxiosError(404));
+      mockJot.notes.setItemsCompleted.mockRejectedValueOnce(makeAxiosError(404));
 
       const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
       await result.current.mutateAsync({ noteId: 'n1', itemId: 'p', completed: true }).catch(() => {});

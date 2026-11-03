@@ -36,7 +36,7 @@ func TestRateLimiting(t *testing.T) {
 		u := ts.createTestUser(t, "burstuser", "password123", false)
 
 		for range 50 {
-			status, _ := doGet(t, u.Client.HTTPClient(), ts.HTTPServer.URL+"/api/v1/me")
+			status, _ := doGet(t, u.Client.HTTPClient(), ts.HTTPServer.URL+"/api/v1/users/me")
 			assert.Equal(t, http.StatusOK, status)
 		}
 	})
@@ -51,11 +51,11 @@ func TestRateLimiting(t *testing.T) {
 		u := ts.createTestUser(t, "baselineuser", "password123", false)
 
 		for range 3 {
-			status, _ := doGet(t, u.Client.HTTPClient(), ts.HTTPServer.URL+"/api/v1/me")
+			status, _ := doGet(t, u.Client.HTTPClient(), ts.HTTPServer.URL+"/api/v1/users/me")
 			assert.Equal(t, http.StatusOK, status)
 		}
 
-		status, header, body := rawRequest(t, u.Client.HTTPClient(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil, nil)
+		status, header, body := rawRequest(t, u.Client.HTTPClient(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/users/me", nil, nil)
 		requireEnvelope(t, http.StatusTooManyRequests, "rate_limited", status, header, body)
 		assert.NotEmpty(t, header.Get("Retry-After"))
 	})
@@ -70,13 +70,13 @@ func TestRateLimiting(t *testing.T) {
 		userA := ts.createTestUser(t, "usera", "password123", false)
 		userB := ts.createTestUser(t, "userb", "password123", false)
 
-		statusA, _ := doGet(t, userA.Client.HTTPClient(), ts.HTTPServer.URL+"/api/v1/me")
+		statusA, _ := doGet(t, userA.Client.HTTPClient(), ts.HTTPServer.URL+"/api/v1/users/me")
 		assert.Equal(t, http.StatusOK, statusA)
-		statusAAgain, _ := doGet(t, userA.Client.HTTPClient(), ts.HTTPServer.URL+"/api/v1/me")
+		statusAAgain, _ := doGet(t, userA.Client.HTTPClient(), ts.HTTPServer.URL+"/api/v1/users/me")
 		assert.Equal(t, http.StatusTooManyRequests, statusAAgain)
 
 		// userB has its own bucket and is unaffected by userA exhausting theirs.
-		statusB, _ := doGet(t, userB.Client.HTTPClient(), ts.HTTPServer.URL+"/api/v1/me")
+		statusB, _ := doGet(t, userB.Client.HTTPClient(), ts.HTTPServer.URL+"/api/v1/users/me")
 		assert.Equal(t, http.StatusOK, statusB)
 	})
 

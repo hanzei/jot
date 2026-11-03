@@ -15,7 +15,6 @@ import { isSseQuiesced, subscribeToServerSwitchLifecycle } from '../store/server
 import { publishProfileIconUpdate } from '../store/profileIconEvents';
 import { publishReconnectResync } from '../store/resyncEvents';
 import {
-  labelCountsQueryKey,
   labelsQueryKey,
   noteLocalQueryKey,
   notesLocalQueryScopeKey,
@@ -81,13 +80,12 @@ export function useSSE(
       // useOfflineNote's background-fetch ordering.
       void (async () => {
         const db = dbRef.current;
-        // The drawer's label list and per-label counts (useLabels / useLabelCounts)
+        // The drawer's label list and per-label counts (useLabels)
         // are derived from notes' labels_json in SQLite, so any note mutation can
         // change them. Invalidate them right after the note write lands (a local
         // re-read, no server round-trip) so the drawer refreshes in lockstep.
         const invalidateLabelQueries = () => {
           queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
-          queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
         };
         switch (event.type) {
           case 'note_updated': {

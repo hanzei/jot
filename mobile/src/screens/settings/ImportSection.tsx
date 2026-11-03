@@ -8,7 +8,6 @@ import { useTheme } from '../../theme/ThemeContext';
 import { importFile } from '../../api/notes';
 import { saveServerLabels, saveServerNotes } from '../../db/syncQueue';
 import {
-  labelCountsQueryKey,
   labelsQueryKey,
   noteLocalQueryScopeKey,
   notesLocalQueryScopeKey,
@@ -106,8 +105,6 @@ export default function ImportSection() {
         queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
         queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
         queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
-        // Counts come from the note rows (labels_json), not the labels table.
-        queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
       }
     } catch (err: unknown) {
       setImportError(extractApiError(err) ?? 'import.importFailed');

@@ -11,9 +11,9 @@ describe('apiPaths', () => {
   });
 
   it('joins an origin, the base path and a path', () => {
-    expect(apiUrl('/me')).toBe('/api/v1/me');
-    expect(apiUrl('/me', 'https://jot.example.com')).toBe('https://jot.example.com/api/v1/me');
-    expect(apiUrl('/me', 'https://jot.example.com//')).toBe('https://jot.example.com/api/v1/me');
+    expect(apiUrl('/users/me')).toBe('/api/v1/users/me');
+    expect(apiUrl('/users/me', 'https://jot.example.com')).toBe('https://jot.example.com/api/v1/users/me');
+    expect(apiUrl('/users/me', 'https://jot.example.com//')).toBe('https://jot.example.com/api/v1/users/me');
   });
 
   it('pins every path', () => {
@@ -25,7 +25,6 @@ describe('apiPaths', () => {
       login: '/login',
       register: '/register',
       logout: '/logout',
-      me: '/me',
       oidcLogin: '/auth/oidc/login',
       oidcLink: '/auth/oidc/link',
       oidcUnlink: '/auth/oidc/unlink',
@@ -50,12 +49,10 @@ describe('apiPaths', () => {
       noteImages: '/notes/n1/images',
       noteItems: '/notes/n1/items',
       noteItem: '/notes/n1/items/i2',
-      noteItemToggleCompleted: '/notes/n1/items/i2/toggle-completed',
       noteItemsReorder: '/notes/n1/items/reorder',
       noteItemsSetCompleted: '/notes/n1/items/set-completed',
       noteItemsDelete: '/notes/n1/items/delete',
       labels: '/labels',
-      labelCounts: '/labels/counts',
       label: '/labels/n1',
       users: '/users',
       usersMe: '/users/me',

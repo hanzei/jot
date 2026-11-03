@@ -234,6 +234,47 @@ describe('migrateDatabase', () => {
     });
   });
 
+  describe('set-completed queue rewrite (issue #1172)', () => {
+    const seed = async (db: TestDatabase, table: 'sync_queue' | 'dead_letter', operation: string, endpoint: string, body: string | null) => {
+      if (table === 'sync_queue') {
+        await db.runAsync(
+          `INSERT INTO sync_queue (operation, endpoint, method, body, created_at) VALUES (?, ?, 'POST', ?, '2026-01-01T00:00:00Z')`,
+          [operation, endpoint, body],
+        );
+      } else {
+        await db.runAsync(
+          `INSERT INTO dead_letter (operation, endpoint, method, body, status, created_at, failed_at)
+           VALUES (?, ?, 'POST', ?, 404, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
+          [operation, endpoint, body],
+        );
+      }
+    };
+
+    it.each(['sync_queue', 'dead_letter'] as const)('rewrites unsent toggle and uncheck-all rows in %s', async (table) => {
+      const db = createTestDb();
+      for (let i = 0; i < 7; i++) {
+        await MIGRATIONS[i]!(db);
+        await db.runAsync(`PRAGMA user_version = ${i + 1}`);
+      }
+      await seed(db, table, 'toggleItemCompleted', '/notes/n1/items/i1/toggle-completed', '{"completed":true}');
+      await seed(db, table, 'toggleItemCompleted', '/notes/n1/items/i2/toggle-completed', '{"completed":false}');
+      await seed(db, table, 'uncheckAllItems', '/notes/n1/items/set-completed', '{"item_ids":["a","b"],"completed":false}');
+      await seed(db, table, 'update', '/notes/n1', '{"title":"x"}');
+
+      await migrateDatabase(db);
+
+      const rows = await db.getAllAsync<{ operation: string; endpoint: string; body: string }>(
+        `SELECT operation, endpoint, body FROM ${table} ORDER BY id`,
+      );
+      expect(rows.map((r) => ({ operation: r.operation, endpoint: r.endpoint, body: JSON.parse(r.body) }))).toEqual([
+        { operation: 'setItemsCompleted', endpoint: '/notes/n1/items/set-completed', body: { item_ids: ['i1'], completed: true } },
+        { operation: 'setItemsCompleted', endpoint: '/notes/n1/items/set-completed', body: { item_ids: ['i2'], completed: false } },
+        { operation: 'setItemsCompleted', endpoint: '/notes/n1/items/set-completed', body: { item_ids: ['a', 'b'], completed: false } },
+        { operation: 'update', endpoint: '/notes/n1', body: { title: 'x' } },
+      ]);
+    });
+  });
+
   describe('pre-versioned install', () => {
     it('converges on the fresh-install schema', async () => {
       const db = await preVersionedInstall();

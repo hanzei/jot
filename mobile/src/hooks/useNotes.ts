@@ -56,7 +56,6 @@ import { useAuth } from '../store/AuthContext';
 import { assertSwitchWriteAllowed, isServerSwitchInProgress } from '../api/client';
 import { resolveLocalLabel } from './useLabels';
 import {
-  labelCountsQueryKey,
   labelsQueryKey,
   noteLocalQueryKey,
   notesLocalQueryScopeKey,
@@ -249,9 +248,9 @@ function rollbackOptimisticNote(
 }
 
 /**
- * Refreshes the drawer's per-label counts.
+ * Refreshes the drawer's label list, whose items carry the per-label counts.
  *
- * They are derived from the notes table, not the labels one: `getLocalLabelCounts`
+ * Offline, the counts are derived from the notes table: `getLocalLabelCounts`
  * counts each label across the *active* notes (archived and trashed excluded). So
  * a write that changes nothing about a note's labels still changes its counts by
  * moving the note in or out of that set — archiving, trashing, restoring,
@@ -261,8 +260,8 @@ function rollbackOptimisticNote(
  * which already invalidates this, as does the SSE handler for every remote note
  * event. This is the local-write side of the same rule.
  */
-function invalidateLabelCounts(queryClient: QueryClient): void {
-  queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
+function invalidateLabelList(queryClient: QueryClient): void {
+  queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
 }
 
 export function useCreateNote() {
@@ -390,8 +389,7 @@ export function useCreateNote() {
       // A create can carry labels (the sync-failure fork does), which the new
       // note then counts towards.
       if (data.labels?.length) {
-        invalidateLabelCounts(queryClient);
-        queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
+        invalidateLabelList(queryClient);
       }
     },
   });
@@ -523,7 +521,7 @@ export function useUpdateNote() {
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       // Only the archive flag moves a note in or out of the counted set; a
       // title/content save must not re-scan every note's labels on each debounce.
-      if (data.archived !== undefined) invalidateLabelCounts(queryClient);
+      if (data.archived !== undefined) invalidateLabelList(queryClient);
     },
   });
 }
@@ -878,7 +876,7 @@ export function useDeleteNote() {
       queryClient.removeQueries({ queryKey: noteLocalQueryKey(id) });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       // Trashing drops the note out of its labels' counts.
-      invalidateLabelCounts(queryClient);
+      invalidateLabelList(queryClient);
     },
   });
 }
@@ -969,7 +967,7 @@ export function useDuplicateNote() {
       queryClient.setQueryData(noteLocalQueryKey(duplicatedNote.id), duplicatedNote);
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       // The copy keeps the source's labels, so each of them gains a note.
-      if (duplicatedNote.labels.length > 0) invalidateLabelCounts(queryClient);
+      if (duplicatedNote.labels.length > 0) invalidateLabelList(queryClient);
     },
   });
 }
@@ -1007,7 +1005,7 @@ export function useRestoreNote() {
       queryClient.removeQueries({ queryKey: noteLocalQueryKey(id) });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       // Restoring puts the note back into its labels' counts.
-      invalidateLabelCounts(queryClient);
+      invalidateLabelList(queryClient);
     },
   });
 }
@@ -1417,7 +1415,7 @@ export function useLeaveNote() {
       queryClient.removeQueries({ queryKey: noteLocalQueryKey(noteId) });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       // The note drops out of any labels the user had applied to it locally.
-      invalidateLabelCounts(queryClient);
+      invalidateLabelList(queryClient);
     },
   });
 }
@@ -1446,17 +1444,17 @@ export function useToggleNoteItemCompleted() {
       return runLocalCompletedWrite(db, queryClient, noteId, isConnected, {
         priorById: new Map(changedIds.map((id) => [id, !completed])),
         writeLocal: () => setLocalItemsCompleted(db, noteId, changedIds, completed),
-        send: () => jot.notes.toggleItemCompleted(noteId, itemId, completed),
+        send: () => jot.notes.setItemsCompleted(noteId, [itemId], completed),
         persist: (write, serverItems, queued) => {
           const completedById = localCompletedWrites.accept(write, serverItems);
           for (const id of queued) completedById.delete(id);
           return setLocalCompletedValues(db, noteId, completedById);
         },
         queued: {
-          operation: 'toggleItemCompleted',
-          endpoint: apiPaths.noteItemToggleCompleted(noteId, itemId),
+          operation: 'setItemsCompleted',
+          endpoint: apiPaths.noteItemsSetCompleted(noteId),
           method: 'POST',
-          body: { completed } as Record<string, unknown>,
+          body: { item_ids: [itemId], completed } as Record<string, unknown>,
         },
       });
     },
@@ -1498,7 +1496,7 @@ export function useUncheckAllItems() {
         persist: (write, serverItems, queued) => reconcileLocalItems(db, noteId, serverItems, write, queued),
         // Carries the exact ids captured at click time.
         queued: {
-          operation: 'uncheckAllItems',
+          operation: 'setItemsCompleted',
           endpoint: apiPaths.noteItemsSetCompleted(noteId),
           method: 'POST',
           body: { item_ids: itemIds, completed: false } as Record<string, unknown>,

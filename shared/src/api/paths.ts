@@ -26,7 +26,6 @@ export const apiPaths = {
   login: '/login',
   register: '/register',
   logout: '/logout',
-  me: '/me',
 
   // The login and link flows are browser redirects, not XHR calls.
   oidcLogin: '/auth/oidc/login',
@@ -55,16 +54,15 @@ export const apiPaths = {
   noteImages: (noteId: string): string => `/notes/${noteId}/images`,
   noteItems: (noteId: string): string => `/notes/${noteId}/items`,
   noteItem: (noteId: string, itemId: string): string => `/notes/${noteId}/items/${itemId}`,
-  noteItemToggleCompleted: (noteId: string, itemId: string): string => `/notes/${noteId}/items/${itemId}/toggle-completed`,
   noteItemsReorder: (noteId: string): string => `/notes/${noteId}/items/reorder`,
   noteItemsSetCompleted: (noteId: string): string => `/notes/${noteId}/items/set-completed`,
   noteItemsDelete: (noteId: string): string => `/notes/${noteId}/items/delete`,
 
   labels: '/labels',
-  labelCounts: '/labels/counts',
   label: (labelId: string): string => `/labels/${labelId}`,
 
   users: '/users',
+  /** `GET` reads the signed-in user, `PATCH` updates them. */
   usersMe: '/users/me',
   usersMePassword: '/users/me/password',
   usersMeProfileIcon: '/users/me/profile-icon',

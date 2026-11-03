@@ -28,7 +28,9 @@ api.interceptors.response.use(
     recordFailedRequest(error);
     if (error.response?.status === 401) {
       const url = error.config?.url || '';
-      const isAuthEndpoint = url === apiPaths.login || url === apiPaths.register || url === apiPaths.me;
+      // Only the read is exempt: PATCH /users/me must still clear a dead session.
+      const isCurrentUserRead = url === apiPaths.usersMe && error.config?.method?.toLowerCase() === 'get';
+      const isAuthEndpoint = url === apiPaths.login || url === apiPaths.register || isCurrentUserRead;
       if (!isAuthEndpoint && !error.config?.skipAuthRedirect) {
         const target = currentRedirectTarget();
         removeUser().finally(() => {

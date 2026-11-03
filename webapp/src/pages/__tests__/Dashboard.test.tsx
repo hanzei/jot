@@ -5,7 +5,7 @@ import { MemoryRouter, useLocation, useNavigate, Routes, Route } from 'react-rou
 import { type ReactNode, useCallback, useEffect, useRef } from 'react';
 import React from 'react';
 import Dashboard from '../Dashboard';
-import type { AuthResponse, Note, Label, NoteSort, UserSettings } from '@jot/shared';
+import type { AuthResponse, Note, Label, LabelWithCount, NoteSort, UserSettings } from '@jot/shared';
 import { notes, labels, users } from '@/utils/api';
 import * as auth from '@/utils/auth';
 import { useAuthenticatedLayout, type AuthenticatedLayoutContext } from '@/components/AuthenticatedLayout';
@@ -29,7 +29,6 @@ vi.mock('@/utils/api', () => ({
   labels: {
     getAll: vi.fn().mockResolvedValue([]),
     create: vi.fn(),
-    getCounts: vi.fn().mockResolvedValue({}),
     rename: vi.fn(),
     delete: vi.fn(),
   },
@@ -247,9 +246,7 @@ describe('Dashboard', () => {
 
       const {
         labels: labelsList,
-        labelCounts,
         loadLabels,
-        loadLabelCounts,
         handleCreateLabel,
         handleRenameLabel,
         handleDeleteLabel,
@@ -259,8 +256,8 @@ describe('Dashboard', () => {
       });
 
       useEffect(() => {
-        void Promise.all([loadLabels(), loadLabelCounts()]);
-      }, [loadLabels, loadLabelCounts]);
+        void loadLabels();
+      }, [loadLabels]);
 
       const registerLabelCallbacks = useCallback((callbacks: Parameters<AuthenticatedLayoutContext['registerLabelCallbacks']>[0]) => {
         labelCallbacksRef.current = callbacks;
@@ -268,9 +265,7 @@ describe('Dashboard', () => {
 
       return {
         labels: labelsList,
-        labelCounts,
         loadLabels,
-        loadLabelCounts,
         handleCreateLabel,
         handleRenameLabel,
         handleDeleteLabel,
@@ -295,8 +290,8 @@ describe('Dashboard', () => {
       // Look for the loading spinner by test id
       expect(screen.getByTestId('loading-spinner')).toBeInTheDocument();
 
-      // Flush the sidebar labels controller's initial load — labels.getAll/
-      // getCounts resolve immediately, and notes.getAll never does — so its
+      // Flush the sidebar labels controller's initial load — labels.getAll
+      // resolves immediately, and notes.getAll never does — so its
       // state updates settle inside act() instead of firing after the test
       // has already returned.
       await act(async () => {
@@ -1273,13 +1268,14 @@ describe('Dashboard', () => {
   });
 
   describe('Label Filtering', () => {
-    const mockLabels: Label[] = [
+    const mockLabels: LabelWithCount[] = [
       {
         id: 'label-work',
         user_id: 'user1',
         name: 'work',
         created_at: '2024-01-01T00:00:00Z',
         updated_at: '2024-01-01T00:00:00Z',
+        note_count: 0,
       },
       {
         id: 'label-personal',
@@ -1287,6 +1283,7 @@ describe('Dashboard', () => {
         name: 'personal',
         created_at: '2024-01-01T00:00:00Z',
         updated_at: '2024-01-01T00:00:00Z',
+        note_count: 0,
       },
     ];
 
@@ -1423,12 +1420,13 @@ describe('Dashboard', () => {
   });
 
   describe('Real-time label updates', () => {
-    const realtimeLabel: Label = {
+    const realtimeLabel: LabelWithCount = {
       id: 'label-realtime',
       user_id: 'user1',
       name: 'realtime',
       created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-01T00:00:00Z',
+      note_count: 1,
     };
 
     it('refreshes sidebar labels when an open note refreshes locally', async () => {
@@ -1499,20 +1497,16 @@ describe('Dashboard', () => {
       });
     });
 
-    it('refreshes labels and counts when SSE reports labels_changed', async () => {
+    it('refreshes labels when SSE reports labels_changed', async () => {
       vi.mocked(labels.getAll)
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([realtimeLabel]);
-      vi.mocked(labels.getCounts)
-        .mockResolvedValueOnce({})
-        .mockResolvedValueOnce({ 'label-realtime': 1 });
 
       renderDashboard();
 
       await waitFor(() => {
         expect(mockRegisterSSECallbacks).toHaveBeenCalled();
         expect(labels.getAll).toHaveBeenCalledTimes(1);
-        expect(labels.getCounts).toHaveBeenCalledTimes(1);
       });
 
       const sseCallbacks = mockRegisterSSECallbacks.mock.calls[0]?.[0];
@@ -1528,7 +1522,6 @@ describe('Dashboard', () => {
 
       await waitFor(() => {
         expect(labels.getAll).toHaveBeenCalledTimes(2);
-        expect(labels.getCounts).toHaveBeenCalledTimes(2);
       });
     });
 
@@ -1537,9 +1530,6 @@ describe('Dashboard', () => {
       vi.mocked(labels.getAll)
         .mockResolvedValueOnce([realtimeLabel])
         .mockResolvedValueOnce([]);
-      vi.mocked(labels.getCounts)
-        .mockResolvedValueOnce({ 'label-realtime': 1 })
-        .mockResolvedValueOnce({});
 
       const LocationProbe = () => {
         const { search } = useLocation();

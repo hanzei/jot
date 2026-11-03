@@ -35,8 +35,7 @@ export type QueueOperation =
   | 'updateItem'
   | 'deleteItem'
   | 'reorderItems'
-  | 'toggleItemCompleted'
-  | 'uncheckAllItems'
+  | 'setItemsCompleted'
   | 'deleteCompletedItems'
   | 'share'
   | 'unshare'
@@ -435,7 +434,7 @@ export async function saveServerNote(db: SQLiteDatabase, note: Note): Promise<vo
 
 /**
  * Items of `noteId` whose completed flag a queued, not-yet-replayed
- * `toggleItemCompleted` or `uncheckAllItems` op will still set: the item-level
+ * `setItemsCompleted` op will still set: the item-level
  * counterpart of {@link getProtectedNoteIds} for writers that must apply the
  * rest of a server snapshot. Until the op replays, the server's copy of these
  * items predates it, so a snapshot's completed value for them is stale — keep
@@ -448,38 +447,30 @@ export async function getQueuedCompletedItemIds(
   exceptEntryId?: number,
 ): Promise<Set<string>> {
   const entries = await db.getAllAsync<Pick<QueueEntry, 'id' | 'operation' | 'endpoint' | 'body'>>(
-    "SELECT id, operation, endpoint, body FROM sync_queue WHERE operation IN ('toggleItemCompleted', 'uncheckAllItems')",
+    "SELECT id, operation, endpoint, body FROM sync_queue WHERE operation = 'setItemsCompleted'",
   );
   const ids = new Set<string>();
   let localItems: NoteItem[] | null = null;
   for (const entry of entries) {
     if (entry.id === exceptEntryId) continue;
-    // /notes/{noteId}/items/{itemId}/toggle-completed or /notes/{noteId}/items/set-completed
+    // /notes/{noteId}/items/set-completed
     const segments = entry.endpoint.split('/');
     if (segments[2] !== noteId) continue;
     const body = parseQueueBody(entry.body);
-    if (entry.operation === 'uncheckAllItems') {
-      const itemIds = body?.item_ids;
-      if (Array.isArray(itemIds)) {
-        for (const id of itemIds) if (typeof id === 'string') ids.add(id);
-      }
-      continue;
-    }
-    const itemId = segments[4];
-    if (!itemId) continue;
-    // The op names only the tapped item; its cascade is recovered from the local
-    // note, whose rows the op already wrote.
+    const itemIds = body?.item_ids;
+    if (!Array.isArray(itemIds)) continue;
+    // The op names only the tapped items; each one's cascade is recovered from
+    // the local note, whose rows the op already wrote.
     if (localItems === null) {
       const note = await getLocalNote(db, noteId);
       localItems = note?.note_type === 'list' ? note.items ?? [] : [];
     }
-    const scope = completedCascadeScope(
-      localItems.map((i) => ({ id: i.id, parentId: i.parent_id })),
-      itemId,
-      body?.completed === true,
-    );
-    ids.add(itemId);
-    for (const id of scope) ids.add(id);
+    const scopeItems = localItems.map((i) => ({ id: i.id, parentId: i.parent_id }));
+    for (const itemId of itemIds) {
+      if (typeof itemId !== 'string') continue;
+      ids.add(itemId);
+      for (const id of completedCascadeScope(scopeItems, itemId, body?.completed === true)) ids.add(id);
+    }
   }
   return ids;
 }
@@ -793,12 +784,11 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           // reflects the server-assigned label id (replacing any local id).
           await saveNoteFromResponse(db, response?.data);
         } else if (
-          entry.operation === 'toggleItemCompleted' ||
-          entry.operation === 'uncheckAllItems' ||
+          entry.operation === 'setItemsCompleted' ||
           entry.operation === 'deleteCompletedItems'
         ) {
-          // endpoints: .../toggle-completed, .../items/set-completed,
-          // .../items/delete. All three return the note's full, authoritative
+          // endpoints: .../items/set-completed and
+          // .../items/delete. Both return the note's full, authoritative
           // item list (the delete endpoint's is the post-delete remainder), so
           // reconcile every field and prune any local row absent from it —
           // not just patch `completed` on the rows present — otherwise a
@@ -1099,7 +1089,7 @@ async function saveNoteFromResponse(db: SQLiteDatabase, data: unknown): Promise<
 
 /**
  * Reconciles local item rows against a server-authoritative full item list
- * returned during queue drain (toggle-completed/set-completed/delete): upserts
+ * returned during queue drain (set-completed/delete): upserts
  * every returned item and prunes any local row absent from it. `items` is
  * `unknown` since it's a raw response body; anything other than an array
  * (e.g. a malformed/legacy response) is skipped rather than wiping the note's

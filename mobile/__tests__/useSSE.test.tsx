@@ -11,7 +11,6 @@ import { makeLabel, makeListNote, makeTextNote } from './helpers/fixtures';
 import { saveNote } from '../src/db/noteQueries';
 import { silenceConsole } from './helpers/consoleGuard';
 import {
-  labelCountsQueryKey,
   labelsQueryKey,
   noteLocalQueryKey,
   notesLocalQueryScopeKey,
@@ -283,7 +282,6 @@ describe('useSSE', () => {
     });
 
     await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: labelsQueryKey() }));
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: labelCountsQueryKey() });
   });
 
   it('upserts the label into the store and invalidates label queries on labels_changed event', async () => {
@@ -310,7 +308,6 @@ describe('useSSE', () => {
       { id: 'label-1', name: 'Urgent' },
     ]);
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: labelsQueryKey() });
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: labelCountsQueryKey() });
   });
 
   it('publishes to the profile-icon bus on profile_icon_updated event', async () => {

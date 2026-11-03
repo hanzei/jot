@@ -11,7 +11,7 @@ import {
 } from '../src/hooks/useLabels';
 import { publishReconnectResync } from '../src/store/resyncEvents';
 import * as noteQueriesModule from '../src/db/noteQueries';
-import { makeTextNote } from './helpers/fixtures';
+import { makeLabel, makeTextNote } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
 import type { Label } from '@jot/shared';
 import { jot } from '../src/api/jot';
@@ -647,5 +647,29 @@ describe('useLabels catch-up on SSE reconnect', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(mockJot.labels.getAll).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('useLabels note_count', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    db = globalThis.testDb;
+  });
+
+  it('serves counts derived from local notes offline, then the server note_count after sync', async () => {
+    const work = makeLabel({ id: 'l1', name: 'Work' });
+    await noteQueriesModule.upsertLabel(db, work);
+    await noteQueriesModule.saveNote(db, makeTextNote({ id: 'n1', content: 'a', labels: [work] }));
+    // The server knows about a note the local cache does not hold.
+    mockJot.labels.getAll.mockResolvedValue([{ ...work, note_count: 5 }]);
+
+    mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+    const offline = await renderHook(() => useLabels(), { wrapper: createWrapper() });
+    await waitFor(() => expect(offline.result.current.data?.[0]?.note_count).toBe(1));
+    expect(mockJot.labels.getAll).not.toHaveBeenCalled();
+
+    mockUseNetworkStatus.mockReturnValue({ isConnected: true });
+    const online = await renderHook(() => useLabels(), { wrapper: createWrapper() });
+    await waitFor(() => expect(online.result.current.data?.[0]?.note_count).toBe(5));
   });
 });

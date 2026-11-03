@@ -13,7 +13,7 @@ import type {
   GetNotesParams,
   ImportResponse,
   Label,
-  LabelCountsResponse,
+  LabelWithCount,
   LabelListResponse,
   LoginRequest,
   Note,
@@ -103,7 +103,7 @@ export function createJotApi(http: JotHttpClient) {
       login: (body: LoginRequest): Promise<AuthResponse> => data(http.post<AuthResponse>(apiPaths.login, body)),
       register: (body: RegisterRequest): Promise<AuthResponse> => data(http.post<AuthResponse>(apiPaths.register, body)),
       logout: (config?: HttpRequestConfig): Promise<void> => done(http.post(apiPaths.logout, undefined, config)),
-      me: (): Promise<AuthResponse> => data(http.get<AuthResponse>(apiPaths.me)),
+      me: (): Promise<AuthResponse> => data(http.get<AuthResponse>(apiPaths.usersMe)),
     },
 
     sso: {
@@ -181,17 +181,13 @@ export function createJotApi(http: JotHttpClient) {
       reorderItems: (noteId: string, itemIds: string[]): Promise<void> =>
         done(http.post(apiPaths.noteItemsReorder(noteId), { item_ids: itemIds })),
 
-      // Toggles an item's completed flag atomically. When the item is a top-level
-      // (parent) item the same value cascades to all of its children server-side, so
-      // checking a group never splits it. Returns the note's full item list for the
-      // caller to reconcile every affected item from one response.
-      toggleItemCompleted: (noteId: string, itemId: string, completed: boolean): Promise<NoteItem[]> =>
-        data(http.post<NoteItem[]>(apiPaths.noteItemToggleCompleted(noteId, itemId), { completed })),
-
-      // Bulk operations over an explicit set of item IDs. Each is one atomic server
-      // request (rather than a per-item burst) and returns the note's item list for
-      // the caller to reconcile from a single response. Callers pass the exact set
-      // they captured, so an item toggled after the click is never affected.
+      // Set-completed is the one path for a single tap ([itemId]) and for bulk
+      // actions over an explicit set of item IDs. Each call is one atomic server
+      // request (rather than a per-item burst) that applies the parent/child
+      // cascade — checking a top-level item carries to its children, unchecking a
+      // child unchecks its parent — and returns the note's full item list for the
+      // caller to reconcile from a single response. Callers pass the exact set they
+      // captured, so an item toggled after the click is never affected.
       setItemsCompleted: (noteId: string, itemIds: string[], completed: boolean): Promise<NoteItem[]> =>
         data(http.post<NoteItem[]>(apiPaths.noteItemsSetCompleted(noteId), { item_ids: itemIds, completed })),
 
@@ -200,15 +196,8 @@ export function createJotApi(http: JotHttpClient) {
     },
 
     labels: {
-      getAll: (): Promise<Label[]> => http.get<LabelListResponse>(apiPaths.labels).then(res => res.data.labels),
-
-      /** Note count per label ID. */
-      getCounts: (): Promise<Record<string, number>> =>
-        http.get<LabelCountsResponse>(apiPaths.labelCounts).then(res => {
-          const counts: Record<string, number> = {};
-          for (const entry of res.data.counts) counts[entry.label_id] = entry.count;
-          return counts;
-        }),
+      /** Every label, each with its `note_count`. */
+      getAll: (): Promise<LabelWithCount[]> => http.get<LabelListResponse>(apiPaths.labels).then(res => res.data.labels),
 
       create: (name: string): Promise<Label> => data(http.post<Label>(apiPaths.labels, { name })),
 

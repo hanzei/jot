@@ -85,12 +85,20 @@ describe('API Module', () => {
       expect(mockLocation.href).toBe('/login?continue=%2Fnotes%2Fabc123%3Flabel%3Dwork');
     });
 
-    it('does not redirect on 401 from /me endpoint', async () => {
-      const error401 = { response: { status: 401 }, config: { url: '/me' } };
+    it('does not redirect on 401 from GET /users/me', async () => {
+      const error401 = { response: { status: 401 }, config: { url: '/users/me', method: 'get' } };
       await expect(errorHandler(error401)).rejects.toEqual(error401);
 
       expect(mockLocalStorage.removeItem).not.toHaveBeenCalled();
       expect(mockLocation.href).not.toBe('/login');
+    });
+
+    it('still redirects on 401 from PATCH /users/me', async () => {
+      const error401 = { response: { status: 401 }, config: { url: '/users/me', method: 'patch' } };
+      await expect(errorHandler(error401)).rejects.toEqual(error401);
+
+      expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('user');
+      expect(mockLocation.href).toBe('/login');
     });
 
     it('does not redirect on 401 from a request that opts out', async () => {

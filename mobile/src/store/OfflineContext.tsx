@@ -19,7 +19,7 @@ import { isClosedDatabaseError } from '../db/errors';
 import { useAuth } from './AuthContext';
 import { isLocalModeActive } from './localMode';
 import { isSyncDrainPaused } from './serverSwitchLifecycle';
-import { labelCountsQueryKey, labelsQueryKey, noteLocalQueryKey, noteLocalQueryScopeKey, notesLocalQueryScopeKey, pendingImageUploadsQueryScopeKey } from '../hooks/queryKeys';
+import { labelsQueryKey, noteLocalQueryKey, noteLocalQueryScopeKey, notesLocalQueryScopeKey, pendingImageUploadsQueryScopeKey } from '../hooks/queryKeys';
 
 interface OfflineContextValue {
   isConnected: boolean;
@@ -253,7 +253,6 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       // Drained label ops may have reconciled local label ids (offline-created
       // labels) to server ids, so refresh the label list/counts too.
       queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
       // Drained creates may have cleared their pending-create marker (#475).
       refreshPendingNoteIds();
       // A drain can dead-letter ops (new failures) or clear a prior failure, so
@@ -287,7 +286,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       const remaining = pendingCount + queuedImageUploadCount;
       // Revalidate the session after a settings drain only when the *settings'
       // own* queue (sync_queue) is empty. The pre-drain revalidation had fetched
-      // stale server values (before the PATCH ran), so we need a fresh GET /me to
+      // stale server values (before the PATCH ran), so we need a fresh GET /users/me to
       // reflect what the drain just applied. Guarding on pendingCount === 0 (not
       // the combined `remaining`) avoids clobbering in-memory optimistic settings
       // state without being held hostage by an unrelated, independent image

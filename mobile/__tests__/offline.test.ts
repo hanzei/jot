@@ -697,7 +697,7 @@ describe('drainQueue', () => {
     expect(await remainingQueueIds(db)).toEqual([]);
   });
 
-  it('reconciles all authoritative fields (not just completed) from a toggleItemCompleted replay', async () => {
+  it('reconciles all authoritative fields (not just completed) from a single-item setItemsCompleted replay', async () => {
     // The server returns the note's full, authoritative item list on this
     // endpoint. If the local DB only patched `completed`, a stale local
     // parent_id/position left over from an earlier partial sync would never
@@ -716,10 +716,10 @@ describe('drainQueue', () => {
       }),
     );
     await seedQueueEntry(db, {
-      operation: 'toggleItemCompleted',
-      endpoint: '/notes/n1/items/i1/toggle-completed',
+      operation: 'setItemsCompleted',
+      endpoint: '/notes/n1/items/set-completed',
       method: 'POST',
-      body: { completed: true },
+      body: { item_ids: ['i1'], completed: true },
     });
     mockApi.post.mockResolvedValueOnce({
       data: [
@@ -741,7 +741,7 @@ describe('drainQueue', () => {
     ]);
   });
 
-  it('reconciles all authoritative fields from an uncheckAllItems (set-completed) replay, upserting a locally-missing item', async () => {
+  it('reconciles all authoritative fields from a multi-item setItemsCompleted replay, upserting a locally-missing item', async () => {
     // i2 simulates an item created on another device while this one was
     // offline, so no local row exists yet — the upsert's UPDATE is a no-op and
     // the INSERT OR IGNORE is what actually creates it.
@@ -753,7 +753,7 @@ describe('drainQueue', () => {
       }),
     );
     await seedQueueEntry(db, {
-      operation: 'uncheckAllItems',
+      operation: 'setItemsCompleted',
       endpoint: '/notes/n1/items/set-completed',
       method: 'POST',
       body: { item_ids: ['i1', 'i2'], completed: false },

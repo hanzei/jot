@@ -27,7 +27,7 @@ describe('createJotApi', () => {
     ['about.get', a => a.about.get({ skipAuthRedirect: true }), 'get', ['/about', { skipAuthRedirect: true }], { v: 1 }, { v: 1 }],
     ['auth.login', a => a.auth.login({ username: 'u', password: 'p' }), 'post', ['/login', { username: 'u', password: 'p' }], { user: 1 }, { user: 1 }],
     ['auth.logout', a => a.auth.logout(), 'post', ['/logout', undefined, undefined], {}, undefined],
-    ['auth.me', a => a.auth.me(), 'get', ['/me'], { user: 1 }, { user: 1 }],
+    ['auth.me', a => a.auth.me(), 'get', ['/users/me'], { user: 1 }, { user: 1 }],
     ['sso.unlink', a => a.sso.unlink(), 'post', ['/auth/oidc/unlink'], {}, undefined],
     ['notes.getById', a => a.notes.getById('n1'), 'get', ['/notes/n1'], note, note],
     ['notes.create', a => a.notes.create({ title: 't' } as never), 'post', ['/notes', { title: 't' }], note, note],
@@ -46,7 +46,6 @@ describe('createJotApi', () => {
     ['notes.updateItem', a => a.notes.updateItem('n1', 'i1', { text: 'y' }), 'patch', ['/notes/n1/items/i1', { text: 'y' }], { id: 'i1' }, { id: 'i1' }],
     ['notes.deleteItem', a => a.notes.deleteItem('n1', 'i1'), 'delete', ['/notes/n1/items/i1'], {}, undefined],
     ['notes.reorderItems', a => a.notes.reorderItems('n1', ['i1']), 'post', ['/notes/n1/items/reorder', { item_ids: ['i1'] }], {}, undefined],
-    ['notes.toggleItemCompleted', a => a.notes.toggleItemCompleted('n1', 'i1', true), 'post', ['/notes/n1/items/i1/toggle-completed', { completed: true }], [1], [1]],
     ['notes.setItemsCompleted', a => a.notes.setItemsCompleted('n1', ['i1'], false), 'post', ['/notes/n1/items/set-completed', { item_ids: ['i1'], completed: false }], [1], [1]],
     ['notes.deleteItems', a => a.notes.deleteItems('n1', ['i1']), 'post', ['/notes/n1/items/delete', { item_ids: ['i1'] }], [1], [1]],
     ['labels.getAll', a => a.labels.getAll(), 'get', ['/labels'], { labels: [1] }, [1]],
@@ -101,11 +100,6 @@ describe('createJotApi', () => {
     expect(http.get).toHaveBeenCalledWith('/notes', {
       params: { archived: undefined, search: 'x', trashed: undefined, label: undefined, my_tasks: undefined },
     });
-  });
-
-  it('converts label counts to a record', async () => {
-    const { api } = mockHttp({ counts: [{ label_id: 'l1', count: 2 }, { label_id: 'l2', count: 0 }] });
-    await expect(api.labels.getCounts()).resolves.toEqual({ l1: 2, l2: 0 });
   });
 
   it('sends duplicate client IDs only when given', async () => {

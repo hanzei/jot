@@ -86,7 +86,6 @@ jest.mock('../src/hooks/queryKeys', () => ({
   notesLocalQueryScopeKey: jest.fn(() => ['notes-local', 'test-scope']),
   noteLocalQueryScopeKey: jest.fn(() => ['note-local', 'test-scope']),
   labelsQueryKey: jest.fn(() => ['labels', 'test-scope']),
-  labelCountsQueryKey: jest.fn(() => ['label-counts', 'test-scope']),
 }));
 
 jest.mock('expo-document-picker', () => ({
@@ -197,7 +196,6 @@ describe('SettingsScreen import section', () => {
     expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['notes-local', 'test-scope'] });
     expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['note-local', 'test-scope'] });
     expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['labels', 'test-scope'] });
-    expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['label-counts', 'test-scope'] });
     await waitFor(() => {
       expect(getByText(/Imported 2 notes/i)).toBeTruthy();
     });
