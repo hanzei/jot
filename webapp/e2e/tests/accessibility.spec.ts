@@ -27,8 +27,6 @@ const CODE_SCOPES = ['keyword', 'type', 'string', 'attribute', 'literal', 'title
 const HIGHLIGHTED_CODE_NOTE = [
   '```ts',
   '// A11y code sample',
-  // Short lines on purpose: a block wide enough to scroll is a separate,
-  // pre-existing finding (scrollable-region-focusable), not a contrast one.
   'export function greet(n: string): number {',
   '  return this.count + 42;',
   '}',
@@ -36,6 +34,16 @@ const HIGHLIGHTED_CODE_NOTE = [
   '',
   '```html',
   '<a href="https://example.com">x</a>',
+  '```',
+].join('\n');
+
+/** One code line far wider than the modal, with and without break points. */
+const LONG_CODE_NOTE = [
+  'A11y long code',
+  '',
+  '```',
+  `const message = ${'"a long string literal that keeps going", '.repeat(8)};`,
+  'x'.repeat(400),
   '```',
 ].join('\n');
 
@@ -257,6 +265,33 @@ for (const theme of THEMES) {
         await expect(saveStatus.getByText('Saved')).toBeVisible();
         await expectNoViolations(page, { include: [preview] });
       }
+    });
+
+    // A code line wider than the note wraps rather than scrolling: a
+    // scrolling <pre> is a region keyboard users cannot reach
+    // (scrollable-region-focusable), and the preview around it is itself a
+    // control, so the block cannot be made a tab stop instead.
+    test('a long code line has no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage }) => {
+      void authenticatedUser;
+      await dashboardPage.goto();
+      await dashboardPage.createTextNote(LONG_CODE_NOTE);
+      await dashboardPage.openTextNote('A11y long code');
+      await expectTheme(page, theme);
+
+      // Measured on the preview, not the <pre>: a block that grew wider than
+      // the note would not overflow itself, only its container.
+      const preview = '[role="dialog"] [data-testid="note-content-preview"]';
+      await expect(page.locator(`${preview} pre`)).toBeVisible();
+      await expectNoViolations(page, { include: [preview] });
+      expect(await page.locator(preview).evaluate((el) => el.scrollWidth - el.clientWidth), 'code scrolls sideways').toBeLessThanOrEqual(0);
+
+      // Cards share the block styles; one is a single control, so a scroll
+      // region inside it would be unreachable too.
+      await dashboardPage.closeNoteModal();
+      const card = dashboardPage.noteCardByText('A11y long code');
+      await expect(card.locator('pre')).toBeVisible();
+      await expectNoViolations(page, { include: ['[data-testid="note-card"]'] });
+      expect(await card.locator('.markdown-content').evaluate((el) => el.scrollWidth - el.clientWidth), 'card code scrolls sideways').toBeLessThanOrEqual(0);
     });
 
     test('settings page has no WCAG A/AA violations', async ({ page, authenticatedUser, settingsPage }) => {
