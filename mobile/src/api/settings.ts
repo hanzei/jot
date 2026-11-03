@@ -1,6 +1,5 @@
-import { Platform } from 'react-native';
-import type { AxiosProgressEvent } from 'axios';
 import { jot } from './jot';
+import { percentProgress, rnFilePart } from './upload';
 import type { User } from '@jot/shared';
 
 // Profile-icon uploads can be large on slow cellular, so this is generous —
@@ -18,27 +17,12 @@ export async function uploadProfileIcon(
   const mimeMap: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
   const type = mimeMap[ext] || 'image/jpeg';
 
-  formData.append('file', {
-    uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
-    name: filename,
-    type,
-  } as unknown as Blob);
+  formData.append('file', rnFilePart(uri, filename, type));
 
-  let lastPercent = -1;
   return jot.users.uploadProfileIcon(formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: UPLOAD_ICON_TIMEOUT,
-    ...(onUploadProgress && {
-      onUploadProgress: (progressEvent: AxiosProgressEvent) => {
-        const percent = progressEvent.total
-          ? Math.round((progressEvent.loaded * 100) / progressEvent.total)
-          : 0;
-        if (percent !== lastPercent) {
-          lastPercent = percent;
-          onUploadProgress(percent);
-        }
-      },
-    }),
+    ...percentProgress(onUploadProgress),
   });
 }
 

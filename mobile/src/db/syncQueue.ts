@@ -2,7 +2,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import axios from 'axios';
 import api from '../api/client';
 import { jot } from '../api/jot';
-import { apiPaths, completedCascadeScope, type GetNotesParams, type Note, type NoteItem } from '@jot/shared';
+import { completedCascadeScope, type GetNotesParams, type Note, type NoteItem } from '@jot/shared';
 import {
   getLocalNote,
   saveNote,
@@ -1124,7 +1124,7 @@ async function reconcileItemsFromResponse(db: SQLiteDatabase, noteId: string, it
 async function reconcileNoteFromServer(db: SQLiteDatabase, noteId: string | undefined): Promise<void> {
   if (!noteId) return;
   try {
-    const data = (await api.get(apiPaths.note(noteId)))?.data;
+    const data: unknown = await jot.notes.getById(noteId);
     if (hasStringId(data)) {
       const note = data as Note;
       await updateLocalNoteShares(db, note.id, {

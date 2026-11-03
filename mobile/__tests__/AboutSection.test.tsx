@@ -44,7 +44,7 @@ jest.mock('../src/store/serverAccounts', () => ({
 }));
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
-const mockGetAboutInfo = jot.about.get as jest.MockedFunction<typeof jot.about.get>;
+const mockGetAboutInfo = jest.mocked(jot.about.get);
 const mockGetActiveServer = getActiveServer as jest.MockedFunction<typeof getActiveServer>;
 
 const baseUser: User = {

@@ -7,13 +7,13 @@ import { getDefaultTestDb } from './helpers/testDb';
 import { makeTextNote } from './helpers/fixtures';
 import { jot } from '../src/api/jot';
 
-const mockJot = jest.mocked(jot);
-
 jest.mock('../src/api/jot');
 
 jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
 }));
+
+const mockJot = jest.mocked(jot);
 
 
 function createWrapper() {

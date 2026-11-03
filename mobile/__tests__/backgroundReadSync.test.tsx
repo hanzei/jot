@@ -9,8 +9,6 @@ import * as noteQueriesModule from '../src/db/noteQueries';
 import * as userQueriesModule from '../src/db/userQueries';
 import { jot } from '../src/api/jot';
 
-const mockJot = jest.mocked(jot);
-
 jest.mock('../src/api/jot');
 
 jest.mock('../src/hooks/useNetworkStatus', () => ({
@@ -47,6 +45,8 @@ jest.mock('../src/store/AuthContext', () => ({
     isAuthenticated: true,
   }),
 }));
+
+const mockJot = jest.mocked(jot);
 
 const mockNoteQueries = noteQueriesModule as jest.Mocked<typeof noteQueriesModule>;
 const mockUserQueries = userQueriesModule as jest.Mocked<typeof userQueriesModule>;

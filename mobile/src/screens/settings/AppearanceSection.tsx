@@ -19,7 +19,7 @@ import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { SUPPORTED_LANGUAGES, getLanguagePreference, resolveLanguage, type LanguagePreference } from '../../i18n/language';
 import { displayMessage, extractApiError } from '../../i18n/utils';
 import i18n from '../../i18n';
-import type { ThemePreference } from '@jot/shared';
+import { apiPaths, type ThemePreference } from '@jot/shared';
 import { styles } from './styles';
 import { jot } from '../../api/jot';
 
@@ -71,7 +71,7 @@ export default function AppearanceSection() {
       try {
         await enqueueOperation(db, {
           operation: 'updateSettings',
-          endpoint: '/users/me',
+          endpoint: apiPaths.usersMe,
           method: 'PATCH',
           body: { language },
         });
@@ -95,7 +95,7 @@ export default function AppearanceSection() {
       if (isQueueableError(err)) {
         await enqueueOperation(db, {
           operation: 'updateSettings',
-          endpoint: '/users/me',
+          endpoint: apiPaths.usersMe,
           method: 'PATCH',
           body: { language },
         });
@@ -136,7 +136,7 @@ export default function AppearanceSection() {
       try {
         await enqueueOperation(db, {
           operation: 'updateSettings',
-          endpoint: '/users/me',
+          endpoint: apiPaths.usersMe,
           method: 'PATCH',
           body: { theme },
         });
@@ -159,7 +159,7 @@ export default function AppearanceSection() {
       if (isQueueableError(err)) {
         await enqueueOperation(db, {
           operation: 'updateSettings',
-          endpoint: '/users/me',
+          endpoint: apiPaths.usersMe,
           method: 'PATCH',
           body: { theme },
         });

@@ -121,10 +121,10 @@ describe('createJotApi', () => {
     await expect(api.notes.restore('n1')).resolves.toEqual({ id: 'n1' });
   });
 
-  it('sends a permanent delete as a query parameter', async () => {
+  it('sends a permanent delete to the URL the sync queue stores', async () => {
     const { http, api } = mockHttp();
     await api.notes.delete('n1', { permanent: true });
-    expect(http.delete).toHaveBeenLastCalledWith('/notes/n1', { params: { permanent: true } });
+    expect(http.delete).toHaveBeenLastCalledWith('/notes/n1?permanent=true');
     await api.notes.delete('n1');
     expect(http.delete).toHaveBeenLastCalledWith('/notes/n1');
   });

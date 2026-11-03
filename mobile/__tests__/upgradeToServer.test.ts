@@ -20,8 +20,6 @@ import * as apiClient from '../src/api/client';
 import * as serverAccounts from '../src/store/serverAccounts';
 import { jot } from '../src/api/jot';
 
-const mockJot = jest.mocked(jot);
-
 // ------------------------------------------------------------------
 // SecureStore mock — used to verify local mode is never mutated
 // ------------------------------------------------------------------
@@ -437,6 +435,8 @@ jest.mock('../src/store/serverAccounts', () => ({
   setServerStorageValue: jest.fn().mockResolvedValue(undefined),
 }));
 
+const mockJot = jest.mocked(jot);
+
 const mockGetAllLocalNotes = noteQueries.getAllLocalNotes as jest.MockedFunction<typeof noteQueries.getAllLocalNotes>;
 const mockInsertQueueEntry = syncQueue.insertQueueEntry as jest.MockedFunction<typeof syncQueue.insertQueueEntry>;
 const mockDrainQueue = syncQueue.drainQueue as jest.MockedFunction<typeof syncQueue.drainQueue>;
@@ -447,7 +447,7 @@ const mockInitializeServerContext = apiClient.initializeServerContext as jest.Mo
 const mockSwitchActiveServer = apiClient.switchActiveServer as jest.MockedFunction<typeof apiClient.switchActiveServer>;
 const mockAddServer = serverAccounts.addServer as jest.MockedFunction<typeof serverAccounts.addServer>;
 const mockSetServerStorageValue = serverAccounts.setServerStorageValue as jest.MockedFunction<typeof serverAccounts.setServerStorageValue>;
-const mockGetNotes = mockJot.notes.getAll as jest.MockedFunction<typeof mockJot.notes.getAll>;
+const mockGetNotes = mockJot.notes.getAll;
 
 const BASE_IDENTITY = {
   user: {

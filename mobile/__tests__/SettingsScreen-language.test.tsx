@@ -89,10 +89,10 @@ jest.mock('../src/hooks/useServerConfig', () => ({
 }));
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
-const mockUpdateMe = jot.users.updateMe as jest.MockedFunction<typeof jot.users.updateMe>;
-const mockListSessions = jot.sessions.list as jest.MockedFunction<typeof jot.sessions.list>;
-const mockGetAboutInfo = jot.about.get as jest.MockedFunction<typeof jot.about.get>;
-const mockRevokeSession = jot.sessions.revoke as jest.MockedFunction<typeof jot.sessions.revoke>;
+const mockUpdateMe = jest.mocked(jot.users.updateMe);
+const mockListSessions = jest.mocked(jot.sessions.list);
+const mockGetAboutInfo = jest.mocked(jot.about.get);
+const mockRevokeSession = jest.mocked(jot.sessions.revoke);
 
 const user: User = {
   id: 'user-1',

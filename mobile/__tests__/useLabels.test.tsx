@@ -16,8 +16,6 @@ import type { TestDatabase } from './helpers/testDb';
 import type { Label } from '@jot/shared';
 import { jot } from '../src/api/jot';
 
-const mockJot = jest.mocked(jot);
-
 jest.mock('../src/api/jot');
 
 jest.mock('react-native', () => ({
@@ -79,6 +77,8 @@ jest.mock('../src/api/client', () => ({
   isServerSwitchInProgress: jest.fn(() => false),
   getActiveServerId: jest.fn(() => 'test-server-id'),
 }));
+
+const mockJot = jest.mocked(jot);
 
 const mockNoteQueries = noteQueriesModule as jest.Mocked<typeof noteQueriesModule>;
 const mockSyncQueue = jest.requireMock('../src/db/syncQueue') as { enqueueOperation: jest.Mock };

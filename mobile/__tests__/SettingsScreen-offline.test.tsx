@@ -119,8 +119,8 @@ jest.mock('../src/api/notes', () => ({
 // ── fixtures ───────────────────────────────────────────────────────────────
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
-const mockUpdateMe = jot.users.updateMe as jest.MockedFunction<typeof jot.users.updateMe>;
-const mockListSessions = jot.sessions.list as jest.MockedFunction<typeof jot.sessions.list>;
+const mockUpdateMe = jest.mocked(jot.users.updateMe);
+const mockListSessions = jest.mocked(jot.sessions.list);
 const mockCacheAuthProfile = cacheAuthProfile as jest.MockedFunction<typeof cacheAuthProfile>;
 const mockEnqueueOperation = enqueueOperation as jest.MockedFunction<typeof enqueueOperation>;
 
@@ -184,7 +184,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
   // ── language ────────────────────────────────────────────────────────────
 
   describe('language change', () => {
-    it('persists to cache and enqueues when jot.users.updateMe fails transiently (network error)', async () => {
+    it('persists to cache and enqueues when updateMe fails transiently (network error)', async () => {
       const { setSettings } = setupAuth();
       mockUpdateMe.mockRejectedValue(makeNetworkError());
 
@@ -218,7 +218,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
       );
     });
 
-    it('persists to cache and enqueues when jot.users.updateMe fails transiently (5xx)', async () => {
+    it('persists to cache and enqueues when updateMe fails transiently (5xx)', async () => {
       const { setSettings } = setupAuth();
       mockUpdateMe.mockRejectedValue(makeAxiosError(503));
 
@@ -239,7 +239,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
       );
     });
 
-    it('reverts language and shows error when jot.users.updateMe fails permanently (4xx)', async () => {
+    it('reverts language and shows error when updateMe fails permanently (4xx)', async () => {
       const { setSettings } = setupAuth();
       mockUpdateMe.mockRejectedValue(
         Object.assign(makeAxiosError(422), { response: { status: 422, data: apiErrorBody('limit_exceeded', 'invalid language') } }),
@@ -264,7 +264,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
       expect(mockEnqueueOperation).not.toHaveBeenCalled();
     });
 
-    it('reverts language and shows error when jot.users.updateMe fails with 400', async () => {
+    it('reverts language and shows error when updateMe fails with 400', async () => {
       setupAuth();
       mockUpdateMe.mockRejectedValue(
         Object.assign(makeAxiosError(400), { response: { status: 400, data: apiErrorBody('validation_failed', 'bad request') } }),
@@ -334,7 +334,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
   // ── theme ────────────────────────────────────────────────────────────────
 
   describe('theme change', () => {
-    it('persists to cache and enqueues when jot.users.updateMe fails transiently (network error)', async () => {
+    it('persists to cache and enqueues when updateMe fails transiently (network error)', async () => {
       const { setSettings } = setupAuth();
       mockUpdateMe.mockRejectedValue(makeNetworkError());
 
@@ -365,7 +365,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
       );
     });
 
-    it('persists to cache and enqueues when jot.users.updateMe fails transiently (5xx)', async () => {
+    it('persists to cache and enqueues when updateMe fails transiently (5xx)', async () => {
       const { setSettings } = setupAuth();
       mockUpdateMe.mockRejectedValue(makeAxiosError(500));
 
@@ -386,7 +386,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
       );
     });
 
-    it('reverts theme and shows error when jot.users.updateMe fails permanently (4xx)', async () => {
+    it('reverts theme and shows error when updateMe fails permanently (4xx)', async () => {
       const { setSettings } = setupAuth();
       mockUpdateMe.mockRejectedValue(
         Object.assign(makeAxiosError(422), { response: { status: 422, data: apiErrorBody('limit_exceeded', 'invalid theme') } }),
@@ -409,7 +409,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
       expect(mockEnqueueOperation).not.toHaveBeenCalled();
     });
 
-    it('reverts theme and shows error when jot.users.updateMe fails with 403', async () => {
+    it('reverts theme and shows error when updateMe fails with 403', async () => {
       setupAuth();
       mockUpdateMe.mockRejectedValue(
         Object.assign(makeAxiosError(403), { response: { status: 403, data: apiErrorBody('forbidden', 'forbidden') } }),
@@ -476,7 +476,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
   // ── profile save ─────────────────────────────────────────────────────────
 
   describe('profile save', () => {
-    it('applies optimistic user update, caches, and enqueues when jot.users.updateMe fails transiently', async () => {
+    it('applies optimistic user update, caches, and enqueues when updateMe fails transiently', async () => {
       const { setUser, setSettings } = setupAuth();
       mockUpdateMe.mockRejectedValue(makeNetworkError());
 
@@ -515,7 +515,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
       );
     });
 
-    it('applies optimistic user update and enqueues when jot.users.updateMe fails with 5xx', async () => {
+    it('applies optimistic user update and enqueues when updateMe fails with 5xx', async () => {
       const { setUser } = setupAuth();
       mockUpdateMe.mockRejectedValue(makeAxiosError(503));
 
@@ -536,7 +536,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
       );
     });
 
-    it('applies optimistic update then reverts and shows error when jot.users.updateMe fails permanently (4xx)', async () => {
+    it('applies optimistic update then reverts and shows error when updateMe fails permanently (4xx)', async () => {
       const { setUser } = setupAuth();
       mockUpdateMe.mockRejectedValue(
         Object.assign(makeAxiosError(422), { response: { status: 422, data: apiErrorBody('limit_exceeded', 'username taken') } }),
@@ -558,7 +558,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
       expect(mockEnqueueOperation).not.toHaveBeenCalled();
     });
 
-    it('applies optimistic update then reverts and shows error when jot.users.updateMe fails with 400', async () => {
+    it('applies optimistic update then reverts and shows error when updateMe fails with 400', async () => {
       const { setUser } = setupAuth();
       mockUpdateMe.mockRejectedValue(
         Object.assign(makeAxiosError(400), { response: { status: 400, data: apiErrorBody('validation_failed', 'invalid input') } }),

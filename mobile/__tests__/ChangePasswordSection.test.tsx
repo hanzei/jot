@@ -29,7 +29,7 @@ jest.mock('react-i18next', () => ({
 
 const mockUseServerConfig = useServerConfig as jest.MockedFunction<typeof useServerConfig>;
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
-const mockChangePassword = jot.users.changePassword as jest.MockedFunction<typeof jot.users.changePassword>;
+const mockChangePassword = jest.mocked(jot.users.changePassword);
 
 const baseUser: User = {
   id: 'u1',

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
-import type { NoteImage } from '@jot/shared';
+import { apiPaths, type NoteImage } from '@jot/shared';
 import { uploadNoteImage, type ImageUploadFile } from '../api/images';
 import { patchLocalNoteImages, isNotePendingCreate } from '../db/noteQueries';
 import { enqueueOperation, rethrowIfNotQueueable } from '../db/syncQueue';
@@ -145,7 +145,7 @@ export function useDeleteNoteImage() {
       await hideImageLocally(db, noteId, imageId);
       await enqueueOperation(db, {
         operation: 'removeImage',
-        endpoint: `/images/${imageId}`,
+        endpoint: apiPaths.image(imageId),
         method: 'DELETE',
         body: { note_id: noteId },
       });

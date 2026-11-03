@@ -28,7 +28,7 @@ jest.mock('../src/store/serverAccounts', () => ({
   setServerStorageValue: jest.fn(),
 }));
 
-const mockFetchServerConfig = jot.config.get as jest.MockedFunction<typeof jot.config.get>;
+const mockFetchServerConfig = jest.mocked(jot.config.get);
 const mockGetActiveServerId = getActiveServerId as jest.MockedFunction<typeof getActiveServerId>;
 const mockGetStoredServerUrl = getStoredServerUrl as jest.MockedFunction<typeof getStoredServerUrl>;
 const mockGetServerStorageValue = getServerStorageValue as jest.MockedFunction<typeof getServerStorageValue>;

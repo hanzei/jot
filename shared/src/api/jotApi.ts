@@ -130,10 +130,9 @@ export function createJotApi(http: JotHttpClient) {
 
       update: (id: string, body: UpdateNoteRequest): Promise<Note> => data(http.patch<Note>(apiPaths.note(id), body)),
 
+      // The same URL the sync queue stores for an offline permanent delete.
       delete: (id: string, opts?: { permanent?: boolean }): Promise<void> =>
-        done(opts?.permanent
-          ? http.delete(apiPaths.note(id), { params: { permanent: true } })
-          : http.delete(apiPaths.note(id))),
+        done(http.delete(opts?.permanent ? apiPaths.notePermanentDelete(id) : apiPaths.note(id))),
 
       emptyTrash: (): Promise<EmptyTrashResponse> => data(http.delete<EmptyTrashResponse>(apiPaths.notesTrash)),
 

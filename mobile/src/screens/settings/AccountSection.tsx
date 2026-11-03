@@ -11,6 +11,7 @@ import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { displayMessage, extractApiError } from '../../i18n/utils';
 import { styles } from './styles';
 import { jot } from '../../api/jot';
+import { apiPaths } from '@jot/shared';
 
 export default function AccountSection() {
   const { user, settings, setUser, setSettings, isLocalMode } = useAuth();
@@ -70,7 +71,7 @@ export default function AccountSection() {
       try {
         await enqueueOperation(db, {
           operation: 'updateSettings',
-          endpoint: '/users/me',
+          endpoint: apiPaths.usersMe,
           method: 'PATCH',
           body: profileUpdate,
         });
@@ -97,7 +98,7 @@ export default function AccountSection() {
       if (isQueueableError(err)) {
         await enqueueOperation(db, {
           operation: 'updateSettings',
-          endpoint: '/users/me',
+          endpoint: apiPaths.usersMe,
           method: 'PATCH',
           body: profileUpdate,
         });

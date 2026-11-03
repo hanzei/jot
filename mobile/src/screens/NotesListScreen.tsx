@@ -24,7 +24,7 @@ import { useConfirm } from '../hooks/useConfirm';
 import { useTheme } from '../theme/ThemeContext';
 import SkeletonNoteList from '../components/SkeletonNoteList';
 import NoteCard from '../components/NoteCard';
-import { normalizeNoteSort, sortNotesForDisplay, type Note, type NoteSort } from '@jot/shared';
+import { apiPaths, normalizeNoteSort, sortNotesForDisplay, type Note, type NoteSort } from '@jot/shared';
 import type { RootStackParamList, LayoutRect } from '../navigation/RootNavigator';
 import { isSortWarningDismissed, dismissSortWarning } from '../utils/sortWarningDismissed';
 import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
@@ -185,7 +185,7 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
       try {
         await enqueueOperation(db, {
           operation: 'updateSettings',
-          endpoint: '/users/me',
+          endpoint: apiPaths.usersMe,
           method: 'PATCH',
           body: { note_sort: nextSort },
         });

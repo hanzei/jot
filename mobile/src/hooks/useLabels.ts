@@ -379,7 +379,7 @@ export function useRenameLabel() {
       const trimmed = name.trim();
       if (!trimmed) throw new LocalizedError('labels.nameRequired', 'Label name must not be empty');
       // A label created offline carries a server-valid id (#546) but its queued
-      // jot.labels.create drains FIFO before this rename, so queue rather than calling
+      // createLabel drains FIFO before this rename, so queue rather than calling
       // online against a label the server doesn't know yet — a direct PATCH would
       // 404 (permanent) and drop the rename instead of syncing it.
       const pendingCreate = (await getPendingLabelIds(db)).has(labelId);
@@ -437,7 +437,7 @@ export function useDeleteLabel() {
     mutationFn: async ({ labelId }: { labelId: string }) => {
       assertSwitchWriteAllowed();
       // A label created offline carries a server-valid id (#546) but its queued
-      // jot.labels.create drains FIFO before this delete, so queue rather than calling
+      // createLabel drains FIFO before this delete, so queue rather than calling
       // online against a label the server doesn't know yet — a direct DELETE would
       // 404 (permanent) and drop the deletion instead of syncing it.
       const pendingCreate = (await getPendingLabelIds(db)).has(labelId);

@@ -30,7 +30,7 @@ jest.mock('../src/db/syncQueue', () => ({
 }));
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
-const mockUpdateMe = jot.users.updateMe as jest.MockedFunction<typeof jot.users.updateMe>;
+const mockUpdateMe = jest.mocked(jot.users.updateMe);
 const mockCacheAuthProfile = cacheAuthProfile as jest.MockedFunction<typeof cacheAuthProfile>;
 const mockEnqueueOperation = enqueueOperation as jest.MockedFunction<typeof enqueueOperation>;
 

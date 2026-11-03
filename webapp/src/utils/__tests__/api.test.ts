@@ -1,26 +1,12 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
-// Create mocked functions that will be hoisted
-const mockPost = vi.hoisted(() => vi.fn());
-const mockGet = vi.hoisted(() => vi.fn());
-const mockPut = vi.hoisted(() => vi.fn());
-const mockPatch = vi.hoisted(() => vi.fn());
-const mockDelete = vi.hoisted(() => vi.fn());
-const mockRequestUse = vi.hoisted(() => vi.fn());
+// Only the response interceptor is tested here; the endpoints live in
+// @jot/shared and are tested there.
 const mockResponseUse = vi.hoisted(() => vi.fn());
 
-// Mock axios completely
 vi.mock('axios', () => ({
   default: {
     create: vi.fn(() => ({
-      post: mockPost,
-      get: mockGet,
-      put: mockPut,
-      patch: mockPatch,
-      delete: mockDelete,
-      interceptors: {
-        request: { use: mockRequestUse },
-        response: { use: mockResponseUse },
-      },
+      interceptors: { response: { use: mockResponseUse } },
     })),
   },
 }));
@@ -31,8 +17,6 @@ import { getDiagnostics, resetDiagnosticsForTest } from '../diagnostics';
 
 // Mock localStorage
 const mockLocalStorage = {
-  getItem: vi.fn(),
-  setItem: vi.fn(),
   removeItem: vi.fn(),
 };
 Object.defineProperty(window, 'localStorage', {

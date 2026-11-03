@@ -104,10 +104,10 @@ jest.mock('../src/hooks/useServerConfig', () => ({
 }));
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
-const mockListSessions = jot.sessions.list as jest.MockedFunction<typeof jot.sessions.list>;
+const mockListSessions = jest.mocked(jot.sessions.list);
 const mockImportFile = importFile as jest.MockedFunction<typeof importFile>;
-const mockGetNotes = jot.notes.getAll as jest.MockedFunction<typeof jot.notes.getAll>;
-const mockGetLabels = jot.labels.getAll as jest.MockedFunction<typeof jot.labels.getAll>;
+const mockGetNotes = jest.mocked(jot.notes.getAll);
+const mockGetLabels = jest.mocked(jot.labels.getAll);
 const mockGetDocumentAsync = DocumentPicker.getDocumentAsync as jest.MockedFunction<typeof DocumentPicker.getDocumentAsync>;
 const mockSaveNotes = saveNotes as jest.MockedFunction<typeof saveNotes>;
 const mockSaveLabels = saveLabels as jest.MockedFunction<typeof saveLabels>;

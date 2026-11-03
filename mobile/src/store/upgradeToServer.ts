@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { API_BASE_PATH, apiPaths, generateId, canonicalizeServerOrigin, parseApiErrorBody } from '@jot/shared';
+import { apiPaths, apiUrl, generateId, canonicalizeServerOrigin, parseApiErrorBody } from '@jot/shared';
 import type { GetNotesParams } from '@jot/shared';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { getAllLocalNotes } from '../db/noteQueries';
@@ -41,7 +41,7 @@ export interface UpgradeClient {
 /** Build an UpgradeClient for a real server URL and session token. */
 export function makeUpgradeClient(serverUrl: string, sessionToken: string): UpgradeClient {
   const instance = axios.create({
-    baseURL: serverUrl + API_BASE_PATH,
+    baseURL: apiUrl('', serverUrl),
     timeout: 15000,
     headers: {
       'Content-Type': 'application/json',
@@ -89,7 +89,7 @@ export async function registerOnServer(
     throw Object.assign(new Error('Invalid server URL'), { code: 'INVALID_URL' as const });
   }
   const res = await axios.post(
-    canonical + API_BASE_PATH + apiPaths.register,
+    apiUrl(apiPaths.register, canonical),
     { username, password },
     {
       timeout: 15000,
@@ -126,7 +126,7 @@ export async function checkCapabilityGate(client: UpgradeClient): Promise<Prefli
 
   try {
     // Note probe: create then duplicate
-    const noteCreate1 = await client.post('/notes', {
+    const noteCreate1 = await client.post(apiPaths.notes, {
       id: probeNoteId,
       note_type: 'list',
       title: '',
@@ -138,7 +138,7 @@ export async function checkCapabilityGate(client: UpgradeClient): Promise<Prefli
     if (noteData.id !== probeNoteId) {
       return { ok: false, reason: 'CLIENT_ID_NOT_HONORED' };
     }
-    const noteCreate2 = await client.post('/notes', {
+    const noteCreate2 = await client.post(apiPaths.notes, {
       id: probeNoteId,
       note_type: 'list',
       title: '',
@@ -148,7 +148,7 @@ export async function checkCapabilityGate(client: UpgradeClient): Promise<Prefli
     }
 
     // Item probe: create then duplicate on the probe note
-    const itemCreate1 = await client.post(`/notes/${probeNoteId}/items`, {
+    const itemCreate1 = await client.post(apiPaths.noteItems(probeNoteId), {
       id: probeItemId,
       text: '',
       position: 0,
@@ -160,7 +160,7 @@ export async function checkCapabilityGate(client: UpgradeClient): Promise<Prefli
     if (itemData.id !== probeItemId) {
       return { ok: false, reason: 'CLIENT_ID_NOT_HONORED' };
     }
-    const itemCreate2 = await client.post(`/notes/${probeNoteId}/items`, {
+    const itemCreate2 = await client.post(apiPaths.noteItems(probeNoteId), {
       id: probeItemId,
       text: '',
       position: 0,
@@ -170,7 +170,7 @@ export async function checkCapabilityGate(client: UpgradeClient): Promise<Prefli
     }
 
     // Label probe: create then duplicate
-    const labelCreate1 = await client.post('/labels', {
+    const labelCreate1 = await client.post(apiPaths.labels, {
       id: probeLabelId,
       name: probeLabelName,
     });
@@ -181,7 +181,7 @@ export async function checkCapabilityGate(client: UpgradeClient): Promise<Prefli
     if (labelData.id !== probeLabelId) {
       return { ok: false, reason: 'CLIENT_ID_NOT_HONORED' };
     }
-    const labelCreate2 = await client.post('/labels', {
+    const labelCreate2 = await client.post(apiPaths.labels, {
       id: probeLabelId,
       name: probeLabelName,
     });
@@ -192,8 +192,8 @@ export async function checkCapabilityGate(client: UpgradeClient): Promise<Prefli
     return { ok: true };
   } finally {
     // Best-effort cleanup — probe garbage is harmless on a fresh account but tidy to remove.
-    await client.delete(`/notes/${probeNoteId}`, { permanent: true }).catch(() => {});
-    await client.delete(`/labels/${probeLabelId}`).catch(() => {});
+    await client.delete(apiPaths.note(probeNoteId), { permanent: true }).catch(() => {});
+    await client.delete(apiPaths.label(probeLabelId)).catch(() => {});
   }
 }
 
@@ -207,7 +207,7 @@ function listField(data: unknown, key: string): unknown {
  * Abort if non-empty — no merge support in this iteration.
  */
 export async function checkEmptinessGate(client: UpgradeClient): Promise<PreflightResult> {
-  const notesRes = await client.get('/notes').catch(() => null);
+  const notesRes = await client.get(apiPaths.notes).catch(() => null);
   if (!notesRes || notesRes.status !== 200) {
     return { ok: false, reason: 'FETCH_FAILED' };
   }
@@ -219,7 +219,7 @@ export async function checkEmptinessGate(client: UpgradeClient): Promise<Preflig
     return { ok: false, reason: 'NOTES_NOT_EMPTY' };
   }
 
-  const labelsRes = await client.get('/labels').catch(() => null);
+  const labelsRes = await client.get(apiPaths.labels).catch(() => null);
   if (!labelsRes || labelsRes.status !== 200) {
     return { ok: false, reason: 'FETCH_FAILED' };
   }

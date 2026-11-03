@@ -18,8 +18,6 @@ import type { TestDatabase } from './helpers/testDb';
 import type { NoteImage } from '@jot/shared';
 import { jot } from '../src/api/jot';
 
-const mockJot = jest.mocked(jot);
-
 const fs = globalThis.mockFileSystem;
 
 jest.mock('../src/api/jot', () => ({
@@ -77,6 +75,8 @@ jest.mock('../src/api/client', () => {
     }),
   };
 });
+
+const mockJot = jest.mocked(jot);
 
 const mockImagesApi = imagesApi as jest.Mocked<typeof imagesApi>;
 const mockNoteQueries = noteQueriesModule as jest.Mocked<typeof noteQueriesModule>;

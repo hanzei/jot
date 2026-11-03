@@ -14,8 +14,6 @@ import { makeLabel, makeTextNote } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
 import { jot } from '../src/api/jot';
 
-const mockJot = jest.mocked(jot);
-
 jest.mock('../src/api/jot');
 
 jest.mock('../src/hooks/useNetworkStatus', () => ({
@@ -25,6 +23,8 @@ jest.mock('../src/hooks/useNetworkStatus', () => ({
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: jest.fn().mockReturnValue({ user: { id: 'u1', username: 'me' }, isAuthenticated: true }),
 }));
+
+const mockJot = jest.mocked(jot);
 
 
 function createWrapper() {

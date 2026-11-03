@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { API_BASE_PATH, apiPaths, createJotApi, type FileImportType, type ExportFormat, type ImportResponse, type NoteImage, type User } from '@jot/shared';
+import { API_BASE_PATH, apiPaths, apiUrl, createJotApi, type FileImportType, type ExportFormat, type ImportResponse, type NoteImage, type User } from '@jot/shared';
 import { removeUser } from '@/utils/auth';
 import { authPathWithRedirect, currentRedirectTarget } from '@/utils/authRedirect';
 import { recordFailedRequest } from '@/utils/diagnostics';
@@ -47,24 +47,20 @@ api.interceptors.response.use(
 // `File`s, the blob download, and URLs the browser loads directly.
 const jot = createJotApi(api);
 
-export const serverConfig = jot.config;
+export const { sso, auth, labels, sessions, pats, about, admin, config: serverConfig } = jot;
 
 // OIDC/SSO endpoints. The login and link flows are server-side redirect flows,
 // so the browser must do a full-page navigation to these absolute URLs (an
 // anchor or `window.location`) — an axios/XHR call would follow the IdP 302 in
 // the background and never hand control to the identity provider. Only unlink
 // is a plain JSON API call.
-export const SSO_LOGIN_URL = API_BASE_PATH + apiPaths.oidcLogin;
-export const SSO_LINK_URL = API_BASE_PATH + apiPaths.oidcLink;
-
-export const sso = jot.sso;
-
-export const auth = jot.auth;
+export const SSO_LOGIN_URL = apiUrl(apiPaths.oidcLogin);
+export const SSO_LINK_URL = apiUrl(apiPaths.oidcLink);
 
 export const notes = {
   ...jot.notes,
 
-  importNotes: (
+  import: (
     payload:
       | { file: File; importType: FileImportType }
       | { importType: 'usememos'; url: string; token: string },
@@ -89,8 +85,6 @@ export const notes = {
     }),
 };
 
-export const labels = jot.labels;
-
 export const users = {
   ...jot.users,
 
@@ -101,19 +95,15 @@ export const users = {
   },
 };
 
-export const sessions = jot.sessions;
-
-export const pats = jot.pats;
-
 // Note images are served inline (not via axios) so <img> tags can use the URL
 // directly as their src; the browser sends the session cookie automatically
 // for this same-origin request.
 export const images = {
-  url: (id: string): string => API_BASE_PATH + apiPaths.image(id),
+  url: (id: string): string => apiUrl(apiPaths.image(id)),
 
   // Resized JPEG tile for grid/cover thumbnails; the lightbox uses `url`
   // (the original) instead so a closer look never shows a downscaled image.
-  thumbnailUrl: (id: string): string => API_BASE_PATH + apiPaths.imageThumbnail(id),
+  thumbnailUrl: (id: string): string => apiUrl(apiPaths.imageThumbnail(id)),
 
   upload: (noteId: string, file: File, onProgress?: (percent: number) => void): Promise<NoteImage> => {
     const formData = new FormData();
@@ -128,9 +118,5 @@ export const images = {
 
   delete: jot.images.delete,
 };
-
-export const about = jot.about;
-
-export const admin = jot.admin;
 
 export default api;

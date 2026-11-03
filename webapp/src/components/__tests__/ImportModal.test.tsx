@@ -6,7 +6,7 @@ const mockImportNotes = vi.hoisted(() => vi.fn());
 
 vi.mock('@/utils/api', () => ({
   notes: {
-    importNotes: mockImportNotes,
+    import: mockImportNotes,
   },
 }));
 

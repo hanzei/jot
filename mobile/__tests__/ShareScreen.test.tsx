@@ -76,7 +76,7 @@ jest.mock('../src/api/serverReachability', () => ({
   isServerReachable: jest.fn(),
 }));
 
-const mockSearchUsers = jot.users.search as jest.MockedFunction<typeof jot.users.search>;
+const mockSearchUsers = jest.mocked(jot.users.search);
 const mockUseNoteShares = useNoteShares as jest.MockedFunction<typeof useNoteShares>;
 const mockUseShareNote = useShareNote as jest.MockedFunction<typeof useShareNote>;
 const mockUseUnshareNote = useUnshareNote as jest.MockedFunction<typeof useUnshareNote>;

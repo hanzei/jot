@@ -77,7 +77,7 @@ jest.mock('../src/utils/appInfo', () => ({
   })),
 }));
 
-const mockGetAboutInfo = jot.about.get as jest.MockedFunction<typeof jot.about.get>;
+const mockGetAboutInfo = jest.mocked(jot.about.get);
 const mockUseOfflineContext = useOfflineContext as jest.MockedFunction<typeof useOfflineContext>;
 const mockIsServerReachable = isServerReachable as jest.MockedFunction<typeof isServerReachable>;
 const mockGetServerReachabilityChangedAt =

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { API_BASE_PATH, apiPaths } from '../api';
+import { API_BASE_PATH, apiPaths, apiUrl } from '../api';
 
 // Mobile's offline sync queue stores these strings in SQLite and replays them
 // after app updates, so every builder's output is pinned byte for byte. A
@@ -8,6 +8,12 @@ import { API_BASE_PATH, apiPaths } from '../api';
 describe('apiPaths', () => {
   it('pins the base path', () => {
     expect(API_BASE_PATH).toBe('/api/v1');
+  });
+
+  it('joins an origin, the base path and a path', () => {
+    expect(apiUrl('/me')).toBe('/api/v1/me');
+    expect(apiUrl('/me', 'https://jot.example.com')).toBe('https://jot.example.com/api/v1/me');
+    expect(apiUrl('/me', 'https://jot.example.com//')).toBe('https://jot.example.com/api/v1/me');
   });
 
   it('pins every path', () => {

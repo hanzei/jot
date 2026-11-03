@@ -23,11 +23,7 @@ jest.mock('../src/api/jot', () => ({
   },
 }));
 
-jest.mock('../src/api/notes', () => ({
-  __esModule: true,
-}));
-
-const mockGetNote = jot.notes.getById as jest.MockedFunction<typeof jot.notes.getById>;
+const mockGetNote = jest.mocked(jot.notes.getById);
 
 function makeTextNote(id: string, content = 'hello'): Note {
   return {

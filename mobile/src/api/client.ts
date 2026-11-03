@@ -1,7 +1,7 @@
 import axios, { AxiosHeaders, CanceledError, type InternalAxiosRequestConfig } from 'axios';
 import { Platform } from 'react-native';
 import type { AuthResponse, LoginRequest, RegisterRequest } from '@jot/shared';
-import { API_BASE_PATH, apiPaths, apiRequestId, canonicalizeServerOrigin, isServerError } from '@jot/shared';
+import { apiPaths, apiRequestId, apiUrl, createJotApi, canonicalizeServerOrigin, isServerError } from '@jot/shared';
 import { randomUUID } from '../utils/random';
 import { markServerReachable, markServerUnreachable } from './serverReachability';
 import {
@@ -186,7 +186,7 @@ export async function probeServerReachability(url: string): Promise<ServerReacha
   }
 
   try {
-    const response = await axios.get(canonical + API_BASE_PATH + apiPaths.me, {
+    const response = await axios.get(apiUrl(apiPaths.me, canonical), {
       timeout: 5000,
       headers: {
         'User-Agent': `JotMobile/1.0 (${platformLabel[Platform.OS] ?? Platform.OS})`,
@@ -232,7 +232,7 @@ const AUTH_ENDPOINT_PATHS = new Set<string>([
 ]);
 
 const api = axios.create({
-  baseURL: currentBaseUrl + API_BASE_PATH,
+  baseURL: apiUrl('', currentBaseUrl),
   timeout: DEFAULT_REQUEST_TIMEOUT_MS,
   headers: {
     'Content-Type': 'application/json',
@@ -247,7 +247,7 @@ function applyServerUrl(url: string): string {
     throw new Error(`Invalid server URL: ${url}`);
   }
   currentBaseUrl = normalized;
-  api.defaults.baseURL = normalized + API_BASE_PATH;
+  api.defaults.baseURL = apiUrl('', normalized);
   return normalized;
 }
 
@@ -609,6 +609,10 @@ export async function clearCachedProfile(): Promise<void> {
   }
 }
 
+// The shared endpoints for the auth calls that don't read response headers.
+// (`api/jot.ts` can't be imported here: it imports this module.)
+const sharedAuth = createJotApi(api);
+
 export const auth = {
   login: async (data: LoginRequest): Promise<AuthResponse> => {
     const res = await api.post(apiPaths.login, data);
@@ -661,9 +665,7 @@ export const auth = {
   },
 
   /** Unbinds the SSO identity; the server refuses (422) when that would strand a password-less account. */
-  oidcUnlink: async (): Promise<void> => {
-    await api.post(apiPaths.oidcUnlink);
-  },
+  oidcUnlink: (): Promise<void> => sharedAuth.sso.unlink(),
 
   logout: async (): Promise<void> => {
     // Server-side session invalidation is best-effort: the session still
@@ -678,16 +680,13 @@ export const auth = {
     await clearStoredSession();
     await clearCachedProfile();
     if (token) {
-      void api.post(apiPaths.logout, undefined, { headers: { Cookie: `jot_session=${token}` } }).catch(() => {
+      void sharedAuth.auth.logout({ headers: { Cookie: `jot_session=${token}` } }).catch(() => {
         // Best-effort: local session is already cleared regardless of outcome.
       });
     }
   },
 
-  me: async (): Promise<AuthResponse> => {
-    const res = await api.get(apiPaths.me);
-    return res.data;
-  },
+  me: (): Promise<AuthResponse> => sharedAuth.auth.me(),
 };
 
 export async function getStoredSession(): Promise<string | null> {

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { API_BASE_PATH, apiPaths, canonicalizeServerOrigin, UPLOAD_MAX_BYTES, VALIDATION, type ServerConfig } from '@jot/shared';
+import { apiPaths, apiUrl, canonicalizeServerOrigin, UPLOAD_MAX_BYTES, VALIDATION, type ServerConfig } from '@jot/shared';
 
 export const DEFAULT_SERVER_CONFIG: ServerConfig = {
   registration_enabled: true,
@@ -18,7 +18,7 @@ export async function probeServerConfig(serverUrl: string): Promise<ServerConfig
     return null;
   }
   try {
-    const res = await axios.get<ServerConfig>(canonical + API_BASE_PATH + apiPaths.config, { timeout: 5000 });
+    const res = await axios.get<ServerConfig>(apiUrl(apiPaths.config, canonical), { timeout: 5000 });
     return res.data;
   } catch {
     return null;

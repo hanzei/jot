@@ -10,6 +10,15 @@
 /** Prefix the server mounts the API under; `apiPaths` are relative to it. */
 export const API_BASE_PATH = '/api/v1';
 
+/**
+ * Absolute URL for an `apiPaths` entry, for requests that don't go through a
+ * client's axios instance (`<img>` sources, downloads, a server that isn't
+ * the active one yet). Without `origin` it is same-origin (`/api/v1/...`).
+ */
+export function apiUrl(path: string, origin = ''): string {
+  return origin.replace(/\/+$/, '') + API_BASE_PATH + path;
+}
+
 export const apiPaths = {
   config: '/config',
   about: '/about',

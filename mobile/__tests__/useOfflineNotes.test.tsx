@@ -18,8 +18,6 @@ import { makeTextNote as buildTextNote } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
 import { jot } from '../src/api/jot';
 
-const mockJot = jest.mocked(jot);
-
 jest.mock('../src/api/jot');
 
 jest.mock('../src/hooks/useNetworkStatus', () => ({
@@ -50,6 +48,8 @@ jest.mock('../src/db/syncQueue', () => {
     getProtectedNoteIds: jest.fn(actual.getProtectedNoteIds),
   };
 });
+
+const mockJot = jest.mocked(jot);
 
 const mockNoteQueries = noteQueriesModule as jest.Mocked<typeof noteQueriesModule>;
 const mockSyncQueue = syncQueueModule as jest.Mocked<typeof syncQueueModule>;
