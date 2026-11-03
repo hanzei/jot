@@ -125,6 +125,13 @@ function renderShareScreen() {
 }
 
 describe('ShareScreen user search connectivity', () => {
+  // Unmount inside the test so the FlatList's pending cells-to-render batch
+  // timer is disposed here, not fired between tests where the console guard
+  // would blame the next test for the resulting act() warning.
+  afterEach(async () => {
+    await screen.unmount();
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     // signedInUser owns the note here, so the modal is in owner (management) mode.
@@ -253,6 +260,13 @@ describe('ShareScreen empty-query suggestions', () => {
   const bob = makeUser({ id: 'user-bob', username: 'bob', first_name: 'Bob', last_name: 'Jones' });
   const carol = makeUser({ id: 'user-carol', username: 'carol', first_name: 'Carol', last_name: 'King' });
   const dave = makeUser({ id: 'user-dave', username: 'dave', first_name: 'Dave', last_name: 'Adams' });
+
+  // Unmount inside the test so the FlatList's pending cells-to-render batch
+  // timer is disposed here, not fired between tests where the console guard
+  // would blame the next test for the resulting act() warning.
+  afterEach(async () => {
+    await screen.unmount();
+  });
 
   beforeEach(() => {
     jest.clearAllMocks();
