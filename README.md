@@ -479,11 +479,13 @@ files are missing are logged as warnings.
 #### Downgrading
 
 Schema migrations only go forward, and a Jot version cannot undo a migration it
-does not ship. So once a newer version has started on a database, an older one
-refuses to start on it and names both schema versions in the log. To go back,
-restore the database and `JOT_UPLOAD_DIR` from the backup taken before the
-upgrade, or keep running the newer version. Take that backup before trying a
-pre-release or a development build against data you want to keep.
+does not ship. So once a newer version has applied a migration an older one does
+not ship, the older one refuses to start on that database and names both schema
+versions in the log. (A newer version that adds no migrations leaves the
+database usable by the older one.) To go back, restore the database and
+`JOT_UPLOAD_DIR` from the backup taken before the upgrade, or keep running the
+newer version. Take that backup before trying a pre-release or a development
+build against data you want to keep.
 
 Separately, each user can export their own notes, images included, as a `.zip`
 bundle from Settings, in the webapp or the mobile app (which hands the file to
