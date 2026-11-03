@@ -4,11 +4,10 @@ import { EllipsisVertical, Plus, Tag } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../theme/ThemeContext';
 import { styles } from './styles';
-import type { Label } from '@jot/shared';
+import type { Label, LabelWithCount } from '@jot/shared';
 
 interface LabelsSectionProps {
-  labels: Label[];
-  labelCounts: Record<string, number> | undefined;
+  labels: LabelWithCount[];
   activeLabelId: string | undefined;
   onLabelNavigate: (labelId: string, labelName: string) => void;
   onOpenRenameModal: (label: Label) => void;
@@ -21,7 +20,6 @@ interface LabelsSectionProps {
 
 export default function LabelsSection({
   labels,
-  labelCounts,
   activeLabelId,
   onLabelNavigate,
   onOpenRenameModal,
@@ -75,7 +73,7 @@ export default function LabelsSection({
           {labels.map((label) => {
             const isActive = activeLabelId === label.id;
             const isDeleting = deletingLabelIds.has(label.id);
-            const labelCount = labelCounts?.[label.id] ?? 0;
+            const labelCount = label.note_count;
             const labelAccessibilityName = `${label.name}, ${labelCount}`;
             return (
               <View

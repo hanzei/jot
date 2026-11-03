@@ -134,6 +134,13 @@ type Label struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// LabelWithCount is a GET /labels list item: a label plus the number of
+// non-trashed, non-archived notes carrying it for the requesting user.
+type LabelWithCount struct {
+	Label
+	NoteCount int `json:"note_count"`
+}
+
 // UserInfo is the public profile returned by the user search endpoint.
 type UserInfo struct {
 	ID             string `json:"id"`

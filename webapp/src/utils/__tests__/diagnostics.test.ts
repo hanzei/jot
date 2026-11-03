@@ -30,7 +30,7 @@ describe('routePattern', () => {
 
   it('keeps fixed segments', () => {
     expect(routePattern('/notes/trash')).toBe('/notes/trash');
-    expect(routePattern('/labels/counts')).toBe('/labels/counts');
+    expect(routePattern('/users/me/password')).toBe('/users/me/password');
   });
 });
 

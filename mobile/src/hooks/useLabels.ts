@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import {
   getLabels,
-  getLabelCounts,
   createLabel,
   addLabelToNote,
   removeLabelFromNote,
@@ -35,9 +34,8 @@ import { useAuth } from '../store/AuthContext';
 import { isLocalModeActive } from '../store/localMode';
 import { isServerSwitchInProgress } from '../api/client';
 import { LocalizedError } from '../i18n/utils';
-import type { Label } from '@jot/shared';
+import type { Label, LabelWithCount } from '@jot/shared';
 import {
-  labelCountsQueryKey,
   labelsQueryKey,
   noteLocalQueryKey,
   noteLocalQueryScopeKey,
@@ -173,18 +171,20 @@ export function useLabels() {
   // server's labels and reconciles the store (pruning stale, upserting current)
   // before returning them (issue #691). Memoized so useBackgroundSyncQuery's effect
   // (which depends on the fns) doesn't re-run — and re-fetch — on every render.
-  const localFn = useCallback(() => getStoredLabels(db), [db]);
-  const serverFn = useCallback(async () => {
+  //
+  // Each item carries `note_count`. Offline it is derived from the notes table
+  // (getLocalLabelCounts); the server's count replaces it once the sync lands, since
+  // the local cache may not hold every note.
+  const localFn = useCallback(async (): Promise<LabelWithCount[]> => {
+    const [labels, counts] = await Promise.all([getStoredLabels(db), getLocalLabelCounts(db)]);
+    return labels.map((label) => ({ ...label, note_count: counts[label.id] ?? 0 }));
+  }, [db]);
+  const serverFn = useCallback(async (): Promise<LabelWithCount[]> => {
     const labels = await getLabels();
     await saveServerLabels(db, labels);
     return labels;
   }, [db]);
   return useBackgroundSyncQuery(labelsQueryKey, localFn, serverFn);
-}
-
-export function useLabelCounts() {
-  const db = useSQLiteContext();
-  return useBackgroundSyncQuery(labelCountsQueryKey, () => getLocalLabelCounts(db), getLabelCounts);
 }
 
 /** Build an optimistic, locally-created label for the offline / transient-failure path. */
@@ -263,7 +263,6 @@ export function useCreateLabel() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
     },
@@ -323,7 +322,6 @@ export function useAddLabelToNote() {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
       // Invalidate labels list since a new label name may have been created
       queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
     },
   });
 }
@@ -370,7 +368,6 @@ export function useRemoveLabelFromNote() {
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
       queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
     },
   });
 }
@@ -430,7 +427,6 @@ export function useRenameLabel() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
     },
@@ -485,7 +481,6 @@ export function useDeleteLabel() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
     },

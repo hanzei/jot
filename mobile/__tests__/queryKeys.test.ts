@@ -1,6 +1,5 @@
 import { setServerUrl } from '../src/api/client';
 import {
-  labelCountsQueryKey,
   labelsQueryKey,
   noteLocalQueryKey,
   noteSharesQueryKey,
@@ -33,26 +32,22 @@ describe('query key scoping', () => {
     const firstLocalNotesKey = notesLocalQueryKey({ archived: true });
     const firstLocalNoteKey = noteLocalQueryKey('note-1');
     const firstLabelsKey = labelsQueryKey();
-    const firstLabelCountsKey = labelCountsQueryKey();
     const firstSharesKey = noteSharesQueryKey('note-1');
 
     await setServerUrl('https://scope-b.example.com');
 
     const secondLocalNoteKey = noteLocalQueryKey('note-1');
     const secondLabelsKey = labelsQueryKey();
-    const secondLabelCountsKey = labelCountsQueryKey();
     const secondSharesKey = noteSharesQueryKey('note-1');
     const secondLocalNotesKey = notesLocalQueryKey({ archived: true });
 
     expect(firstLocalNotesKey[0]).toBe('notes-local');
     expect(firstLocalNoteKey[0]).toBe('note-local');
     expect(firstLabelsKey[0]).toBe('labels');
-    expect(firstLabelCountsKey[0]).toBe('label-counts');
     expect(firstSharesKey[0]).toBe('noteShares');
 
     expect(firstLocalNoteKey[1]).not.toEqual(secondLocalNoteKey[1]);
     expect(firstLabelsKey[1]).not.toEqual(secondLabelsKey[1]);
-    expect(firstLabelCountsKey[1]).not.toEqual(secondLabelCountsKey[1]);
     expect(firstSharesKey[1]).not.toEqual(secondSharesKey[1]);
     expect(firstLocalNotesKey[1]).not.toEqual(secondLocalNotesKey[1]);
     expect(secondLocalNotesKey[0]).toBe('notes-local');

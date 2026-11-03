@@ -40,29 +40,21 @@ func newLabelStore(db *sql.DB, d *dialect.Dialect) *labelStore {
 	return &labelStore{db: db, d: d}
 }
 
-// GetLabels returns all labels belonging to a user.
-func (s *labelStore) GetLabels(ctx context.Context, userID string) ([]Label, error) {
-	query := s.d.RewritePlaceholders(`SELECT id, user_id, name, created_at, updated_at FROM labels WHERE user_id = ? ORDER BY ` + s.d.LabelOrder(""))
-	rows, err := s.db.QueryContext(ctx, query, userID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get labels: %w", err)
-	}
-
-	labels, err := collectRows(rows, scanLabel)
-	if err != nil {
-		return nil, fmt.Errorf("failed to scan labels: %w", err)
-	}
-	if labels == nil {
-		labels = []Label{}
-	}
-	return labels, nil
+// LabelWithCount is a label list item: the label plus the number of notes
+// carrying it. It exists for GetLabels only; Label itself is also embedded in
+// notes and SSE events, where a count would be meaningless or stale.
+type LabelWithCount struct {
+	Label
+	// NoteCount is the number of non-trashed, non-archived notes that carry the
+	// label for the requesting user.
+	NoteCount int `json:"note_count"`
 }
 
-// GetLabelCounts returns a map of label ID to note count for active notes.
+// GetLabels returns all labels belonging to a user with their note counts.
 // Counts exclude archived and trashed notes to match the default notes view.
-func (s *labelStore) GetLabelCounts(ctx context.Context, userID string) (map[string]int, error) {
-	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(`
-		SELECT l.id, COUNT(nus.note_id) AS note_count
+func (s *labelStore) GetLabels(ctx context.Context, userID string) ([]LabelWithCount, error) {
+	query := s.d.RewritePlaceholders(`
+		SELECT l.id, l.user_id, l.name, l.created_at, l.updated_at, COUNT(nus.note_id) AS note_count
 		FROM labels l
 		LEFT JOIN note_labels nl
 			ON nl.label_id = l.id AND nl.user_id = l.user_id
@@ -75,28 +67,24 @@ func (s *labelStore) GetLabelCounts(ctx context.Context, userID string) (map[str
 			AND nus.archived = FALSE
 		WHERE l.user_id = ?
 		GROUP BY l.id
-	`), userID)
+		ORDER BY ` + s.d.LabelOrder("l."))
+	rows, err := s.db.QueryContext(ctx, query, userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get label counts: %w", err)
-	}
-	defer func() {
-		_ = rows.Close()
-	}()
-
-	counts := map[string]int{}
-	for rows.Next() {
-		var labelID string
-		var count int
-		if err := rows.Scan(&labelID, &count); err != nil {
-			return nil, fmt.Errorf("scan label count: %w", err)
-		}
-		counts[labelID] = count
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate label counts: %w", err)
+		return nil, fmt.Errorf("failed to get labels: %w", err)
 	}
 
-	return counts, nil
+	labels, err := collectRows(rows, func(rows *sql.Rows) (LabelWithCount, error) {
+		var l LabelWithCount
+		scanErr := rows.Scan(&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt, &l.NoteCount)
+		return l, scanErr
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan labels: %w", err)
+	}
+	if labels == nil {
+		labels = []LabelWithCount{}
+	}
+	return labels, nil
 }
 
 // GetOrCreateLabel finds an existing label by name for a user or creates a new one.

@@ -882,6 +882,7 @@ const docTemplate = `{
         },
         "/labels": {
             "get": {
+                "description": "Each label carries note_count: the number of non-trashed, non-archived notes carrying the label for the requesting user.",
                 "produces": [
                     "application/json"
                 ],
@@ -970,42 +971,6 @@ const docTemplate = `{
                     },
                     "422": {
                         "description": "label name too long (label_name_too_long)",
-                        "schema": {
-                            "$ref": "#/definitions/apierr.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/apierr.ErrorResponse"
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "CookieAuth": []
-                    }
-                ]
-            }
-        },
-        "/labels/counts": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "labels"
-                ],
-                "summary": "Get note counts per label for the current user",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.LabelCountsResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "unauthorized",
                         "schema": {
                             "$ref": "#/definitions/apierr.ErrorResponse"
                         }
@@ -3969,35 +3934,13 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.LabelCount": {
-            "type": "object",
-            "properties": {
-                "count": {
-                    "type": "integer"
-                },
-                "label_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "handlers.LabelCountsResponse": {
-            "type": "object",
-            "properties": {
-                "counts": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/handlers.LabelCount"
-                    }
-                }
-            }
-        },
         "handlers.LabelListResponse": {
             "type": "object",
             "properties": {
                 "labels": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.Label"
+                        "$ref": "#/definitions/models.LabelWithCount"
                     }
                 }
             }
@@ -4531,6 +4474,30 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.LabelWithCount": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "note_count": {
+                    "description": "NoteCount is the number of non-trashed, non-archived notes that carry the\nlabel for the requesting user.",
+                    "type": "integer"
                 },
                 "updated_at": {
                     "type": "string"

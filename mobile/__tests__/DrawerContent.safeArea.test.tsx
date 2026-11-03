@@ -4,7 +4,7 @@ import { fireEvent, render, waitFor, act } from '@testing-library/react-native';
 import type { DrawerContentComponentProps } from '@react-navigation/drawer';
 import DrawerContent from '../src/components/DrawerContent';
 import { ConfirmContext } from '../src/hooks/useConfirm';
-import type { Label } from '@jot/shared';
+import type { Label, LabelWithCount } from '@jot/shared';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -17,8 +17,7 @@ const mockRevalidateSession = jest.fn(async () => true);
 const mockListServers = jest.fn();
 const mockGetActiveServer = jest.fn();
 const mockAddServer = jest.fn();
-const mockLabelsData: Label[] = [];
-const mockLabelCountsData: Record<string, number> = {};
+const mockLabelsData: LabelWithCount[] = [];
 const mockCreateLabelMutateAsync = jest.fn();
 const mockRenameLabelMutateAsync = jest.fn();
 const mockDeleteLabelMutateAsync = jest.fn();
@@ -72,7 +71,6 @@ jest.mock('../src/hooks/useLabels', () => {
   }
   return {
     useLabels: () => ({ data: mockLabelsData }),
-    useLabelCounts: () => ({ data: mockLabelCountsData }),
     useCreateLabel: () => useTrackedMutation(mockCreateLabelMutateAsync),
     useRenameLabel: () => useTrackedMutation(mockRenameLabelMutateAsync),
     useDeleteLabel: () => useTrackedMutation(mockDeleteLabelMutateAsync),
@@ -161,7 +159,6 @@ describe('DrawerContent', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockLabelsData.length = 0;
-    Object.keys(mockLabelCountsData).forEach((key) => delete mockLabelCountsData[key]);
     mockHasProfileIcon = true;
     mockRevalidateSession.mockResolvedValue(true);
     mockListServers.mockResolvedValue([]);
@@ -282,6 +279,7 @@ describe('DrawerContent', () => {
       name: 'Work',
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
+      note_count: 0,
     });
 
     const props = makeProps();
@@ -308,6 +306,7 @@ describe('DrawerContent', () => {
       name: 'Work',
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
+      note_count: 0,
     });
 
     const navigate = jest.fn();
@@ -337,6 +336,7 @@ describe('DrawerContent', () => {
       name: 'Work',
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
+      note_count: 0,
     });
 
     const navigate = jest.fn();
@@ -364,6 +364,7 @@ describe('DrawerContent', () => {
       name: 'Work',
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
+      note_count: 0,
     });
 
     const navigate = jest.fn();
@@ -386,8 +387,8 @@ describe('DrawerContent', () => {
       name: 'Work',
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
+      note_count: 7,
     });
-    mockLabelCountsData['label-1'] = 7;
 
     const props = makeProps();
     const { getByTestId, queryByTestId } = await render(<DrawerContent {...props} />);
@@ -396,13 +397,14 @@ describe('DrawerContent', () => {
     expect(queryByTestId('drawer-label-count-missing')).toBeNull();
   });
 
-  it('shows zero label count badge when label count entry is missing', async () => {
+  it('shows zero label count badge when the label has no notes', async () => {
     mockLabelsData.push({
       id: 'label-1',
       user_id: 'user-1',
       name: 'Work',
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
+      note_count: 0,
     });
 
     const props = makeProps();
@@ -465,6 +467,7 @@ describe('DrawerContent', () => {
       name: 'Work',
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
+      note_count: 0,
     });
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
     const { promise, resolve } = deferred<Label>();
@@ -508,6 +511,7 @@ describe('DrawerContent', () => {
       name: 'Work',
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
+      note_count: 0,
     });
     jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
     const { promise, resolve } = deferred<void>();
@@ -556,6 +560,7 @@ describe('DrawerContent', () => {
         name: 'Work',
         created_at: '2026-01-01T00:00:00Z',
         updated_at: '2026-01-01T00:00:00Z',
+        note_count: 0,
       },
       {
         id: 'label-2',
@@ -563,6 +568,7 @@ describe('DrawerContent', () => {
         name: 'Home',
         created_at: '2026-01-01T00:00:00Z',
         updated_at: '2026-01-01T00:00:00Z',
+        note_count: 0,
       },
     );
     jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());

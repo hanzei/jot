@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderHook, waitFor, act } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useLabelCounts } from '../src/hooks/useLabels';
+import { useLabels } from '../src/hooks/useLabels';
 import {
   useCreateNote,
   useDeleteNote,
@@ -40,9 +40,18 @@ function createWrapper() {
 
 const work = makeLabel({ id: 'l1', name: 'Work' });
 
+/** The drawer's label list reduced to { labelId: note_count } for non-empty labels. */
+function useLabelCounts() {
+  const { data, dataUpdatedAt } = useLabels();
+  return {
+    dataUpdatedAt,
+    data: data && Object.fromEntries(data.filter((l) => l.note_count > 0).map((l) => [l.id, l.note_count])),
+  };
+}
+
 /**
- * The drawer's per-label counts are derived from the notes table, not the labels
- * one, so a note write that touches no label still changes them. These cover the
+ * The drawer's per-label counts are derived offline from the notes table, not the
+ * labels one, so a note write that touches no label still changes them. These cover the
  * local-write paths: the counts must follow the SQLite rows without waiting for a
  * reconnect resync or an app restart.
  */
@@ -54,7 +63,7 @@ describe('label counts follow local note writes', () => {
     db = globalThis.testDb as TestDatabase;
     // The server agrees with SQLite at mount time; every later change below is
     // local, so only an invalidation can move the count.
-    mockLabelsApi.getLabelCounts.mockResolvedValue({ l1: 1 } as never);
+    mockLabelsApi.getLabels.mockResolvedValue([{ ...work, note_count: 1 }] as never);
     await saveNote(db, makeTextNote({ id: 'n1', content: 'hi', labels: [work] }));
   });
 

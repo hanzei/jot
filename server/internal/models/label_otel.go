@@ -23,16 +23,10 @@ func NewLabelStore(db *sql.DB, d *dialect.Dialect, slowThreshold time.Duration) 
 	}
 }
 
-func (s *LabelStore) GetLabels(ctx context.Context, userID string) (_ []Label, err error) {
+func (s *LabelStore) GetLabels(ctx context.Context, userID string) (_ []LabelWithCount, err error) {
 	ctx, end := startSpan(ctx, s.instr, "LabelStore.GetLabels", &err)
 	defer end()
 	return s.inner.GetLabels(ctx, userID)
-}
-
-func (s *LabelStore) GetLabelCounts(ctx context.Context, userID string) (_ map[string]int, err error) {
-	ctx, end := startSpan(ctx, s.instr, "LabelStore.GetLabelCounts", &err)
-	defer end()
-	return s.inner.GetLabelCounts(ctx, userID)
 }
 
 func (s *LabelStore) GetOrCreateLabel(ctx context.Context, userID, name string) (_ *Label, _ bool, err error) {

@@ -23,7 +23,7 @@ import { useCreateNote } from './useNotes';
 import { useOfflineContext } from '../store/OfflineContext';
 import {
   deadLettersQueryKey,
-  labelCountsQueryKey,
+  labelsQueryKey,
   noteLocalQueryScopeKey,
   notesLocalQueryScopeKey,
 } from './queryKeys';
@@ -173,7 +173,7 @@ export function useSyncFailures() {
     // Resolving can delete a discarded local create, tombstone a note the server
     // no longer has, or replace a note wholesale with the server's copy — each of
     // which changes what its labels count.
-    queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
+    queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
     refreshSyncFailures();
   }, [queryClient, refreshSyncFailures]);
 
