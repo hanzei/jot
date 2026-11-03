@@ -16,7 +16,7 @@ import SidebarLabels from '@/components/SidebarLabels';
 import { useSidebarLabelsController } from '@/hooks/useSidebarLabelsController';
 import { auth } from '@/utils/api';
 import { removeUser, isAdmin } from '@/utils/auth';
-import type { Label } from '@jot/shared';
+import type { Label, LabelWithCount } from '@jot/shared';
 
 interface LabelCallbacks {
   onRenameSuccess?: (label: Label, newName: string) => void | Promise<void>;
@@ -29,10 +29,8 @@ interface SSECallbacks {
 }
 
 export interface AuthenticatedLayoutContext {
-  labels: Label[];
-  labelCounts: Record<string, number> | null;
-  loadLabels: (opts?: { preserveOnError?: boolean }) => Promise<Label[] | null>;
-  loadLabelCounts: (opts?: { preserveOnError?: boolean }) => Promise<Record<string, number> | null>;
+  labels: LabelWithCount[];
+  loadLabels: (opts?: { preserveOnError?: boolean }) => Promise<LabelWithCount[] | null>;
   handleCreateLabel: (name: string) => Promise<boolean>;
   handleRenameLabel: (label: Label, name: string) => Promise<boolean>;
   handleDeleteLabel: (label: Label) => Promise<boolean>;
@@ -91,9 +89,7 @@ const AuthenticatedLayout = ({ onLogout }: AuthenticatedLayoutProps) => {
 
   const {
     labels,
-    labelCounts,
     loadLabels,
-    loadLabelCounts,
     handleCreateLabel,
     handleRenameLabel,
     handleDeleteLabel,
@@ -103,8 +99,8 @@ const AuthenticatedLayout = ({ onLogout }: AuthenticatedLayoutProps) => {
   });
 
   useEffect(() => {
-    void Promise.all([loadLabels(), loadLabelCounts()]);
-  }, [loadLabels, loadLabelCounts]);
+    void loadLabels();
+  }, [loadLabels]);
 
   // Dashboard calls registerLabelCallbacks once on mount (via a stable useEffect)
   // to wire up page-specific reactions to label renames and deletes. The callbacks
@@ -177,20 +173,17 @@ const AuthenticatedLayout = ({ onLogout }: AuthenticatedLayoutProps) => {
   const sidebarChildren = useMemo(() => (
     <SidebarLabels
       labels={labels}
-      labelCounts={labelCounts}
       selectedLabelId={isAtDashboard ? selectedLabelId : null}
       onSelect={handleLabelSelect}
       onCreate={handleCreateLabel}
       onRename={handleRenameLabel}
       onDelete={handleDeleteLabel}
     />
-  ), [labels, labelCounts, isAtDashboard, selectedLabelId, handleLabelSelect, handleCreateLabel, handleRenameLabel, handleDeleteLabel]);
+  ), [labels, isAtDashboard, selectedLabelId, handleLabelSelect, handleCreateLabel, handleRenameLabel, handleDeleteLabel]);
 
   const context = useMemo<AuthenticatedLayoutContext>(() => ({
     labels,
-    labelCounts,
     loadLabels,
-    loadLabelCounts,
     handleCreateLabel,
     handleRenameLabel,
     handleDeleteLabel,
@@ -199,9 +192,7 @@ const AuthenticatedLayout = ({ onLogout }: AuthenticatedLayoutProps) => {
     setSearchBar,
   }), [
     labels,
-    labelCounts,
     loadLabels,
-    loadLabelCounts,
     handleCreateLabel,
     handleRenameLabel,
     handleDeleteLabel,

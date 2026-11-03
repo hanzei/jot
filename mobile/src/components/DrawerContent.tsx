@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Archive, ChevronRight, Clipboard, FileText, LogOut, Settings, Trash2, type LucideIcon } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
-import { useCreateLabel, useDeleteLabel, useLabelCounts, useLabels, useRenameLabel } from '../hooks/useLabels';
+import { useCreateLabel, useDeleteLabel, useLabels, useRenameLabel } from '../hooks/useLabels';
 import { useTheme } from '../theme/ThemeContext';
 import UserAvatar from './UserAvatar';
 import { displayMessage, errorMessageKey } from '../i18n/utils';
@@ -36,7 +36,6 @@ type DrawerDispatchAction = Parameters<DrawerContentComponentProps['navigation']
 export default function DrawerContent(props: DrawerContentComponentProps) {
   const { user, logout, isLocalMode } = useAuth();
   const { data: labels } = useLabels();
-  const { data: labelCounts } = useLabelCounts();
   const createLabel = useCreateLabel();
   const renameLabel = useRenameLabel();
   const deleteLabel = useDeleteLabel();
@@ -305,7 +304,6 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
 
           <LabelsSection
             labels={labels ?? []}
-            labelCounts={labelCounts}
             activeLabelId={activeLabelId}
             onLabelNavigate={handleLabelNavigate}
             onOpenRenameModal={openRenameModal}

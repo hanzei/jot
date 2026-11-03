@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import type { Label } from '@jot/shared';
+import type { LabelWithCount } from '@jot/shared';
 import { useSidebarLabelsController } from '../useSidebarLabelsController';
 import { labels as labelsApi } from '@/utils/api';
 import { createApiError } from '@/utils/__tests__/test-helpers';
@@ -12,7 +12,6 @@ vi.mock('@/utils/api', async () => {
     labels: {
       ...actual.labels,
       getAll: vi.fn(),
-      getCounts: vi.fn(),
       create: vi.fn(),
       rename: vi.fn(),
       delete: vi.fn(),
@@ -26,12 +25,13 @@ vi.mock('@/hooks/useToast', () => ({
   useToast: () => ({ showToast: mockShowToast, showErrorToast: mockShowErrorToast }),
 }));
 
-const makeLabel = (overrides: Partial<Label> = {}): Label => ({
+const makeLabel = (overrides: Partial<LabelWithCount> = {}): LabelWithCount => ({
   id: 'label1',
   name: 'Work',
   user_id: 'user1',
   created_at: '2023-01-01T00:00:00Z',
   updated_at: '2023-01-01T00:00:00Z',
+  note_count: 0,
   ...overrides,
 });
 
@@ -91,7 +91,7 @@ describe('useSidebarLabelsController', () => {
       vi.mocked(labelsApi.getAll).mockRejectedValue(new Error('network'));
       const { result } = renderHook(() => useSidebarLabelsController());
 
-      let returned: Label[] | null = [];
+      let returned: LabelWithCount[] | null = [];
       await act(async () => {
         returned = await result.current.loadLabels();
       });
@@ -100,57 +100,11 @@ describe('useSidebarLabelsController', () => {
     });
   });
 
-  describe('loadLabelCounts', () => {
-    it('populates counts on success', async () => {
-      vi.mocked(labelsApi.getCounts).mockResolvedValue({ label1: 3 });
-      const { result } = renderHook(() => useSidebarLabelsController());
-
-      await act(async () => {
-        await result.current.loadLabelCounts();
-      });
-
-      expect(result.current.labelCounts).toEqual({ label1: 3 });
-    });
-
-    it('resets counts to null on error by default', async () => {
-      vi.mocked(labelsApi.getCounts)
-        .mockResolvedValueOnce({ label1: 3 })
-        .mockRejectedValueOnce(new Error('network'));
-      const { result } = renderHook(() => useSidebarLabelsController());
-
-      await act(async () => {
-        await result.current.loadLabelCounts();
-      });
-      await act(async () => {
-        await result.current.loadLabelCounts();
-      });
-
-      expect(result.current.labelCounts).toBeNull();
-    });
-
-    it('preserves prior counts on error when preserveOnError is set', async () => {
-      vi.mocked(labelsApi.getCounts)
-        .mockResolvedValueOnce({ label1: 3 })
-        .mockRejectedValueOnce(new Error('network'));
-      const { result } = renderHook(() => useSidebarLabelsController());
-
-      await act(async () => {
-        await result.current.loadLabelCounts();
-      });
-      await act(async () => {
-        await result.current.loadLabelCounts({ preserveOnError: true });
-      });
-
-      expect(result.current.labelCounts).toEqual({ label1: 3 });
-    });
-  });
-
   describe('handleCreateLabel', () => {
     it('adds the created label, refreshes, and toasts success', async () => {
       const created = makeLabel({ id: 'new1', name: 'New' });
       vi.mocked(labelsApi.create).mockResolvedValue(created);
       vi.mocked(labelsApi.getAll).mockResolvedValue([created]);
-      vi.mocked(labelsApi.getCounts).mockResolvedValue({});
       const { result } = renderHook(() => useSidebarLabelsController());
 
       let ok = false;
@@ -167,7 +121,6 @@ describe('useSidebarLabelsController', () => {
       const created = makeLabel({ id: 'new1', name: 'New' });
       vi.mocked(labelsApi.create).mockResolvedValue(created);
       vi.mocked(labelsApi.getAll).mockResolvedValue([]);
-      vi.mocked(labelsApi.getCounts).mockResolvedValue({});
       const onCreateSuccess = vi.fn();
       const { result } = renderHook(() => useSidebarLabelsController({ onCreateSuccess }));
 
@@ -182,7 +135,6 @@ describe('useSidebarLabelsController', () => {
       const created = makeLabel({ id: 'new1', name: 'New' });
       vi.mocked(labelsApi.create).mockResolvedValue(created);
       vi.mocked(labelsApi.getAll).mockResolvedValue([created]);
-      vi.mocked(labelsApi.getCounts).mockResolvedValue({});
       const onCreateSuccess = vi.fn().mockRejectedValue(new Error('callback failed'));
       const { result } = renderHook(() => useSidebarLabelsController({ onCreateSuccess }));
 
@@ -213,7 +165,6 @@ describe('useSidebarLabelsController', () => {
       const label = makeLabel();
       vi.mocked(labelsApi.rename).mockResolvedValue({ ...label, name: 'Renamed' });
       vi.mocked(labelsApi.getAll).mockResolvedValue([{ ...label, name: 'Renamed' }]);
-      vi.mocked(labelsApi.getCounts).mockResolvedValue({});
       const onRenameSuccess = vi.fn();
       const { result } = renderHook(() => useSidebarLabelsController({ onRenameSuccess }));
 
@@ -246,7 +197,6 @@ describe('useSidebarLabelsController', () => {
       const label = makeLabel();
       vi.mocked(labelsApi.delete).mockResolvedValue(undefined);
       vi.mocked(labelsApi.getAll).mockResolvedValue([]);
-      vi.mocked(labelsApi.getCounts).mockResolvedValue({});
       const onDeleteSuccess = vi.fn();
       const { result } = renderHook(() => useSidebarLabelsController({ onDeleteSuccess }));
 
@@ -274,19 +224,16 @@ describe('useSidebarLabelsController', () => {
     });
   });
 
-  it('reflects concurrent loadLabels/loadLabelCounts calls once both settle', async () => {
-    vi.mocked(labelsApi.getAll).mockResolvedValue([makeLabel()]);
-    vi.mocked(labelsApi.getCounts).mockResolvedValue({ label1: 1 });
+  it('exposes the per-label note_count from the label list', async () => {
+    vi.mocked(labelsApi.getAll).mockResolvedValue([makeLabel({ note_count: 3 })]);
     const { result } = renderHook(() => useSidebarLabelsController());
 
-    act(() => {
-      void result.current.loadLabels();
-      void result.current.loadLabelCounts();
+    await act(async () => {
+      await result.current.loadLabels();
     });
 
     await waitFor(() => {
-      expect(result.current.labels).toHaveLength(1);
-      expect(result.current.labelCounts).toEqual({ label1: 1 });
+      expect(result.current.labels.map((l) => l.note_count)).toEqual([3]);
     });
   });
 });

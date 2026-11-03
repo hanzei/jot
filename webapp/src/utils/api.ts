@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, NoteItem, CreateNoteRequest, UpdateNoteRequest, ConvertNoteTypeRequest, CreateNoteItemRequest, PatchNoteItemRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, FileImportType, ExportFormat, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, SetUserPasswordRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest, NoteImage, LabelCountsResponse, NoteListResponse, NoteShareListResponse, LabelListResponse, UserSearchResponse, SessionListResponse, PATListResponse } from '@jot/shared';
+import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, NoteItem, CreateNoteRequest, UpdateNoteRequest, ConvertNoteTypeRequest, CreateNoteItemRequest, PatchNoteItemRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, FileImportType, ExportFormat, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, SetUserPasswordRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest, NoteImage, LabelWithCount, NoteListResponse, NoteShareListResponse, LabelListResponse, UserSearchResponse, SessionListResponse, PATListResponse } from '@jot/shared';
 import { removeUser } from '@/utils/auth';
 import { authPathWithRedirect, currentRedirectTarget } from '@/utils/authRedirect';
 import { recordFailedRequest } from '@/utils/diagnostics';
@@ -179,13 +179,8 @@ export const notes = {
 };
 
 export const labels = {
-  getAll: (): Promise<Label[]> =>
+  getAll: (): Promise<LabelWithCount[]> =>
     api.get<LabelListResponse>('/labels').then(res => res.data.labels),
-
-  getCounts: (): Promise<Record<string, number>> =>
-    api.get<LabelCountsResponse>('/labels/counts').then(res =>
-      Object.fromEntries(res.data.counts.map(({ label_id, count }) => [label_id, count]))
-    ),
 
   create: (name: string): Promise<Label> =>
     api.post('/labels', { name }).then(res => res.data),

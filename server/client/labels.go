@@ -8,39 +8,15 @@ import (
 
 const paramName = "name"
 
-// ListLabels returns all labels for the authenticated user.
-func (c *Client) ListLabels(ctx context.Context) ([]Label, error) {
+// ListLabels returns all labels for the authenticated user, each with its note count.
+func (c *Client) ListLabels(ctx context.Context) ([]LabelWithCount, error) {
 	var resp struct {
-		Labels []Label `json:"labels"`
+		Labels []LabelWithCount `json:"labels"`
 	}
 	if err := c.doJSON(ctx, http.MethodGet, "/api/v1/labels", nil, &resp); err != nil {
 		return nil, err
 	}
 	return resp.Labels, nil
-}
-
-// labelCount is the note count for a single label.
-type labelCount struct {
-	LabelID string `json:"label_id"`
-	Count   int    `json:"count"`
-}
-
-// labelCountsResponse is the envelope returned by GET /labels/counts.
-type labelCountsResponse struct {
-	Counts []labelCount `json:"counts"`
-}
-
-// ListLabelCounts returns note counts per label for the authenticated user, keyed by label ID.
-func (c *Client) ListLabelCounts(ctx context.Context) (map[string]int, error) {
-	var resp labelCountsResponse
-	if err := c.doJSON(ctx, http.MethodGet, "/api/v1/labels/counts", nil, &resp); err != nil {
-		return nil, err
-	}
-	counts := make(map[string]int, len(resp.Counts))
-	for _, c := range resp.Counts {
-		counts[c.LabelID] = c.Count
-	}
-	return counts, nil
 }
 
 // CreateLabel creates a label (or returns the existing one with the same name).

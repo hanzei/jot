@@ -349,25 +349,11 @@ definitions:
       skipped:
         type: integer
     type: object
-  handlers.LabelCount:
-    properties:
-      count:
-        type: integer
-      label_id:
-        type: string
-    type: object
-  handlers.LabelCountsResponse:
-    properties:
-      counts:
-        items:
-          $ref: '#/definitions/handlers.LabelCount'
-        type: array
-    type: object
   handlers.LabelListResponse:
     properties:
       labels:
         items:
-          $ref: '#/definitions/models.Label'
+          $ref: '#/definitions/models.LabelWithCount'
         type: array
     type: object
   handlers.LoginRequest:
@@ -728,6 +714,24 @@ definitions:
         type: string
       name:
         type: string
+      updated_at:
+        type: string
+      user_id:
+        type: string
+    type: object
+  models.LabelWithCount:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      note_count:
+        description: |-
+          NoteCount is the number of non-trashed, non-archived notes that carry the
+          label for the requesting user.
+        type: integer
       updated_at:
         type: string
       user_id:
@@ -1509,6 +1513,8 @@ paths:
       - notes
   /labels:
     get:
+      description: 'Each label carries note_count: the number of non-trashed, non-archived
+        notes carrying the label for the requesting user.'
       produces:
       - application/json
       responses:
@@ -1648,28 +1654,6 @@ paths:
       security:
       - CookieAuth: []
       summary: Rename a label
-      tags:
-      - labels
-  /labels/counts:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handlers.LabelCountsResponse'
-        "401":
-          description: unauthorized
-          schema:
-            $ref: '#/definitions/apierr.ErrorResponse'
-        "500":
-          description: internal server error
-          schema:
-            $ref: '#/definitions/apierr.ErrorResponse'
-      security:
-      - CookieAuth: []
-      summary: Get note counts per label for the current user
       tags:
       - labels
   /login:
