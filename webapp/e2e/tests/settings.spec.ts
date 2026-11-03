@@ -204,7 +204,7 @@ test.describe('Settings', () => {
       // still "system") but hold that answer back until the change is saved.
       let releaseMe!: () => void;
       const meHeld = new Promise<void>((resolve) => { releaseMe = resolve; });
-      await page.route('**/api/v1/me', async (route) => {
+      await page.route('**/api/v1/users/me', async (route) => {
         const response = await route.fetch();
         await meHeld;
         await route.fulfill({ response });
@@ -215,7 +215,7 @@ test.describe('Settings', () => {
 
       await settingsPage.selectTheme('Dark');
       await expect(page.getByText('Theme updated')).toBeVisible();
-      const meAnswered = page.waitForResponse('**/api/v1/me');
+      const meAnswered = page.waitForResponse('**/api/v1/users/me');
       releaseMe();
       await meAnswered;
 

@@ -1727,28 +1727,6 @@ paths:
       summary: Log out the current user
       tags:
       - auth
-  /me:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handlers.AuthResponse'
-        "401":
-          description: unauthorized
-          schema:
-            $ref: '#/definitions/apierr.ErrorResponse'
-        "500":
-          description: internal server error
-          schema:
-            $ref: '#/definitions/apierr.ErrorResponse'
-      security:
-      - CookieAuth: []
-      summary: Get the current authenticated user and settings
-      tags:
-      - auth
   /notes:
     get:
       parameters:
@@ -3123,6 +3101,27 @@ paths:
       tags:
       - users
   /users/me:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.AuthResponse'
+        "401":
+          description: unauthorized
+          schema:
+            $ref: '#/definitions/apierr.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/apierr.ErrorResponse'
+      security:
+      - CookieAuth: []
+      summary: Get the current authenticated user and settings
+      tags:
+      - users
     patch:
       consumes:
       - application/json

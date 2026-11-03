@@ -434,7 +434,7 @@ func (s *Server) setupRoutes() error {
 			r.Get("/events", s.eventsHandler.ServeSSE)
 
 			r.Get("/about", s.wrapHandler(s.handleAbout))
-			r.Get("/me", s.wrapHandler(s.authHandler.Me))
+			r.Get("/users/me", s.wrapHandler(s.authHandler.Me))
 			r.Patch("/users/me", s.wrapHandler(s.authHandler.UpdateUser))
 			r.Put("/users/me/password", s.wrapHandler(s.authHandler.ChangePassword))
 			r.Post("/users/me/profile-icon", s.wrapHandler(s.authHandler.UploadProfileIcon))

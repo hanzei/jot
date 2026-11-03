@@ -186,7 +186,7 @@ export async function probeServerReachability(url: string): Promise<ServerReacha
   }
 
   try {
-    const response = await axios.get(`${canonical}/api/v1/me`, {
+    const response = await axios.get(`${canonical}/api/v1/users/me`, {
       timeout: 5000,
       headers: {
         'User-Agent': `JotMobile/1.0 (${platformLabel[Platform.OS] ?? Platform.OS})`,
@@ -546,7 +546,9 @@ api.interceptors.response.use(
 
     if (error.response?.status === 401) {
       const url: string = config?.url || '';
-      const isAuthEndpoint = url === '/login' || url === '/register' || url === '/logout' || url === '/me';
+      // Only the read is exempt: PATCH /users/me must still clear a dead session.
+      const isCurrentUserRead = url === '/users/me' && config?.method?.toLowerCase() === 'get';
+      const isAuthEndpoint = url === '/login' || url === '/register' || url === '/logout' || isCurrentUserRead;
       if (!isAuthEndpoint) {
         await handleUnauthorizedSession();
       }
@@ -688,7 +690,7 @@ export const auth = {
   },
 
   me: async (): Promise<AuthResponse> => {
-    const res = await api.get('/me');
+    const res = await api.get('/users/me');
     return res.data;
   },
 };

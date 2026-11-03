@@ -45,7 +45,7 @@ async function mockSsoOnlyLinked(page: Page) {
       json: { ...body, sso: { enabled: true, provider_name: 'Keycloak', local_login_enabled: false } },
     });
   });
-  await page.route('**/api/v1/me', async (route) => {
+  await page.route('**/api/v1/users/me', async (route) => {
     const response = await route.fetch();
     const body = await response.json();
     await route.fulfill({ response, json: { ...body, user: { ...body.user, has_sso_linked: true } } });

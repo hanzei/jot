@@ -114,7 +114,7 @@ function isLocalIdentity(value: unknown): value is LocalIdentity {
 /**
  * Return the persisted local identity, or null when local mode is not enabled.
  * Used by `AuthContext` on startup to land the user directly in the notes UI,
- * bypassing the login/register flow and the `GET /me` session restore.
+ * bypassing the login/register flow and the `GET /users/me` session restore.
  */
 export async function getLocalIdentity(): Promise<LocalIdentity | null> {
   const raw = await SecureStore.getItemAsync(LOCAL_MODE_KEY);
