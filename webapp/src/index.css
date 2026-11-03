@@ -169,9 +169,12 @@ body {
      know, and a tint lets the note colour through. Both values, and every token
      colour, are CODE_PALETTE in shared/src/codeHighlight.ts — mobile draws the
      same ones, and src/utils/__tests__/codeHighlightStyles.test.ts fails if
-     this file drifts from it. */
+     this file drifts from it.
+     Long lines wrap rather than scroll, as on mobile: a scrolling <pre> is a
+     region keyboard users cannot reach, and making it focusable would nest a
+     tab stop inside the preview, which is itself a control (§2.3). */
   .markdown-content pre {
-    @apply bg-[#f3f4f6] dark:bg-[#111827] text-[#111827] dark:text-[#f9fafb] border border-[rgba(0,0,0,0.1)] dark:border-[rgba(255,255,255,0.15)] rounded p-2 mb-2 last:mb-0 overflow-x-auto;
+    @apply bg-[#f3f4f6] dark:bg-[#111827] text-[#111827] dark:text-[#f9fafb] border border-[rgba(0,0,0,0.1)] dark:border-[rgba(255,255,255,0.15)] rounded p-2 mb-2 last:mb-0 whitespace-pre-wrap break-words;
   }
   /* Cards are never highlighted (§2.3), so their code keeps the translucent
      tint that follows the note colour, and the card's own text colour. Must

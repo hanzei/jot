@@ -447,6 +447,17 @@ short of 4.5:1 there. A faint translucent border edges the panel, because the
 light panel is the Gray swatch's own colour and would vanish into a Gray note.
 Inline code keeps its tint; it is never highlighted.
 
+**Long lines wrap; nothing scrolls sideways.** On both clients and both forms, a
+code line wider than the note wraps at the panel's edge, breaking inside a word
+only when the word alone is too wide. Mobile's Text wraps natively; the webapp
+sets `white-space: pre-wrap` on `.markdown-content pre`. A horizontally
+scrolling block is a region keyboard users cannot scroll (axe's
+`scrollable-region-focusable`), and the fix for that — a `tabindex` on each
+`<pre>` — would put tab stops inside the open note's preview, which is itself a
+control that switches to edit mode, and would need `tabindex` on the sanitizer's
+allowlist. Wrapping removes the region instead, at the cost of indentation on a
+wrapped continuation line.
+
 **Cards stay plain.** A card is six clamped lines, the dashboard would pay for
 highlighting every note on it, and the tokens would be too small to read there
 anyway — the same reasoning, on both clients, as cards not linking (§1.1).
