@@ -159,6 +159,13 @@ describe('normalizeInlineTokens', () => {
       ]);
     });
 
+    it('trims whitespace inside an angle-bracket target before encoding it', () => {
+      // Encoded untrimmed, `%20https://…` would be a relative path, not a link out.
+      expect(lex('[a](< https://x.example/a >)')).toEqual([
+        { type: 'link', href: 'https://x.example/a', children: [{ type: 'text', value: 'a' }] },
+      ]);
+    });
+
     it('renders a target that cannot be encoded as its label', () => {
       // A lone surrogate makes encodeURI throw.
       expect(lex('[docs](https://x.example/\uD800)')).toEqual([{ type: 'text', value: 'docs' }]);

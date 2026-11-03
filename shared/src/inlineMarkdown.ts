@@ -126,10 +126,10 @@ function contentOffset(raw: string, content: string): number {
  */
 function normalizeLink(token: InlineMarkdownToken, span: InlineSourceSpan | undefined): InlineNode[] {
   const children = normalizeInlineTokens(token.tokens ?? [], childSourceStart(token, span));
-  const target = token.href ?? '';
-
-  // The scheme is checked on the target as written: encoding turns leading
-  // whitespace into `%20`, which would hide the scheme from the check.
+  // Trimmed first: the angle-bracket form keeps inner whitespace
+  // (`[a](< https://x>)`), and encoded as `%20https://x` that leading space
+  // would turn the link into a relative path on the Jot origin.
+  const target = (token.href ?? '').trim();
   const href = isAllowedLinkHref(target) ? encodeLinkHref(target) : null;
   if (href === null) return children;
 
