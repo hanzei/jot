@@ -18,7 +18,6 @@ import {
   markLocalNoteDeleted,
 } from '../db/noteQueries';
 import { reassignPendingImageUploads } from '../db/imageUploadQueue';
-import { getNote } from '../api/notes';
 import { useCreateNote } from './useNotes';
 import { useOfflineContext } from '../store/OfflineContext';
 import {
@@ -27,6 +26,7 @@ import {
   noteLocalQueryScopeKey,
   notesLocalQueryScopeKey,
 } from './queryKeys';
+import { jot } from '../api/jot';
 
 /**
  * Build a fresh-note creation request from a note's preserved local content, so
@@ -82,7 +82,7 @@ export async function reconcileDiscard(db: SQLiteDatabase, dl: DeadLetteredOpera
     } else {
       await clearNoteSyncFailed(db, dl.note_id);
       try {
-        const serverNote = await getNote(dl.note_id);
+        const serverNote = await jot.notes.getById(dl.note_id);
         await saveServerResponseNote(db, serverNote);
       } catch (err) {
         const status = axios.isAxiosError(err) ? err.response?.status : undefined;

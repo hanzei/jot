@@ -18,7 +18,7 @@ import * as noteQueries from '../src/db/noteQueries';
 import * as syncQueue from '../src/db/syncQueue';
 import * as apiClient from '../src/api/client';
 import * as serverAccounts from '../src/store/serverAccounts';
-import * as notesApi from '../src/api/notes';
+import { jot } from '../src/api/jot';
 
 // ------------------------------------------------------------------
 // SecureStore mock — used to verify local mode is never mutated
@@ -51,6 +51,14 @@ const mockAxiosInstance = {
   get: jest.fn(),
   delete: jest.fn(),
 };
+
+jest.mock('../src/api/jot', () => ({
+  jot: {
+    notes: {
+      getAll: jest.fn().mockResolvedValue([]),
+    },
+  },
+}));
 
 jest.mock('axios', () => ({
   __esModule: true,
@@ -416,9 +424,6 @@ jest.mock('../src/db/syncQueue', () => ({
   saveServerNotesScope: jest.fn().mockResolvedValue(undefined),
 }));
 
-jest.mock('../src/api/notes', () => ({
-  getNotes: jest.fn().mockResolvedValue([]),
-}));
 
 jest.mock('../src/api/client', () => ({
   initializeServerContext: jest.fn().mockResolvedValue(undefined),
@@ -430,6 +435,8 @@ jest.mock('../src/store/serverAccounts', () => ({
   setServerStorageValue: jest.fn().mockResolvedValue(undefined),
 }));
 
+const mockJot = jest.mocked(jot);
+
 const mockGetAllLocalNotes = noteQueries.getAllLocalNotes as jest.MockedFunction<typeof noteQueries.getAllLocalNotes>;
 const mockInsertQueueEntry = syncQueue.insertQueueEntry as jest.MockedFunction<typeof syncQueue.insertQueueEntry>;
 const mockDrainQueue = syncQueue.drainQueue as jest.MockedFunction<typeof syncQueue.drainQueue>;
@@ -440,7 +447,7 @@ const mockInitializeServerContext = apiClient.initializeServerContext as jest.Mo
 const mockSwitchActiveServer = apiClient.switchActiveServer as jest.MockedFunction<typeof apiClient.switchActiveServer>;
 const mockAddServer = serverAccounts.addServer as jest.MockedFunction<typeof serverAccounts.addServer>;
 const mockSetServerStorageValue = serverAccounts.setServerStorageValue as jest.MockedFunction<typeof serverAccounts.setServerStorageValue>;
-const mockGetNotes = notesApi.getNotes as jest.MockedFunction<typeof notesApi.getNotes>;
+const mockGetNotes = mockJot.notes.getAll;
 
 const BASE_IDENTITY = {
   user: {

@@ -1,4 +1,4 @@
-import type { ExportFormat } from '@jot/shared';
+import { apiPaths, apiUrl, type ExportFormat } from '@jot/shared';
 import { getBaseUrl, getStoredSession } from './client';
 import { cachePath, deleteFileIfExists, downloadFile, ensureDirExists, listFileNames } from '../utils/fs';
 
@@ -86,7 +86,7 @@ export async function downloadExportBundle(format: ExportFormat = 'jot', signal?
   armStallTimer();
 
   try {
-    await downloadFile(`${getBaseUrl()}/api/v1/notes/export?format=${format}`, destUri, {
+    await downloadFile(`${apiUrl(apiPaths.notesExport, getBaseUrl())}?format=${format}`, destUri, {
       headers,
       signal: controller.signal,
       onProgress: armStallTimer,

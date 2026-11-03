@@ -9,13 +9,13 @@
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import SettingsScreen from '../src/screens/SettingsScreen';
 import { useAuth } from '../src/store/AuthContext';
-import { updateMe, listSessions } from '../src/api/settings';
 import { cacheAuthProfile } from '../src/api/client';
 import { enqueueOperation } from '../src/db/syncQueue';
 import { markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
 import i18n from '../src/i18n';
 import type { User } from '@jot/shared';
 import { apiErrorBody } from './helpers/apiError';
+import { jot } from '../src/api/jot';
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -32,21 +32,37 @@ function makeNetworkError() {
 
 // ── mocks ──────────────────────────────────────────────────────────────────
 
+jest.mock('../src/api/jot', () => ({
+  jot: {
+    notes: {
+      getAll: jest.fn(),
+    },
+    users: {
+      updateMe: jest.fn(),
+      changePassword: jest.fn(),
+      deleteProfileIcon: jest.fn(),
+    },
+    about: {
+      get: jest.fn(),
+    },
+    sessions: {
+      list: jest.fn(),
+      revoke: jest.fn(),
+    },
+    pats: {
+      list: jest.fn().mockResolvedValue([]),
+      create: jest.fn(),
+      revoke: jest.fn(),
+    },
+  },
+}));
+
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: jest.fn(),
 }));
 
 jest.mock('../src/api/settings', () => ({
-  updateMe: jest.fn(),
-  changePassword: jest.fn(),
   uploadProfileIcon: jest.fn(),
-  deleteProfileIcon: jest.fn(),
-  getAboutInfo: jest.fn(),
-  listSessions: jest.fn(),
-  revokeSession: jest.fn(),
-  listPATs: jest.fn().mockResolvedValue([]),
-  createPAT: jest.fn(),
-  revokePAT: jest.fn(),
 }));
 
 jest.mock('../src/api/client', () => ({
@@ -98,14 +114,13 @@ jest.mock('expo-document-picker', () => ({
 
 jest.mock('../src/api/notes', () => ({
   importFile: jest.fn(),
-  getNotes: jest.fn(),
 }));
 
 // ── fixtures ───────────────────────────────────────────────────────────────
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
-const mockUpdateMe = updateMe as jest.MockedFunction<typeof updateMe>;
-const mockListSessions = listSessions as jest.MockedFunction<typeof listSessions>;
+const mockUpdateMe = jest.mocked(jot.users.updateMe);
+const mockListSessions = jest.mocked(jot.sessions.list);
 const mockCacheAuthProfile = cacheAuthProfile as jest.MockedFunction<typeof cacheAuthProfile>;
 const mockEnqueueOperation = enqueueOperation as jest.MockedFunction<typeof enqueueOperation>;
 

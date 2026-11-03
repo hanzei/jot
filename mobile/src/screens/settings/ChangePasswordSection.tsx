@@ -2,12 +2,12 @@ import { useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, TextInput } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../theme/ThemeContext';
-import { changePassword } from '../../api/settings';
 import { isPasswordTooShort } from '@jot/shared';
 import { displayMessage, extractApiError } from '../../i18n/utils';
 import { styles } from './styles';
 import { useServerConfig } from '../../hooks/useServerConfig';
 import { useAuth } from '../../store/AuthContext';
+import { jot } from '../../api/jot';
 
 // Translation keys for the two variants of the card.
 const CHANGE_PASSWORD_KEYS = {
@@ -66,7 +66,7 @@ export default function ChangePasswordSection() {
 
     setPasswordSaving(true);
     try {
-      await changePassword(hasPassword
+      await jot.users.changePassword(hasPassword
         ? { current_password: currentPassword, new_password: newPassword }
         : { new_password: newPassword });
       setPasswordSuccess(keys.success);

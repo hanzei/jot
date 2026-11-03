@@ -2,15 +2,6 @@ import { useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import {
-  getLabels,
-  createLabel,
-  addLabelToNote,
-  removeLabelFromNote,
-  renameLabel,
-  deleteLabel,
-} from '../api/labels';
-import { getNotes } from '../api/notes';
-import {
   renameLabelInLocalNotes,
   deleteLabelFromLocalNotes,
   addLabelToLocalNote,
@@ -34,13 +25,14 @@ import { useAuth } from '../store/AuthContext';
 import { isLocalModeActive } from '../store/localMode';
 import { isServerSwitchInProgress } from '../api/client';
 import { LocalizedError } from '../i18n/utils';
-import type { Label, LabelWithCount } from '@jot/shared';
+import { apiPaths, type Label, type LabelWithCount } from '@jot/shared';
 import {
   labelsQueryKey,
   noteLocalQueryKey,
   noteLocalQueryScopeKey,
   notesLocalQueryScopeKey,
 } from './queryKeys';
+import { jot } from '../api/jot';
 
 type LabelSyncScope = { archived?: true; trashed?: true; my_tasks?: true } | undefined;
 
@@ -74,7 +66,7 @@ async function syncLocalNotesAfterLabelMutation(db: SQLiteDatabase) {
 
   for (const scope of scopes) {
     try {
-      const notes = await getNotes(scope);
+      const notes = await jot.notes.getAll(scope);
       // saveServerNotes re-reads the pending set per scope, so an edit queued
       // mid-loop is gated by the scope saved after it, not just a stale snapshot
       // taken before the (multi-fetch) loop began (#487).
@@ -180,7 +172,7 @@ export function useLabels() {
     return labels.map((label) => ({ ...label, note_count: counts[label.id] ?? 0 }));
   }, [db]);
   const serverFn = useCallback(async (): Promise<LabelWithCount[]> => {
-    const labels = await getLabels();
+    const labels = await jot.labels.getAll();
     await saveServerLabels(db, labels);
     return labels;
   }, [db]);
@@ -213,7 +205,7 @@ export async function resolveLocalLabel(db: SQLiteDatabase, name: string, userId
   const label = buildLocalLabel(name, userId);
   await enqueueOperation(db, {
     operation: 'createLabel',
-    endpoint: '/labels',
+    endpoint: apiPaths.labels,
     method: 'POST',
     body: { id: label.id, name },
   });
@@ -234,7 +226,7 @@ export function useCreateLabel() {
       if (!trimmed) throw new LocalizedError('labels.nameRequired', 'Label name must not be empty');
       if (isOnlineWriteAllowed(isConnected)) {
         try {
-          const serverLabel = await createLabel(trimmed);
+          const serverLabel = await jot.labels.create(trimmed);
           // Persist to the canonical label store so the new (empty) label shows in
           // the drawer immediately — it isn't attached to any note yet (#691).
           await upsertLabel(db, serverLabel);
@@ -254,7 +246,7 @@ export function useCreateLabel() {
       const localLabel = buildLocalLabel(trimmed, user?.id ?? '');
       await enqueueOperation(db, {
         operation: 'createLabel',
-        endpoint: '/labels',
+        endpoint: apiPaths.labels,
         method: 'POST',
         body: { id: localLabel.id, name: trimmed },
       });
@@ -287,7 +279,7 @@ export function useAddLabelToNote() {
       const pendingCreate = await isNotePendingCreate(db, noteId);
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
-          const updatedNote = await addLabelToNote(noteId, trimmed);
+          const updatedNote = await jot.notes.addLabel(noteId, trimmed);
           await saveServerResponseNote(db, updatedNote);
           // The server may have minted a brand-new label; persist it to the store
           // so it shows in the drawer immediately (#691).
@@ -311,7 +303,7 @@ export function useAddLabelToNote() {
       await addLabelToLocalNote(db, noteId, label);
       await enqueueOperation(db, {
         operation: 'addLabelToNote',
-        endpoint: `/notes/${noteId}/labels`,
+        endpoint: apiPaths.noteLabels(noteId),
         method: 'POST',
         body: { name: trimmed },
       });
@@ -340,7 +332,7 @@ export function useRemoveLabelFromNote() {
       const pendingCreate = await isNotePendingCreate(db, noteId);
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
-          const updatedNote = await removeLabelFromNote(noteId, labelId);
+          const updatedNote = await jot.notes.removeLabel(noteId, labelId);
           await saveServerResponseNote(db, updatedNote);
           return updatedNote;
         } catch (err) {
@@ -359,7 +351,7 @@ export function useRemoveLabelFromNote() {
       await removeLabelFromLocalNote(db, noteId, labelId);
       await enqueueOperation(db, {
         operation: 'removeLabelFromNote',
-        endpoint: `/notes/${noteId}/labels/${labelId}`,
+        endpoint: apiPaths.noteLabel(noteId, labelId),
         method: 'DELETE',
       });
       return note;
@@ -391,7 +383,7 @@ export function useRenameLabel() {
       const pendingCreate = (await getPendingLabelIds(db)).has(labelId);
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
-          const updatedLabel = await renameLabel(labelId, trimmed);
+          const updatedLabel = await jot.labels.rename(labelId, trimmed);
           await renameStoredLabel(db, labelId, updatedLabel.name);
           try {
             await renameLabelInLocalNotes(db, labelId, updatedLabel.name);
@@ -418,7 +410,7 @@ export function useRenameLabel() {
       await renameLabelInLocalNotes(db, labelId, trimmed);
       await enqueueOperation(db, {
         operation: 'renameLabel',
-        endpoint: `/labels/${labelId}`,
+        endpoint: apiPaths.label(labelId),
         method: 'PATCH',
         body: { name: trimmed },
       });
@@ -448,7 +440,7 @@ export function useDeleteLabel() {
       const pendingCreate = (await getPendingLabelIds(db)).has(labelId);
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
-          await deleteLabel(labelId);
+          await jot.labels.delete(labelId);
           await deleteStoredLabel(db, labelId);
           try {
             await deleteLabelFromLocalNotes(db, labelId);
@@ -475,7 +467,7 @@ export function useDeleteLabel() {
       await deleteLabelFromLocalNotes(db, labelId);
       await enqueueOperation(db, {
         operation: 'deleteLabel',
-        endpoint: `/labels/${labelId}`,
+        endpoint: apiPaths.label(labelId),
         method: 'DELETE',
       });
     },

@@ -250,7 +250,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   // continuations, so an effect can call them without setting state
   // synchronously (react-hooks/set-state-in-effect).
   const loadUsers = useCallback(() => {
-    return usersApi.search()
+    return usersApi.list()
       .then(usersData => {
         if (!isMountedRef.current) return;
         const map = new Map<string, User>();
@@ -281,19 +281,19 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
 
       if (showBin && debouncedSearchQuery) {
         const [loadedNotes, allTrashedNotes] = await Promise.all([
-          notes.getAll(showArchived, debouncedSearchQuery, showBin, selectedLabelId ?? '', showMyTasks),
-          notes.getAll(false, '', true),
+          notes.getAll({ archived: showArchived, search: debouncedSearchQuery, trashed: showBin, label: selectedLabelId ?? undefined, my_tasks: showMyTasks }),
+          notes.getAll({ archived: false, search: '', trashed: true }),
         ]);
         notesData = loadedNotes;
         nextTrashCount = allTrashedNotes.length;
       } else if (includeArchivedSplit) {
         const [activeMatches, archivedMatches] = await Promise.all([
-          notes.getAll(false, debouncedSearchQuery, false, selectedLabelId ?? '', false),
-          notes.getAll(true, debouncedSearchQuery, false, selectedLabelId ?? '', false),
+          notes.getAll({ archived: false, search: debouncedSearchQuery, trashed: false, label: selectedLabelId ?? undefined, my_tasks: false }),
+          notes.getAll({ archived: true, search: debouncedSearchQuery, trashed: false, label: selectedLabelId ?? undefined, my_tasks: false }),
         ]);
         notesData = [...activeMatches, ...archivedMatches];
       } else {
-        notesData = await notes.getAll(showArchived, debouncedSearchQuery, showBin, selectedLabelId ?? '', showMyTasks);
+        notesData = await notes.getAll({ archived: showArchived, search: debouncedSearchQuery, trashed: showBin, label: selectedLabelId ?? undefined, my_tasks: showMyTasks });
         if (showBin) {
           nextTrashCount = notesData.length;
         }

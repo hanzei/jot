@@ -10,7 +10,6 @@
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import ShareScreen from '../src/screens/ShareScreen';
-import { searchUsers } from '../src/api/users';
 import { useNoteShares, useShareNote, useUnshareNote, useLeaveNote } from '../src/hooks/useNotes';
 import { useNetworkStatus } from '../src/hooks/useNetworkStatus';
 import { useConfirm } from '../src/hooks/useConfirm';
@@ -19,8 +18,17 @@ import { useAuth } from '../src/store/AuthContext';
 import { getLocalShareHistory } from '../src/db/noteQueries';
 import { isServerReachable } from '../src/api/serverReachability';
 import type { NoteShare, User } from '@jot/shared';
+import { jot } from '../src/api/jot';
 
 const mockPopToTop = jest.fn();
+
+jest.mock('../src/api/jot', () => ({
+  jot: {
+    users: {
+      search: jest.fn(),
+    },
+  },
+}));
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ goBack: jest.fn(), popToTop: mockPopToTop }),
@@ -36,9 +44,6 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
-jest.mock('../src/api/users', () => ({
-  searchUsers: jest.fn(),
-}));
 
 jest.mock('../src/hooks/useNotes', () => ({
   useNoteShares: jest.fn(),
@@ -71,7 +76,7 @@ jest.mock('../src/api/serverReachability', () => ({
   isServerReachable: jest.fn(),
 }));
 
-const mockSearchUsers = searchUsers as jest.MockedFunction<typeof searchUsers>;
+const mockSearchUsers = jest.mocked(jot.users.search);
 const mockUseNoteShares = useNoteShares as jest.MockedFunction<typeof useNoteShares>;
 const mockUseShareNote = useShareNote as jest.MockedFunction<typeof useShareNote>;
 const mockUseUnshareNote = useUnshareNote as jest.MockedFunction<typeof useUnshareNote>;

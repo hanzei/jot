@@ -5,7 +5,6 @@ import axios from 'axios';
 import { getLocalNotes, getLocalNote, markLocalNoteDeleted } from '../db/noteQueries';
 import { isClosedDatabaseError } from '../db/errors';
 import { getProtectedNoteIds, saveServerNote, saveServerNotesScope } from '../db/syncQueue';
-import { getNotes, getNote } from '../api/notes';
 import type { GetNotesParams, Note } from '@jot/shared';
 import { useNetworkStatus } from './useNetworkStatus';
 import { isLocalModeActive } from '../store/localMode';
@@ -17,6 +16,7 @@ import {
   notesLocalQueryKey,
   notesLocalQueryScopeKey,
 } from './queryKeys';
+import { jot } from '../api/jot';
 
 export function useOfflineNotes(params?: GetNotesParams, options?: { enabled?: boolean }) {
   const db = useSQLiteContext();
@@ -51,7 +51,7 @@ export function useOfflineNotes(params?: GetNotesParams, options?: { enabled?: b
     if (isSyncingRef.current) return;
     isSyncingRef.current = true;
     try {
-      const serverNotes = await retrySync(() => getNotes(paramsRef.current), {
+      const serverNotes = await retrySync(() => jot.notes.getAll(paramsRef.current), {
         isConnected: () => isConnectedRef.current,
         canceller,
       });
@@ -150,7 +150,7 @@ export function useOfflineNote(id: string | null) {
     // Local mode is the source of truth: there is no server to refresh from (#514).
     if (!id || isLocalModeActive()) return;
     try {
-      const serverNote = await retrySync(() => getNote(id), {
+      const serverNote = await retrySync(() => jot.notes.getById(id), {
         isConnected: () => isConnectedRef.current,
         canceller,
       });
