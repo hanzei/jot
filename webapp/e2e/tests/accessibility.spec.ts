@@ -278,11 +278,20 @@ for (const theme of THEMES) {
       await dashboardPage.openTextNote('A11y long code');
       await expectTheme(page, theme);
 
+      // Measured on the preview, not the <pre>: a block that grew wider than
+      // the note would not overflow itself, only its container.
       const preview = '[role="dialog"] [data-testid="note-content-preview"]';
-      const block = page.locator(`${preview} pre`);
-      await expect(block).toBeVisible();
+      await expect(page.locator(`${preview} pre`)).toBeVisible();
       await expectNoViolations(page, { include: [preview] });
-      expect(await block.evaluate((el) => el.scrollWidth - el.clientWidth), 'code block scrolls sideways').toBeLessThanOrEqual(0);
+      expect(await page.locator(preview).evaluate((el) => el.scrollWidth - el.clientWidth), 'code scrolls sideways').toBeLessThanOrEqual(0);
+
+      // Cards share the block styles; one is a single control, so a scroll
+      // region inside it would be unreachable too.
+      await dashboardPage.closeNoteModal();
+      const card = dashboardPage.noteCardByText('A11y long code');
+      await expect(card.locator('pre')).toBeVisible();
+      await expectNoViolations(page, { include: ['[data-testid="note-card"]'] });
+      expect(await card.locator('.markdown-content').evaluate((el) => el.scrollWidth - el.clientWidth), 'card code scrolls sideways').toBeLessThanOrEqual(0);
     });
 
     test('settings page has no WCAG A/AA violations', async ({ page, authenticatedUser, settingsPage }) => {

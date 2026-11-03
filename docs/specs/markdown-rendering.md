@@ -450,7 +450,8 @@ Inline code keeps its tint; it is never highlighted.
 **Long lines wrap; nothing scrolls sideways.** On both clients and both forms, a
 code line wider than the note wraps at the panel's edge, breaking inside a word
 only when the word alone is too wide. Mobile's Text wraps natively; the webapp
-sets `white-space: pre-wrap` on `.markdown-content pre`. A horizontally
+sets `white-space: pre-wrap` and `overflow-wrap: anywhere` on
+`.markdown-content pre`. A horizontally
 scrolling block is a region keyboard users cannot scroll (axe's
 `scrollable-region-focusable`), and the fix for that — a `tabindex` on each
 `<pre>` — would put tab stops inside the open note's preview, which is itself a
@@ -700,6 +701,14 @@ here so the next person does not have to rediscover them.
   highlight.js minor and would ship a second copy. The HTML is public and closed
   — `<span class="…">`, `</span>`, and five escaped characters — so a scan reads
   it without an HTML parser, which mobile does not have.
+- **A webapp code block must not scroll sideways.** `overflow-x: auto` on
+  `<pre>` makes a region axe reports as `scrollable-region-focusable`, and the
+  usual fix, `tabindex="0"` on the block, would put a tab stop inside the open
+  note's preview and on every card — both are themselves controls. Lines wrap
+  instead (§2.3). `overflow-wrap: anywhere` rather than `break-word`, because
+  only `anywhere` lowers the block's min-content width, so a single long token
+  cannot widen a content-sized ancestor. `accessibility.spec.ts` measures the
+  container, not the `<pre>`, for the same reason.
 - **Webapp tokens carry `data-code`, not `class`.** A token is
   `<span data-code="keyword">`, styled by an attribute selector in `index.css`.
   DOMPurify keeps `data-*` attributes by default, so only `span` joins the
