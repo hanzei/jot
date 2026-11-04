@@ -1,8 +1,9 @@
-import { render, fireEvent, act } from '@testing-library/react-native';
+import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
 import {
   mockUseRoute,
   mockNavigationAddListener,
   mockUseOfflineNote,
+  mockUpdateMutateAsync,
 } from './helpers/noteEditorScreenTestSetup';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 
@@ -71,6 +72,45 @@ describe('NoteEditorScreen read-mode task checkboxes', () => {
     });
 
     expect(getByTestId('note-content-input').props.value).toBe('- [x] first\n- [x] second');
+  });
+
+  it('schedules a save of the toggled content', async () => {
+    mockUpdateMutateAsync.mockResolvedValue({});
+    const { getByLabelText, getByTestId } = await render(<NoteEditorScreen />);
+
+    await act(async () => {
+      await fireEvent.press(getByLabelText('first'));
+    });
+    // Leaving the screen flushes the pending autosave.
+    const beforeRemove = mockNavigationAddListener.mock.calls
+      .filter((call) => call[0] === 'beforeRemove')
+      .map((call) => call[1] as (e: { preventDefault: () => void; data: { action: object } }) => void)
+      .pop();
+    await act(async () => {
+      beforeRemove?.({ preventDefault: jest.fn(), data: { action: { type: 'GO_BACK' } } });
+    });
+
+    await waitFor(() => expect(mockUpdateMutateAsync).toHaveBeenCalled());
+    expect(JSON.stringify(mockUpdateMutateAsync.mock.calls)).toContain('- [x] first\\n- [x] second');
+    expect(getByTestId('content-preview')).toBeTruthy();
+  });
+
+  it('keeps checkboxes reachable by screen readers and offers a separate edit control', async () => {
+    const { getByTestId, getByLabelText } = await render(<NoteEditorScreen />);
+
+    expect(getByTestId('content-preview').props.accessible).toBe(false);
+    await act(async () => {
+      await fireEvent.press(getByLabelText('note.editContent'));
+    });
+    expect(getByTestId('note-content-input')).toBeTruthy();
+  });
+
+  it('keeps the preview itself accessible when there are no checkboxes', async () => {
+    mockUseOfflineNote.mockReturnValue({ data: makeNote({ content: 'plain text' }) });
+    const { getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
+
+    expect(getByTestId('content-preview').props.accessible).not.toBe(false);
+    expect(queryByTestId('edit-content')).toBeNull();
   });
 
   it('leaves checkboxes as plain text in a trashed note', async () => {

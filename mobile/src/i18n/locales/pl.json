@@ -266,6 +266,7 @@
     "typeList": "Lista",
     "titlePlaceholder": "Tytuł notatki...",
     "contentPlaceholder": "Zapisz notatkę...",
+    "editContent": "Edytuj notatkę",
     "addItem": "Dodaj element",
     "failedSaveChanges": "Nie udało się zapisać zmian. Dotknij, aby ponowić.",
     "menuOptions": "Opcje notatki",

@@ -483,7 +483,7 @@ describe('markdown card preview', () => {
 describe('task checkboxes (docs/specs/markdown-rendering.md §2.4)', () => {
   it('stay text unless the surface opts in', async () => {
     const { queryByTestId } = await render(<Markdown content="- [ ] todo" />);
-    expect(queryByTestId('task-checkbox-5')).toBeNull();
+    expect(queryByTestId('task-checkbox-3')).toBeNull();
   });
 
   it('become tappable with the marker offset when the surface opts in', async () => {

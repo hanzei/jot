@@ -848,6 +848,10 @@ export default function NoteEditorScreen() {
     [contentRef, markDirtyAndScheduleUpdate, setContent],
   );
 
+  // Checkboxes are only tappable when the note is editable; a stray `[ ]` in
+  // prose only costs a redundant screen-reader button.
+  const hasTappableTasks = !isReadOnly && /\[[ xX]\]/.test(content);
+
   const handleTitleSubmit = useCallback(() => {
     if (noteTypeRef.current === 'text') {
       contentInputRef.current?.focus();
@@ -1575,9 +1579,14 @@ export default function NoteEditorScreen() {
                 testID="note-content-input"
               />
             ) : (
+              <>
               <TouchableOpacity
                 onPress={isReadOnly ? undefined : () => setIsEditingContent(true)}
                 disabled={isReadOnly}
+                // An accessible touchable is one screen-reader element and can hide
+                // the checkboxes inside it, so with tappable checkboxes it stops
+                // being one; `edit-content` below carries its role instead.
+                accessible={!hasTappableTasks}
                 activeOpacity={1}
                 testID="content-preview"
                 style={styles.contentPreview}
@@ -1594,6 +1603,16 @@ export default function NoteEditorScreen() {
                   </Text>
                 )}
               </TouchableOpacity>
+              {hasTappableTasks && (
+                <TouchableOpacity
+                  onPress={() => setIsEditingContent(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('note.editContent')}
+                  style={styles.screenReaderOnly}
+                  testID="edit-content"
+                />
+              )}
+              </>
             )}
 
             {/* iOS: formatting toolbar as InputAccessoryView (docks above keyboard).

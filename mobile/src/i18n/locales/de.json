@@ -266,6 +266,7 @@
     "typeList": "Liste",
     "titlePlaceholder": "Notiz-Titel...",
     "contentPlaceholder": "Eine Notiz aufschreiben...",
+    "editContent": "Notiz bearbeiten",
     "addItem": "Element hinzufügen",
     "failedSaveChanges": "Änderungen konnten nicht gespeichert werden. Tippe zum Wiederholen.",
     "menuOptions": "Notizoptionen",
