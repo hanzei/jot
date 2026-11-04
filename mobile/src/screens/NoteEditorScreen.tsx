@@ -239,6 +239,11 @@ export default function NoteEditorScreen() {
   useEffect(() => {
     const sub = Keyboard.addListener('keyboardDidHide', () => {
       setIsEditingContent(false);
+      // Android's back gesture closes the keyboard but leaves the TextInput
+      // focused, so the caret keeps blinking in a row with no keyboard. Blur it
+      // to match what tapping elsewhere does. Keyboard.dismiss() only blurs while
+      // the keyboard is visible, so go through the focus state directly.
+      if (Platform.OS === 'android') TextInput.State.currentlyFocusedInput()?.blur();
     });
     return () => sub.remove();
   }, []);
