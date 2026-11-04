@@ -211,57 +211,6 @@ func normalizeItemOrderTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, n
 	return positions, nil
 }
 
-func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID, actorID, text string, position int, completed bool, parentID string, assignedTo string) (*NoteItem, error) {
-	itemID, err := generateID()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate item ID: %w", err)
-	}
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	now := Timestamp(Now())
-
-	if err = validateParentRefTx(ctx, tx, s.d, noteID, itemID, parentID); err != nil {
-		return nil, err
-	}
-
-	query := s.d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, parent_id, assigned_to, created_at, updated_at)
-			  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`)
-	var item NoteItem
-	if err = tx.QueryRowContext(ctx, query, itemID, noteID, text, position, completed, nullableParentID(parentID),
-		nullableAssignedTo(assignedTo), now, now,
-	).Scan(
-		&item.CreatedAt, &item.UpdatedAt,
-	); err != nil {
-		return nil, fmt.Errorf("failed to create note item: %w", err)
-	}
-
-	positions, err := normalizeItemOrderTx(ctx, tx, s.d, noteID, now)
-	if err != nil {
-		return nil, err
-	}
-	if err = touchNoteTx(ctx, tx, s.d, noteID, actorID, now); err != nil {
-		return nil, err
-	}
-	if err = tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit create note item: %w", err)
-	}
-
-	item.ID = itemID
-	item.NoteID = noteID
-	item.Text = text
-	item.Position = positions[itemID]
-	item.Completed = completed
-	item.ParentID = parentIDPtr(nullableParentID(parentID))
-	item.AssignedTo = assignedTo
-
-	return &item, nil
-}
-
 // CreateItemWithID inserts a list item using a caller-supplied ID. Returns
 // ErrNoteItemExists if an item with that ID already exists, and bumps the
 // parent note's updated_at. When maxItems > 0 the note's item count is checked
@@ -445,41 +394,6 @@ func patchChangesItem(current *NoteItem, currentParent, text string, completed b
 		(position != nil && *position != current.Position)
 }
 
-// DeleteItemFromNote deletes a single item scoped to its note and bumps the
-// parent note's updated_at. Returns ErrNoteItemNotFound if no such item exists.
-func (s *noteStore) DeleteItemFromNote(ctx context.Context, noteID, actorID, itemID string) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	now := Timestamp(Now())
-
-	result, err := tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`DELETE FROM note_items WHERE id = ? AND note_id = ?`),
-		itemID, noteID,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to delete note item: %w", err)
-	}
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-	if rowsAffected == 0 {
-		return ErrNoteItemNotFound
-	}
-
-	if err = touchNoteTx(ctx, tx, s.d, noteID, actorID, now); err != nil {
-		return err
-	}
-	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("commit delete note item: %w", err)
-	}
-	return nil
-}
-
 // ReorderItems sets each item's position to its index in itemIDs, then
 // normalizes per normalizeItemOrderTx so every child still directly follows
 // its parent. Every ID must belong to the note; otherwise ErrNoteItemNotFound
@@ -640,13 +554,14 @@ func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID, actorID strin
 // single transaction and returns the note's remaining items so callers reconcile
 // from one response. As defense-in-depth against a drifted row, an item orphaned
 // by the delete (its parent was among those removed) is re-homed to top level to
-// preserve the parent-reference invariant. Positions are left with gaps, matching
-// DeleteItemFromNote. IDs that do not belong to the note are ignored. The note's
+// preserve the parent-reference invariant. Positions are left with gaps. IDs that
+// do not belong to the note are ignored; the returned count is the number of rows
+// actually deleted, so single-item callers can report not-found on 0. The note's
 // updated_at is bumped only when at least one row was actually deleted.
-func (s *noteStore) DeleteItems(ctx context.Context, noteID, actorID string, itemIDs []string) ([]NoteItem, error) {
+func (s *noteStore) DeleteItems(ctx context.Context, noteID, actorID string, itemIDs []string) ([]NoteItem, int, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, 0, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -659,11 +574,11 @@ func (s *noteStore) DeleteItems(ctx context.Context, noteID, actorID string, ite
 			noteID, itemID,
 		)
 		if execErr != nil {
-			return nil, fmt.Errorf("failed to delete note item: %w", execErr)
+			return nil, 0, fmt.Errorf("failed to delete note item: %w", execErr)
 		}
 		n, raErr := res.RowsAffected()
 		if raErr != nil {
-			return nil, fmt.Errorf("failed to get rows affected: %w", raErr)
+			return nil, 0, fmt.Errorf("failed to get rows affected: %w", raErr)
 		}
 		deleted += n
 	}
@@ -676,17 +591,21 @@ func (s *noteStore) DeleteItems(ctx context.Context, noteID, actorID string, ite
 				  AND parent_id NOT IN (SELECT id FROM note_items WHERE note_id = ?)`),
 			now, noteID, noteID,
 		); err != nil {
-			return nil, fmt.Errorf("failed to re-home orphaned note items: %w", err)
+			return nil, 0, fmt.Errorf("failed to re-home orphaned note items: %w", err)
 		}
 
 		// Only bump the note when something was actually deleted.
 		if err = touchNoteTx(ctx, tx, s.d, noteID, actorID, now); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 	}
 	if err = tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit delete note items: %w", err)
+		return nil, 0, fmt.Errorf("commit delete note items: %w", err)
 	}
 
-	return s.getItemsByNoteID(ctx, noteID)
+	items, err := s.getItemsByNoteID(ctx, noteID)
+	if err != nil {
+		return nil, 0, err
+	}
+	return items, int(deleted), nil
 }

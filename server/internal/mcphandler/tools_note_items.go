@@ -216,8 +216,12 @@ func (h *Handler) handleDeleteNoteItem(userID string) mcp.ToolHandlerFor[deleteN
 		if in.ItemID == "" {
 			return toolError("item_id is required")
 		}
-		if err := h.noteStore.DeleteItemFromNote(ctx, in.NoteID, userID, in.ItemID); err != nil {
+		_, deleted, err := h.noteStore.DeleteItems(ctx, in.NoteID, userID, []string{in.ItemID})
+		if err != nil {
 			return toolError("delete note item: %w", err)
+		}
+		if deleted == 0 {
+			return toolError("delete note item: %w", models.ErrNoteItemNotFound)
 		}
 		h.events.NoteUpdated(ctx, in.NoteID, nil, userID, true)
 		return toolDeletedResult(in.ItemID, map[string]any{"note_id": in.NoteID})
