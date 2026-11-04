@@ -5,7 +5,6 @@ import {
   normalizeInlineTokens,
   flattenInlineNodes,
   inlineRendersAsSource,
-  taskMarkerOffsets,
   BLOCK_LEXER_OPTIONS,
   INLINE_LEXER_OPTIONS,
   highlightCode,
@@ -54,9 +53,10 @@ const ALLOWED_TAGS = [
 // allowlist was quietly causing.
 const ALLOWED_ATTR = ['href', 'target', 'rel', 'start'];
 
-// Interactive task checkboxes (`taskToggle`). Only the renderer emits an
+// Interactive task checkboxes (`renderInteractiveMarkdown`). Only the renderer emits an
 // <input>: raw HTML in a note has already been degraded to text by the shared
 // normalizer, so none can come from the note itself.
+const TASK_TAGS = [...ALLOWED_TAGS, 'input'];
 const TASK_ATTR = [...ALLOWED_ATTR, 'type', 'checked', 'aria-label'];
 
 /**
@@ -84,23 +84,15 @@ export interface MarkdownRenderOptions {
    * See docs/specs/markdown-rendering.md §2.3.
    */
   highlight?: boolean;
-  /**
-   * Whether task-list checkboxes render as real checkboxes. Each carries
-   * `data-task-offset`, its marker's offset for `toggleTaskMarkerAt`, and
-   * `data-task-index`, its position among the note's checkboxes. Only the open
-   * note's preview passes `true`; note cards keep ☐ / ☑ text (docs/specs §2.4).
-   * A checkbox whose marker cannot be located in the source stays ☐ / ☑ text.
-   */
-  taskToggle?: boolean;
 }
 
-/**
- * Render-time state for one `renderMarkdown` call: the options that reach
- * every node, and the running checkbox index when `taskToggle` is on.
- */
+/** Render-time state for one block render: its options, and what it emitted. */
 interface BlockRenderContext {
   highlight: boolean;
-  tasks: { offsets: (number | null)[]; next: number } | null;
+  /** Whether located task markers render as checkboxes (`renderInteractiveMarkdown`). */
+  tasks: boolean;
+  /** How many checkboxes were emitted. */
+  taskCount: number;
 }
 
 /**
@@ -172,17 +164,38 @@ function renderBlockNodes(nodes: BlockNode[], ctx: BlockRenderContext): string {
 
 export function renderMarkdown(
   content: string,
-  { links = true, highlight = true, taskToggle = false }: MarkdownRenderOptions = {},
+  { links = true, highlight = true }: MarkdownRenderOptions = {},
 ): string {
   if (!content.trim()) return '';
-  const tokens = Lexer.lex(content, BLOCK_LEXER_OPTIONS);
-  const tasks = taskToggle ? { offsets: taskMarkerOffsets(content, tokens), next: 0 } : null;
-  const nodes = normalizeBlockTokens(tokens);
-  const tags = links ? ALLOWED_TAGS : NO_LINK_TAGS;
-  return DOMPurify.sanitize(renderBlockNodes(nodes, { highlight, tasks }), {
-    ALLOWED_TAGS: taskToggle ? [...tags, 'input'] : tags,
-    ALLOWED_ATTR: taskToggle ? TASK_ATTR : ALLOWED_ATTR,
+  const nodes = normalizeBlockTokens(Lexer.lex(content, BLOCK_LEXER_OPTIONS));
+  return DOMPurify.sanitize(renderBlockNodes(nodes, { highlight, tasks: false, taskCount: 0 }), {
+    ALLOWED_TAGS: links ? ALLOWED_TAGS : NO_LINK_TAGS,
+    ALLOWED_ATTR,
   });
+}
+
+export interface InteractiveMarkdownRender {
+  html: string;
+  /** Whether `html` holds any task checkbox. */
+  hasTasks: boolean;
+}
+
+/**
+ * Renders text-note content for the open note's preview, where task-list
+ * markers are real checkboxes (docs/specs §2.4). Each carries
+ * `data-task-offset`, its marker's offset for `toggleTaskMarkerAt`; a marker
+ * that cannot be located safely stays ☐ / ☑ text. Note cards use
+ * `renderMarkdown`, which never emits a checkbox.
+ */
+export function renderInteractiveMarkdown(content: string): InteractiveMarkdownRender {
+  if (!content.trim()) return { html: '', hasTasks: false };
+  const nodes = normalizeBlockTokens(Lexer.lex(content, BLOCK_LEXER_OPTIONS), { taskSource: content });
+  const ctx: BlockRenderContext = { highlight: true, tasks: true, taskCount: 0 };
+  const html = DOMPurify.sanitize(renderBlockNodes(nodes, ctx), {
+    ALLOWED_TAGS: TASK_TAGS,
+    ALLOWED_ATTR: TASK_ATTR,
+  });
+  return { html, hasTasks: ctx.taskCount > 0 };
 }
 
 // List-item text renders an inline-only subset — see shared/src/inlineMarkdown.ts
@@ -192,31 +205,17 @@ export function renderMarkdown(
 const INLINE_ALLOWED_TAGS = ['strong', 'em', 'del', 'code', 'a', 'br'];
 const INLINE_NO_LINK_TAGS = INLINE_ALLOWED_TAGS.filter((tag) => tag !== 'a');
 
-function renderTaskCheckbox(
-  checked: boolean,
-  rest: InlineNode[],
-  tasks: NonNullable<BlockRenderContext['tasks']>,
-): string | null {
-  const index = tasks.next++;
-  const offset = tasks.offsets[index] ?? null;
-  if (offset === null) return null;
-  // Named by the item's own text, as the eye reads it.
-  const label = escapeHtml(flattenInlineNodes(rest).trim());
-  return `<input type="checkbox" data-task-index="${index}" data-task-offset="${offset}"${checked ? ' checked' : ''} aria-label="${label}"> `;
-}
-
 function renderInlineNodes(nodes: InlineNode[], ctx?: BlockRenderContext): string {
   let html = '';
 
-  for (const [i, node] of nodes.entries()) {
+  for (const node of nodes) {
     switch (node.type) {
       case 'text':
-        if (node.task && ctx?.tasks) {
-          const checkbox = renderTaskCheckbox(node.task.checked, nodes.slice(i + 1), ctx.tasks);
-          if (checkbox !== null) {
-            html += checkbox;
-            break;
-          }
+        if (node.task && node.task.offset !== null && ctx?.tasks) {
+          const { checked, offset, label } = node.task;
+          ctx.taskCount++;
+          html += `<input type="checkbox" data-task-offset="${offset}"${checked ? ' checked' : ''} aria-label="${escapeHtml(label)}"> `;
+          break;
         }
         // A newline that survived into a text node is a line break the reader
         // should see — HTML would collapse it to a space. Only literal source

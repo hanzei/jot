@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, distinctCompletedTexts, findSuggestedItem, generateId, reviveSuggestedItem, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, toggleTaskMarkerAt, completedCascadeScope, completedPriorById, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
-import { renderMarkdown, inlineMarkdownToText } from '@/utils/markdown';
+import { renderMarkdown, renderInteractiveMarkdown, inlineMarkdownToText, type InteractiveMarkdownRender } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
 import NoteImageGallery from '@/components/NoteImageGallery';
 import LetterAvatar from '@/components/LetterAvatar';
@@ -164,7 +164,7 @@ interface NoteModalProps {
   initialContent?: string | undefined;
 }
 
-/** A task checkbox in the rendered preview (renderMarkdown's `taskToggle`). */
+/** A task checkbox in the rendered preview (`renderInteractiveMarkdown`). */
 function isTaskCheckbox(target: EventTarget): target is HTMLInputElement {
   return target instanceof HTMLInputElement && target.dataset.taskOffset !== undefined;
 }
@@ -669,47 +669,47 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
   // Skipped while the textarea replaces the preview: it would otherwise lex and
   // syntax-highlight the whole note on every keystroke for nothing on screen.
   const isEditingText = isEditingContent && !isReadOnly;
-  const renderedContent = useMemo(() => {
-    if (isEditingText || !content?.trim()) return '';
-    const md = renderMarkdown(content, { taskToggle: !isReadOnly });
-    if (md) return md;
-    return content.replace(/[&<>"']/g, (c) => (
+  // A note in the bin is read-only, so its task markers stay ☐ / ☑ text.
+  const { html: renderedContent, hasTasks: previewHasTasks } = useMemo((): InteractiveMarkdownRender => {
+    if (isEditingText || !content?.trim()) return { html: '', hasTasks: false };
+    const md = isReadOnly ? { html: renderMarkdown(content), hasTasks: false } : renderInteractiveMarkdown(content);
+    if (md.html) return md;
+    const escaped = content.replace(/[&<>"']/g, (c) => (
       { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c] ?? c
     ));
+    return { html: escaped, hasTasks: false };
   }, [content, isEditingText, isReadOnly]);
 
   // Task checkboxes in the preview (docs/specs/markdown-rendering.md §2.4).
   // A toggle rewrites one character of `content`, which re-renders the
-  // preview's HTML and so replaces the checkbox that had focus; the index is
-  // kept here so the effect below can hand focus to its replacement.
+  // preview's HTML and so replaces the checkbox that had focus. A toggle swaps
+  // one character for one, so the replacement has the same offset; it is kept
+  // here so the effect below can hand focus to it.
   const previewRef = useRef<HTMLDivElement>(null);
-  const focusTaskIndexRef = useRef<number | null>(null);
+  const focusTaskOffsetRef = useRef<string | null>(null);
   const toggleTask = (e: React.MouseEvent, checkbox: HTMLInputElement) => {
     // The offset was computed from this same `content` when the checkbox was
     // rendered, so it still points at the marker; the bracket check in
     // toggleTaskMarkerAt is the net behind that.
-    const next = toggleTaskMarkerAt(content, Number(checkbox.dataset.taskOffset));
+    const offset = checkbox.dataset.taskOffset ?? '';
+    const next = toggleTaskMarkerAt(content, Number(offset));
     if (next === null) {
       e.preventDefault();
       return;
     }
-    focusTaskIndexRef.current = document.activeElement === checkbox ? Number(checkbox.dataset.taskIndex) : null;
+    focusTaskOffsetRef.current = document.activeElement === checkbox ? offset : null;
     setContent(next);
     if (note) {
       markDirty();
       scheduleAutoSave();
     }
   };
-  // Interactive checkboxes cannot live inside role="textbox", a leaf role whose
-  // content assistive technology may flatten — so a preview holding any is a
-  // labelled group instead. Enter and Space on it still open the editor.
-  const previewHasTasks = renderedContent.includes('data-task-offset=');
   useEffect(() => {
-    const index = focusTaskIndexRef.current;
-    if (index === null) return;
-    focusTaskIndexRef.current = null;
+    const offset = focusTaskOffsetRef.current;
+    if (offset === null) return;
+    focusTaskOffsetRef.current = null;
     previewRef.current
-      ?.querySelector<HTMLInputElement>(`input[data-task-index="${index}"]`)
+      ?.querySelector<HTMLInputElement>(`input[data-task-offset="${offset}"]`)
       ?.focus();
   }, [renderedContent]);
 
@@ -2138,6 +2138,10 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                   <div
                     ref={previewRef}
                     data-testid="note-content-preview"
+                    // Interactive checkboxes cannot live inside role="textbox", a
+                    // leaf role whose content assistive technology may flatten —
+                    // so a preview holding any is a labelled group instead.
+                    // Enter and Space on it still open the editor.
                     {...(previewHasTasks
                       ? { role: 'group', 'aria-label': t('note.contentPreview') }
                       : {

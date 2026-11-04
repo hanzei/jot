@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { Lexer } from 'marked';
 import { BLOCK_LEXER_OPTIONS, normalizeBlockTokens, type BlockMarkdownToken, type BlockNode } from '../blockMarkdown';
-import type { InlineNode } from '../inlineMarkdown';
-import { normalizeTaskSource, taskMarkerOffsets, toggleTaskMarkerAt } from '../taskMarkers';
+import type { InlineNode, TaskMarker } from '../inlineMarkdown';
+import { taskMarkerOffsets, toggleTaskMarkerAt } from '../taskMarkers';
 
 function offsets(content: string): (number | null)[] {
   return taskMarkerOffsets(content, Lexer.lex(content, BLOCK_LEXER_OPTIONS));
@@ -10,7 +10,7 @@ function offsets(content: string): (number | null)[] {
 
 /** What each offset points at: the `[?]` around it, or null. */
 function markers(content: string): (string | null)[] {
-  const source = normalizeTaskSource(content);
+  const source = content.replace(/\r\n?/g, '\n');
   return offsets(content).map((offset) => (offset === null ? null : source.slice(offset - 1, offset + 2)));
 }
 
@@ -21,13 +21,13 @@ function toggle(content: string, index: number): string | null {
   return toggleTaskMarkerAt(content, offset);
 }
 
-/** Checkbox states in the order the renderer numbers them. */
-function renderedTasks(content: string): boolean[] {
-  const out: boolean[] = [];
+/** The `task` tags the normalizer carries, in document order. */
+function tags(content: string): TaskMarker[] {
+  const out: TaskMarker[] = [];
   const inline = (nodes: InlineNode[]) => {
     for (const node of nodes) {
       if (node.type === 'text') {
-        if (node.task) out.push(node.task.checked);
+        if (node.task) out.push(node.task);
       } else if ('children' in node) {
         inline(node.children);
       }
@@ -40,8 +40,13 @@ function renderedTasks(content: string): boolean[] {
       else if (node.type === 'list') node.items.forEach(blocks);
     }
   };
-  blocks(normalizeBlockTokens(Lexer.lex(content, BLOCK_LEXER_OPTIONS)));
+  blocks(normalizeBlockTokens(Lexer.lex(content, BLOCK_LEXER_OPTIONS), { taskSource: content }));
   return out;
+}
+
+/** Checkbox states in the order the renderer numbers them. */
+function renderedTasks(content: string): boolean[] {
+  return tags(content).map((tag) => tag.checked);
 }
 
 describe('taskMarkerOffsets', () => {
@@ -119,6 +124,27 @@ describe('taskMarkerOffsets', () => {
 
   it('returns nothing for content without tasks', () => {
     expect(offsets('just text\n\n- item')).toEqual([]);
+  });
+});
+
+describe('normalizeBlockTokens taskSource', () => {
+  it('carries each checkbox\'s offset and label', () => {
+    const content = '- [ ] milk\n  - [x] **eggs** and `ham`\n\n> 1. [ ] quoted';
+    expect(tags(content)).toEqual([
+      { checked: false, offset: offsets(content)[0], label: 'milk' },
+      { checked: true, offset: offsets(content)[1], label: 'eggs and ham' },
+      { checked: false, offset: offsets(content)[2], label: 'quoted' },
+    ]);
+    expect(offsets(content).every((offset) => offset !== null)).toBe(true);
+  });
+
+  it('labels a loose item by its own paragraph', () => {
+    expect(tags('- [ ] one\n\n- [x] two').map((tag) => tag.label)).toEqual(['one', 'two']);
+  });
+
+  it('leaves offsets null without a taskSource', () => {
+    const nodes = normalizeBlockTokens(Lexer.lex('- [ ] a', BLOCK_LEXER_OPTIONS));
+    expect(JSON.stringify(nodes)).toContain('"offset":null');
   });
 });
 

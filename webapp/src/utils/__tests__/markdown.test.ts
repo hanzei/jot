@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { MARKDOWN_CASES, toggleTaskMarkerAt } from '@jot/shared';
-import { renderMarkdown } from '../markdown';
+import { renderMarkdown, renderInteractiveMarkdown } from '../markdown';
 
 /** The words a reader sees, with the markup removed. */
 function text(html: string): string {
@@ -280,11 +280,14 @@ describe('renderMarkdown', () => {
     });
   });
 
-  describe('taskToggle', () => {
-    it('renders task markers as indexed checkboxes named by their item', () => {
-      const html = renderMarkdown('- [ ] milk\n- [x] **eggs**', { taskToggle: true });
-      expect(html).toContain('<input type="checkbox" data-task-index="0" data-task-offset="3" aria-label="milk"> milk');
-      expect(html).toContain('<input type="checkbox" data-task-index="1" data-task-offset="14" checked="" aria-label="eggs"> <strong>eggs</strong>');
+  describe('renderInteractiveMarkdown', () => {
+    const interactive = (content: string) => renderInteractiveMarkdown(content).html;
+
+    it('renders task markers as checkboxes named by their item', () => {
+      const { html, hasTasks } = renderInteractiveMarkdown('- [ ] milk\n- [x] **eggs**');
+      expect(hasTasks).toBe(true);
+      expect(html).toContain('<input type="checkbox" data-task-offset="3" aria-label="milk"> milk');
+      expect(html).toContain('<input type="checkbox" data-task-offset="14" checked="" aria-label="eggs"> <strong>eggs</strong>');
       expect(html).not.toContain('☐');
     });
 
@@ -295,16 +298,19 @@ describe('renderMarkdown', () => {
     });
 
     it('never turns a ☐ the note itself contains into a checkbox', () => {
-      expect(renderMarkdown('☐ typed', { taskToggle: true })).not.toContain('<input');
+      expect(interactive('☐ typed')).not.toContain('<input');
+      // Nor does text that merely spells the attribute.
+      expect(renderInteractiveMarkdown('`data-task-offset="1"`').hasTasks).toBe(false);
     });
 
     it('keeps raw HTML inputs out even with the input tag allowed', () => {
-      const html = renderMarkdown('<input type="checkbox"> and - [ ] x', { taskToggle: true });
+      const html = interactive('<input type="checkbox"> and - [ ] x');
       expect(html).not.toContain('<input');
     });
 
     it('leaves a checkbox it cannot locate as text', () => {
-      const html = renderMarkdown('- [ ] real\n  ```\n  - [ ] fake\n  ```', { taskToggle: true });
+      const { html, hasTasks } = renderInteractiveMarkdown('- [ ] real\n  ```\n  - [ ] fake\n  ```');
+      expect(hasTasks).toBe(false);
       expect(html).not.toContain('<input');
       expect(html).toContain('☐ real');
     });
@@ -315,7 +321,7 @@ describe('task checkbox offsets', () => {
   /** Renders, then toggles the `index`th checkbox by its `data-task-offset`. */
   function toggleRendered(content: string, index: number): string | null {
     const host = document.createElement('div');
-    host.innerHTML = renderMarkdown(content, { taskToggle: true });
+    host.innerHTML = renderInteractiveMarkdown(content).html;
     const checkbox = host.querySelectorAll<HTMLInputElement>('input[data-task-offset]')[index];
     if (!checkbox) throw new Error(`no checkbox ${index}`);
     return toggleTaskMarkerAt(content, Number(checkbox.dataset.taskOffset));

@@ -508,9 +508,11 @@ becomes a checkbox. Checkboxes are numbered in document order, and
 each one's marker: the top-level tokens' `raw` slices rebuild the source exactly,
 so each block's start is known, and within a block the lines matching one
 pattern — indentation, then any run of quote and list markers, then the box —
-are paired with the block's checkboxes in order. The renderer writes each
-marker's offset onto its checkbox (`data-task-offset`), so a toggle is one
-character splice with no re-parse. The approach follows Memos'
+are paired with the block's checkboxes in order. `normalizeBlockTokens` called
+with `taskSource` carries each checkbox's offset and accessible label on its
+`task` tag, so a renderer reads them rather than re-deriving them; the webapp
+writes the offset onto the checkbox (`data-task-offset`), and a toggle is a
+one-character splice with no re-parse. The approach follows Memos'
 `markdown-task-actions.ts`.
 
 **When in doubt, a checkbox stays text.** A line can match the pattern without
@@ -631,7 +633,7 @@ one client only is exactly the kind of drift this spec exists to prevent.
 | Mobile tap point → rendered offset | `mobile/src/utils/inlineCaret.ts` |
 | Card links-as-text switch | `links` option on both clients' renderers |
 | Task-marker source offsets (§2.4) | `shared/src/taskMarkers.ts` |
-| Webapp interactive checkboxes (§2.4) | `taskToggle` option in `webapp/src/utils/markdown.ts`; click handling (`toggleTaskMarkerAt`) in `webapp/src/components/NoteModal.tsx` |
+| Webapp interactive checkboxes (§2.4) | `renderInteractiveMarkdown` in `webapp/src/utils/markdown.ts`; click handling (`toggleTaskMarkerAt`) in `webapp/src/components/NoteModal.tsx` |
 | Card no-highlighting switch | `highlight` option on the webapp renderer; mobile's card renderer has no highlighting |
 | Mobile inline leaf rendering (shared by all three) | `mobile/src/components/inlineNodes.tsx` |
 | Mobile text metrics + colours | `mobile/src/utils/markdownStyles.ts` |
@@ -938,7 +940,7 @@ in both themes.
 
 Task checkboxes (§2.4) are covered by `shared/src/__tests__/taskMarkers.test.ts`
 (offsets per list shape, the inert fallbacks, numbering matching the rendered
-order), the `taskToggle` cases in `webapp/src/utils/__tests__/markdown.test.ts`,
+order), the `renderInteractiveMarkdown` cases in `webapp/src/utils/__tests__/markdown.test.ts`,
 the preview wiring in `NoteModal.test.tsx`, and `markdown.spec.ts` end to end —
 tick, Space, save, reload. `accessibility.spec.ts` scans them in both themes.
 
