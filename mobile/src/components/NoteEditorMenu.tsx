@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { ArrowLeftRight, Copy, Share2, Square, Tag, Trash2, Undo2, UserPlus, Users, type LucideIcon } from 'lucide-react-native';
+import { ArrowLeftRight, Copy, History, Share2, Square, Tag, Trash2, Undo2, UserPlus, Users, type LucideIcon } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import BottomSheet from './BottomSheet';
@@ -31,6 +31,12 @@ interface NoteEditorMenuProps {
   onDuplicate?: (() => void) | undefined;
   onConvert?: () => void;
   onManageLabels?: () => void;
+  /**
+   * Opens the note's version history. History is online-only, so while the
+   * server is unusable the entry stays visible but disabled, with a hint.
+   */
+  onHistory?: (() => void) | undefined;
+  historyUnavailable?: boolean;
   /** Shown only when the list has completed items (list notes only). */
   onUncheckAllItems?: (() => void | Promise<void>) | undefined;
   onDeleteCheckedItems?: (() => void | Promise<void>) | undefined;
@@ -45,6 +51,9 @@ interface Action {
   label: string;
   onPress: () => void;
   destructive?: boolean;
+  /** Shown greyed out and inert, with `hint` under the label. */
+  disabled?: boolean;
+  hint?: string | undefined;
   testId: string;
 }
 
@@ -66,6 +75,8 @@ export default function NoteEditorMenu({
   onDuplicate,
   onConvert,
   onManageLabels,
+  onHistory,
+  historyUnavailable = false,
   onUncheckAllItems,
   onDeleteCheckedItems,
   onMoveToTrash,
@@ -140,6 +151,16 @@ export default function NoteEditorMenu({
         testId: 'editor-menu-label',
       });
     }
+    if (onHistory) {
+      actions.push({
+        icon: History,
+        label: t('history.title'),
+        onPress: run(onHistory),
+        disabled: historyUnavailable,
+        hint: historyUnavailable ? t('history.menuOffline') : undefined,
+        testId: 'editor-menu-history',
+      });
+    }
     if (onUncheckAllItems) {
       actions.push({
         icon: Square,
@@ -191,17 +212,34 @@ export default function NoteEditorMenu({
                 !isLast && !isDestructive && !nextIsDestructive && { borderBottomColor: colors.borderLight, borderBottomWidth: 1 },
               ]}
               onPress={action.onPress}
+              disabled={action.disabled}
               testID={action.testId}
               accessibilityRole="menuitem"
               accessibilityLabel={action.label}
+              accessibilityHint={action.hint}
+              accessibilityState={action.disabled ? { disabled: true } : undefined}
             >
               <action.icon
                 size={22}
-                color={isDestructive ? colors.error : colors.text}
+                color={isDestructive ? colors.error : action.disabled ? colors.iconMuted : colors.text}
               />
-              <Text style={[styles.actionLabel, { color: colors.text }, isDestructive && { color: colors.error }]}>
-                {action.label}
-              </Text>
+              <View style={styles.actionText}>
+                <Text
+                  style={[
+                    styles.actionLabel,
+                    { color: colors.text },
+                    isDestructive && { color: colors.error },
+                    action.disabled && { color: colors.textMuted },
+                  ]}
+                >
+                  {action.label}
+                </Text>
+                {action.hint ? (
+                  <Text style={[styles.actionHint, { color: colors.textMuted }]} testID={`${action.testId}-hint`}>
+                    {action.hint}
+                  </Text>
+                ) : null}
+              </View>
             </TouchableOpacity>
           </React.Fragment>
         );
@@ -224,8 +262,15 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     gap: 14,
   },
+  actionText: {
+    flex: 1,
+  },
   actionLabel: {
     fontSize: 16,
+  },
+  actionHint: {
+    fontSize: 13,
+    marginTop: 2,
   },
   destructiveSeparator: {
     height: 1,

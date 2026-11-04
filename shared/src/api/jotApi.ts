@@ -20,12 +20,16 @@ import type {
   NoteImage,
   NoteItem,
   NoteListResponse,
+  NoteRevision,
+  NoteRevisionListResponse,
+  NoteRevisionSummary,
   NoteShare,
   NoteShareListResponse,
   PATListResponse,
   PatchNoteItemRequest,
   PersonalAccessToken,
   RegisterRequest,
+  RestoreNoteRevisionRequest,
   ServerConfig,
   SessionListResponse,
   SetUserPasswordRequest,
@@ -148,6 +152,15 @@ export function createJotApi(http: JotHttpClient) {
       },
 
       convert: (id: string, body: ConvertNoteTypeRequest): Promise<Note> => data(http.post<Note>(apiPaths.noteConvert(id), body)),
+
+      listRevisions: (id: string): Promise<NoteRevisionSummary[]> =>
+        http.get<NoteRevisionListResponse>(apiPaths.noteRevisions(id)).then(res => res.data.revisions),
+
+      getRevision: (id: string, revisionId: string): Promise<NoteRevision> =>
+        data(http.get<NoteRevision>(apiPaths.noteRevision(id, revisionId))),
+
+      restoreRevision: (id: string, revisionId: string, body: RestoreNoteRevisionRequest, config?: HttpRequestConfig): Promise<Note> =>
+        data(http.post<Note>(apiPaths.noteRevisionRestore(id, revisionId), body, config)),
 
       share: (id: string, body: ShareNoteRequest): Promise<void> => done(http.post(apiPaths.noteShare(id), body)),
 

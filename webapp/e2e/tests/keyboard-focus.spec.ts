@@ -194,6 +194,38 @@ test.describe('Modal focus management', () => {
     expect(await focusIsInside(noteDialog)).toBe(true);
   });
 
+  test('note history panel traps focus, keeps note shortcuts out, and restores focus on Escape', async ({ authenticatedUser, page, dashboardPage, noteHistoryDialog }) => {
+    void authenticatedUser;
+    // A write from page.request (another client) leaves a revision behind,
+    // so the panel has entries and a Restore button to tab through.
+    const created = await page.request.post('/api/v1/notes', { data: { note_type: 'text', content: 'History focus v1' } });
+    expect(created.ok()).toBeTruthy();
+    const { id } = (await created.json()) as { id: string };
+    expect((await page.request.patch(`/api/v1/notes/${id}`, { data: { content: 'History focus v2' } })).ok()).toBeTruthy();
+
+    await dashboardPage.goto();
+    await dashboardPage.openTextNote('History focus v2');
+    await noteHistoryDialog.open();
+
+    const historyDialog = page.getByRole('dialog', { name: 'Version history' });
+    await expect(noteHistoryDialog.preview()).toBeVisible();
+    await expectFocusTrapped(page, historyDialog);
+
+    // The note modal's single-key shortcuts (Delete moves the note to the bin)
+    // must not fire while focus is in the panel.
+    await noteHistoryDialog.entries().first().focus();
+    await page.keyboard.press('Delete');
+    await expect(noteHistoryDialog.dialog()).toBeVisible();
+    expect((await page.request.get(`/api/v1/notes/${id}`)).ok()).toBeTruthy();
+
+    await page.keyboard.press('Escape');
+    await expect(historyDialog).toBeHidden();
+    const noteDialog = page.locator('[role="dialog"][aria-modal="true"]').first();
+    await expect(noteDialog).toBeAttached();
+    // Focus comes back once the panel's leave transition finishes.
+    await expect.poll(() => focusIsInside(noteDialog)).toBe(true);
+  });
+
   test('image lightbox traps focus and closes on Escape', async ({ authenticatedUser, page, dashboardPage }) => {
     void authenticatedUser;
     await dashboardPage.goto();
