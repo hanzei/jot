@@ -276,8 +276,12 @@ func (h *NotesHandler) DeleteNoteItem(w http.ResponseWriter, r *http.Request) (i
 		return status, nil, err
 	}
 
-	if err := h.noteStore.DeleteItemFromNote(r.Context(), noteID, user.ID, itemID); err != nil {
+	_, deleted, err := h.noteStore.DeleteItems(r.Context(), noteID, user.ID, []string{itemID})
+	if err != nil {
 		return storeError(err, "delete item")
+	}
+	if deleted == 0 {
+		return storeError(models.ErrNoteItemNotFound, "delete item")
 	}
 
 	h.publishItemChangeEvent(r.Context(), noteID, user.ID)
@@ -458,7 +462,7 @@ func (h *NotesHandler) DeleteNoteItems(w http.ResponseWriter, r *http.Request) (
 		return status, nil, err
 	}
 
-	items, err := h.noteStore.DeleteItems(r.Context(), noteID, user.ID, req.ItemIDs)
+	items, _, err := h.noteStore.DeleteItems(r.Context(), noteID, user.ID, req.ItemIDs)
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("delete items: %w", err)
 	}
