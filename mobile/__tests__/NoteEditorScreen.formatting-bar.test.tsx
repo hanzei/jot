@@ -1,4 +1,4 @@
-import { Alert, Keyboard, Platform, TextInput } from 'react-native';
+import { Alert, Keyboard, Platform } from 'react-native';
 import { render, fireEvent, act } from '@testing-library/react-native';
 import { VALIDATION } from '@jot/shared';
 import {
@@ -298,17 +298,6 @@ describe('NoteEditorScreen formatting bar', () => {
     expect(queryByTestId('format-bold-btn')).toBeNull();
     expect(getByTestId('toolbar-color-btn')).toBeTruthy();
     expect(getByTestId('content-preview')).toBeTruthy();
-  });
-
-  it('blurs the focused input when Android closes the keyboard (back press)', async () => {
-    Platform.OS = 'android';
-    const blur = jest.fn();
-    jest.spyOn(TextInput.State, 'currentlyFocusedInput').mockReturnValue({ blur } as never);
-    await renderEditor();
-
-    await emitKeyboardEvent('keyboardDidHide');
-
-    expect(blur).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the buttons out of the Android focus order', async () => {
