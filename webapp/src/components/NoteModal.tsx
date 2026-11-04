@@ -170,11 +170,15 @@ function isTaskCheckbox(target: EventTarget): target is HTMLInputElement {
 }
 
 /**
- * Whether an event came from inside a link in the rendered preview. Following
- * a link is not a request to edit (docs/specs/markdown-rendering.md §1.1).
+ * Whether an event came from a control inside the rendered preview — a link,
+ * a task checkbox, or anything interactive rendering may add later. Using a
+ * control is not a request to edit (docs/specs/markdown-rendering.md §1.1), so
+ * the preview leaves its clicks and keys to it.
  */
-function isInPreviewLink(target: EventTarget): boolean {
-  return target instanceof Element && target.closest('a[href]') !== null;
+function isPreviewControl(target: EventTarget, preview: Element): boolean {
+  if (!(target instanceof Element)) return false;
+  const control = target.closest('a[href], input, button, select, textarea, summary, label');
+  return control !== null && preview.contains(control);
 }
 
 export default function NoteModal({ note = null, onClose, onSave, onCreated, onRefresh, onShare, onDelete, onDuplicate, onConvert, onRestore, onPermanentlyDelete, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent }: NoteModalProps) {
@@ -2165,15 +2169,14 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                         toggleTask(e, e.target);
                         return;
                       }
-                      if (isInPreviewLink(e.target)) return;
+                      if (isPreviewControl(e.target, e.currentTarget)) return;
                       setIsEditingContent(true);
                     }}
                     onKeyDown={(e) => {
                       if (isReadOnly) return;
-                      // Space on a task checkbox is the checkbox's own toggle, and
-                      // Enter on a link follows it.
-                      if (isTaskCheckbox(e.target)) return;
-                      if (e.key === 'Enter' && isInPreviewLink(e.target)) return;
+                      // A control's own keys are its own: Space toggles a task
+                      // checkbox, Enter follows a link.
+                      if (isPreviewControl(e.target, e.currentTarget)) return;
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
                         setIsEditingContent(true);
