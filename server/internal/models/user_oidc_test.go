@@ -67,7 +67,7 @@ func TestProvisionSSOUser(t *testing.T) {
 		t.Run("username is de-duplicated on collision", func(t *testing.T) {
 			store := newTestUserStore(t, driver)
 			// A local user already holds "alice".
-			_, err := store.Create(ctx, "alice", "password123")
+			_, err := store.Create(ctx, "alice", "password123", "")
 			require.NoError(t, err)
 
 			u2, err := store.ProvisionSSOUser(ctx, testIssuer, "sub-2", "alice", false)
@@ -90,7 +90,7 @@ func TestProvisionSSOUser(t *testing.T) {
 		t.Run("de-duplicated username stays within the length limit", func(t *testing.T) {
 			store := newTestUserStore(t, driver)
 			base := strings.Repeat("a", 30) // already at the 30-char limit
-			_, err := store.Create(ctx, base, "password123")
+			_, err := store.Create(ctx, base, "password123", "")
 			require.NoError(t, err)
 
 			u, err := store.ProvisionSSOUser(ctx, testIssuer, "sub-long", base, false)
@@ -128,9 +128,9 @@ func TestOIDCIdentityUniqueness(t *testing.T) {
 		ctx := t.Context()
 
 		// Two local accounts.
-		alice, err := store.Create(ctx, "alice", "password123")
+		alice, err := store.Create(ctx, "alice", "password123", "")
 		require.NoError(t, err)
-		bob, err := store.Create(ctx, "bob", "password123")
+		bob, err := store.Create(ctx, "bob", "password123", "")
 		require.NoError(t, err)
 
 		// Many local-only users (both OIDC columns NULL) coexist — the unique
@@ -155,7 +155,7 @@ func TestLinkUnlinkOIDCIdentity(t *testing.T) {
 
 		t.Run("link then log in via SSO resolves to the same account", func(t *testing.T) {
 			store := newTestUserStore(t, driver)
-			alice, err := store.Create(ctx, "alice", "password123")
+			alice, err := store.Create(ctx, "alice", "password123", "")
 			require.NoError(t, err)
 
 			require.NoError(t, store.LinkOIDCIdentity(ctx, alice.ID, testIssuer, testSubject))
@@ -184,14 +184,14 @@ func TestLinkUnlinkOIDCIdentity(t *testing.T) {
 
 		t.Run("unlink is safe for a user who linked SSO onto a local account", func(t *testing.T) {
 			store := newTestUserStore(t, driver)
-			alice, err := store.Create(ctx, "alice", "password123")
+			alice, err := store.Create(ctx, "alice", "password123", "")
 			require.NoError(t, err)
 			require.NoError(t, store.LinkOIDCIdentity(ctx, alice.ID, testIssuer, testSubject))
 
 			require.NoError(t, store.UnlinkOIDCIdentity(ctx, alice.ID))
 
 			// The identity is now free to bind elsewhere.
-			bob, err := store.Create(ctx, "bob", "password123")
+			bob, err := store.Create(ctx, "bob", "password123", "")
 			require.NoError(t, err)
 			require.NoError(t, store.LinkOIDCIdentity(ctx, bob.ID, testIssuer, testSubject))
 		})
