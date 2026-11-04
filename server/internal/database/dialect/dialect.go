@@ -137,6 +137,19 @@ func (d *Dialect) ForUpdate() string {
 	return ""
 }
 
+// LockFirstUserCheck returns the statement that serializes "is this the first
+// user?" checks, to run at the start of the transaction that counts users and
+// inserts: a transaction-scoped advisory lock for PostgreSQL, released at
+// commit or rollback, so concurrent first sign-ups queue up instead of all
+// seeing an empty table. SQLite returns "" — the open transaction holds its
+// single connection, which already serializes them.
+func (d *Dialect) LockFirstUserCheck() string {
+	if d.Driver == DriverPostgres {
+		return "SELECT pg_advisory_xact_lock(7243901)"
+	}
+	return ""
+}
+
 // FullTextMatchExpr builds the backend-specific match expression bound into the
 // full-text search query, from tokens already normalized by the caller (lower
 // cased, split into literal alphanumeric words). Terms are ANDed and the final
