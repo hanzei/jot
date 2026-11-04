@@ -31,8 +31,13 @@ import type { BlockMarkdownToken } from './blockMarkdown';
  * (an item may begin with another list's marker), its marker, then the box.
  * Group 1 is everything before the `[`, so the marker character sits at
  * `match[1].length + 1`.
+ *
+ * Each repeated list-marker group starts with the marker itself, never with
+ * whitespace: a leading `[ \t]*` there would compete with the previous group's
+ * trailing `[ \t]+` for the same characters and backtrack exponentially on
+ * input like `*\t\t*\t\t*…` — note text is user-controlled.
  */
-const TASK_LINE = /^((?:[ \t]*>)*(?:[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+)+)\[[ xX]\]/;
+const TASK_LINE = /^((?:[ \t]*>)*[ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)+)\[[ xX]\]/;
 
 /**
  * marked lexes CRLF and lone CR as LF, so `raw` only lines up with source that

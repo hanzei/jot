@@ -85,6 +85,15 @@ describe('taskMarkerOffsets', () => {
     expect(markers(content)).toEqual([null, '[x]']);
   });
 
+  it('stays linear on a long run of markers and tabs', () => {
+    // Inside a task item, so the block has a checkbox and every line of it is
+    // run through the pattern.
+    const content = '- [ ] a\n  ' + '*' + '\t\t*'.repeat(5_000) + 'x';
+    const start = performance.now();
+    expect(markers(content)).toEqual(['[ ]']);
+    expect(performance.now() - start).toBeLessThan(1_000);
+  });
+
   it('returns nothing for content without tasks', () => {
     expect(offsets('just text\n\n- item')).toEqual([]);
   });
