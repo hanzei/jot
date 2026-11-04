@@ -23,7 +23,19 @@ import { openUrl } from '../utils/openUrl';
  * tappable and is not is worse than plain text. See
  * docs/specs/markdown-rendering.md §1.1.
  */
-export type InlineRenderOptions = { links: false } | { links?: true; linkColor: string };
+export type InlineRenderOptions =
+  | { links: false }
+  | {
+      links?: true;
+      linkColor: string;
+      /**
+       * Makes each located task checkbox tappable, called with the marker's
+       * source offset. Omitted, checkboxes stay ☐ / ☑ text (trashed notes). Only
+       * on this variant because a surface that cannot follow a link cannot host
+       * a control either (§2.4).
+       */
+      onToggleTask?: ((offset: number) => void) | undefined;
+    };
 
 /**
  * Renders nodes as the children of a <Text>.
@@ -40,8 +52,29 @@ export function renderInlineNodes(
     const key = `${keyPrefix}${index}`;
 
     switch (node.type) {
-      case 'text':
+      case 'text': {
+        const task = node.task;
+        // A null offset means the marker could not be located safely, so the
+        // checkbox stays inert text (docs/specs/markdown-rendering.md §2.4).
+        if (task && task.offset !== null && options.links !== false && options.onToggleTask) {
+          const { offset } = task;
+          const onToggleTask = options.onToggleTask;
+          return (
+            <Text
+              key={key}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: task.checked }}
+              accessibilityLabel={task.label}
+              testID={`task-checkbox-${offset}`}
+              onPress={() => onToggleTask(offset)}
+              suppressHighlighting
+            >
+              {node.value}
+            </Text>
+          );
+        }
         return <Text key={key}>{node.value}</Text>;
+      }
       case 'br':
         return <Text key={key}>{'\n'}</Text>;
       case 'code':

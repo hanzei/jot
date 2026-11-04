@@ -29,6 +29,8 @@ interface RenderContext {
   textStyles: MarkdownTextStyles;
   /** Body colour at this depth — a blockquote renders its contents muted. */
   color: string;
+  /** Present only when checkboxes are tappable (the note is editable). */
+  onToggleTask?: ((offset: number) => void) | undefined;
 }
 
 /**
@@ -60,7 +62,7 @@ function renderBlocks(nodes: BlockNode[], ctx: RenderContext, keyPrefix = ''): R
       case 'paragraph':
         return (
           <Text key={key} style={[ctx.textStyles.body, { color: ctx.color }]}>
-            {renderInlineNodes(node.children, { linkColor: ctx.theme.link }, `${key}.`)}
+            {renderInlineNodes(node.children, { linkColor: ctx.theme.link, onToggleTask: ctx.onToggleTask }, `${key}.`)}
           </Text>
         );
 
@@ -75,7 +77,7 @@ function renderBlocks(nodes: BlockNode[], ctx: RenderContext, keyPrefix = ''): R
             accessibilityRole="header"
             style={[headingStyle(ctx.textStyles, node.depth), { color: ctx.color }]}
           >
-            {renderInlineNodes(node.children, { linkColor: ctx.theme.link }, `${key}.`)}
+            {renderInlineNodes(node.children, { linkColor: ctx.theme.link, onToggleTask: ctx.onToggleTask }, `${key}.`)}
           </Text>
         );
 
@@ -130,11 +132,18 @@ interface MarkdownProps {
   content: string;
   /** True when the note carries a colour, so the body reads dark-on-swatch. */
   onColoredNote?: boolean;
+  /**
+   * Called with a task marker's source offset when its checkbox is tapped. When
+   * omitted (a trashed note) checkboxes stay ☐ / ☑ text, and no offsets are
+   * computed (docs/specs/markdown-rendering.md §2.4).
+   */
+  onToggleTask?: ((offset: number) => void) | undefined;
 }
 
-function Markdown({ content, onColoredNote = false }: MarkdownProps) {
+function Markdown({ content, onColoredNote = false, onToggleTask }: MarkdownProps) {
   const { colors, isDark } = useTheme();
-  const nodes = useMemo(() => blockMarkdownNodes(content), [content]);
+  const tappable = onToggleTask !== undefined;
+  const nodes = useMemo(() => blockMarkdownNodes(content, tappable), [content, tappable]);
   const theme = useMemo(
     () => markdownTheme(colors, isDark, onColoredNote),
     [colors, isDark, onColoredNote],
@@ -142,7 +151,7 @@ function Markdown({ content, onColoredNote = false }: MarkdownProps) {
 
   return (
     <View style={styles.blocks}>
-      {renderBlocks(nodes, { theme, textStyles: fullMarkdownStyles, color: theme.text })}
+      {renderBlocks(nodes, { theme, textStyles: fullMarkdownStyles, color: theme.text, onToggleTask })}
     </View>
   );
 }

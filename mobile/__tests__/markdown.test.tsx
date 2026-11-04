@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import { render } from '@testing-library/react-native';
+import { render, fireEvent } from '@testing-library/react-native';
 import { CODE_PALETTE, MARKDOWN_CASES } from '@jot/shared';
 import Markdown from '../src/components/Markdown';
 import MarkdownPreview, { PREVIEW_LINES } from '../src/components/MarkdownPreview';
@@ -477,5 +477,26 @@ describe('markdown card preview', () => {
     expect(styleFor(tree, 'i').fontStyle).toBe('italic');
     expect(styleFor(tree, 's').textDecorationLine).toBe('line-through');
     expect(styleFor(tree, 'c').fontFamily).toBeTruthy();
+  });
+});
+
+describe('task checkboxes (docs/specs/markdown-rendering.md §2.4)', () => {
+  it('stay text unless the surface opts in', async () => {
+    const { queryByTestId } = await render(<Markdown content="- [ ] todo" />);
+    expect(queryByTestId('task-checkbox-3')).toBeNull();
+  });
+
+  it('become tappable with the marker offset when the surface opts in', async () => {
+    const onToggleTask = jest.fn();
+    const { getByTestId } = await render(<Markdown content="- [ ] todo" onToggleTask={onToggleTask} />);
+    await fireEvent.press(getByTestId('task-checkbox-3'));
+    expect(onToggleTask).toHaveBeenCalledWith(3);
+  });
+
+  it('stay inert in a block whose markers cannot be located', async () => {
+    const { queryByTestId } = await render(
+      <Markdown content={'```\n- [ ] in code\n```'} onToggleTask={jest.fn()} />,
+    );
+    expect(queryByTestId(/task-checkbox/)).toBeNull();
   });
 });
