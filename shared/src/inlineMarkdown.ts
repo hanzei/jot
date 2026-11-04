@@ -57,6 +57,22 @@ export interface InlineSourceSpan {
 }
 
 /**
+ * What a renderer needs to make a task-list checkbox interactive
+ * (docs/specs/markdown-rendering.md §2.4).
+ */
+export interface TaskMarker {
+  checked: boolean;
+  /**
+   * The marker's offset for `toggleTaskMarkerAt`, or `null` when it could not
+   * be located safely — or was not asked for (`normalizeBlockTokens`'
+   * `taskSource`). A checkbox without one stays non-interactive.
+   */
+  offset: number | null;
+  /** The item's own text, flattened, as the checkbox's accessible name. */
+  label: string;
+}
+
+/**
  * A platform-neutral inline node. Deliberately smaller than marked's token
  * union: everything unsupported has already been degraded to `text` by
  * `normalizeInlineTokens`, so a renderer only has to handle these five cases and
@@ -66,7 +82,10 @@ export interface InlineSourceSpan {
  * that narrowing on `type` keeps working exactly as it did.
  */
 export type InlineNode =
-  | { type: 'text'; value: string; src?: InlineSourceSpan }
+  // `task` marks the ☐ / ☑ a task-list checkbox renders as — only text-note
+  // content produces one (blockMarkdown.ts). Renderers that ignore it show the
+  // character, which is the non-interactive rendering.
+  | { type: 'text'; value: string; src?: InlineSourceSpan; task?: TaskMarker }
   | { type: 'code'; value: string; src?: InlineSourceSpan }
   | { type: 'br'; src?: InlineSourceSpan }
   | { type: 'strong'; children: InlineNode[]; src?: InlineSourceSpan }

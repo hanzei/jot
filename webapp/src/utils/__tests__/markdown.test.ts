@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { MARKDOWN_CASES } from '@jot/shared';
-import { renderMarkdown } from '../markdown';
+import { MARKDOWN_CASES, toggleTaskMarkerAt } from '@jot/shared';
+import { renderMarkdown, renderInteractiveMarkdown } from '../markdown';
 
 /** The words a reader sees, with the markup removed. */
 function text(html: string): string {
@@ -278,5 +278,61 @@ describe('renderMarkdown', () => {
       expect(html).toContain('<code>c</code>');
       expect(html).toContain('<li>one</li>');
     });
+  });
+
+  describe('renderInteractiveMarkdown', () => {
+    const interactive = (content: string) => renderInteractiveMarkdown(content).html;
+
+    it('renders task markers as checkboxes named by their item', () => {
+      const { html, hasTasks } = renderInteractiveMarkdown('- [ ] milk\n- [x] **eggs**');
+      expect(hasTasks).toBe(true);
+      expect(html).toContain('<input type="checkbox" data-task-offset="3" aria-label="milk"> milk');
+      expect(html).toContain('<input type="checkbox" data-task-offset="14" checked="" aria-label="eggs"> <strong>eggs</strong>');
+      expect(html).not.toContain('☐');
+    });
+
+    it('keeps ☐ / ☑ text without it, as note cards do', () => {
+      const html = renderMarkdown('- [ ] milk', { links: false });
+      expect(html).not.toContain('<input');
+      expect(html).toContain('☐ milk');
+    });
+
+    it('never turns a ☐ the note itself contains into a checkbox', () => {
+      expect(interactive('☐ typed')).not.toContain('<input');
+      // Nor does text that merely spells the attribute.
+      expect(renderInteractiveMarkdown('`data-task-offset="1"`').hasTasks).toBe(false);
+    });
+
+    it('keeps raw HTML inputs out even with the input tag allowed', () => {
+      const html = interactive('<input type="checkbox"> and - [ ] x');
+      expect(html).not.toContain('<input');
+    });
+
+    it('leaves a checkbox it cannot locate as text', () => {
+      const { html, hasTasks } = renderInteractiveMarkdown('- [ ] real\n  ```\n  - [ ] fake\n  ```');
+      expect(hasTasks).toBe(false);
+      expect(html).not.toContain('<input');
+      expect(html).toContain('☐ real');
+    });
+  });
+});
+
+describe('task checkbox offsets', () => {
+  /** Renders, then toggles the `index`th checkbox by its `data-task-offset`. */
+  function toggleRendered(content: string, index: number): string | null {
+    const host = document.createElement('div');
+    host.innerHTML = renderInteractiveMarkdown(content).html;
+    const checkbox = host.querySelectorAll<HTMLInputElement>('input[data-task-offset]')[index];
+    if (!checkbox) throw new Error(`no checkbox ${index}`);
+    return toggleTaskMarkerAt(content, Number(checkbox.dataset.taskOffset));
+  }
+
+  it('flips the rendered checkbox\'s own marker', () => {
+    expect(toggleRendered('- [ ] a\n- [ ] b', 1)).toBe('- [ ] a\n- [x] b');
+    expect(toggleRendered('> - [x] a', 0)).toBe('> - [ ] a');
+  });
+
+  it('keeps CRLF line endings', () => {
+    expect(toggleRendered('- [ ] a\r\n- [ ] b\r\n', 1)).toBe('- [ ] a\r\n- [x] b\r\n');
   });
 });

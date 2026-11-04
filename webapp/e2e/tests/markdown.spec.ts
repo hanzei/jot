@@ -80,13 +80,85 @@ test.describe('Markdown note editing', () => {
     await expect(preview.locator('h4')).toHaveCSS('font-weight', '700');
     await expect(preview.locator('strong')).toHaveText('bold');
     await expect(preview.locator('del')).toHaveText('struck');
-    await expect(preview.locator('li').nth(0)).toHaveText('☑ done');
-    await expect(preview.locator('li').nth(1)).toHaveText('☐ todo');
-    // Checkboxes are glyphs, not inputs — nothing to toggle.
-    await expect(preview.locator('input')).toHaveCount(0);
+    // In the open note, task markers are real checkboxes (§2.4).
+    await expect(preview.getByRole('checkbox', { name: 'done' })).toBeChecked();
+    await expect(preview.getByRole('checkbox', { name: 'todo' })).not.toBeChecked();
     await expect(preview.locator('pre')).toContainText('const a = 1;');
     await expect(preview.locator('hr')).toHaveCount(1);
     await expect(preview.locator('a[href="https://example.com"]')).toBeVisible();
+  });
+
+  // docs/specs/markdown-rendering.md §2.4: ticking a box in the open note
+  // rewrites its marker in the content and saves; the card stays glyphs.
+  test('toggles task checkboxes in the open note and saves the content', async ({ page, dashboardPage, noteEditorPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createTextNote('Packing\n\n- [ ] passport\n- [x] charger');
+
+    const card = dashboardPage.noteCardByText('passport');
+    await expect(card).toContainText('☐ passport');
+    await expect(card.locator('input')).toHaveCount(0);
+
+    await dashboardPage.openTextNote('passport');
+    const preview = noteEditorPage.preview();
+    // A textbox may not hold operable controls; a preview with checkboxes is a group.
+    await expect(page.getByRole('group', { name: 'Note content' })).toBeVisible();
+    const passport = preview.getByRole('checkbox', { name: 'passport' });
+    await passport.click();
+    await expect(passport).toBeChecked();
+    // Ticking is not a click on the preview: it stays in preview mode.
+    await expect(page.getByRole('dialog').locator('textarea[placeholder="Take a note..."]')).toHaveCount(0);
+
+    // Keyboard: Space toggles, and focus survives the re-render.
+    const charger = preview.getByRole('checkbox', { name: 'charger' });
+    await charger.focus();
+    await page.keyboard.press('Space');
+    await expect(charger).not.toBeChecked();
+    await expect(charger).toBeFocused();
+
+    await expect(page.getByTestId('note-save-status').getByText('Saved')).toBeVisible();
+    await dashboardPage.closeNoteModal();
+    await expect(card).toContainText('☑ passport');
+    await expect(card).toContainText('☐ charger');
+
+    // The rewritten content is what was saved.
+    await page.reload();
+    await dashboardPage.openTextNote('passport');
+    await expect(preview.getByRole('checkbox', { name: 'passport' })).toBeChecked();
+    await expect(preview.getByRole('checkbox', { name: 'charger' })).not.toBeChecked();
+    await preview.getByText('Packing').click();
+    await expect(page.getByRole('dialog').locator('textarea[placeholder="Take a note..."]'))
+      .toHaveValue('Packing\n\n- [x] passport\n- [ ] charger');
+  });
+
+  // Spec §1.1: the open note renders live links, and following one is not a
+  // click on the text — the preview stays a preview.
+  test('follows a link in the preview without entering edit mode', async ({ page, dashboardPage, noteEditorPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createTextNote('Reading list: [docs](https://example.com/docs)');
+    await dashboardPage.openTextNote('Reading list');
+
+    // Stubbed, so the test never leaves for the network.
+    await page.context().route('https://example.com/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'text/html', body: '<title>docs</title>' }),
+    );
+    const editor = page.getByRole('dialog').locator('textarea[placeholder="Take a note..."]');
+    const link = noteEditorPage.preview().getByRole('link', { name: 'docs' });
+
+    let popupPromise = page.waitForEvent('popup');
+    await link.click();
+    let popup = await popupPromise;
+    expect(popup.url()).toBe('https://example.com/docs');
+    await popup.close();
+    await expect(editor).toHaveCount(0);
+
+    // Keyboard: Enter on the focused link follows it too.
+    popupPromise = page.waitForEvent('popup');
+    await link.focus();
+    await page.keyboard.press('Enter');
+    popup = await popupPromise;
+    await popup.close();
+    await expect(editor).toHaveCount(0);
+    await expect(noteEditorPage.preview()).toBeVisible();
   });
 
   test('shows unsupported syntax as literal source and refuses unsupported link schemes', async ({ page, dashboardPage }) => {

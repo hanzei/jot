@@ -34,7 +34,10 @@ colour that only signals "link" fails anyone who cannot use it. So the label
 renders exactly as the surrounding text.
 
 The open note is unaffected: the webapp's modal preview and mobile's editor both
-render live links, which is where a reader who wants the link already is. An
+render live links, which is where a reader who wants the link already is.
+Following one — a click, or Enter on the focused link — only opens the link; it
+does not also switch the webapp's preview into edit mode, which a click anywhere
+else in the preview does. An
 *editable* list-item row is the one other place a link stays inert, for a
 different reason, and it reaches its targets through a button of its own
 instead — §1.2.
@@ -249,7 +252,7 @@ reach it differently.
 | `` `inline code` `` | Rendered |
 | Fenced and indented code | Rendered **with block layout**; a fence naming a known language is syntax highlighted (§2.3) |
 | Bullet and ordered lists | Rendered |
-| `- [ ]` / `- [x]` | Rendered as ☐ / ☑, **non-interactive** |
+| `- [ ]` / `- [x]` | Rendered as ☐ / ☑. Clickable in the webapp's open note only (§2.4) |
 | Blockquotes | Rendered |
 | `[text](url)` and bare `https://…` | Rendered as links — **except on note cards** (§1.1) |
 | `---`, `***` | Horizontal rule |
@@ -480,6 +483,54 @@ checked to reassemble the source exactly; if it does not, or highlight.js
 throws, the block renders as it would with no language. No content is ever lost
 to highlighting.
 
+### 2.4 Task checkboxes in the open note
+
+In the **webapp's modal preview**, each `- [ ]` / `- [x]` renders as a real
+checkbox. Ticking one rewrites that marker in `content` — `[ ]` ↔ `[x]`, the one
+character between the brackets — and saves through the normal autosave, exactly
+as typing the change would. The preview stays a preview: a click on a checkbox
+does not enter edit mode, and Space toggles a focused checkbox rather than
+opening the editor. Focus stays on the checkbox across the re-render.
+
+A preview holding checkboxes is a `group` labelled "Note content" rather than a
+`textbox`: `textbox` is a leaf role, and assistive technology may flatten what
+is inside it, checkboxes included. Enter and Space on the preview itself still
+open the editor; a preview without checkboxes keeps the `textbox` role.
+
+| Surface | Task markers |
+|---|---|
+| Webapp modal preview | Checkboxes, named by their item's text |
+| Webapp modal preview of a note in the bin | ☐ / ☑ text |
+| Note cards, both clients | ☐ / ☑ text — a card is one control (§1.1) |
+| Mobile editor read mode | ☐ / ☑ text — not yet interactive |
+
+**Locating the marker.** The normalizer tags the ☐ / ☑ text node it emits for
+each checkbox (`task` on the `text` node), so a ☐ typed into the note never
+becomes a checkbox. Checkboxes are numbered in document order, and
+`taskMarkerOffsets` (`shared/src/taskMarkers.ts`) finds the source offset of
+each one's marker: the top-level tokens' `raw` slices rebuild the source exactly,
+so each block's start is known, and within a block the lines matching one
+pattern — indentation, then any run of quote and list markers, then the box —
+are paired with the block's checkboxes in order. `normalizeBlockTokens` called
+with `taskSource` carries each checkbox's offset and accessible label on its
+`task` tag, so a renderer reads them rather than re-deriving them; the webapp
+writes the offset onto the checkbox (`data-task-offset`), and a toggle is a
+one-character splice with no re-parse. The approach follows Memos'
+`markdown-task-actions.ts`.
+
+**When in doubt, a checkbox stays text.** A line can match the pattern without
+being a task (`- [ ]` with nothing after it, task syntax in a code block nested
+inside a list item), and a construct the pattern does not describe could hide a
+real one. A count check alone cannot catch both at once — a miss and a false
+match cancel out — so **each pair is verified**: the source line from its `[`
+must equal the first line of the list item that owns the checkbox, from its
+`[`. A block whose counts or lines disagree gets no offsets, and its checkboxes
+render as ☐ / ☑. A toggle therefore never rewrites another item's line.
+
+**Line endings.** marked lexes CRLF as LF, so offsets index the LF-normalized
+source; a toggle maps its offset back onto the original and changes only the
+marker, keeping CRLF content CRLF.
+
 ---
 
 ## 3. How unsupported formatting is handled
@@ -584,6 +635,8 @@ one client only is exactly the kind of drift this spec exists to prevent.
 | Mobile several-links sheet | `mobile/src/components/ItemLinksSheet.tsx` |
 | Mobile tap point → rendered offset | `mobile/src/utils/inlineCaret.ts` |
 | Card links-as-text switch | `links` option on both clients' renderers |
+| Task-marker source offsets (§2.4) | `shared/src/taskMarkers.ts` |
+| Webapp interactive checkboxes (§2.4) | `renderInteractiveMarkdown` in `webapp/src/utils/markdown.ts`; click handling (`toggleTaskMarkerAt`) in `webapp/src/components/NoteModal.tsx` |
 | Card no-highlighting switch | `highlight` option on the webapp renderer; mobile's card renderer has no highlighting |
 | Mobile inline leaf rendering (shared by all three) | `mobile/src/components/inlineNodes.tsx` |
 | Mobile text metrics + colours | `mobile/src/utils/markdownStyles.ts` |
@@ -850,8 +903,10 @@ is on both bars but has no keyboard shortcut on either surface.
 
 ## 6. Deliberately not covered
 
-- **Interactive checkboxes.** Toggling a rendered ☐ would mean writing back into
-  `content` — a much larger feature than rendering.
+- **Interactive checkboxes on mobile and on cards.** §2.4 covers the webapp's
+  open note only. Mobile's editor read mode could reuse `taskMarkerOffsets`, but
+  a tappable box inside wrapped React Native `Text` is its own piece of work;
+  cards stay non-interactive for the reason in §1.1.
 - **Block Markdown in list items.** Not a gap to be filled later — §2.1 explains
   why an item cannot hold it.
 - **Syntax highlighting beyond §2.3**: more languages, guessing a language, or
@@ -885,6 +940,12 @@ of the palette in `index.css` is pinned to `CODE_PALETTE` by
 `webapp/src/utils/__tests__/codeHighlightStyles.test.ts`, and
 `e2e/tests/accessibility.spec.ts` scans highlighted code in every note colour
 in both themes.
+
+Task checkboxes (§2.4) are covered by `shared/src/__tests__/taskMarkers.test.ts`
+(offsets per list shape, the inert fallbacks, numbering matching the rendered
+order), the `renderInteractiveMarkdown` cases in `webapp/src/utils/__tests__/markdown.test.ts`,
+the preview wiring in `NoteModal.test.tsx`, and `markdown.spec.ts` end to end —
+tick, Space, save, reload. `accessibility.spec.ts` scans them in both themes.
 
 The editable row's swap (§1.2) is covered per client rather than by the corpus,
 since it is a state machine rather than a rendering:

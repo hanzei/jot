@@ -215,6 +215,11 @@ body {
   .markdown-content a {
     @apply text-blue-500 dark:text-blue-400 underline;
   }
+  /* Interactive task checkboxes — the open note's preview only
+     (renderInteractiveMarkdown). Sized and coloured like a list note's item checkbox. */
+  .markdown-content input[type="checkbox"] {
+    @apply h-4 w-4 text-blue-600 rounded align-[-0.15em] mr-1 cursor-pointer;
+  }
 
   /* Inline markdown in list-item text — the subset in shared/src/inlineMarkdown.ts.
      strong/em/del are left to the browser defaults, as .markdown-content does.
