@@ -3,9 +3,9 @@ import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Users, Check
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, distinctCompletedTexts, findSuggestedItem, generateId, reviveSuggestedItem, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, completedCascadeScope, completedPriorById, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, distinctCompletedTexts, findSuggestedItem, generateId, reviveSuggestedItem, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, toggleTaskMarkerAt, completedCascadeScope, completedPriorById, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
-import { renderMarkdown, inlineMarkdownToText, toggleTaskInMarkdown } from '@/utils/markdown';
+import { renderMarkdown, inlineMarkdownToText } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
 import NoteImageGallery from '@/components/NoteImageGallery';
 import LetterAvatar from '@/components/LetterAvatar';
@@ -162,6 +162,11 @@ interface NoteModalProps {
   // link (PWA shortcut or share target). Ignored once a note is being edited.
   initialType?: NoteType | undefined;
   initialContent?: string | undefined;
+}
+
+/** A task checkbox in the rendered preview (renderMarkdown's `taskToggle`). */
+function isTaskCheckbox(target: EventTarget): target is HTMLInputElement {
+  return target instanceof HTMLInputElement && target.dataset.taskOffset !== undefined;
 }
 
 export default function NoteModal({ note = null, onClose, onSave, onCreated, onRefresh, onShare, onDelete, onDuplicate, onConvert, onRestore, onPermanentlyDelete, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent }: NoteModalProps) {
@@ -679,22 +684,26 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
   // kept here so the effect below can hand focus to its replacement.
   const previewRef = useRef<HTMLDivElement>(null);
   const focusTaskIndexRef = useRef<number | null>(null);
-  const toggleTask = (checkbox: HTMLInputElement) => {
-    const index = Number(checkbox.dataset.taskIndex);
-    const next = toggleTaskInMarkdown(content, index);
+  const toggleTask = (e: React.MouseEvent, checkbox: HTMLInputElement) => {
+    // The offset was computed from this same `content` when the checkbox was
+    // rendered, so it still points at the marker; the bracket check in
+    // toggleTaskMarkerAt is the net behind that.
+    const next = toggleTaskMarkerAt(content, Number(checkbox.dataset.taskOffset));
     if (next === null) {
-      // Nothing to write: undo the browser's own toggle so the box keeps
-      // showing what the note says.
-      checkbox.checked = !checkbox.checked;
+      e.preventDefault();
       return;
     }
-    focusTaskIndexRef.current = document.activeElement === checkbox ? index : null;
+    focusTaskIndexRef.current = document.activeElement === checkbox ? Number(checkbox.dataset.taskIndex) : null;
     setContent(next);
     if (note) {
       markDirty();
       scheduleAutoSave();
     }
   };
+  // Interactive checkboxes cannot live inside role="textbox", a leaf role whose
+  // content assistive technology may flatten — so a preview holding any is a
+  // labelled group instead. Enter and Space on it still open the editor.
+  const previewHasTasks = renderedContent.includes('data-task-offset=');
   useEffect(() => {
     const index = focusTaskIndexRef.current;
     if (index === null) return;
@@ -2129,15 +2138,19 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                   <div
                     ref={previewRef}
                     data-testid="note-content-preview"
-                    role="textbox"
-                    aria-label={t('note.contentPlaceholder')}
-                    aria-multiline="true"
-                    aria-readonly={isReadOnly}
+                    {...(previewHasTasks
+                      ? { role: 'group', 'aria-label': t('note.contentPreview') }
+                      : {
+                          role: 'textbox',
+                          'aria-label': t('note.contentPlaceholder'),
+                          'aria-multiline': true,
+                          'aria-readonly': isReadOnly,
+                        })}
                     tabIndex={0}
                     onClick={(e) => {
                       if (isReadOnly) return;
-                      if (e.target instanceof HTMLInputElement && e.target.dataset.taskIndex !== undefined) {
-                        toggleTask(e.target);
+                      if (isTaskCheckbox(e.target)) {
+                        toggleTask(e, e.target);
                         return;
                       }
                       setIsEditingContent(true);
@@ -2145,7 +2158,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                     onKeyDown={(e) => {
                       if (isReadOnly) return;
                       // Space on a task checkbox is the checkbox's own toggle.
-                      if (e.target !== e.currentTarget) return;
+                      if (isTaskCheckbox(e.target)) return;
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
                         setIsEditingContent(true);

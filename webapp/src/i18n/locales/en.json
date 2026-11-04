@@ -456,6 +456,7 @@
     "typeList": "List",
     "titlePlaceholder": "Note title...",
     "contentPlaceholder": "Take a note...",
+    "contentPreview": "Note content",
     "formatToolbar": "Formatting",
     "formatBold": "Bold",
     "formatItalic": "Italic",

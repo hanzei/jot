@@ -456,6 +456,7 @@
     "typeList": "Lista",
     "titlePlaceholder": "Titolo della nota...",
     "contentPlaceholder": "Prendi nota...",
+    "contentPreview": "Contenuto della nota",
     "formatToolbar": "Formattazione",
     "formatBold": "Grassetto",
     "formatItalic": "Corsivo",

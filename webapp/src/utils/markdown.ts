@@ -5,9 +5,7 @@ import {
   normalizeInlineTokens,
   flattenInlineNodes,
   inlineRendersAsSource,
-  normalizeTaskSource,
   taskMarkerOffsets,
-  toggleTaskMarkerAt,
   BLOCK_LEXER_OPTIONS,
   INLINE_LEXER_OPTIONS,
   highlightCode,
@@ -87,10 +85,11 @@ export interface MarkdownRenderOptions {
    */
   highlight?: boolean;
   /**
-   * Whether task-list checkboxes render as real checkboxes carrying
-   * `data-task-index`, for `toggleTaskInMarkdown`. Only the open note's preview
-   * passes `true`; note cards keep ☐ / ☑ text (docs/specs §2.4). A checkbox
-   * whose marker cannot be located in the source stays ☐ / ☑ text.
+   * Whether task-list checkboxes render as real checkboxes. Each carries
+   * `data-task-offset`, its marker's offset for `toggleTaskMarkerAt`, and
+   * `data-task-index`, its position among the note's checkboxes. Only the open
+   * note's preview passes `true`; note cards keep ☐ / ☑ text (docs/specs §2.4).
+   * A checkbox whose marker cannot be located in the source stays ☐ / ☑ text.
    */
   taskToggle?: boolean;
 }
@@ -176,37 +175,14 @@ export function renderMarkdown(
   { links = true, highlight = true, taskToggle = false }: MarkdownRenderOptions = {},
 ): string {
   if (!content.trim()) return '';
-  let tasks: BlockRenderContext['tasks'] = null;
-  let nodes: BlockNode[];
-  if (taskToggle) {
-    const source = normalizeTaskSource(content);
-    const tokens = Lexer.lex(source, BLOCK_LEXER_OPTIONS);
-    tasks = { offsets: taskMarkerOffsets(source, tokens), next: 0 };
-    nodes = normalizeBlockTokens(tokens);
-  } else {
-    nodes = normalizeBlockTokens(Lexer.lex(content, BLOCK_LEXER_OPTIONS));
-  }
+  const tokens = Lexer.lex(content, BLOCK_LEXER_OPTIONS);
+  const tasks = taskToggle ? { offsets: taskMarkerOffsets(content, tokens), next: 0 } : null;
+  const nodes = normalizeBlockTokens(tokens);
   const tags = links ? ALLOWED_TAGS : NO_LINK_TAGS;
   return DOMPurify.sanitize(renderBlockNodes(nodes, { highlight, tasks }), {
     ALLOWED_TAGS: taskToggle ? [...tags, 'input'] : tags,
     ALLOWED_ATTR: taskToggle ? TASK_ATTR : ALLOWED_ATTR,
   });
-}
-
-/**
- * Flips the `index`th task checkbox — the `data-task-index` that
- * `renderMarkdown(..., { taskToggle: true })` gave it — in `content`.
- *
- * Returns `null` when that checkbox can no longer be located, e.g. because the
- * content changed underneath the rendered view. The result has LF line endings
- * (`normalizeTaskSource`).
- */
-export function toggleTaskInMarkdown(content: string, index: number): string | null {
-  const source = normalizeTaskSource(content);
-  const offset = taskMarkerOffsets(source, Lexer.lex(source, BLOCK_LEXER_OPTIONS))[index] ?? null;
-  if (offset === null) return null;
-  const next = toggleTaskMarkerAt(source, offset);
-  return next === source ? null : next;
 }
 
 // List-item text renders an inline-only subset — see shared/src/inlineMarkdown.ts
@@ -222,10 +198,11 @@ function renderTaskCheckbox(
   tasks: NonNullable<BlockRenderContext['tasks']>,
 ): string | null {
   const index = tasks.next++;
-  if ((tasks.offsets[index] ?? null) === null) return null;
+  const offset = tasks.offsets[index] ?? null;
+  if (offset === null) return null;
   // Named by the item's own text, as the eye reads it.
   const label = escapeHtml(flattenInlineNodes(rest).trim());
-  return `<input type="checkbox" data-task-index="${index}"${checked ? ' checked' : ''} aria-label="${label}"> `;
+  return `<input type="checkbox" data-task-index="${index}" data-task-offset="${offset}"${checked ? ' checked' : ''} aria-label="${label}"> `;
 }
 
 function renderInlineNodes(nodes: InlineNode[], ctx?: BlockRenderContext): string {

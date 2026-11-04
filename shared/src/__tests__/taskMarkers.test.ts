@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Lexer } from 'marked';
-import { BLOCK_LEXER_OPTIONS, normalizeBlockTokens, type BlockNode } from '../blockMarkdown';
+import { BLOCK_LEXER_OPTIONS, normalizeBlockTokens, type BlockMarkdownToken, type BlockNode } from '../blockMarkdown';
 import type { InlineNode } from '../inlineMarkdown';
 import { normalizeTaskSource, taskMarkerOffsets, toggleTaskMarkerAt } from '../taskMarkers';
 
@@ -10,11 +10,12 @@ function offsets(content: string): (number | null)[] {
 
 /** What each offset points at: the `[?]` around it, or null. */
 function markers(content: string): (string | null)[] {
-  return offsets(content).map((offset) => (offset === null ? null : content.slice(offset - 1, offset + 2)));
+  const source = normalizeTaskSource(content);
+  return offsets(content).map((offset) => (offset === null ? null : source.slice(offset - 1, offset + 2)));
 }
 
 /** Toggles the `index`th checkbox, the way the webapp does. */
-function toggle(content: string, index: number): string {
+function toggle(content: string, index: number): string | null {
   const offset = offsets(content)[index];
   if (offset === undefined || offset === null) throw new Error(`no offset for ${index}`);
   return toggleTaskMarkerAt(content, offset);
@@ -61,6 +62,28 @@ describe('taskMarkerOffsets', () => {
 
   it('handles an item that opens with another list marker', () => {
     expect(markers('- - [ ] inner')).toEqual(['[ ]']);
+  });
+
+  it('handles a task quoted inside a list item', () => {
+    expect(markers('- > - [ ] quoted')).toEqual(['[ ]']);
+    expect(toggle('- > - [ ] quoted', 0)).toBe('- > - [x] quoted');
+  });
+
+  // The review's two wrong-line cases: a real task the line pattern once
+  // missed, cancelled out by a false match in the same list.
+  it('never pairs a checkbox with another item\'s line', () => {
+    expect(offsets('- > - [ ] quoted\n- [ ]')).toEqual([null]);
+    expect(offsets('- > - [ ] quoted\n- ```\n  - [ ] fake\n  ```')).toEqual([null]);
+  });
+
+  it('leaves a block inert when counts agree but a line belongs to another item', () => {
+    // Hand-built: the matched line says `a`, the checkbox's item says `b`.
+    const tokens: BlockMarkdownToken[] = [{
+      type: 'list',
+      raw: '- [ ] a\n',
+      items: [{ type: 'list_item', raw: '- [ ] b', tokens: [{ type: 'checkbox', raw: '[ ] ' }] }],
+    }];
+    expect(taskMarkerOffsets('- [ ] a\n', tokens)).toEqual([null]);
   });
 
   it('skips task syntax inside a top-level code block', () => {
@@ -111,15 +134,20 @@ describe('toggleTaskMarkerAt', () => {
   });
 
   it('ignores an offset that is not a marker', () => {
-    expect(toggleTaskMarkerAt('- [ ] a', 0)).toBe('- [ ] a');
-    expect(toggleTaskMarkerAt('- [ ] a', 99)).toBe('- [ ] a');
+    expect(toggleTaskMarkerAt('- [ ] a', 0)).toBeNull();
+    expect(toggleTaskMarkerAt('- [ ] a', 99)).toBeNull();
+    expect(toggleTaskMarkerAt('[?]', 1)).toBeNull();
   });
 });
 
-describe('normalizeTaskSource', () => {
-  it('maps CRLF content once normalized', () => {
-    const content = normalizeTaskSource('- [ ] a\r\n- [x] b\r\n');
-    expect(content).toBe('- [ ] a\n- [x] b\n');
+describe('line endings', () => {
+  it('maps CRLF content and keeps its line endings on toggle', () => {
+    const content = '- [ ] a\r\n- [x] b\r\n';
     expect(markers(content)).toEqual(['[ ]', '[x]']);
+    expect(toggle(content, 1)).toBe('- [ ] a\r\n- [ ] b\r\n');
+  });
+
+  it('keeps lone CRs too', () => {
+    expect(toggle('note\r\r- [ ] a', 0)).toBe('note\r\r- [x] a');
   });
 });

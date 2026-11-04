@@ -2756,6 +2756,29 @@ describe('NoteModal', () => {
       expect(screen.queryByPlaceholderText('Take a note...')).not.toBeInTheDocument();
     });
 
+    it('exposes a preview holding checkboxes as a group, not a textbox', () => {
+      const note = createMockNote({ note_type: 'text', content: '- [ ] milk' });
+      renderNoteModal({ ...defaultProps, note });
+      const preview = screen.getByTestId('note-content-preview');
+      expect(preview).toHaveAttribute('role', 'group');
+      expect(preview).toHaveAccessibleName('Note content');
+      fireEvent.keyDown(preview, { key: 'Enter' });
+      expect(screen.getByPlaceholderText('Take a note...')).toBeInTheDocument();
+    });
+
+    it('keeps the textbox role for a preview without checkboxes', () => {
+      const note = createMockNote({ note_type: 'text', content: 'plain' });
+      renderNoteModal({ ...defaultProps, note });
+      expect(screen.getByTestId('note-content-preview')).toHaveAttribute('role', 'textbox');
+    });
+
+    it('still opens the editor on Enter from a link in the preview', () => {
+      const note = createMockNote({ note_type: 'text', content: '[docs](https://example.com)' });
+      renderNoteModal({ ...defaultProps, note });
+      fireEvent.keyDown(screen.getByRole('link', { name: 'docs' }), { key: 'Enter' });
+      expect(screen.getByPlaceholderText('Take a note...')).toBeInTheDocument();
+    });
+
     it('renders task markers as text in a trashed note', () => {
       const note = createMockNote({ note_type: 'text', content: '- [ ] milk', deleted_at: '2024-01-01T00:00:00Z' });
       renderNoteModal({ ...defaultProps, note });

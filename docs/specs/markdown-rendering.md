@@ -489,6 +489,11 @@ as typing the change would. The preview stays a preview: a click on a checkbox
 does not enter edit mode, and Space toggles a focused checkbox rather than
 opening the editor. Focus stays on the checkbox across the re-render.
 
+A preview holding checkboxes is a `group` labelled "Note content" rather than a
+`textbox`: `textbox` is a leaf role, and assistive technology may flatten what
+is inside it, checkboxes included. Enter and Space on the preview itself still
+open the editor; a preview without checkboxes keeps the `textbox` role.
+
 | Surface | Task markers |
 |---|---|
 | Webapp modal preview | Checkboxes, named by their item's text |
@@ -501,21 +506,25 @@ each checkbox (`task` on the `text` node), so a ☐ typed into the note never
 becomes a checkbox. Checkboxes are numbered in document order, and
 `taskMarkerOffsets` (`shared/src/taskMarkers.ts`) finds the source offset of
 each one's marker: the top-level tokens' `raw` slices rebuild the source exactly,
-so each block's start is known, and within a block every task item's first line
-matches one pattern (blockquote `>` prefixes and outer list markers included).
-Matches are paired with the block's checkboxes in order. The approach follows
-Memos' `markdown-task-actions.ts`.
+so each block's start is known, and within a block the lines matching one
+pattern — indentation, then any run of quote and list markers, then the box —
+are paired with the block's checkboxes in order. The renderer writes each
+marker's offset onto its checkbox (`data-task-offset`), so a toggle is one
+character splice with no re-parse. The approach follows Memos'
+`markdown-task-actions.ts`.
 
 **When in doubt, a checkbox stays text.** A line can match the pattern without
-being a task — `- [ ]` with nothing after it, or task syntax in a code block
-nested inside a list item — and then that block's counts disagree. Such a block
-gets no offsets and its checkboxes render as ☐ / ☑, so a toggle can never rewrite
-the wrong line. A real task line always matches, so this only ever errs towards
-inert.
+being a task (`- [ ]` with nothing after it, task syntax in a code block nested
+inside a list item), and a construct the pattern does not describe could hide a
+real one. A count check alone cannot catch both at once — a miss and a false
+match cancel out — so **each pair is verified**: the source line from its `[`
+must equal the first line of the list item that owns the checkbox, from its
+`[`. A block whose counts or lines disagree gets no offsets, and its checkboxes
+render as ☐ / ☑. A toggle therefore never rewrites another item's line.
 
-**Line endings.** marked lexes CRLF as LF, so the source is normalized to LF
-before mapping, and a toggle writes LF back. Content typed in the webapp already
-is LF.
+**Line endings.** marked lexes CRLF as LF, so offsets index the LF-normalized
+source; a toggle maps its offset back onto the original and changes only the
+marker, keeping CRLF content CRLF.
 
 ---
 
@@ -622,7 +631,7 @@ one client only is exactly the kind of drift this spec exists to prevent.
 | Mobile tap point → rendered offset | `mobile/src/utils/inlineCaret.ts` |
 | Card links-as-text switch | `links` option on both clients' renderers |
 | Task-marker source offsets (§2.4) | `shared/src/taskMarkers.ts` |
-| Webapp interactive checkboxes (§2.4) | `taskToggle` option + `toggleTaskInMarkdown` in `webapp/src/utils/markdown.ts`; click handling in `webapp/src/components/NoteModal.tsx` |
+| Webapp interactive checkboxes (§2.4) | `taskToggle` option in `webapp/src/utils/markdown.ts`; click handling (`toggleTaskMarkerAt`) in `webapp/src/components/NoteModal.tsx` |
 | Card no-highlighting switch | `highlight` option on the webapp renderer; mobile's card renderer has no highlighting |
 | Mobile inline leaf rendering (shared by all three) | `mobile/src/components/inlineNodes.tsx` |
 | Mobile text metrics + colours | `mobile/src/utils/markdownStyles.ts` |

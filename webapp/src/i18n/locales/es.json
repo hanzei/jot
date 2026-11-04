@@ -456,6 +456,7 @@
     "typeList": "Lista",
     "titlePlaceholder": "Título de la nota...",
     "contentPlaceholder": "Tomar una nota...",
+    "contentPreview": "Contenido de la nota",
     "formatToolbar": "Formato",
     "formatBold": "Negrita",
     "formatItalic": "Cursiva",

@@ -100,6 +100,8 @@ test.describe('Markdown note editing', () => {
 
     await dashboardPage.openTextNote('passport');
     const preview = noteEditorPage.preview();
+    // A textbox may not hold operable controls; a preview with checkboxes is a group.
+    await expect(page.getByRole('group', { name: 'Note content' })).toBeVisible();
     const passport = preview.getByRole('checkbox', { name: 'passport' });
     await passport.click();
     await expect(passport).toBeChecked();

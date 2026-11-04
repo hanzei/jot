@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { MARKDOWN_CASES } from '@jot/shared';
-import { renderMarkdown, toggleTaskInMarkdown } from '../markdown';
+import { MARKDOWN_CASES, toggleTaskMarkerAt } from '@jot/shared';
+import { renderMarkdown } from '../markdown';
 
 /** The words a reader sees, with the markup removed. */
 function text(html: string): string {
@@ -283,8 +283,8 @@ describe('renderMarkdown', () => {
   describe('taskToggle', () => {
     it('renders task markers as indexed checkboxes named by their item', () => {
       const html = renderMarkdown('- [ ] milk\n- [x] **eggs**', { taskToggle: true });
-      expect(html).toContain('<input type="checkbox" data-task-index="0" aria-label="milk"> milk');
-      expect(html).toContain('<input type="checkbox" data-task-index="1" checked="" aria-label="eggs"> <strong>eggs</strong>');
+      expect(html).toContain('<input type="checkbox" data-task-index="0" data-task-offset="3" aria-label="milk"> milk');
+      expect(html).toContain('<input type="checkbox" data-task-index="1" data-task-offset="14" checked="" aria-label="eggs"> <strong>eggs</strong>');
       expect(html).not.toContain('☐');
     });
 
@@ -311,18 +311,22 @@ describe('renderMarkdown', () => {
   });
 });
 
-describe('toggleTaskInMarkdown', () => {
-  it('flips the indexed marker only', () => {
-    expect(toggleTaskInMarkdown('- [ ] a\n- [ ] b', 1)).toBe('- [ ] a\n- [x] b');
-    expect(toggleTaskInMarkdown('- [x] a', 0)).toBe('- [ ] a');
+describe('task checkbox offsets', () => {
+  /** Renders, then toggles the `index`th checkbox by its `data-task-offset`. */
+  function toggleRendered(content: string, index: number): string | null {
+    const host = document.createElement('div');
+    host.innerHTML = renderMarkdown(content, { taskToggle: true });
+    const checkbox = host.querySelectorAll<HTMLInputElement>('input[data-task-offset]')[index];
+    if (!checkbox) throw new Error(`no checkbox ${index}`);
+    return toggleTaskMarkerAt(content, Number(checkbox.dataset.taskOffset));
+  }
+
+  it('flips the rendered checkbox\'s own marker', () => {
+    expect(toggleRendered('- [ ] a\n- [ ] b', 1)).toBe('- [ ] a\n- [x] b');
+    expect(toggleRendered('> - [x] a', 0)).toBe('> - [ ] a');
   });
 
-  it('returns null for an index it cannot locate', () => {
-    expect(toggleTaskInMarkdown('- [ ] a', 3)).toBeNull();
-    expect(toggleTaskInMarkdown('no tasks', 0)).toBeNull();
-  });
-
-  it('writes LF line endings back', () => {
-    expect(toggleTaskInMarkdown('- [ ] a\r\n- [ ] b\r\n', 0)).toBe('- [x] a\n- [ ] b\n');
+  it('keeps CRLF line endings', () => {
+    expect(toggleRendered('- [ ] a\r\n- [ ] b\r\n', 1)).toBe('- [ ] a\r\n- [x] b\r\n');
   });
 });
