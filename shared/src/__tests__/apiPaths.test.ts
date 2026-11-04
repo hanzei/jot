@@ -59,7 +59,6 @@ describe('apiPaths', () => {
       usersMe: '/users/me',
       usersMePassword: '/users/me/password',
       usersMeProfileIcon: '/users/me/profile-icon',
-      usersMeSettings: '/users/me/settings',
       sessions: '/sessions',
       session: '/sessions/n1',
       pats: '/pats',
