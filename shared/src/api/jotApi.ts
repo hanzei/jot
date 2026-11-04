@@ -36,7 +36,6 @@ import type {
   User,
   UserListResponse,
   UserSearchResponse,
-  UserSettings,
 } from '../types';
 import { apiPaths } from './paths';
 
@@ -220,8 +219,6 @@ export function createJotApi(http: JotHttpClient) {
       updateMe: (body: UpdateMeRequest): Promise<AuthResponse> => data(http.patch<AuthResponse>(apiPaths.usersMe, body)),
 
       changePassword: (body: ChangePasswordRequest): Promise<void> => done(http.put(apiPaths.usersMePassword, body)),
-
-      getSettings: (): Promise<UserSettings> => data(http.get<UserSettings>(apiPaths.usersMeSettings)),
 
       /** `formData` carries the image as `file`. */
       uploadProfileIcon: (formData: unknown, config?: HttpRequestConfig): Promise<User> =>

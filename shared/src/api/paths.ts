@@ -69,7 +69,6 @@ export const apiPaths = {
   usersMe: '/users/me',
   usersMePassword: '/users/me/password',
   usersMeProfileIcon: '/users/me/profile-icon',
-  usersMeSettings: '/users/me/settings',
 
   sessions: '/sessions',
   session: (sessionId: string): string => `/sessions/${sessionId}`,
