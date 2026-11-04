@@ -89,9 +89,11 @@ memory or from this file. Read them off the code at survey time.
    does. A spec that misdescribes an endpoint often hides an overlap.
 
 The cost of each extra endpoint is paid several times over: the handler, the Go client
-(`server/client/`), the shared API module, both clients' callers, a mobile sync-queue
-operation (count the `QueueOperation` union in `mobile/src/db/syncQueue.ts`), tests, and
-the spec. Say which of these a merge removes.
+(`server/client/`), the shared API module, both clients' callers, tests, the spec, and,
+for a write that mobile replays offline, a sync-queue operation with its own replay
+branch (the `QueueOperation` union in `mobile/src/db/syncQueue.ts`). Reads are never
+queued, so a read-only merge removes no queue operation. Say which of these a merge
+removes.
 
 ### Server code paths
 
