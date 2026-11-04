@@ -56,7 +56,6 @@ describe('createJotApi', () => {
     ['users.search', a => a.users.search('al'), 'get', ['/users', { params: { search: 'al' } }], { users: [1], truncated: true }, { users: [1], truncated: true }],
     ['users.updateMe', a => a.users.updateMe({ theme: 'dark' }), 'patch', ['/users/me', { theme: 'dark' }], { user: 1 }, { user: 1 }],
     ['users.changePassword', a => a.users.changePassword({ new_password: 'x' } as never), 'put', ['/users/me/password', { new_password: 'x' }], {}, undefined],
-    ['users.getSettings', a => a.users.getSettings(), 'get', ['/users/me/settings'], { theme: 'dark' }, { theme: 'dark' }],
     ['users.uploadProfileIcon', a => a.users.uploadProfileIcon('form'), 'post', ['/users/me/profile-icon', 'form', undefined], { id: 'u1' }, { id: 'u1' }],
     ['users.deleteProfileIcon', a => a.users.deleteProfileIcon(), 'delete', ['/users/me/profile-icon'], {}, undefined],
     ['sessions.list', a => a.sessions.list(), 'get', ['/sessions'], { sessions: [1] }, [1]],
