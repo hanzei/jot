@@ -2725,6 +2725,44 @@ describe('NoteModal', () => {
       expect(screen.getByPlaceholderText('Take a note...')).toBeInTheDocument();
     });
 
+    it('toggles a task checkbox in the preview without entering edit mode', async () => {
+      const note = createMockNote({ note_type: 'text', content: '- [ ] milk\n- [x] eggs' });
+      renderNoteModal({ ...defaultProps, note });
+
+      const milk = screen.getByRole('checkbox', { name: 'milk' });
+      expect(milk).not.toBeChecked();
+      expect(screen.getByRole('checkbox', { name: 'eggs' })).toBeChecked();
+
+      fireEvent.click(milk);
+
+      expect(screen.getByRole('checkbox', { name: 'milk' })).toBeChecked();
+      expect(screen.queryByPlaceholderText('Take a note...')).not.toBeInTheDocument();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(mockNotesUpdate).toHaveBeenCalledWith(note.id, expect.objectContaining({ content: '- [x] milk\n- [x] eggs' }));
+    });
+
+    it('keeps focus on a task checkbox after toggling it', () => {
+      const note = createMockNote({ note_type: 'text', content: '- [ ] milk' });
+      renderNoteModal({ ...defaultProps, note });
+
+      const milk = screen.getByRole('checkbox', { name: 'milk' });
+      milk.focus();
+      fireEvent.keyDown(milk, { key: ' ' });
+      fireEvent.click(milk);
+
+      const replaced = screen.getByRole('checkbox', { name: 'milk' });
+      expect(replaced).toBeChecked();
+      expect(replaced).toHaveFocus();
+      expect(screen.queryByPlaceholderText('Take a note...')).not.toBeInTheDocument();
+    });
+
+    it('renders task markers as text in a trashed note', () => {
+      const note = createMockNote({ note_type: 'text', content: '- [ ] milk', deleted_at: '2024-01-01T00:00:00Z' });
+      renderNoteModal({ ...defaultProps, note });
+      expect(screen.queryByRole('checkbox', { name: 'milk' })).not.toBeInTheDocument();
+      expect(screen.getByTestId('note-content-preview')).toHaveTextContent('☐ milk');
+    });
+
     it('collapses to preview on Escape', () => {
       const note = createMockNote({ note_type: 'text', content: 'Hello' });
       renderNoteModal({ ...defaultProps, note });

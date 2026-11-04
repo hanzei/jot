@@ -267,6 +267,18 @@ for (const theme of THEMES) {
       }
     });
 
+    test('task checkboxes in the note preview have no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage }) => {
+      void authenticatedUser;
+      await dashboardPage.goto();
+      await dashboardPage.createTextNote('A11y tasks\n\n- [ ] open item\n- [x] **done** item');
+      await dashboardPage.openTextNote('A11y tasks');
+      await expectTheme(page, theme);
+
+      const preview = '[role="dialog"] [data-testid="note-content-preview"]';
+      await expect(page.locator(`${preview} input[type="checkbox"]`)).toHaveCount(2);
+      await expectNoViolations(page, { include: [preview] });
+    });
+
     // A code line wider than the note wraps rather than scrolling: a
     // scrolling <pre> is a region keyboard users cannot reach
     // (scrollable-region-focusable), and the preview around it is itself a

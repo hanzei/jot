@@ -86,13 +86,22 @@ function checkboxText(token: BlockMarkdownToken): string {
  * one.
  */
 function inlineNodes(tokens: BlockMarkdownToken[]): InlineNode[] {
-  return normalizeInlineTokens(
-    tokens.map((token) =>
-      token.type === 'checkbox'
-        ? { type: 'text', raw: token.raw, text: checkboxText(token) }
-        : token,
-    ),
-  );
+  const nodes: InlineNode[] = [];
+  let run: BlockMarkdownToken[] = [];
+  for (const token of tokens) {
+    if (token.type !== 'checkbox') {
+      run.push(token);
+      continue;
+    }
+    nodes.push(...normalizeInlineTokens(run));
+    run = [];
+    // Tagged so a renderer can make it interactive (docs/specs §2.4) without
+    // mistaking a ☐ the user typed for one.
+    const checked = token.checked ?? false;
+    nodes.push({ type: 'text', value: checkboxText(token), task: { checked } });
+  }
+  nodes.push(...normalizeInlineTokens(run));
+  return nodes;
 }
 
 /**

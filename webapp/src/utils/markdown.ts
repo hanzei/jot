@@ -5,6 +5,9 @@ import {
   normalizeInlineTokens,
   flattenInlineNodes,
   inlineRendersAsSource,
+  normalizeTaskSource,
+  taskMarkerOffsets,
+  toggleTaskMarkerAt,
   BLOCK_LEXER_OPTIONS,
   INLINE_LEXER_OPTIONS,
   highlightCode,
@@ -53,6 +56,11 @@ const ALLOWED_TAGS = [
 // allowlist was quietly causing.
 const ALLOWED_ATTR = ['href', 'target', 'rel', 'start'];
 
+// Interactive task checkboxes (`taskToggle`). Only the renderer emits an
+// <input>: raw HTML in a note has already been degraded to text by the shared
+// normalizer, so none can come from the note itself.
+const TASK_ATTR = [...ALLOWED_ATTR, 'type', 'checked', 'aria-label'];
+
 /**
  * Dropping `a` from the allowlist is the whole implementation of the
  * links-as-text rule: DOMPurify strips a tag it does not allow and keeps the
@@ -78,6 +86,22 @@ export interface MarkdownRenderOptions {
    * See docs/specs/markdown-rendering.md §2.3.
    */
   highlight?: boolean;
+  /**
+   * Whether task-list checkboxes render as real checkboxes carrying
+   * `data-task-index`, for `toggleTaskInMarkdown`. Only the open note's preview
+   * passes `true`; note cards keep ☐ / ☑ text (docs/specs §2.4). A checkbox
+   * whose marker cannot be located in the source stays ☐ / ☑ text.
+   */
+  taskToggle?: boolean;
+}
+
+/**
+ * Render-time state for one `renderMarkdown` call: the options that reach
+ * every node, and the running checkbox index when `taskToggle` is on.
+ */
+interface BlockRenderContext {
+  highlight: boolean;
+  tasks: { offsets: (number | null)[]; next: number } | null;
 }
 
 /**
@@ -90,12 +114,12 @@ export interface MarkdownRenderOptions {
  * CommonMark's distinction, carried on the list node so this does not have to
  * guess it back from the shape of the item.
  */
-function renderListItem(blocks: BlockNode[], loose: boolean, highlight: boolean): string {
+function renderListItem(blocks: BlockNode[], loose: boolean, ctx: BlockRenderContext): string {
   return blocks
     .map((block) =>
       !loose && block.type === 'paragraph'
-        ? renderInlineNodes(block.children)
-        : renderBlockNode(block, highlight),
+        ? renderInlineNodes(block.children, ctx)
+        : renderBlockNode(block, ctx),
     )
     .join('');
 }
@@ -108,32 +132,32 @@ function renderCodeRuns(runs: CodeRun[]): string {
     .join('');
 }
 
-function renderBlockNode(node: BlockNode, highlight: boolean): string {
+function renderBlockNode(node: BlockNode, ctx: BlockRenderContext): string {
   switch (node.type) {
     case 'paragraph':
-      return `<p>${renderInlineNodes(node.children)}</p>\n`;
+      return `<p>${renderInlineNodes(node.children, ctx)}</p>\n`;
 
     case 'heading':
       // h4-h6 stay real headings and are styled down in CSS, keeping the
       // document outline for assistive technology.
-      return `<h${node.depth}>${renderInlineNodes(node.children)}</h${node.depth}>\n`;
+      return `<h${node.depth}>${renderInlineNodes(node.children, ctx)}</h${node.depth}>\n`;
 
     case 'code': {
       // No <br> substitution: newlines are significant inside <pre>. No
       // language class either — the tokens carry their own, and an unknown
       // language renders plain (docs/specs §2.3).
-      const runs = highlight ? highlightCode(getCodeHighlighter(), node.text, node.lang) : null;
+      const runs = ctx.highlight ? highlightCode(getCodeHighlighter(), node.text, node.lang) : null;
       return `<pre><code>${runs ? renderCodeRuns(runs) : escapeHtml(node.text)}</code></pre>\n`;
     }
 
     case 'blockquote':
-      return `<blockquote>\n${renderBlockNodes(node.children, highlight)}</blockquote>\n`;
+      return `<blockquote>\n${renderBlockNodes(node.children, ctx)}</blockquote>\n`;
 
     case 'list': {
       const tag = node.ordered ? 'ol' : 'ul';
       const start = node.ordered && node.start !== 1 ? ` start="${node.start}"` : '';
       const items = node.items
-        .map((item) => `<li>${renderListItem(item, node.loose, highlight)}</li>\n`)
+        .map((item) => `<li>${renderListItem(item, node.loose, ctx)}</li>\n`)
         .join('');
       return `<${tag}${start}>\n${items}</${tag}>\n`;
     }
@@ -143,20 +167,46 @@ function renderBlockNode(node: BlockNode, highlight: boolean): string {
   }
 }
 
-function renderBlockNodes(nodes: BlockNode[], highlight: boolean): string {
-  return nodes.map((node) => renderBlockNode(node, highlight)).join('');
+function renderBlockNodes(nodes: BlockNode[], ctx: BlockRenderContext): string {
+  return nodes.map((node) => renderBlockNode(node, ctx)).join('');
 }
 
 export function renderMarkdown(
   content: string,
-  { links = true, highlight = true }: MarkdownRenderOptions = {},
+  { links = true, highlight = true, taskToggle = false }: MarkdownRenderOptions = {},
 ): string {
   if (!content.trim()) return '';
-  const nodes = normalizeBlockTokens(Lexer.lex(content, BLOCK_LEXER_OPTIONS));
-  return DOMPurify.sanitize(renderBlockNodes(nodes, highlight), {
-    ALLOWED_TAGS: links ? ALLOWED_TAGS : NO_LINK_TAGS,
-    ALLOWED_ATTR,
+  let tasks: BlockRenderContext['tasks'] = null;
+  let nodes: BlockNode[];
+  if (taskToggle) {
+    const source = normalizeTaskSource(content);
+    const tokens = Lexer.lex(source, BLOCK_LEXER_OPTIONS);
+    tasks = { offsets: taskMarkerOffsets(source, tokens), next: 0 };
+    nodes = normalizeBlockTokens(tokens);
+  } else {
+    nodes = normalizeBlockTokens(Lexer.lex(content, BLOCK_LEXER_OPTIONS));
+  }
+  const tags = links ? ALLOWED_TAGS : NO_LINK_TAGS;
+  return DOMPurify.sanitize(renderBlockNodes(nodes, { highlight, tasks }), {
+    ALLOWED_TAGS: taskToggle ? [...tags, 'input'] : tags,
+    ALLOWED_ATTR: taskToggle ? TASK_ATTR : ALLOWED_ATTR,
   });
+}
+
+/**
+ * Flips the `index`th task checkbox — the `data-task-index` that
+ * `renderMarkdown(..., { taskToggle: true })` gave it — in `content`.
+ *
+ * Returns `null` when that checkbox can no longer be located, e.g. because the
+ * content changed underneath the rendered view. The result has LF line endings
+ * (`normalizeTaskSource`).
+ */
+export function toggleTaskInMarkdown(content: string, index: number): string | null {
+  const source = normalizeTaskSource(content);
+  const offset = taskMarkerOffsets(source, Lexer.lex(source, BLOCK_LEXER_OPTIONS))[index] ?? null;
+  if (offset === null) return null;
+  const next = toggleTaskMarkerAt(source, offset);
+  return next === source ? null : next;
 }
 
 // List-item text renders an inline-only subset — see shared/src/inlineMarkdown.ts
@@ -166,12 +216,31 @@ export function renderMarkdown(
 const INLINE_ALLOWED_TAGS = ['strong', 'em', 'del', 'code', 'a', 'br'];
 const INLINE_NO_LINK_TAGS = INLINE_ALLOWED_TAGS.filter((tag) => tag !== 'a');
 
-function renderInlineNodes(nodes: InlineNode[]): string {
+function renderTaskCheckbox(
+  checked: boolean,
+  rest: InlineNode[],
+  tasks: NonNullable<BlockRenderContext['tasks']>,
+): string | null {
+  const index = tasks.next++;
+  if ((tasks.offsets[index] ?? null) === null) return null;
+  // Named by the item's own text, as the eye reads it.
+  const label = escapeHtml(flattenInlineNodes(rest).trim());
+  return `<input type="checkbox" data-task-index="${index}"${checked ? ' checked' : ''} aria-label="${label}"> `;
+}
+
+function renderInlineNodes(nodes: InlineNode[], ctx?: BlockRenderContext): string {
   let html = '';
 
-  for (const node of nodes) {
+  for (const [i, node] of nodes.entries()) {
     switch (node.type) {
       case 'text':
+        if (node.task && ctx?.tasks) {
+          const checkbox = renderTaskCheckbox(node.task.checked, nodes.slice(i + 1), ctx.tasks);
+          if (checkbox !== null) {
+            html += checkbox;
+            break;
+          }
+        }
         // A newline that survived into a text node is a line break the reader
         // should see — HTML would collapse it to a space. Only literal source
         // (a table, an HTML block) still carries one; everywhere else `breaks:
@@ -185,19 +254,19 @@ function renderInlineNodes(nodes: InlineNode[]): string {
         html += '<br>';
         break;
       case 'strong':
-        html += `<strong>${renderInlineNodes(node.children)}</strong>`;
+        html += `<strong>${renderInlineNodes(node.children, ctx)}</strong>`;
         break;
       case 'em':
-        html += `<em>${renderInlineNodes(node.children)}</em>`;
+        html += `<em>${renderInlineNodes(node.children, ctx)}</em>`;
         break;
       case 'del':
-        html += `<del>${renderInlineNodes(node.children)}</del>`;
+        html += `<del>${renderInlineNodes(node.children, ctx)}</del>`;
         break;
       case 'link': {
         // normalizeInlineTokens has already dropped links Jot will not follow
         // and encoded the target (`encodeLinkHref`), which also encodes a quote
         // that would close the attribute; DOMPurify is the net behind that.
-        html += `<a href="${node.href}" target="_blank" rel="noopener noreferrer">${renderInlineNodes(node.children)}</a>`;
+        html += `<a href="${node.href}" target="_blank" rel="noopener noreferrer">${renderInlineNodes(node.children, ctx)}</a>`;
         break;
       }
     }

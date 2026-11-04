@@ -66,7 +66,10 @@ export interface InlineSourceSpan {
  * that narrowing on `type` keeps working exactly as it did.
  */
 export type InlineNode =
-  | { type: 'text'; value: string; src?: InlineSourceSpan }
+  // `task` marks the ☐ / ☑ a task-list checkbox renders as — only text-note
+  // content produces one (blockMarkdown.ts). Renderers that ignore it show the
+  // character, which is the non-interactive rendering.
+  | { type: 'text'; value: string; src?: InlineSourceSpan; task?: { checked: boolean } }
   | { type: 'code'; value: string; src?: InlineSourceSpan }
   | { type: 'br'; src?: InlineSourceSpan }
   | { type: 'strong'; children: InlineNode[]; src?: InlineSourceSpan }

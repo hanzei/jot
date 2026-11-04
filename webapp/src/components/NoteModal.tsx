@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, distinctCompletedTexts, findSuggestedItem, generateId, reviveSuggestedItem, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, completedCascadeScope, completedPriorById, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
-import { renderMarkdown, inlineMarkdownToText } from '@/utils/markdown';
+import { renderMarkdown, inlineMarkdownToText, toggleTaskInMarkdown } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
 import NoteImageGallery from '@/components/NoteImageGallery';
 import LetterAvatar from '@/components/LetterAvatar';
@@ -666,12 +666,43 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
   const isEditingText = isEditingContent && !isReadOnly;
   const renderedContent = useMemo(() => {
     if (isEditingText || !content?.trim()) return '';
-    const md = renderMarkdown(content);
+    const md = renderMarkdown(content, { taskToggle: !isReadOnly });
     if (md) return md;
     return content.replace(/[&<>"']/g, (c) => (
       { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c] ?? c
     ));
-  }, [content, isEditingText]);
+  }, [content, isEditingText, isReadOnly]);
+
+  // Task checkboxes in the preview (docs/specs/markdown-rendering.md §2.4).
+  // A toggle rewrites one character of `content`, which re-renders the
+  // preview's HTML and so replaces the checkbox that had focus; the index is
+  // kept here so the effect below can hand focus to its replacement.
+  const previewRef = useRef<HTMLDivElement>(null);
+  const focusTaskIndexRef = useRef<number | null>(null);
+  const toggleTask = (checkbox: HTMLInputElement) => {
+    const index = Number(checkbox.dataset.taskIndex);
+    const next = toggleTaskInMarkdown(content, index);
+    if (next === null) {
+      // Nothing to write: undo the browser's own toggle so the box keeps
+      // showing what the note says.
+      checkbox.checked = !checkbox.checked;
+      return;
+    }
+    focusTaskIndexRef.current = document.activeElement === checkbox ? index : null;
+    setContent(next);
+    if (note) {
+      markDirty();
+      scheduleAutoSave();
+    }
+  };
+  useEffect(() => {
+    const index = focusTaskIndexRef.current;
+    if (index === null) return;
+    focusTaskIndexRef.current = null;
+    previewRef.current
+      ?.querySelector<HTMLInputElement>(`input[data-task-index="${index}"]`)
+      ?.focus();
+  }, [renderedContent]);
 
   // Mobile snaps indent level to the nearest INDENT_PX_PER_LEVEL step (rounding),
   // so it takes half a step — 12px — to commit to nesting. The desktop drag has no
@@ -2096,15 +2127,25 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                   />
                 ) : (
                   <div
+                    ref={previewRef}
                     data-testid="note-content-preview"
                     role="textbox"
                     aria-label={t('note.contentPlaceholder')}
                     aria-multiline="true"
                     aria-readonly={isReadOnly}
                     tabIndex={0}
-                    onClick={() => !isReadOnly && setIsEditingContent(true)}
+                    onClick={(e) => {
+                      if (isReadOnly) return;
+                      if (e.target instanceof HTMLInputElement && e.target.dataset.taskIndex !== undefined) {
+                        toggleTask(e.target);
+                        return;
+                      }
+                      setIsEditingContent(true);
+                    }}
                     onKeyDown={(e) => {
                       if (isReadOnly) return;
+                      // Space on a task checkbox is the checkbox's own toggle.
+                      if (e.target !== e.currentTarget) return;
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
                         setIsEditingContent(true);

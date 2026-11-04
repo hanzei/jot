@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { MARKDOWN_CASES } from '@jot/shared';
-import { renderMarkdown } from '../markdown';
+import { renderMarkdown, toggleTaskInMarkdown } from '../markdown';
 
 /** The words a reader sees, with the markup removed. */
 function text(html: string): string {
@@ -278,5 +278,51 @@ describe('renderMarkdown', () => {
       expect(html).toContain('<code>c</code>');
       expect(html).toContain('<li>one</li>');
     });
+  });
+
+  describe('taskToggle', () => {
+    it('renders task markers as indexed checkboxes named by their item', () => {
+      const html = renderMarkdown('- [ ] milk\n- [x] **eggs**', { taskToggle: true });
+      expect(html).toContain('<input type="checkbox" data-task-index="0" aria-label="milk"> milk');
+      expect(html).toContain('<input type="checkbox" data-task-index="1" checked="" aria-label="eggs"> <strong>eggs</strong>');
+      expect(html).not.toContain('☐');
+    });
+
+    it('keeps ☐ / ☑ text without it, as note cards do', () => {
+      const html = renderMarkdown('- [ ] milk', { links: false });
+      expect(html).not.toContain('<input');
+      expect(html).toContain('☐ milk');
+    });
+
+    it('never turns a ☐ the note itself contains into a checkbox', () => {
+      expect(renderMarkdown('☐ typed', { taskToggle: true })).not.toContain('<input');
+    });
+
+    it('keeps raw HTML inputs out even with the input tag allowed', () => {
+      const html = renderMarkdown('<input type="checkbox"> and - [ ] x', { taskToggle: true });
+      expect(html).not.toContain('<input');
+    });
+
+    it('leaves a checkbox it cannot locate as text', () => {
+      const html = renderMarkdown('- [ ] real\n  ```\n  - [ ] fake\n  ```', { taskToggle: true });
+      expect(html).not.toContain('<input');
+      expect(html).toContain('☐ real');
+    });
+  });
+});
+
+describe('toggleTaskInMarkdown', () => {
+  it('flips the indexed marker only', () => {
+    expect(toggleTaskInMarkdown('- [ ] a\n- [ ] b', 1)).toBe('- [ ] a\n- [x] b');
+    expect(toggleTaskInMarkdown('- [x] a', 0)).toBe('- [ ] a');
+  });
+
+  it('returns null for an index it cannot locate', () => {
+    expect(toggleTaskInMarkdown('- [ ] a', 3)).toBeNull();
+    expect(toggleTaskInMarkdown('no tasks', 0)).toBeNull();
+  });
+
+  it('writes LF line endings back', () => {
+    expect(toggleTaskInMarkdown('- [ ] a\r\n- [ ] b\r\n', 0)).toBe('- [x] a\n- [ ] b\n');
   });
 });
