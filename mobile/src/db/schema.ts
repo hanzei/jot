@@ -267,7 +267,41 @@ const migration7 = async (db: SQLiteDatabase): Promise<void> => {
   await addColumnIfMissing(db, 'notes', 'unread', 'unread TEXT');
 };
 
-export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7];
+// Migration 8: the server removed POST /notes/{id}/items/{item_id}/toggle-completed
+// in favour of POST /notes/{id}/items/set-completed, and the client merged its
+// `toggleItemCompleted` and `uncheckAllItems` queue operations into one
+// `setItemsCompleted`. Rewrite unsent rows (and dead-lettered ones, which the
+// failed-changes flow can re-queue) so replay needs no legacy branch: a toggle
+// becomes a one-element set-completed, and an uncheckAllItems row keeps its
+// endpoint and body and only takes the new operation name. Idempotent: rows
+// already in the new form are not touched.
+const migration8 = async (db: SQLiteDatabase): Promise<void> => {
+  const toggleEndpoint = /^\/notes\/([^/]+)\/items\/([^/]+)\/toggle-completed$/;
+  for (const table of ['sync_queue', 'dead_letter']) {
+    // Already a set-completed request: only the operation name changes.
+    await db.runAsync(`UPDATE ${table} SET operation = 'setItemsCompleted' WHERE operation = 'uncheckAllItems'`);
+
+    const toggles = await db.getAllAsync<{ id: number; endpoint: string; body: string | null }>(
+      `SELECT id, endpoint, body FROM ${table} WHERE operation = 'toggleItemCompleted'`,
+    );
+    for (const row of toggles) {
+      const match = toggleEndpoint.exec(row.endpoint);
+      if (!match) continue;
+      let completed = false;
+      try {
+        completed = (JSON.parse(row.body ?? 'null') as { completed?: unknown } | null)?.completed === true;
+      } catch {
+        // Unparseable body: replay it as an uncheck rather than dropping it.
+      }
+      await db.runAsync(
+        `UPDATE ${table} SET operation = 'setItemsCompleted', endpoint = ?, body = ? WHERE id = ?`,
+        [`/notes/${match[1]}/items/set-completed`, JSON.stringify({ item_ids: [match[2]], completed }), row.id],
+      );
+    }
+  }
+};
+
+export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8];
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   // Run PRAGMAs separately: sqlite3_exec (used by execAsync) stops on the

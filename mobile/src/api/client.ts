@@ -1,7 +1,7 @@
 import axios, { AxiosHeaders, CanceledError, type InternalAxiosRequestConfig } from 'axios';
 import { Platform } from 'react-native';
 import type { AuthResponse, LoginRequest, RegisterRequest } from '@jot/shared';
-import { apiRequestId, canonicalizeServerOrigin, isServerError } from '@jot/shared';
+import { apiPaths, apiRequestId, apiUrl, createJotApi, canonicalizeServerOrigin, isServerError } from '@jot/shared';
 import { randomUUID } from '../utils/random';
 import { markServerReachable, markServerUnreachable } from './serverReachability';
 import {
@@ -186,7 +186,7 @@ export async function probeServerReachability(url: string): Promise<ServerReacha
   }
 
   try {
-    const response = await axios.get(`${canonical}/api/v1/me`, {
+    const response = await axios.get(apiUrl(apiPaths.usersMe, canonical), {
       timeout: 5000,
       headers: {
         'User-Agent': `JotMobile/1.0 (${platformLabel[Platform.OS] ?? Platform.OS})`,
@@ -222,20 +222,17 @@ export const WRITE_REQUEST_TIMEOUT_MS = 5000;
 
 // Auth requests have no offline queue fallback and may be slow on a weak link,
 // so they keep the default (longer) timeout rather than the short write budget.
-const OIDC_NATIVE_EXCHANGE_PATH = '/auth/oidc/native/exchange';
-const OIDC_NATIVE_LINK_PATH = '/auth/oidc/native/link';
-const OIDC_UNLINK_PATH = '/auth/oidc/unlink';
-const AUTH_ENDPOINT_PATHS = new Set([
-  '/login',
-  '/register',
-  '/logout',
-  OIDC_NATIVE_EXCHANGE_PATH,
-  OIDC_NATIVE_LINK_PATH,
-  OIDC_UNLINK_PATH,
+const AUTH_ENDPOINT_PATHS = new Set<string>([
+  apiPaths.login,
+  apiPaths.register,
+  apiPaths.logout,
+  apiPaths.oidcNativeExchange,
+  apiPaths.oidcNativeLink,
+  apiPaths.oidcUnlink,
 ]);
 
 const api = axios.create({
-  baseURL: `${currentBaseUrl}/api/v1`,
+  baseURL: apiUrl('', currentBaseUrl),
   timeout: DEFAULT_REQUEST_TIMEOUT_MS,
   headers: {
     'Content-Type': 'application/json',
@@ -250,7 +247,7 @@ function applyServerUrl(url: string): string {
     throw new Error(`Invalid server URL: ${url}`);
   }
   currentBaseUrl = normalized;
-  api.defaults.baseURL = `${normalized}/api/v1`;
+  api.defaults.baseURL = apiUrl('', normalized);
   return normalized;
 }
 
@@ -546,7 +543,9 @@ api.interceptors.response.use(
 
     if (error.response?.status === 401) {
       const url: string = config?.url || '';
-      const isAuthEndpoint = url === '/login' || url === '/register' || url === '/logout' || url === '/me';
+      // Only the read is exempt: PATCH /users/me must still clear a dead session.
+      const isCurrentUserRead = url === apiPaths.usersMe && config?.method?.toLowerCase() === 'get';
+      const isAuthEndpoint = url === apiPaths.login || url === apiPaths.register || url === apiPaths.logout || isCurrentUserRead;
       if (!isAuthEndpoint) {
         await handleUnauthorizedSession();
       }
@@ -612,15 +611,19 @@ export async function clearCachedProfile(): Promise<void> {
   }
 }
 
+// The shared endpoints for the auth calls that don't read response headers.
+// (`api/jot.ts` can't be imported here: it imports this module.)
+const sharedAuth = createJotApi(api);
+
 export const auth = {
   login: async (data: LoginRequest): Promise<AuthResponse> => {
-    const res = await api.post('/login', data);
+    const res = await api.post(apiPaths.login, data);
     await storeSessionFromResponse(res.headers as Record<string, string | string[] | undefined>);
     return res.data;
   },
 
   register: async (data: RegisterRequest): Promise<AuthResponse> => {
-    const res = await api.post('/register', data);
+    const res = await api.post(apiPaths.register, data);
     await storeSessionFromResponse(res.headers as Record<string, string | string[] | undefined>);
     return res.data;
   },
@@ -646,7 +649,7 @@ export const auth = {
         throw new CanceledError('Active server changed during the SSO exchange.');
       }
     };
-    const res = await api.post(OIDC_NATIVE_EXCHANGE_PATH, { code, code_verifier: codeVerifier });
+    const res = await api.post(apiPaths.oidcNativeExchange, { code, code_verifier: codeVerifier });
     assertStillActive();
     await storeSessionFromResponse(res.headers as Record<string, string | string[] | undefined>, serverId);
     await cacheAuthProfile(res.data, serverId);
@@ -660,13 +663,11 @@ export const auth = {
    * 403 when the server has local login disabled, 400 for a bad code.
    */
   oidcNativeLink: async (code: string, codeVerifier: string): Promise<void> => {
-    await api.post(OIDC_NATIVE_LINK_PATH, { code, code_verifier: codeVerifier });
+    await api.post(apiPaths.oidcNativeLink, { code, code_verifier: codeVerifier });
   },
 
   /** Unbinds the SSO identity; the server refuses (422) when that would strand a password-less account. */
-  oidcUnlink: async (): Promise<void> => {
-    await api.post(OIDC_UNLINK_PATH);
-  },
+  oidcUnlink: (): Promise<void> => sharedAuth.sso.unlink(),
 
   logout: async (): Promise<void> => {
     // Server-side session invalidation is best-effort: the session still
@@ -681,16 +682,13 @@ export const auth = {
     await clearStoredSession();
     await clearCachedProfile();
     if (token) {
-      void api.post('/logout', undefined, { headers: { Cookie: `jot_session=${token}` } }).catch(() => {
+      void sharedAuth.auth.logout({ headers: { Cookie: `jot_session=${token}` } }).catch(() => {
         // Best-effort: local session is already cleared regardless of outcome.
       });
     }
   },
 
-  me: async (): Promise<AuthResponse> => {
-    const res = await api.get('/me');
-    return res.data;
-  },
+  me: (): Promise<AuthResponse> => sharedAuth.auth.me(),
 };
 
 export async function getStoredSession(): Promise<string | null> {

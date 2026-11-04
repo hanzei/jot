@@ -26,7 +26,7 @@ test.describe('Localization', () => {
     authenticatedUser,
   }) => {
     const loadSettingsResponse = page.waitForResponse((resp) =>
-      resp.url().includes('/api/v1/me') && resp.request().method() === 'GET' && resp.ok(),
+      resp.url().includes('/api/v1/users/me') && resp.request().method() === 'GET' && resp.ok(),
     );
     await settingsPage.goto();
     await loadSettingsResponse;
@@ -46,7 +46,7 @@ test.describe('Localization', () => {
     await expect(page).toHaveTitle(deLocale.pageTitle.settings);
 
     const reloadSettingsResponse = page.waitForResponse((resp) =>
-      resp.url().includes('/api/v1/me') && resp.request().method() === 'GET' && resp.ok(),
+      resp.url().includes('/api/v1/users/me') && resp.request().method() === 'GET' && resp.ok(),
     );
     await page.reload();
     await reloadSettingsResponse;

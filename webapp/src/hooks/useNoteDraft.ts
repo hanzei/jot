@@ -3,9 +3,11 @@ import { useTranslation } from 'react-i18next';
 import {
   DEFAULT_NOTE_COLOR,
   VALIDATION,
+  advanceSnapshot,
   buildScalarPatch,
   diffItems,
   itemSnapshot,
+  createCompletedWriteTracker,
   itemsDiffer,
   patchTouchesSharedContent,
   type ItemSnapshot,
@@ -110,6 +112,11 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
   // so edits made during the save are not lost.
   const pendingSaveRef = useRef(false);
   const savingRef = useRef(false);
+  // Which in-flight completed writes claim which items; every server item
+  // snapshot's completed flags — write responses and adopted notes alike — go
+  // through it (see completedWrites in @jot/shared), and the save diff leaves
+  // the flags it claims to those writes.
+  const [completedWrites] = useState(createCompletedWriteTracker);
 
   useEffect(() => {
     noteIdRef.current = note?.id ?? null;
@@ -236,7 +243,7 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
   // retry — which would otherwise re-create items and get stuck on 409 Conflict.
   const persistItemDiff = useCallback(async (noteId: string, listItems: ListItem[]) => {
     const base = savedItemsRef.current;
-    for (const op of diffItems(base, savedOrderRef.current, listItems)) {
+    for (const op of diffItems(base, savedOrderRef.current, listItems, completedWrites.claimed())) {
       switch (op.kind) {
         case 'create':
           try {
@@ -247,10 +254,13 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
           }
           base.set(op.itemId, op.snapshot);
           break;
-        case 'patch':
+        case 'patch': {
           await notes.updateItem(noteId, op.itemId, op.patch);
-          base.set(op.itemId, op.snapshot);
+          // An entry that vanished meanwhile (a bulk delete absorbed it) stays gone.
+          const current = base.get(op.itemId);
+          if (current) base.set(op.itemId, advanceSnapshot(current, op.patch));
           break;
+        }
         case 'delete':
           await notes.deleteItem(noteId, op.itemId);
           base.delete(op.itemId);
@@ -261,7 +271,7 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
       }
     }
     savedOrderRef.current = listItems.map(it => it.id);
-  }, []);
+  }, [completedWrites]);
 
   // Flushes all pending scalar and item changes to the server in one pass.
   // Throws NoteConflictError (with the conflict state raised) when the note
@@ -427,7 +437,7 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
     // Stale-write conflict (409 on base_version)
     conflict, overwriteConflict,
     // Baseline
-    setSavedBaseline, markScalarSaved, applyDraftScalars, isDirty, hasUnflushedWork, baseline,
+    setSavedBaseline, markScalarSaved, applyDraftScalars, isDirty, hasUnflushedWork, baseline, completedWrites,
     // Save pipeline
     reportSaveFailure,
     autoSaveNote, scheduleAutoSave, cancelPendingSave, flushSave,

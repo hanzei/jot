@@ -1,17 +1,8 @@
-import { useContext } from 'react';
-import {
-  Modal,
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  Pressable,
-} from 'react-native';
-import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
+import { TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { Check } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
+import BottomSheet from './BottomSheet';
 import { NOTE_COLORS, LIGHT_NOTE_COLORS, NOTE_COLOR_NAME_KEYS } from '@jot/shared';
 
 interface ColorPickerProps {
@@ -24,80 +15,44 @@ interface ColorPickerProps {
 export default function ColorPicker({ visible, currentColor, onSelect, onClose }: ColorPickerProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      <Pressable style={[styles.overlay, { backgroundColor: colors.overlay }]} onPress={onClose}>
-        <View style={[styles.sheet, { backgroundColor: colors.sheetBackground, paddingBottom: insets.bottom }]}>
-          <Pressable>
-            <View style={[styles.handle, { backgroundColor: colors.handleColor }]} />
-            <Text style={[styles.title, { color: colors.text }]}>{t('note.changeColor')}</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.palette}
-            >
-              {NOTE_COLORS.map((color) => (
-                <TouchableOpacity
-                  key={color}
-                  style={[
-                    styles.colorCircle,
-                    { backgroundColor: color },
-                    LIGHT_NOTE_COLORS.has(color) && { borderWidth: 1, borderColor: colors.border },
-                  ]}
-                  onPress={() => {
-                    onSelect(color);
-                    onClose();
-                  }}
-                  testID={`color-swatch-${color.replace('#', '')}`}
-                  accessibilityLabel={t(NOTE_COLOR_NAME_KEYS[color] ?? 'note.changeColor')}
-                >
-                  {currentColor === color && (
-                    <Check
-                      size={18}
-                      color={LIGHT_NOTE_COLORS.has(color) ? '#666' : '#333'}
-                    />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </Pressable>
-        </View>
-      </Pressable>
-    </Modal>
+    <BottomSheet visible={visible} onClose={onClose} title={t('note.changeColor')} testID="color-picker">
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.palette}
+      >
+        {NOTE_COLORS.map((color) => (
+          <TouchableOpacity
+            key={color}
+            style={[
+              styles.colorCircle,
+              { backgroundColor: color },
+              LIGHT_NOTE_COLORS.has(color) && { borderWidth: 1, borderColor: colors.border },
+            ]}
+            onPress={() => {
+              onSelect(color);
+              onClose();
+            }}
+            testID={`color-swatch-${color.replace('#', '')}`}
+            accessibilityLabel={t(NOTE_COLOR_NAME_KEYS[color] ?? 'note.changeColor')}
+          >
+            {currentColor === color && (
+              <Check
+                size={18}
+                color={LIGHT_NOTE_COLORS.has(color) ? '#666' : '#333'}
+              />
+            )}
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    padding: 16,
-  },
-  handle: {
-    width: 40,
-    height: 5,
-    borderRadius: 2.5,
-    alignSelf: 'center',
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 16,
-  },
   palette: {
-    paddingBottom: 8,
     gap: 10,
   },
   colorCircle: {

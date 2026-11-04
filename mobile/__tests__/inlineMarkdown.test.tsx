@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import { render } from '@testing-library/react-native';
 import { MARKDOWN_ITEM_CASES } from '@jot/shared';
 import InlineMarkdown from '../src/components/InlineMarkdown';
+import { openedUrl } from './helpers/openedUrl';
 
 // The mobile half of the shared item corpus (shared/src/markdownCases.ts);
 // webapp/src/utils/__tests__/inlineMarkdown.test.ts runs the same list through
@@ -90,6 +91,14 @@ const conformance: Record<string, () => Promise<void>> = {
   'item-link-formatted-label': async () => {
     expect(await tappable('item-link-formatted-label')).toEqual(['docs']);
     expect(await bold('item-link-formatted-label')).toContain('docs');
+  },
+  'item-link-space-target': async () => {
+    expect(await tappable('item-link-space-target')).toEqual(['docs']);
+    expect(await openedUrl(await renderCase('item-link-space-target'))).toBe('https://example.com/a%20b');
+  },
+  'item-link-non-ascii-target': async () => {
+    expect(await tappable('item-link-non-ascii-target')).toEqual(['café']);
+    expect(await openedUrl(await renderCase('item-link-non-ascii-target'))).toBe('https://example.com/caf%C3%A9');
   },
   'item-bare-url': async () => {
     expect(await text('item-bare-url')).toBe('see https://example.com');

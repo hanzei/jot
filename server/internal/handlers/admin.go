@@ -152,7 +152,7 @@ func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusBadRequest, nil, err
 	}
 
-	user, err := h.userStore.CreateByAdmin(r.Context(), req.Username, req.Password, req.Role)
+	user, err := h.userStore.Create(r.Context(), req.Username, req.Password, req.Role)
 	if err != nil {
 		return storeError(err, "create user")
 	}

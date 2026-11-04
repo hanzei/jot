@@ -103,14 +103,14 @@ func TestNoteUnreadState(t *testing.T) {
 		const itemID = "item000000000000000001"
 		_, err = store.MarkViewed(ctx, note.ID, ownerID, Now())
 		require.NoError(t, err)
-		_, err = store.ToggleItemCompleted(ctx, note.ID, collabID, itemID, false)
+		_, err = store.SetItemsCompleted(ctx, note.ID, collabID, []string{itemID}, false)
 		require.NoError(t, err)
 		require.NoError(t, store.ReorderItems(ctx, note.ID, collabID, []string{itemID}))
 		sameText := "x"
 		_, err = store.PatchItem(ctx, note.ID, collabID, itemID, NoteItemPatch{Text: &sameText})
 		require.NoError(t, err)
 		assert.Empty(t, unreadFor(t, store, note.ID, ownerID), "no-op toggle, reorder and patch change nothing")
-		_, err = store.ToggleItemCompleted(ctx, note.ID, collabID, itemID, true)
+		_, err = store.SetItemsCompleted(ctx, note.ID, collabID, []string{itemID}, true)
 		require.NoError(t, err)
 		assert.Equal(t, NoteUnreadUpdated, unreadFor(t, store, note.ID, ownerID))
 

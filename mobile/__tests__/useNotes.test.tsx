@@ -4,13 +4,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted, useUncheckAllItems, useDeleteCompletedItems, useShareNote, useUnshareNote, useLeaveNote, useMarkNoteViewed, NoteConversionCapError } from '../src/hooks/useNotes';
 import { VALIDATION } from '@jot/shared';
 import { noteLocalQueryKey, notesLocalQueryKey, notesLocalQueryScopeKey } from '../src/hooks/queryKeys';
-import * as notesApi from '../src/api/notes';
-import * as usersApi from '../src/api/users';
 import * as noteQueriesModule from '../src/db/noteQueries';
 import * as clientModule from '../src/api/client';
+import { insertQueueEntry } from '../src/db/syncQueue';
+import { jot } from '../src/api/jot';
 
-jest.mock('../src/api/notes');
-jest.mock('../src/api/users');
+jest.mock('../src/api/jot');
 
 jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
@@ -72,8 +71,8 @@ jest.mock('../src/api/client', () => {
   };
 });
 
-const mockNotesApi = notesApi as jest.Mocked<typeof notesApi>;
-const mockUsersApi = usersApi as jest.Mocked<typeof usersApi>;
+const mockJot = jest.mocked(jot);
+
 const mockNoteQueries = noteQueriesModule as jest.Mocked<typeof noteQueriesModule>;
 const mockClientModule = clientModule as jest.Mocked<typeof clientModule>;
 const mockSyncQueue = jest.requireMock('../src/db/syncQueue') as { enqueueOperation: jest.Mock };
@@ -145,7 +144,7 @@ describe('useNotes hooks', () => {
         checked_items_collapsed: false, is_shared: false, deleted_at: null,
         user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
       };
-      mockNotesApi.createNote.mockResolvedValueOnce(newNote as never);
+      mockJot.notes.create.mockResolvedValueOnce(newNote as never);
 
       const { result } = await renderHook(() => useCreateNote(), { wrapper: createWrapper() });
 
@@ -154,12 +153,12 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toEqual(newNote);
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newNote);
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newNote, expect.objectContaining({ serverSnapshot: true }));
     });
 
     it('stores the labels a create returns, since it may have minted them', async () => {
       const errands = { id: 'label-errands', user_id: 'u1', name: 'Errands', created_at: '', updated_at: '' };
-      mockNotesApi.createNote.mockResolvedValueOnce({
+      mockJot.notes.create.mockResolvedValueOnce({
         id: 'server-id', content: 'Labelled', note_type: 'text',
         color: '#ffffff', pinned: false, archived: false, position: 0,
         is_shared: false, deleted_at: null,
@@ -180,7 +179,7 @@ describe('useNotes hooks', () => {
         user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
         items: [],
       };
-      mockNotesApi.createNote.mockResolvedValueOnce(newListNote as never);
+      mockJot.notes.create.mockResolvedValueOnce(newListNote as never);
 
       const { result } = await renderHook(() => useCreateNote(), { wrapper: createWrapper() });
 
@@ -189,7 +188,7 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toEqual(newListNote);
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newListNote);
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newListNote, expect.objectContaining({ serverSnapshot: true }));
     });
 
     it('blocks write when server switch is in progress', async () => {
@@ -201,7 +200,7 @@ describe('useNotes hooks', () => {
         result.current.mutateAsync({ content: 'Blocked', note_type: 'text' }),
       ).rejects.toThrow('Server switch in progress; write blocked');
 
-      expect(mockNotesApi.createNote).not.toHaveBeenCalled();
+      expect(mockJot.notes.create).not.toHaveBeenCalled();
       expect(mockNoteQueries.saveNote).not.toHaveBeenCalled();
     });
   });
@@ -223,7 +222,7 @@ describe('useNotes hooks', () => {
       await result.current.mutateAsync({ content: 'Written after going offline', note_type: 'text' });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockNotesApi.createNote).not.toHaveBeenCalled();
+      expect(mockJot.notes.create).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ operation: 'create', endpoint: '/notes', method: 'POST' }),
@@ -240,7 +239,7 @@ describe('useNotes hooks', () => {
         user_id: 'test-user-id', color: '#ffffff', pinned: false, archived: false, trashed: false,
         collapsed: false, position: 0, version: 1, created_at: '', updated_at: '',
       };
-      mockNotesApi.createNote.mockResolvedValue(created as never);
+      mockJot.notes.create.mockResolvedValue(created as never);
 
       mockUseNetworkStatus.mockReturnValue({ isConnected: true });
       await rerender(undefined);
@@ -248,7 +247,7 @@ describe('useNotes hooks', () => {
       await result.current.mutateAsync({ content: 'Written after reconnecting', note_type: 'text' });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockNotesApi.createNote).toHaveBeenCalled();
+      expect(mockJot.notes.create).toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
   });
@@ -266,7 +265,7 @@ describe('useNotes hooks', () => {
       // The note is saved locally with the client id and marked unsynced; the
       // queued create carries that id (not a legacy local_id) so the replay is
       // idempotent on the server.
-      expect(mockNotesApi.createNote).not.toHaveBeenCalled();
+      expect(mockJot.notes.create).not.toHaveBeenCalled();
       expect(mockNoteQueries.markNotePendingCreate).toHaveBeenCalledWith(
         expect.anything(),
         'ClientNoteId000000000A',
@@ -425,7 +424,7 @@ describe('useNotes hooks', () => {
       await result.current.mutateAsync('ServerValidButPending00');
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(mockNotesApi.duplicateNote).not.toHaveBeenCalled();
+      expect(mockJot.notes.duplicate).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
@@ -481,7 +480,7 @@ describe('useNotes hooks', () => {
       const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ id: PENDING_ID, data: { content: 'New body' } });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(mockNotesApi.updateNote).not.toHaveBeenCalled();
+      expect(mockJot.notes.update).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ operation: 'update', endpoint: `/notes/${PENDING_ID}`, method: 'PATCH' }),
@@ -492,7 +491,7 @@ describe('useNotes hooks', () => {
       const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
       await result.current.mutateAsync(PENDING_ID);
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(mockNotesApi.convertNoteType).not.toHaveBeenCalled();
+      expect(mockJot.notes.convert).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ operation: 'convertNoteType', endpoint: `/notes/${PENDING_ID}/convert` }),
@@ -503,7 +502,7 @@ describe('useNotes hooks', () => {
       const { result } = await renderHook(() => useCreateNoteItem(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: PENDING_ID, item: { id: 'i2', text: 'New', position: 1 } });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(mockNotesApi.createNoteItem).not.toHaveBeenCalled();
+      expect(mockJot.notes.createItem).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ operation: 'createItem', endpoint: `/notes/${PENDING_ID}/items` }),
@@ -515,7 +514,7 @@ describe('useNotes hooks', () => {
       const { result } = await renderHook(() => useUpdateNoteItem(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: PENDING_ID, itemId: 'i1', data: { parent_id: 'i0' } });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(mockNotesApi.updateNoteItem).not.toHaveBeenCalled();
+      expect(mockJot.notes.updateItem).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ operation: 'updateItem', endpoint: `/notes/${PENDING_ID}/items/i1`, method: 'PATCH' }),
@@ -526,7 +525,7 @@ describe('useNotes hooks', () => {
       const { result } = await renderHook(() => useDeleteNoteItem(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: PENDING_ID, itemId: 'i1' });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(mockNotesApi.deleteNoteItem).not.toHaveBeenCalled();
+      expect(mockJot.notes.deleteItem).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ operation: 'deleteItem', endpoint: `/notes/${PENDING_ID}/items/i1`, method: 'DELETE' }),
@@ -537,7 +536,7 @@ describe('useNotes hooks', () => {
       const { result } = await renderHook(() => useReorderNoteItems(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: PENDING_ID, itemIds: ['i1'] });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(mockNotesApi.reorderNoteItems).not.toHaveBeenCalled();
+      expect(mockJot.notes.reorderItems).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ operation: 'reorderItems', endpoint: `/notes/${PENDING_ID}/items/reorder` }),
@@ -548,10 +547,10 @@ describe('useNotes hooks', () => {
       const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: PENDING_ID, itemId: 'i1', completed: true });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(mockNotesApi.toggleItemCompleted).not.toHaveBeenCalled();
+      expect(mockJot.notes.setItemsCompleted).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'toggleItemCompleted', endpoint: `/notes/${PENDING_ID}/items/i1/toggle-completed` }),
+        expect.objectContaining({ operation: 'setItemsCompleted', endpoint: `/notes/${PENDING_ID}/items/set-completed` }),
       );
     });
 
@@ -559,10 +558,10 @@ describe('useNotes hooks', () => {
       const { result } = await renderHook(() => useUncheckAllItems(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: PENDING_ID, itemIds: ['i1'] });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(mockNotesApi.uncheckAllItems).not.toHaveBeenCalled();
+      expect(mockJot.notes.setItemsCompleted).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'uncheckAllItems', endpoint: `/notes/${PENDING_ID}/items/set-completed` }),
+        expect.objectContaining({ operation: 'setItemsCompleted', endpoint: `/notes/${PENDING_ID}/items/set-completed` }),
       );
     });
 
@@ -570,7 +569,7 @@ describe('useNotes hooks', () => {
       const { result } = await renderHook(() => useDeleteCompletedItems(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: PENDING_ID, itemIds: ['i1'] });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(mockNotesApi.deleteCompletedItems).not.toHaveBeenCalled();
+      expect(mockJot.notes.deleteItems).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ operation: 'deleteCompletedItems', endpoint: `/notes/${PENDING_ID}/items/delete` }),
@@ -581,7 +580,7 @@ describe('useNotes hooks', () => {
       const { result } = await renderHook(() => useDeleteNote(), { wrapper: createWrapper() });
       await result.current.mutateAsync(PENDING_ID);
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(mockNotesApi.deleteNote).not.toHaveBeenCalled();
+      expect(mockJot.notes.delete).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ operation: 'delete', endpoint: `/notes/${PENDING_ID}`, method: 'DELETE' }),
@@ -592,7 +591,7 @@ describe('useNotes hooks', () => {
       const { result } = await renderHook(() => useRestoreNote(), { wrapper: createWrapper() });
       await result.current.mutateAsync(PENDING_ID);
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(mockNotesApi.restoreNote).not.toHaveBeenCalled();
+      expect(mockJot.notes.restore).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ operation: 'restore', endpoint: `/notes/${PENDING_ID}/restore` }),
@@ -603,7 +602,7 @@ describe('useNotes hooks', () => {
       const { result } = await renderHook(() => usePermanentDeleteNote(), { wrapper: createWrapper() });
       await result.current.mutateAsync(PENDING_ID);
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(mockNotesApi.permanentDeleteNote).not.toHaveBeenCalled();
+      expect(mockJot.notes.delete).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ operation: 'permanentDelete', endpoint: `/notes/${PENDING_ID}?permanent=true` }),
@@ -619,7 +618,7 @@ describe('useNotes hooks', () => {
         checked_items_collapsed: false, is_shared: false, deleted_at: null,
         user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
       };
-      mockNotesApi.updateNote.mockResolvedValueOnce(updated as never);
+      mockJot.notes.update.mockResolvedValueOnce(updated as never);
 
       const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
 
@@ -628,8 +627,8 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toEqual(updated);
-      expect(mockNotesApi.updateNote).toHaveBeenCalledWith('123', { title: 'Updated' });
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), updated);
+      expect(mockJot.notes.update).toHaveBeenCalledWith('123', { title: 'Updated' });
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), updated, expect.objectContaining({ serverSnapshot: true }));
     });
   });
 
@@ -646,8 +645,8 @@ describe('useNotes hooks', () => {
     };
 
     it('invalidates the notes list scope so dashboard avatars refresh after sharing', async () => {
-      mockUsersApi.shareNote.mockResolvedValueOnce(undefined as never);
-      mockNotesApi.getNote.mockResolvedValueOnce(sharedNote as never);
+      mockJot.notes.share.mockResolvedValueOnce(undefined as never);
+      mockJot.notes.getById.mockResolvedValueOnce(sharedNote as never);
 
       const { wrapper, queryClient } = createWrapperWithClient();
       const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
@@ -657,13 +656,13 @@ describe('useNotes hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockUsersApi.shareNote).toHaveBeenCalledWith('123', 'u2');
+      expect(mockJot.notes.share).toHaveBeenCalledWith('123', { user_id: 'u2' });
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
     });
 
     it('invalidates the notes list scope so dashboard avatars refresh after unsharing', async () => {
-      mockUsersApi.unshareNote.mockResolvedValueOnce(undefined as never);
-      mockNotesApi.getNote.mockResolvedValueOnce({ ...sharedNote, is_shared: false } as never);
+      mockJot.notes.unshare.mockResolvedValueOnce(undefined as never);
+      mockJot.notes.getById.mockResolvedValueOnce({ ...sharedNote, is_shared: false } as never);
 
       const { wrapper, queryClient } = createWrapperWithClient();
       const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
@@ -673,7 +672,7 @@ describe('useNotes hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockUsersApi.unshareNote).toHaveBeenCalledWith('123', 'u2');
+      expect(mockJot.notes.unshare).toHaveBeenCalledWith('123', 'u2');
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
     });
   });
@@ -691,13 +690,13 @@ describe('useNotes hooks', () => {
     };
 
     it('online: removes the current user\'s own share and deletes the note locally', async () => {
-      mockUsersApi.unshareNote.mockResolvedValueOnce(undefined as never);
+      mockJot.notes.unshare.mockResolvedValueOnce(undefined as never);
 
       const { result } = await renderHook(() => useLeaveNote(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: 'n1' });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockUsersApi.unshareNote).toHaveBeenCalledWith('n1', 'test-user-id');
+      expect(mockJot.notes.unshare).toHaveBeenCalledWith('n1', 'test-user-id');
       // The note is gone locally — not merely tombstoned — so it leaves the list.
       expect(mockNoteQueries.permanentDeleteLocalNote).toHaveBeenCalledWith(expect.anything(), 'n1');
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
@@ -711,7 +710,7 @@ describe('useNotes hooks', () => {
       await result.current.mutateAsync({ noteId: 'n1' });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockUsersApi.unshareNote).not.toHaveBeenCalled();
+      expect(mockJot.notes.unshare).not.toHaveBeenCalled();
       expect(mockNoteQueries.permanentDeleteLocalNote).toHaveBeenCalledWith(expect.anything(), 'n1');
       // Reuses the `unshare` op — same endpoint/method, idempotent when the target
       // is gone — targeting the current user's own share.
@@ -726,7 +725,7 @@ describe('useNotes hooks', () => {
     });
 
     it('falls back to the local queue when the online removal fails transiently', async () => {
-      mockUsersApi.unshareNote.mockRejectedValueOnce(makeAxiosError(503));
+      mockJot.notes.unshare.mockRejectedValueOnce(makeAxiosError(503));
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(sharedWithMeNote as never);
 
       const { result } = await renderHook(() => useLeaveNote(), { wrapper: createWrapper() });
@@ -741,7 +740,7 @@ describe('useNotes hooks', () => {
     });
 
     it('surfaces a permanent failure (4xx) without deleting locally or queuing', async () => {
-      mockUsersApi.unshareNote.mockRejectedValueOnce(makeAxiosError(403));
+      mockJot.notes.unshare.mockRejectedValueOnce(makeAxiosError(403));
 
       const { result } = await renderHook(() => useLeaveNote(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: 'n1' }).catch(() => {});
@@ -867,7 +866,7 @@ describe('useNotes hooks', () => {
 
     it('sends base_version on an online content update', async () => {
       const updated = { ...existingNote, content: 'New body', version: 10 };
-      mockNotesApi.updateNote.mockResolvedValueOnce(updated as never);
+      mockJot.notes.update.mockResolvedValueOnce(updated as never);
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingNote as never);
 
       const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
@@ -878,12 +877,12 @@ describe('useNotes hooks', () => {
 
       // The note's current version is echoed so the server can reject a write
       // that raced a concurrent edit (#489).
-      expect(mockNotesApi.updateNote).toHaveBeenCalledWith('123', { content: 'New body', base_version: 9 });
+      expect(mockJot.notes.update).toHaveBeenCalledWith('123', { content: 'New body', base_version: 9 });
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
 
     it('falls back to the local queue when a transient failure (5xx) occurs', async () => {
-      mockNotesApi.updateNote.mockRejectedValueOnce(makeAxiosError(503));
+      mockJot.notes.update.mockRejectedValueOnce(makeAxiosError(503));
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingNote as never);
 
       const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
@@ -903,7 +902,7 @@ describe('useNotes hooks', () => {
     });
 
     it('falls back to the local queue on a network error (no response)', async () => {
-      mockNotesApi.updateNote.mockRejectedValueOnce(makeNetworkError());
+      mockJot.notes.update.mockRejectedValueOnce(makeNetworkError());
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingNote as never);
 
       const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
@@ -915,7 +914,7 @@ describe('useNotes hooks', () => {
     });
 
     it('surfaces a permanent failure (4xx) without queuing', async () => {
-      mockNotesApi.updateNote.mockRejectedValueOnce(makeAxiosError(400));
+      mockJot.notes.update.mockRejectedValueOnce(makeAxiosError(400));
 
       const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
 
@@ -930,7 +929,7 @@ describe('useNotes hooks', () => {
     });
 
     it('surfaces a 401 without queuing (the interceptor logs the user out)', async () => {
-      mockNotesApi.updateNote.mockRejectedValueOnce(makeAxiosError(401));
+      mockJot.notes.update.mockRejectedValueOnce(makeAxiosError(401));
 
       const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
 
@@ -943,7 +942,7 @@ describe('useNotes hooks', () => {
     });
 
     it('rethrows a non-Axios (local) error instead of queuing it', async () => {
-      mockNotesApi.updateNote.mockRejectedValueOnce(new Error('boom'));
+      mockJot.notes.update.mockRejectedValueOnce(new Error('boom'));
 
       const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
 
@@ -958,7 +957,7 @@ describe('useNotes hooks', () => {
 
   describe('item mutations (online write failures)', () => {
     it('useCreateNoteItem falls back to the local queue on a transient failure', async () => {
-      mockNotesApi.createNoteItem.mockRejectedValueOnce(makeAxiosError(503));
+      mockJot.notes.createItem.mockRejectedValueOnce(makeAxiosError(503));
 
       const { result } = await renderHook(() => useCreateNoteItem(), { wrapper: createWrapper() });
 
@@ -974,7 +973,7 @@ describe('useNotes hooks', () => {
     });
 
     it('useToggleNoteItemCompleted falls back to the local queue on a transient failure', async () => {
-      mockNotesApi.toggleItemCompleted.mockRejectedValueOnce(makeAxiosError(503));
+      mockJot.notes.setItemsCompleted.mockRejectedValueOnce(makeAxiosError(503));
       mockNoteQueries.getLocalNote.mockResolvedValueOnce({
         id: 'n1', note_type: 'list', title: 'L', checked_items_collapsed: false,
         color: '#ffffff', pinned: false, archived: false, position: 0, is_shared: false,
@@ -990,12 +989,16 @@ describe('useNotes hooks', () => {
 
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'toggleItemCompleted', endpoint: '/notes/n1/items/i1/toggle-completed' }),
+        expect.objectContaining({
+          operation: 'setItemsCompleted',
+          endpoint: '/notes/n1/items/set-completed',
+          body: { item_ids: ['i1'], completed: true },
+        }),
       );
     });
 
     it('useUncheckAllItems falls back to the local queue on a transient failure', async () => {
-      mockNotesApi.uncheckAllItems.mockRejectedValueOnce(makeAxiosError(503));
+      mockJot.notes.setItemsCompleted.mockRejectedValueOnce(makeAxiosError(503));
 
       const { result } = await renderHook(() => useUncheckAllItems(), { wrapper: createWrapper() });
 
@@ -1007,7 +1010,7 @@ describe('useNotes hooks', () => {
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
-          operation: 'uncheckAllItems',
+          operation: 'setItemsCompleted',
           endpoint: '/notes/n1/items/set-completed',
           method: 'POST',
           body: { item_ids: ['i1', 'i2'], completed: false },
@@ -1016,7 +1019,7 @@ describe('useNotes hooks', () => {
     });
 
     it('useUncheckAllItems surfaces a permanent failure (4xx) without queuing', async () => {
-      mockNotesApi.uncheckAllItems.mockRejectedValueOnce(makeAxiosError(400));
+      mockJot.notes.setItemsCompleted.mockRejectedValueOnce(makeAxiosError(400));
 
       const { result } = await renderHook(() => useUncheckAllItems(), { wrapper: createWrapper() });
 
@@ -1027,7 +1030,7 @@ describe('useNotes hooks', () => {
     });
 
     it('useDeleteCompletedItems falls back to the local queue on a transient failure', async () => {
-      mockNotesApi.deleteCompletedItems.mockRejectedValueOnce(makeAxiosError(503));
+      mockJot.notes.deleteItems.mockRejectedValueOnce(makeAxiosError(503));
 
       const { result } = await renderHook(() => useDeleteCompletedItems(), { wrapper: createWrapper() });
 
@@ -1048,7 +1051,7 @@ describe('useNotes hooks', () => {
     });
 
     it('useDeleteCompletedItems surfaces a permanent failure (4xx) without queuing', async () => {
-      mockNotesApi.deleteCompletedItems.mockRejectedValueOnce(makeAxiosError(400));
+      mockJot.notes.deleteItems.mockRejectedValueOnce(makeAxiosError(400));
 
       const { result } = await renderHook(() => useDeleteCompletedItems(), { wrapper: createWrapper() });
 
@@ -1059,7 +1062,7 @@ describe('useNotes hooks', () => {
     });
 
     it('useCreateNoteItem surfaces a permanent failure (4xx) without queuing', async () => {
-      mockNotesApi.createNoteItem.mockRejectedValueOnce(makeAxiosError(400));
+      mockJot.notes.createItem.mockRejectedValueOnce(makeAxiosError(400));
 
       const { result } = await renderHook(() => useCreateNoteItem(), { wrapper: createWrapper() });
 
@@ -1073,7 +1076,7 @@ describe('useNotes hooks', () => {
 
   describe('useDeleteNote (online)', () => {
     it('deletes a note via API and marks it deleted locally', async () => {
-      mockNotesApi.deleteNote.mockResolvedValueOnce(undefined);
+      mockJot.notes.delete.mockResolvedValueOnce(undefined);
 
       const { result } = await renderHook(() => useDeleteNote(), { wrapper: createWrapper() });
 
@@ -1081,7 +1084,7 @@ describe('useNotes hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockNotesApi.deleteNote).toHaveBeenCalledWith('123');
+      expect(mockJot.notes.delete).toHaveBeenCalledWith('123');
       expect(mockNoteQueries.markLocalNoteDeleted).toHaveBeenCalledWith(expect.anything(), '123');
     });
   });
@@ -1112,8 +1115,8 @@ describe('useNotes hooks', () => {
       // The server call stays in flight for the duration of the assertions.
       // Reset first: clearAllMocks does not drain a leftover mock*Once queue.
       const pending = deferred<typeof existingTextNote>();
-      mockNotesApi.updateNote.mockReset();
-      mockNotesApi.updateNote.mockReturnValueOnce(pending.promise as never);
+      mockJot.notes.update.mockReset();
+      mockJot.notes.update.mockReturnValueOnce(pending.promise as never);
 
       const { result } = await renderHook(() => useUpdateNote(), { wrapper });
       result.current.mutate({ id: '123', data: { content: 'New body' } });
@@ -1123,7 +1126,7 @@ describe('useNotes hooks', () => {
       await waitFor(() => {
         expect((queryClient.getQueryData(noteLocalQueryKey('123')) as { content: string }).content).toBe('New body');
       });
-      expect(mockNotesApi.updateNote).toHaveBeenCalledWith('123', { content: 'New body' });
+      expect(mockJot.notes.update).toHaveBeenCalledWith('123', { content: 'New body' });
       expect((queryClient.getQueryData(notesLocalQueryKey(undefined)) as Array<{ content: string }>)[0]!.content).toBe('New body');
 
       // Let the request finish so the hook settles cleanly.
@@ -1135,7 +1138,7 @@ describe('useNotes hooks', () => {
       const { wrapper, queryClient } = createWrapperWithClient();
       queryClient.setQueryData(noteLocalQueryKey('123'), existingTextNote);
       queryClient.setQueryData(notesLocalQueryKey(undefined), [existingTextNote]);
-      mockNotesApi.updateNote.mockRejectedValueOnce(makeAxiosError(400));
+      mockJot.notes.update.mockRejectedValueOnce(makeAxiosError(400));
 
       const { result } = await renderHook(() => useUpdateNote(), { wrapper });
       await result.current.mutateAsync({ id: '123', data: { content: 'New body' } }).catch(() => {});
@@ -1157,8 +1160,8 @@ describe('useNotes hooks', () => {
 
       // Note A's request stays in flight so we can interleave a concurrent edit.
       const pending = deferred<typeof noteA>();
-      mockNotesApi.updateNote.mockReset();
-      mockNotesApi.updateNote.mockReturnValueOnce(pending.promise as never);
+      mockJot.notes.update.mockReset();
+      mockJot.notes.update.mockReturnValueOnce(pending.promise as never);
 
       const { result } = await renderHook(() => useUpdateNote(), { wrapper });
       result.current.mutate({ id: 'a', data: { content: 'A-new' } });
@@ -1189,8 +1192,8 @@ describe('useNotes hooks', () => {
       queryClient.setQueryData(noteLocalQueryKey('n1'), listNote);
 
       const pending = deferred<unknown[]>();
-      mockNotesApi.toggleItemCompleted.mockReset();
-      mockNotesApi.toggleItemCompleted.mockReturnValueOnce(pending.promise as never);
+      mockJot.notes.setItemsCompleted.mockReset();
+      mockJot.notes.setItemsCompleted.mockReturnValueOnce(pending.promise as never);
 
       const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
       result.current.mutate({ noteId: 'n1', itemId: 'p', completed: true });
@@ -1201,7 +1204,7 @@ describe('useNotes hooks', () => {
         // Toggling a top-level item cascades to its children.
         expect(cached.items.find((i) => i.id === 'c')!.completed).toBe(true);
       });
-      expect(mockNotesApi.toggleItemCompleted).toHaveBeenCalledWith('n1', 'p', true);
+      expect(mockJot.notes.setItemsCompleted).toHaveBeenCalledWith('n1', ['p'], true);
 
       pending.resolve([]);
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -1219,8 +1222,8 @@ describe('useNotes hooks', () => {
       queryClient.setQueryData(noteLocalQueryKey('n1'), completedListNote);
 
       const pending = deferred<unknown[]>();
-      mockNotesApi.toggleItemCompleted.mockReset();
-      mockNotesApi.toggleItemCompleted.mockReturnValueOnce(pending.promise as never);
+      mockJot.notes.setItemsCompleted.mockReset();
+      mockJot.notes.setItemsCompleted.mockReturnValueOnce(pending.promise as never);
 
       const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
       result.current.mutate({ noteId: 'n1', itemId: 'c', completed: false });
@@ -1231,7 +1234,7 @@ describe('useNotes hooks', () => {
         // A parent can never stay "done" while one of its children is not.
         expect(cached.items.find((i) => i.id === 'p')!.completed).toBe(false);
       });
-      expect(mockNotesApi.toggleItemCompleted).toHaveBeenCalledWith('n1', 'c', false);
+      expect(mockJot.notes.setItemsCompleted).toHaveBeenCalledWith('n1', ['c'], false);
 
       pending.resolve([]);
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -1248,8 +1251,8 @@ describe('useNotes hooks', () => {
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(listNote as never);
 
       const pending = deferred<unknown[]>();
-      mockNotesApi.toggleItemCompleted.mockReset();
-      mockNotesApi.toggleItemCompleted.mockReturnValueOnce(pending.promise as never);
+      mockJot.notes.setItemsCompleted.mockReset();
+      mockJot.notes.setItemsCompleted.mockReturnValueOnce(pending.promise as never);
 
       const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
       result.current.mutate({ noteId: 'n1', itemId: 'p', completed: true });
@@ -1260,18 +1263,138 @@ describe('useNotes hooks', () => {
       await waitFor(() => {
         expect(mockNoteQueries.setLocalItemsCompleted).toHaveBeenCalledWith(expect.anything(), 'n1', ['p', 'c'], true);
       });
-      expect(mockNotesApi.toggleItemCompleted).toHaveBeenCalledWith('n1', 'p', true);
+      expect(mockJot.notes.setItemsCompleted).toHaveBeenCalledWith('n1', ['p'], true);
 
       pending.resolve([]);
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    });
+
+    // The response is the note's full item list as of that one write, so the
+    // response to an earlier tap still reports a later-tapped row unchecked.
+    // Writing every item from it back to SQLite unchecked the later row locally
+    // — and kept it that way when the stale response was the last to land.
+    it('useToggleNoteItemCompleted never writes a stale snapshot of a later toggle back to SQLite', async () => {
+      const twoItemNote = {
+        ...listNote,
+        items: [
+          { ...listNote.items[0]!, id: 'qa', parent_id: null, completed: false },
+          { ...listNote.items[0]!, id: 'qb', parent_id: null, completed: false, position: 1 },
+        ],
+      };
+      const t0 = '2026-01-01T00:00:00Z';
+      const tA = '2026-01-01T00:00:01Z';
+      const tB = '2026-01-01T00:00:02Z';
+      const { wrapper, queryClient } = createWrapperWithClient();
+      queryClient.setQueryData(noteLocalQueryKey('n1'), twoItemNote);
+      mockNoteQueries.getLocalNote
+        .mockResolvedValueOnce(twoItemNote as never)
+        .mockResolvedValueOnce(twoItemNote as never);
+
+      const first = deferred<unknown[]>();
+      const second = deferred<unknown[]>();
+      mockJot.notes.setItemsCompleted.mockReset();
+      mockJot.notes.setItemsCompleted
+        .mockReturnValueOnce(first.promise as never)
+        .mockReturnValueOnce(second.promise as never);
+
+      const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
+      const tapA = result.current.mutateAsync({ noteId: 'n1', itemId: 'qa', completed: true });
+      await waitFor(() => expect(mockJot.notes.setItemsCompleted).toHaveBeenCalledTimes(1));
+      const tapB = result.current.mutateAsync({ noteId: 'n1', itemId: 'qb', completed: true });
+      await waitFor(() => expect(mockJot.notes.setItemsCompleted).toHaveBeenCalledTimes(2));
+
+      // B's response lands first; A's, read before B's write, lands last.
+      second.resolve([{ id: 'qa', completed: true, updated_at: tA }, { id: 'qb', completed: true, updated_at: tB }]);
+      await tapB;
+      first.resolve([{ id: 'qa', completed: true, updated_at: tA }, { id: 'qb', completed: false, updated_at: t0 }]);
+      await tapA;
+
+      expect(mockNoteQueries.setLocalItemsCompleted).not.toHaveBeenCalledWith(
+        expect.anything(), 'n1', expect.arrayContaining(['qb']), false,
+      );
+      expect(mockNoteQueries.setLocalItemsCompleted).toHaveBeenLastCalledWith(expect.anything(), 'n1', ['qa', 'qb'], true);
+    });
+
+    // Two overlapping toggles of one item that both fail permanently must leave
+    // the row where it was before either, in SQLite and in the cache — and the
+    // first failure must not roll the cache back over the second toggle.
+    it('useToggleNoteItemCompleted unwinds overlapping permanent failures to the original state', async () => {
+      const oneItemNote = { ...listNote, items: [{ ...listNote.items[0]!, id: 'qz', parent_id: null, completed: false }] };
+      const checkedNote = { ...oneItemNote, items: [{ ...oneItemNote.items[0]!, completed: true }] };
+      const { wrapper, queryClient } = createWrapperWithClient();
+      queryClient.setQueryData(noteLocalQueryKey('n1'), oneItemNote);
+      mockNoteQueries.getLocalNote
+        .mockResolvedValueOnce(oneItemNote as never)
+        .mockResolvedValueOnce(checkedNote as never);
+
+      const check = deferred<unknown[]>();
+      const uncheck = deferred<unknown[]>();
+      mockJot.notes.setItemsCompleted.mockReset();
+      mockJot.notes.setItemsCompleted
+        .mockReturnValueOnce(check.promise as never)
+        .mockReturnValueOnce(uncheck.promise as never);
+
+      const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
+      const tapCheck = result.current.mutateAsync({ noteId: 'n1', itemId: 'qz', completed: true }).catch(() => {});
+      await waitFor(() => expect(mockJot.notes.setItemsCompleted).toHaveBeenCalledTimes(1));
+      const tapUncheck = result.current.mutateAsync({ noteId: 'n1', itemId: 'qz', completed: false }).catch(() => {});
+      await waitFor(() => expect(mockJot.notes.setItemsCompleted).toHaveBeenCalledTimes(2));
+
+      // The check fails first: the uncheck still decides the row, so nothing reverts.
+      check.reject(makeAxiosError(404));
+      await tapCheck;
+      const cachedZ = () => (queryClient.getQueryData(noteLocalQueryKey('n1')) as { items: Array<{ completed: boolean }> }).items[0]!.completed;
+      expect(cachedZ()).toBe(false);
+
+      // Then the uncheck fails: the row returns to before the first tap.
+      uncheck.reject(makeAxiosError(404));
+      await tapUncheck;
+      // Pre-flight check, pre-flight uncheck, then the one revert — to unchecked.
+      expect(mockNoteQueries.setLocalItemsCompleted).toHaveBeenCalledTimes(3);
+      expect(mockNoteQueries.setLocalItemsCompleted).toHaveBeenLastCalledWith(expect.anything(), 'n1', ['qz'], false);
+      expect(cachedZ()).toBe(false);
+    });
+
+    // An earlier change queued for replay (offline, or after a transient
+    // failure) has not reached the server yet, so an online toggle's response
+    // still reports the queued item's old value: it must neither be written to
+    // SQLite nor handed to the editor.
+    it('useToggleNoteItemCompleted leaves alone an item a queued op has yet to replay', async () => {
+      const { wrapper, queryClient } = createWrapperWithClient();
+      const note = { ...listNote, items: [
+        { ...listNote.items[0]!, id: 'wq', parent_id: null, completed: false },
+        { ...listNote.items[0]!, id: 'wt', parent_id: null, completed: false, position: 1 },
+      ] };
+      queryClient.setQueryData(noteLocalQueryKey('n1'), note);
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(note as never);
+      await insertQueueEntry(globalThis.testDb, {
+        operation: 'setItemsCompleted',
+        endpoint: '/notes/n1/items/set-completed',
+        method: 'POST',
+        body: { item_ids: ['wq'], completed: false },
+      });
+      mockJot.notes.setItemsCompleted.mockReset();
+      mockJot.notes.setItemsCompleted.mockResolvedValueOnce([
+        { id: 'wq', completed: true, updated_at: '2026-01-01T00:00:00Z' },
+        { id: 'wt', completed: true, updated_at: '2026-01-01T00:00:01Z' },
+      ] as never);
+
+      const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
+      const returned = await result.current.mutateAsync({ noteId: 'n1', itemId: 'wt', completed: true });
+
+      expect(returned.map((i) => i.id)).toEqual(['wt']);
+      expect(mockNoteQueries.setLocalItemsCompleted).not.toHaveBeenCalledWith(
+        expect.anything(), 'n1', expect.arrayContaining(['wq']), expect.anything(),
+      );
+      await globalThis.testDb.runAsync('DELETE FROM sync_queue');
     });
 
     it('useToggleNoteItemCompleted takes the local rows back on a permanent failure', async () => {
       const { wrapper, queryClient } = createWrapperWithClient();
       queryClient.setQueryData(noteLocalQueryKey('n1'), listNote);
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(listNote as never);
-      mockNotesApi.toggleItemCompleted.mockReset();
-      mockNotesApi.toggleItemCompleted.mockRejectedValueOnce(makeAxiosError(404));
+      mockJot.notes.setItemsCompleted.mockReset();
+      mockJot.notes.setItemsCompleted.mockRejectedValueOnce(makeAxiosError(404));
 
       const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
       await result.current.mutateAsync({ noteId: 'n1', itemId: 'p', completed: true }).catch(() => {});
@@ -1288,8 +1411,8 @@ describe('useNotes hooks', () => {
     it('useUncheckAllItems writes to the local DB before the request, and re-checks on a permanent failure', async () => {
       const { wrapper, queryClient } = createWrapperWithClient();
       queryClient.setQueryData(noteLocalQueryKey('n1'), listNote);
-      mockNotesApi.uncheckAllItems.mockReset();
-      mockNotesApi.uncheckAllItems.mockRejectedValueOnce(makeAxiosError(404));
+      mockJot.notes.setItemsCompleted.mockReset();
+      mockJot.notes.setItemsCompleted.mockRejectedValueOnce(makeAxiosError(404));
 
       const { result } = await renderHook(() => useUncheckAllItems(), { wrapper });
       await result.current.mutateAsync({ noteId: 'n1', itemIds: ['p', 'c'] }).catch(() => {});
@@ -1304,7 +1427,9 @@ describe('useNotes hooks', () => {
     it('useToggleNoteItemCompleted rolls back the optimistic toggle on a permanent failure', async () => {
       const { wrapper, queryClient } = createWrapperWithClient();
       queryClient.setQueryData(noteLocalQueryKey('n1'), listNote);
-      mockNotesApi.toggleItemCompleted.mockRejectedValueOnce(makeAxiosError(404));
+      // The cached note is a read of the local row, which the revert is keyed on.
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(listNote as never);
+      mockJot.notes.setItemsCompleted.mockRejectedValueOnce(makeAxiosError(404));
 
       const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
       await result.current.mutateAsync({ noteId: 'n1', itemId: 'p', completed: true }).catch(() => {});
@@ -1329,8 +1454,8 @@ describe('useNotes hooks', () => {
       queryClient.setQueryData(noteLocalQueryKey('n1'), completedListNote);
 
       const pending = deferred<unknown[]>();
-      mockNotesApi.uncheckAllItems.mockReset();
-      mockNotesApi.uncheckAllItems.mockReturnValueOnce(pending.promise as never);
+      mockJot.notes.setItemsCompleted.mockReset();
+      mockJot.notes.setItemsCompleted.mockReturnValueOnce(pending.promise as never);
 
       const { result } = await renderHook(() => useUncheckAllItems(), { wrapper });
       result.current.mutate({ noteId: 'n1', itemIds: ['p', 'c'] });
@@ -1340,7 +1465,7 @@ describe('useNotes hooks', () => {
         expect(cached.items.find((i) => i.id === 'p')!.completed).toBe(false);
         expect(cached.items.find((i) => i.id === 'c')!.completed).toBe(false);
       });
-      expect(mockNotesApi.uncheckAllItems).toHaveBeenCalledWith('n1', ['p', 'c']);
+      expect(mockJot.notes.setItemsCompleted).toHaveBeenCalledWith('n1', ['p', 'c'], false);
 
       pending.resolve([]);
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -1356,7 +1481,7 @@ describe('useNotes hooks', () => {
         ],
       };
       queryClient.setQueryData(noteLocalQueryKey('n1'), completedListNote);
-      mockNotesApi.uncheckAllItems.mockRejectedValueOnce(makeAxiosError(404));
+      mockJot.notes.setItemsCompleted.mockRejectedValueOnce(makeAxiosError(404));
 
       const { result } = await renderHook(() => useUncheckAllItems(), { wrapper });
       await result.current.mutateAsync({ noteId: 'n1', itemIds: ['p', 'c'] }).catch(() => {});
@@ -1381,8 +1506,8 @@ describe('useNotes hooks', () => {
       queryClient.setQueryData(noteLocalQueryKey('n1'), completedListNote);
 
       const pending = deferred<unknown[]>();
-      mockNotesApi.deleteCompletedItems.mockReset();
-      mockNotesApi.deleteCompletedItems.mockReturnValueOnce(pending.promise as never);
+      mockJot.notes.deleteItems.mockReset();
+      mockJot.notes.deleteItems.mockReturnValueOnce(pending.promise as never);
 
       const { result } = await renderHook(() => useDeleteCompletedItems(), { wrapper });
       result.current.mutate({ noteId: 'n1', itemIds: ['p', 'c'] });
@@ -1391,7 +1516,7 @@ describe('useNotes hooks', () => {
         const cached = queryClient.getQueryData(noteLocalQueryKey('n1')) as { items: Array<{ id: string }> };
         expect(cached.items).toHaveLength(0);
       });
-      expect(mockNotesApi.deleteCompletedItems).toHaveBeenCalledWith('n1', ['p', 'c']);
+      expect(mockJot.notes.deleteItems).toHaveBeenCalledWith('n1', ['p', 'c']);
 
       pending.resolve([]);
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -1407,7 +1532,7 @@ describe('useNotes hooks', () => {
         ],
       };
       queryClient.setQueryData(noteLocalQueryKey('n1'), completedListNote);
-      mockNotesApi.deleteCompletedItems.mockRejectedValueOnce(makeAxiosError(404));
+      mockJot.notes.deleteItems.mockRejectedValueOnce(makeAxiosError(404));
 
       const { result } = await renderHook(() => useDeleteCompletedItems(), { wrapper });
       await result.current.mutateAsync({ noteId: 'n1', itemIds: ['p', 'c'] }).catch(() => {});
@@ -1439,8 +1564,8 @@ describe('useNotes hooks', () => {
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingTextNote as never);
 
       const pending = deferred<typeof existingTextNote>();
-      mockNotesApi.updateNote.mockReset();
-      mockNotesApi.updateNote.mockReturnValueOnce(pending.promise as never);
+      mockJot.notes.update.mockReset();
+      mockJot.notes.update.mockReturnValueOnce(pending.promise as never);
 
       const { result } = await renderHook(() => useUpdateNote(), { wrapper });
       result.current.mutate({ id: '123', data: { content: 'New body' } });
@@ -1453,7 +1578,7 @@ describe('useNotes hooks', () => {
       });
       // The pre-flight write must not bump the version the server gates against:
       // base_version stays the value read before the write (#489).
-      expect(mockNotesApi.updateNote).toHaveBeenCalledWith('123', { content: 'New body', base_version: 7 });
+      expect(mockJot.notes.update).toHaveBeenCalledWith('123', { content: 'New body', base_version: 7 });
 
       pending.resolve({ ...existingTextNote, content: 'New body', version: 8 } as never);
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -1463,9 +1588,9 @@ describe('useNotes hooks', () => {
       const { wrapper, queryClient } = createWrapperWithClient();
       queryClient.setQueryData(noteLocalQueryKey('123'), existingTextNote);
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingTextNote as never);
-      mockNotesApi.updateNote.mockReset();
+      mockJot.notes.update.mockReset();
       // A 409 (version conflict) is permanent, so it surfaces rather than queues.
-      mockNotesApi.updateNote.mockRejectedValueOnce(makeAxiosError(409));
+      mockJot.notes.update.mockRejectedValueOnce(makeAxiosError(409));
 
       const { result } = await renderHook(() => useUpdateNote(), { wrapper });
       await result.current.mutateAsync({ id: '123', data: { content: 'New body' } }).catch(() => {});
@@ -1488,7 +1613,7 @@ describe('useNotes hooks', () => {
         checked_items_collapsed: false, is_shared: false, deleted_at: null,
         user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
       };
-      mockNotesApi.duplicateNote.mockResolvedValueOnce(duplicated as never);
+      mockJot.notes.duplicate.mockResolvedValueOnce(duplicated as never);
 
       const { result } = await renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
 
@@ -1497,8 +1622,8 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toEqual(duplicated);
-      expect(mockNotesApi.duplicateNote).toHaveBeenCalledWith('123');
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), duplicated);
+      expect(mockJot.notes.duplicate).toHaveBeenCalledWith('123');
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), duplicated, expect.objectContaining({ serverSnapshot: true }));
     });
   });
 
@@ -1618,7 +1743,7 @@ describe('useNotes hooks', () => {
     };
 
     it('falls back to the local queue on a transient failure (5xx)', async () => {
-      mockNotesApi.duplicateNote.mockRejectedValueOnce(makeAxiosError(503));
+      mockJot.notes.duplicate.mockRejectedValueOnce(makeAxiosError(503));
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceTextNote as never);
 
       const { result } = await renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
@@ -1635,7 +1760,7 @@ describe('useNotes hooks', () => {
     });
 
     it('falls back to the local queue on a network error (no response)', async () => {
-      mockNotesApi.duplicateNote.mockRejectedValueOnce(makeNetworkError());
+      mockJot.notes.duplicate.mockRejectedValueOnce(makeNetworkError());
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceTextNote as never);
 
       const { result } = await renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
@@ -1647,7 +1772,7 @@ describe('useNotes hooks', () => {
     });
 
     it('surfaces a permanent failure (4xx) without queuing', async () => {
-      mockNotesApi.duplicateNote.mockRejectedValueOnce(makeAxiosError(403));
+      mockJot.notes.duplicate.mockRejectedValueOnce(makeAxiosError(403));
 
       const { result } = await renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
 
@@ -1680,7 +1805,7 @@ describe('useNotes hooks', () => {
         ],
       };
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceTextNote as never);
-      mockNotesApi.convertNoteType.mockResolvedValueOnce(converted as never);
+      mockJot.notes.convert.mockResolvedValueOnce(converted as never);
 
       const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
@@ -1689,7 +1814,7 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(returned).toEqual(converted);
-      expect(mockNotesApi.convertNoteType).toHaveBeenCalledWith('123', {
+      expect(mockJot.notes.convert).toHaveBeenCalledWith('123', {
         note_type: 'list',
         base_version: 3,
         title: '',
@@ -1698,7 +1823,7 @@ describe('useNotes hooks', () => {
           expect.objectContaining({ text: 'Buy eggs', position: 1, completed: false }),
         ],
       });
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), converted);
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), converted, expect.objectContaining({ serverSnapshot: true }));
     });
 
     it('promotes a leading heading to the list title instead of an item', async () => {
@@ -1707,14 +1832,14 @@ describe('useNotes hooks', () => {
         ...sourceTextNote,
         content: '## Groceries\nBuy milk',
       } as never);
-      mockNotesApi.convertNoteType.mockResolvedValueOnce(converted as never);
+      mockJot.notes.convert.mockResolvedValueOnce(converted as never);
 
       const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync('123');
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockNotesApi.convertNoteType).toHaveBeenCalledWith('123', {
+      expect(mockJot.notes.convert).toHaveBeenCalledWith('123', {
         note_type: 'list',
         base_version: 3,
         title: 'Groceries',
@@ -1739,7 +1864,7 @@ describe('useNotes hooks', () => {
         user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
       };
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceListNote as never);
-      mockNotesApi.convertNoteType.mockResolvedValueOnce(converted as never);
+      mockJot.notes.convert.mockResolvedValueOnce(converted as never);
 
       const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
@@ -1747,7 +1872,7 @@ describe('useNotes hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockNotesApi.convertNoteType).toHaveBeenCalledWith('456', {
+      expect(mockJot.notes.convert).toHaveBeenCalledWith('456', {
         note_type: 'text',
         base_version: 2,
         content: '# My List\n\n- [ ] Item A',
@@ -1763,7 +1888,7 @@ describe('useNotes hooks', () => {
 
       await waitFor(() => expect(result.current.isError).toBe(true));
       expect((result.current.error as Error).message).toMatch(/not found/i);
-      expect(mockNotesApi.convertNoteType).not.toHaveBeenCalled();
+      expect(mockJot.notes.convert).not.toHaveBeenCalled();
     });
 
     it('throws NoteConversionCapError and calls neither the API nor the offline queue when the item cap is exceeded', async () => {
@@ -1779,7 +1904,7 @@ describe('useNotes hooks', () => {
       expect(error).toBeInstanceOf(NoteConversionCapError);
       expect(error.kind).toBe('tooManyItems');
       expect(error.max).toBe(VALIDATION.ITEM_MAX_COUNT);
-      expect(mockNotesApi.convertNoteType).not.toHaveBeenCalled();
+      expect(mockJot.notes.convert).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
 
@@ -1796,7 +1921,7 @@ describe('useNotes hooks', () => {
       expect(error).toBeInstanceOf(NoteConversionCapError);
       expect(error.kind).toBe('itemTextTooLong');
       expect(error.max).toBe(VALIDATION.ITEM_TEXT_MAX_LENGTH);
-      expect(mockNotesApi.convertNoteType).not.toHaveBeenCalled();
+      expect(mockJot.notes.convert).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
   });
@@ -1823,7 +1948,7 @@ describe('useNotes hooks', () => {
       const listNote = localConverted as { note_type: 'list'; title: string; items: Array<{ text: string; completed: boolean }> };
       expect(listNote.title).toBe('');
       expect(listNote.items).toEqual([expect.objectContaining({ text: 'Buy milk', completed: false })]);
-      expect(mockNotesApi.convertNoteType).not.toHaveBeenCalled();
+      expect(mockJot.notes.convert).not.toHaveBeenCalled();
       expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), localConverted);
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
@@ -1906,7 +2031,7 @@ describe('useNotes hooks', () => {
     };
 
     it('falls back to the local queue on a transient failure (5xx)', async () => {
-      mockNotesApi.convertNoteType.mockRejectedValueOnce(makeAxiosError(503));
+      mockJot.notes.convert.mockRejectedValueOnce(makeAxiosError(503));
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceTextNote as never);
 
       const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
@@ -1923,7 +2048,7 @@ describe('useNotes hooks', () => {
     });
 
     it('falls back to the local queue on a network error (no response)', async () => {
-      mockNotesApi.convertNoteType.mockRejectedValueOnce(makeNetworkError());
+      mockJot.notes.convert.mockRejectedValueOnce(makeNetworkError());
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceTextNote as never);
 
       const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
@@ -1935,7 +2060,7 @@ describe('useNotes hooks', () => {
     });
 
     it('surfaces a permanent failure (4xx) without queuing', async () => {
-      mockNotesApi.convertNoteType.mockRejectedValueOnce(makeAxiosError(403));
+      mockJot.notes.convert.mockRejectedValueOnce(makeAxiosError(403));
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceTextNote as never);
 
       const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
@@ -1954,13 +2079,13 @@ describe('useNotes hooks', () => {
     });
 
     it('clears the badge locally and tells the server when online', async () => {
-      mockNotesApi.markNoteViewed.mockResolvedValueOnce(undefined);
+      mockJot.notes.markViewed.mockResolvedValueOnce(undefined);
       const { result } = await renderHook(() => useMarkNoteViewed(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync('n1');
 
       expect(mockNoteQueries.clearLocalNoteUnread).toHaveBeenCalledWith(expect.anything(), 'n1');
-      expect(mockNotesApi.markNoteViewed).toHaveBeenCalledWith('n1');
+      expect(mockJot.notes.markViewed).toHaveBeenCalledWith('n1');
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
 
@@ -1971,7 +2096,7 @@ describe('useNotes hooks', () => {
       await result.current.mutateAsync('n1');
 
       expect(mockNoteQueries.clearLocalNoteUnread).toHaveBeenCalledWith(expect.anything(), 'n1');
-      expect(mockNotesApi.markNoteViewed).not.toHaveBeenCalled();
+      expect(mockJot.notes.markViewed).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
         {
@@ -1986,7 +2111,7 @@ describe('useNotes hooks', () => {
     });
 
     it('queues the view after a transient online failure', async () => {
-      mockNotesApi.markNoteViewed.mockRejectedValueOnce(makeNetworkError());
+      mockJot.notes.markViewed.mockRejectedValueOnce(makeNetworkError());
       const { result } = await renderHook(() => useMarkNoteViewed(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync('n1');

@@ -20,6 +20,33 @@ import type { Page } from '@playwright/test';
 
 const THEMES = ['light', 'dark'] as const;
 
+/** CODE_SCOPES from @jot/shared, which the e2e project cannot import. */
+const CODE_SCOPES = ['keyword', 'type', 'string', 'attribute', 'literal', 'title', 'comment'] as const;
+
+/** One fence per grammar family, between them covering every token scope. */
+const HIGHLIGHTED_CODE_NOTE = [
+  '```ts',
+  '// A11y code sample',
+  'export function greet(n: string): number {',
+  '  return this.count + 42;',
+  '}',
+  '```',
+  '',
+  '```html',
+  '<a href="https://example.com">x</a>',
+  '```',
+].join('\n');
+
+/** One code line far wider than the modal, with and without break points. */
+const LONG_CODE_NOTE = [
+  'A11y long code',
+  '',
+  '```',
+  `const message = ${'"a long string literal that keeps going", '.repeat(8)};`,
+  'x'.repeat(400),
+  '```',
+].join('\n');
+
 /** Every swatch in the note colour picker, by its accessible name. */
 const NOTE_COLOURS = [
   'Coral', 'Yellow', 'Lime', 'Teal', 'Periwinkle',
@@ -138,6 +165,25 @@ for (const theme of THEMES) {
       await expectNoViolations(page);
     });
 
+    test('list rows with links, and the links menu, have no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage }) => {
+      void authenticatedUser;
+      await dashboardPage.goto();
+      // One row per form of the open-link control: an anchor, and a menu button.
+      await dashboardPage.createListNote('A11y Links Note', [
+        'see [docs](https://example.com/docs)',
+        '[a](https://a.example.com) or [b](https://b.example.com)',
+      ]);
+      await dashboardPage.openNote('A11y Links Note');
+      await expect(dashboardPage.listItemOpenLink(0)).toBeVisible();
+      await expectTheme(page, theme);
+      await expectNoViolations(page);
+
+      // The open menu is portalled out of the row, so it is its own scan.
+      await dashboardPage.listItemOpenLink(1).click();
+      await expect(page.getByRole('menu')).toBeVisible();
+      await expectNoViolations(page);
+    });
+
     test('read-only bin note modal has no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage }) => {
       void authenticatedUser;
       await dashboardPage.goto();
@@ -195,6 +241,57 @@ for (const theme of THEMES) {
         await expect(saveStatus.getByText(/Last edited/)).toBeVisible();
         await expectNoViolations(page);
       }
+    });
+
+    // Highlighted code sits on an opaque panel whatever the note colour, which
+    // is what lets one palette per theme pass everywhere — this checks that
+    // claim against every colour, with every token scope on screen.
+    test('highlighted code has no WCAG A/AA violations in any note colour', async ({ page, authenticatedUser, dashboardPage }) => {
+      void authenticatedUser;
+      test.setTimeout(120_000);
+      await dashboardPage.goto();
+      await dashboardPage.createTextNote(HIGHLIGHTED_CODE_NOTE);
+      await dashboardPage.openTextNote('A11y code sample');
+      await expectTheme(page, theme);
+
+      const preview = '[role="dialog"] [data-testid="note-content-preview"]';
+      for (const scope of CODE_SCOPES) {
+        await expect(page.locator(`${preview} [data-code="${scope}"]`).first(), scope).toBeVisible();
+      }
+
+      const saveStatus = page.getByTestId('note-save-status');
+      for (const colour of NOTE_COLOURS) {
+        await dashboardPage.setNoteColorFromModal(colour);
+        await expect(saveStatus.getByText('Saved')).toBeVisible();
+        await expectNoViolations(page, { include: [preview] });
+      }
+    });
+
+    // A code line wider than the note wraps rather than scrolling: a
+    // scrolling <pre> is a region keyboard users cannot reach
+    // (scrollable-region-focusable), and the preview around it is itself a
+    // control, so the block cannot be made a tab stop instead.
+    test('a long code line has no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage }) => {
+      void authenticatedUser;
+      await dashboardPage.goto();
+      await dashboardPage.createTextNote(LONG_CODE_NOTE);
+      await dashboardPage.openTextNote('A11y long code');
+      await expectTheme(page, theme);
+
+      // Measured on the preview, not the <pre>: a block that grew wider than
+      // the note would not overflow itself, only its container.
+      const preview = '[role="dialog"] [data-testid="note-content-preview"]';
+      await expect(page.locator(`${preview} pre`)).toBeVisible();
+      await expectNoViolations(page, { include: [preview] });
+      expect(await page.locator(preview).evaluate((el) => el.scrollWidth - el.clientWidth), 'code scrolls sideways').toBeLessThanOrEqual(0);
+
+      // Cards share the block styles; one is a single control, so a scroll
+      // region inside it would be unreachable too.
+      await dashboardPage.closeNoteModal();
+      const card = dashboardPage.noteCardByText('A11y long code');
+      await expect(card.locator('pre')).toBeVisible();
+      await expectNoViolations(page, { include: ['[data-testid="note-card"]'] });
+      expect(await card.locator('.markdown-content').evaluate((el) => el.scrollWidth - el.clientWidth), 'card code scrolls sideways').toBeLessThanOrEqual(0);
     });
 
     test('settings page has no WCAG A/AA violations', async ({ page, authenticatedUser, settingsPage }) => {

@@ -43,7 +43,23 @@ export const MARKDOWN_CASES: MarkdownCase[] = [
 
   // Code
   { id: 'inline-code', markdown: '`code`', expected: 'inline code' },
-  { id: 'fenced-code', markdown: '```js\nconst a = 1;\n```', expected: 'a code block with block layout' },
+  // A fence naming a language Jot knows is highlighted in the open note
+  // (docs/specs §2.3); anything else is the same block, plain.
+  {
+    id: 'fenced-code',
+    markdown: '```js\nconst a = 1;\n```',
+    expected: 'a code block with block layout, highlighted as JavaScript',
+  },
+  {
+    id: 'fenced-code-unknown-language',
+    markdown: '```brainfuck\n+[->+<]>.\n```',
+    expected: 'a plain code block — not a language Jot highlights',
+  },
+  {
+    id: 'fenced-code-markup',
+    markdown: '```html\n<b class="x">hi</b>\n```',
+    expected: 'highlighted HTML source, shown as text rather than rendered',
+  },
   { id: 'indented-code', markdown: '    indented code', expected: 'a code block with block layout' },
   {
     id: 'task-marker-in-code',
@@ -77,6 +93,19 @@ export const MARKDOWN_CASES: MarkdownCase[] = [
   { id: 'tel-link', markdown: '[call](tel:+15550100)', expected: 'plain text "call", not a link' },
   { id: 'javascript-link', markdown: '[click](javascript:alert(1))', expected: 'plain text "click", not a link' },
   { id: 'relative-link', markdown: '[rel](/dashboard)', expected: 'plain text "rel", not a link' },
+  // A target is encoded once, in the shared normalizer, so both clients open
+  // the same address — mobile hands it straight to the OS, which refuses a raw
+  // space on iOS.
+  {
+    id: 'link-space-target',
+    markdown: '[docs](<https://example.com/a b>)',
+    expected: 'a link labelled "docs" to https://example.com/a%20b',
+  },
+  {
+    id: 'link-non-ascii-target',
+    markdown: '[café](https://example.com/café)',
+    expected: 'a link labelled "café" to https://example.com/caf%C3%A9',
+  },
 
   // Images: never rendered, shown as literal source
   {
@@ -167,6 +196,16 @@ export const MARKDOWN_ITEM_CASES: MarkdownCase[] = [
     expected: 'plain text "click", not a link',
   },
   { id: 'item-relative-link', markdown: '[rel](/dashboard)', expected: 'plain text "rel", not a link' },
+  {
+    id: 'item-link-space-target',
+    markdown: '[docs](<https://example.com/a b>)',
+    expected: 'a link labelled "docs" to https://example.com/a%20b',
+  },
+  {
+    id: 'item-link-non-ascii-target',
+    markdown: '[café](https://example.com/café)',
+    expected: 'a link labelled "café" to https://example.com/caf%C3%A9',
+  },
   {
     id: 'item-empty-link-label',
     markdown: '[](https://example.com)',

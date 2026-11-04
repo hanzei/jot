@@ -275,7 +275,7 @@ func TestCreateLabelWithClientID(t *testing.T) {
 	})
 }
 
-func TestGetLabelCounts(t *testing.T) {
+func TestLabelNoteCounts(t *testing.T) {
 	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "countlabels", "password123", false)
@@ -311,21 +311,19 @@ func TestGetLabelCounts(t *testing.T) {
 	labels, err := user.Client.ListLabels(t.Context())
 	require.NoError(t, err)
 	require.Len(t, labels, 2)
-	labelIDByName := map[string]string{}
+	countByName := map[string]int{}
 	for _, l := range labels {
-		labelIDByName[l.Name] = l.ID
+		countByName[l.Name] = l.NoteCount
 	}
 
 	t.Run("returns active-note counts, excluding archived and trashed notes", func(t *testing.T) {
-		counts, err := user.Client.ListLabelCounts(t.Context())
-		require.NoError(t, err)
-		assert.Equal(t, 1, counts[labelIDByName["work"]])
-		assert.Equal(t, 1, counts[labelIDByName["personal"]])
+		assert.Equal(t, 1, countByName["work"])
+		assert.Equal(t, 1, countByName["personal"])
 	})
 
 	t.Run("unauthenticated request returns 401", func(t *testing.T) {
 		c := ts.newClient()
-		_, err := c.ListLabelCounts(t.Context())
+		_, err := c.ListLabels(t.Context())
 		require.Error(t, err)
 		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
 	})
@@ -347,10 +345,7 @@ func TestGetLabelCounts(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, labels, 1)
 		assert.Equal(t, "shared-work", labels[0].Name)
-
-		counts, err := collaborator.Client.ListLabelCounts(t.Context())
-		require.NoError(t, err)
-		assert.Equal(t, 1, counts[labels[0].ID])
+		assert.Equal(t, 1, labels[0].NoteCount)
 	})
 }
 

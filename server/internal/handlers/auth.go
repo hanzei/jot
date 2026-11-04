@@ -100,7 +100,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, any
 		return http.StatusBadRequest, nil, err
 	}
 
-	user, err := h.userStore.Create(r.Context(), req.Username, req.Password)
+	user, err := h.userStore.Create(r.Context(), req.Username, req.Password, "")
 	if err != nil {
 		return storeError(err, "create user")
 	}
@@ -428,13 +428,13 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 // Me godoc
 //
 //	@Summary	Get the current authenticated user and settings
-//	@Tags		auth
+//	@Tags		users
 //	@Security	CookieAuth
 //	@Produce	json
 //	@Success	200	{object}	AuthResponse
 //	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
 //	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
-//	@Router		/me [get]
+//	@Router		/users/me [get]
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, authErr := requireUser(r)
 	if authErr != nil {

@@ -37,7 +37,7 @@ func TestAdminStatsRuntime(t *testing.T) {
 		d := &dialect.Dialect{Driver: driver}
 		ctx := t.Context()
 
-		user, err := newUserStore(db, d).Create(ctx, "statsuser", "password123")
+		user, err := newUserStore(db, d).Create(ctx, "statsuser", "password123", "")
 		require.NoError(t, err)
 		sessions, err := newSessionStore(db, d)
 		require.NoError(t, err)

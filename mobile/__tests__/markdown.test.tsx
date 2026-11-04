@@ -1,9 +1,11 @@
 import { StyleSheet } from 'react-native';
 import { render } from '@testing-library/react-native';
-import { MARKDOWN_CASES } from '@jot/shared';
+import { CODE_PALETTE, MARKDOWN_CASES } from '@jot/shared';
 import Markdown from '../src/components/Markdown';
 import MarkdownPreview, { PREVIEW_LINES } from '../src/components/MarkdownPreview';
-import { compactMarkdownStyles, fullMarkdownStyles } from '../src/utils/markdownStyles';
+import { compactMarkdownStyles, fullMarkdownStyles, markdownTheme } from '../src/utils/markdownStyles';
+import { darkColors, lightColors } from '../src/theme/colors';
+import { openedUrl } from './helpers/openedUrl';
 
 // The mobile half of the shared conformance corpus (shared/src/markdownCases.ts);
 // webapp/src/utils/__tests__/markdown.test.ts runs the same list through marked's
@@ -93,7 +95,27 @@ function boxes(
   );
 }
 
-const hasTint = (node: RenderedNode) => boxes(node, (s) => s.backgroundColor !== undefined).length;
+const hasPanel = (node: RenderedNode) => boxes(node, (s) => s.backgroundColor !== undefined).length;
+
+const light = CODE_PALETTE.light.scopes;
+
+const TOKEN_COLOURS: ReadonlySet<unknown> = new Set([
+  ...Object.values(CODE_PALETTE.light.scopes),
+  ...Object.values(CODE_PALETTE.dark.scopes),
+]);
+
+/**
+ * The highlighted tokens in a tree, as [text, colour] pairs: every Text whose
+ * own style sets a token colour. Plain code is a bare string, so it never
+ * appears here.
+ */
+function codeTokens(node: RenderedNode): [string, unknown][] {
+  if (node === null || typeof node === 'string') return [];
+  const style = (StyleSheet.flatten(node.props?.style as never) ?? {}) as Record<string, unknown>;
+  const own: [string, unknown][] =
+    node.type === 'Text' && TOKEN_COLOURS.has(style.color) ? [[visibleText(node), style.color]] : [];
+  return own.concat((node.children ?? []).flatMap((child) => codeTokens(child as RenderedNode)));
+}
 const hasBar = (node: RenderedNode) => boxes(node, (s) => Number(s.borderLeftWidth) > 0).length;
 const hasRule = (node: RenderedNode) => boxes(node, (s) => s.height === 1).length;
 
@@ -128,19 +150,37 @@ const conformance: Record<string, () => Promise<void>> = {
   'fenced-code': async () => {
     const tree = await renderCase('fenced-code');
     expect(styleFor(tree, 'const a = 1;').fontFamily).toBeTruthy();
-    // Block layout: the tinted box a fenced block sits in, which inline code has
-    // no equivalent of.
-    expect(hasTint(tree)).toBe(1);
+    // Block layout: the panel a fenced block sits in, which inline code has no
+    // equivalent of.
+    expect(hasPanel(tree)).toBe(1);
+    expect(codeTokens(tree)).toEqual([['const', light.keyword], ['1', light.literal]]);
+    // A token inherits the block's monospace font from the Text around it.
+    expect(styleFor(tree, 'const').fontFamily).toBe(styleFor(tree, 'const a = 1;').fontFamily);
+  },
+  'fenced-code-unknown-language': async () => {
+    const tree = await renderCase('fenced-code-unknown-language');
+    expect(visibleText(tree)).toBe('+[->+<]>.');
+    expect(hasPanel(tree)).toBe(1);
+    expect(codeTokens(tree)).toEqual([]);
+  },
+  'fenced-code-markup': async () => {
+    const tree = await renderCase('fenced-code-markup');
+    expect(visibleText(tree)).toBe('<b class="x">hi</b>');
+    expect(codeTokens(tree)).toEqual(expect.arrayContaining([
+      ['b', light.keyword],
+      ['class', light.attribute],
+      ['"x"', light.string],
+    ]));
   },
   'indented-code': async () => {
     const tree = await renderCase('indented-code');
     expect(styleFor(tree, 'indented code').fontFamily).toBeTruthy();
-    expect(hasTint(tree)).toBe(1);
+    expect(hasPanel(tree)).toBe(1);
   },
   'task-marker-in-code': async () => {
     const tree = await renderCase('task-marker-in-code');
     expect(visibleText(tree)).toBe('- [x] not a checkbox');
-    expect(hasTint(tree)).toBe(1);
+    expect(hasPanel(tree)).toBe(1);
   },
 
   'bullet-list': async () => expect(visibleText(await renderCase('bullet-list'))).toBe('•item'),
@@ -173,6 +213,16 @@ const conformance: Record<string, () => Promise<void>> = {
     expect(tappableText(tree)).toEqual([]);
   },
   'mailto-link': async () => expect(tappableText(await renderCase('mailto-link'))).toEqual(['mail']),
+  'link-space-target': async () => {
+    const tree = await renderCase('link-space-target');
+    expect(tappableText(tree)).toEqual(['docs']);
+    expect(await openedUrl(tree)).toBe('https://example.com/a%20b');
+  },
+  'link-non-ascii-target': async () => {
+    const tree = await renderCase('link-non-ascii-target');
+    expect(tappableText(tree)).toEqual(['café']);
+    expect(await openedUrl(tree)).toBe('https://example.com/caf%C3%A9');
+  },
   'tel-link': async () => {
     const tree = await renderCase('tel-link');
     expect(visibleText(tree)).toBe('call');
@@ -316,6 +366,37 @@ describe('markdown rendering', () => {
 // different layout of the same content, never a different feature set, so the
 // parity test below is the real assertion and the cases after it only pin the
 // affordances a Text has to substitute for a box.
+// docs/specs/markdown-rendering.md §2.3. The corpus pins what a highlighted
+// block looks like; these pin which palette it takes and where it is off.
+describe('syntax highlighting', () => {
+  it('draws code on the shared panel, chosen by the text it carries', () => {
+    expect(markdownTheme(lightColors, false, false).code).toBe(CODE_PALETTE.light);
+    expect(markdownTheme(darkColors, true, false).code).toBe(CODE_PALETTE.dark);
+    // A coloured note keeps its light swatch in dark mode, so its body — code
+    // included — is dark-on-light.
+    expect(markdownTheme(darkColors, true, true).code).toBe(CODE_PALETTE.light);
+  });
+
+  it('sets comments in italic as well as colour', async () => {
+    const tree = (await render(<Markdown content={'```js\nx; // note\n```'} />)).toJSON() as RenderedNode;
+    const style = styleFor(tree, '// note');
+    expect(style.color).toBe(light.comment);
+    expect(style.fontStyle).toBe('italic');
+  });
+
+  it('edges the panel and draws plain code in the palette text, even in a blockquote', async () => {
+    const tree = (await render(<Markdown content={'> ```\n> quoted code\n> ```'} />)).toJSON() as RenderedNode;
+    expect(styleFor(tree, 'quoted code').color).toBe(CODE_PALETTE.light.text);
+    expect(boxes(tree, (s) => s.borderColor === CODE_PALETTE.light.border)).toHaveLength(1);
+  });
+
+  it('leaves the card preview plain', async () => {
+    const tree = await renderPreview('fenced-code');
+    expect(visibleText(tree)).toContain('const a = 1;');
+    expect(codeTokens(tree)).toEqual([]);
+  });
+});
+
 describe('markdown card preview', () => {
   /**
    * Visible text with whitespace and the rule stand-in removed.

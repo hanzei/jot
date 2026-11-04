@@ -129,6 +129,11 @@ func TestForUpdate(t *testing.T) {
 	})
 }
 
+func TestLockFirstUserCheck(t *testing.T) {
+	assert.Empty(t, (&dialect.Dialect{Driver: "sqlite"}).LockFirstUserCheck())
+	assert.Contains(t, (&dialect.Dialect{Driver: "postgres"}).LockFirstUserCheck(), "pg_advisory_xact_lock")
+}
+
 func TestIsUniqueConstraintError(t *testing.T) {
 	t.Run("PostgreSQL 23505 returns true", func(t *testing.T) {
 		d := &dialect.Dialect{Driver: "postgres"}

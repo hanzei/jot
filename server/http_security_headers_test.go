@@ -48,7 +48,7 @@ func TestSecurityHeaders(t *testing.T) {
 		ts := setupTestServer(t)
 		u := ts.createTestUser(t, "headeruser", "password123", false)
 
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/users/me", nil)
 		require.NoError(t, err)
 
 		// u.Client.HTTPClient() carries the session cookie from Register.

@@ -116,6 +116,49 @@ test.describe('Markdown note editing', () => {
     await expect(preview.locator('a')).toHaveCount(0);
   });
 
+  // Syntax highlighting (docs/specs/markdown-rendering.md §2.3): in the open
+  // note only, in the shared palette, on the code block's opaque panel. The
+  // per-language token mapping is the shared suite's job; this checks it lands.
+  test('highlights a fenced code block in the note body but not on the card', async ({ page, dashboardPage, noteEditorPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createTextNote('```ts\nconst answer: number = 42; // why\n```');
+
+    const card = dashboardPage.noteCardByText('const answer');
+    await expect(card.locator('pre')).toHaveText('const answer: number = 42; // why');
+    await expect(card.locator('pre span')).toHaveCount(0);
+    // A card keeps the translucent tint, not the panel. Asserted as "not the
+    // panel" because Tailwind emits the tint in oklab, not rgb.
+    await expect(card.locator('pre')).not.toHaveCSS('background-color', 'rgb(243, 244, 246)');
+    await expect(card.locator('pre')).toHaveCSS('border-top-width', '0px');
+
+    await dashboardPage.openTextNote('const answer');
+    const code = noteEditorPage.preview().locator('pre code');
+    const token = (scope: string) => code.locator(`[data-code="${scope}"]`);
+    await expect(code).toHaveText('const answer: number = 42; // why');
+    await expect(token('keyword')).toHaveText('const');
+    await expect(token('type')).toHaveText('number');
+    await expect(token('literal')).toHaveText('42');
+    await expect(token('comment')).toHaveText('// why');
+
+    // What the browser actually draws: CODE_PALETTE.light's keyword (#c33d43)
+    // and panel (#f3f4f6). The e2e project cannot import @jot/shared;
+    // codeHighlightStyles.test.ts pins index.css to the palette itself.
+    await expect(token('keyword')).toHaveCSS('color', 'rgb(195, 61, 67)');
+    await expect(token('comment')).toHaveCSS('font-style', 'italic');
+    await expect(page.getByRole('dialog').locator('pre')).toHaveCSS('background-color', 'rgb(243, 244, 246)');
+    await expect(page.getByRole('dialog').locator('pre')).toHaveCSS('border-top-width', '1px');
+  });
+
+  test('renders a fence in an unknown language as plain code', async ({ dashboardPage, noteEditorPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createTextNote('```brainfuck\n+[->+<]>.\n```');
+    await dashboardPage.openTextNote('+[->+<]>.');
+
+    const code = noteEditorPage.preview().locator('pre code');
+    await expect(code).toHaveText('+[->+<]>.');
+    await expect(code.locator('span')).toHaveCount(0);
+  });
+
   // List-item text renders the inline subset (docs/specs/markdown-rendering.md
   // §2.1). The card is the display surface; the editor row deliberately still
   // shows source, which is what the second test below pins.
@@ -489,6 +532,52 @@ test.describe('Markdown in list-item rows', () => {
     // label survives, the target does not, and nothing looks followable.
     await expect(dashboardPage.listItemRendered(0)).toHaveText('see docs');
     await expect(dashboardPage.listItemRendered(0).locator('a')).toHaveCount(0);
+  });
+
+  test('opens an editable row\'s link from its own button', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createListNote('Open Link Note', ['see [docs](https://example.com/docs)', 'buy milk']);
+    await dashboardPage.openNote('Open Link Note');
+
+    // The label is plain text, so the button is the only cue — and it is shown
+    // without hover, unlike the row's other controls.
+    await expect(dashboardPage.listItemOpenLink(0)).toBeVisible();
+    await expect(dashboardPage.listItemOpenLink(1)).toHaveCount(0);
+    await expect(dashboardPage.listItemOpenLink(0)).toHaveAccessibleName('Open link: docs');
+
+    // Stubbed, so the test never leaves for the network.
+    await page.context().route('https://example.com/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'text/html', body: '<title>docs</title>' }),
+    );
+    const popupPromise = page.waitForEvent('popup');
+    await dashboardPage.listItemOpenLink(0).click();
+    const popup = await popupPromise;
+    expect(popup.url()).toBe('https://example.com/docs');
+    await popup.close();
+
+    // Opening it was not a click on the text: the row did not enter edit mode.
+    await expect(dashboardPage.listItemRendered(0)).toHaveText('see docs');
+  });
+
+  test('offers a menu when an item has several links', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    // The third link is the first one spelled differently: targets are encoded
+    // in the shared normalizer, so it is not offered twice.
+    await dashboardPage.createListNote('Two Links Note', [
+      '[a](https://a.example.com/café) or https://b.example.com or [again](https://a.example.com/caf%C3%A9)',
+    ]);
+    await dashboardPage.openNote('Two Links Note');
+
+    await dashboardPage.listItemOpenLink(0).click();
+    const menu = page.getByRole('menu');
+    await expect(menu.getByRole('menuitem')).toHaveCount(2);
+    await expect(menu.getByRole('menuitem').nth(0)).toHaveAttribute('href', 'https://a.example.com/caf%C3%A9');
+    await expect(menu.getByRole('menuitem').nth(1)).toHaveAttribute('href', 'https://b.example.com');
+
+    // Escape closes the menu without closing the note.
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    await expect(dashboardPage.listItemRow(0)).toBeVisible();
   });
 
   test('Ctrl+B and Ctrl+I format a list item, and Ctrl+Shift+B is left to the browser', async ({ page, dashboardPage }) => {

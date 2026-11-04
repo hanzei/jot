@@ -81,7 +81,7 @@ func TestErrorEnvelope(t *testing.T) {
 	})
 
 	t.Run("401 from auth middleware", func(t *testing.T) {
-		status, header, body := rawRequest(t, ts.httpClient, http.MethodGet, api+"/me", nil, nil)
+		status, header, body := rawRequest(t, ts.httpClient, http.MethodGet, api+"/users/me", nil, nil)
 		requireEnvelope(t, http.StatusUnauthorized, "unauthorized", status, header, body)
 	})
 

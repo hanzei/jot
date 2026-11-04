@@ -114,7 +114,7 @@ describe('SsoSection', () => {
     expect(queryByTestId('settings-sso-connect')).toBeNull();
   });
 
-  it('links through the browser flow and refreshes /me', async () => {
+  it('links through the browser flow and refreshes /users/me', async () => {
     mockRunFlow.mockResolvedValue({ type: 'code', code: 'link-code', codeVerifier: 'link-verifier' });
     mockLink.mockResolvedValue(undefined);
     const { getByTestId } = await renderSection(mixedMode, baseUser);
@@ -166,7 +166,7 @@ describe('SsoSection', () => {
     expect(setUser).not.toHaveBeenCalled();
   });
 
-  it('unlinks after confirmation and refreshes /me', async () => {
+  it('unlinks after confirmation and refreshes /users/me', async () => {
     mockUnlink.mockResolvedValue(undefined);
     const { getByTestId } = await renderSection(mixedMode, { ...baseUser, has_sso_linked: true });
 

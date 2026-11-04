@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, NoteItem, CreateNoteRequest, UpdateNoteRequest, ConvertNoteTypeRequest, CreateNoteItemRequest, PatchNoteItemRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, FileImportType, ExportFormat, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, SetUserPasswordRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest, NoteImage, LabelCountsResponse, NoteListResponse, NoteShareListResponse, LabelListResponse, UserSearchResponse, SessionListResponse, PATListResponse } from '@jot/shared';
+import { API_BASE_PATH, apiPaths, apiUrl, createJotApi, type FileImportType, type ExportFormat, type ImportResponse, type NoteImage, type User } from '@jot/shared';
 import { removeUser } from '@/utils/auth';
 import { authPathWithRedirect, currentRedirectTarget } from '@/utils/authRedirect';
 import { recordFailedRequest } from '@/utils/diagnostics';
@@ -15,7 +15,7 @@ declare module 'axios' {
 }
 
 const api = axios.create({
-  baseURL: '/api/v1',
+  baseURL: API_BASE_PATH,
   withCredentials: true,
   timeout: 10_000,
   headers: { 'X-Client-Id': CLIENT_ID },
@@ -28,7 +28,9 @@ api.interceptors.response.use(
     recordFailedRequest(error);
     if (error.response?.status === 401) {
       const url = error.config?.url || '';
-      const isAuthEndpoint = url === '/login' || url === '/register' || url === '/me';
+      // Only the read is exempt: PATCH /users/me must still clear a dead session.
+      const isCurrentUserRead = url === apiPaths.usersMe && error.config?.method?.toLowerCase() === 'get';
+      const isAuthEndpoint = url === apiPaths.login || url === apiPaths.register || isCurrentUserRead;
       if (!isAuthEndpoint && !error.config?.skipAuthRedirect) {
         const target = currentRedirectTarget();
         removeUser().finally(() => {
@@ -42,84 +44,25 @@ api.interceptors.response.use(
   }
 );
 
-export const serverConfig = {
-  get: (): Promise<ServerConfig> =>
-    api.get('/config').then(res => res.data),
-};
+// The endpoints themselves live in @jot/shared, shared with mobile. What stays
+// here is web-specific: the instance above, multipart bodies built from
+// `File`s, the blob download, and URLs the browser loads directly.
+const jot = createJotApi(api);
+
+export const { sso, auth, labels, sessions, pats, about, admin, config: serverConfig } = jot;
 
 // OIDC/SSO endpoints. The login and link flows are server-side redirect flows,
 // so the browser must do a full-page navigation to these absolute URLs (an
 // anchor or `window.location`) — an axios/XHR call would follow the IdP 302 in
 // the background and never hand control to the identity provider. Only unlink
 // is a plain JSON API call.
-export const SSO_LOGIN_URL = '/api/v1/auth/oidc/login';
-export const SSO_LINK_URL = '/api/v1/auth/oidc/link';
-
-export const sso = {
-  unlink: (): Promise<void> =>
-    api.post('/auth/oidc/unlink').then(() => undefined),
-};
-
-export const auth = {
-  login: (data: LoginRequest): Promise<AuthResponse> =>
-    api.post('/login', data).then(res => res.data),
-
-  register: (data: RegisterRequest): Promise<AuthResponse> =>
-    api.post('/register', data).then(res => res.data),
-
-  logout: (): Promise<void> =>
-    api.post('/logout'),
-
-  me: (): Promise<AuthResponse> =>
-    api.get('/me').then(res => res.data),
-};
+export const SSO_LOGIN_URL = apiUrl(apiPaths.oidcLogin);
+export const SSO_LINK_URL = apiUrl(apiPaths.oidcLink);
 
 export const notes = {
-  getAll: (archived = false, search = '', trashed = false, labelId = '', myTasks = false): Promise<Note[]> =>
-    api.get<NoteListResponse>('/notes', { params: { archived, search, trashed, ...(labelId ? { label: labelId } : {}), ...(myTasks ? { my_tasks: true } : {}) } }).then(res => res.data.notes),
+  ...jot.notes,
 
-  getById: (id: string): Promise<Note> =>
-    api.get(`/notes/${id}`).then(res => res.data),
-
-  create: (data: CreateNoteRequest): Promise<Note> =>
-    api.post('/notes', data).then(res => res.data),
-
-  update: (id: string, data: UpdateNoteRequest): Promise<Note> =>
-    api.patch(`/notes/${id}`, data).then(res => res.data),
-
-  delete: (id: string, opts?: { permanent?: boolean }): Promise<void> =>
-    opts?.permanent
-      ? api.delete(`/notes/${id}`, { params: { permanent: true } })
-      : api.delete(`/notes/${id}`),
-
-  emptyTrash: (): Promise<EmptyTrashResponse> =>
-    api.delete('/notes/trash').then(res => res.data),
-
-  restore: (id: string): Promise<Note> =>
-    api.post(`/notes/${id}/restore`).then(res => res.data),
-
-  markViewed: (id: string): Promise<void> =>
-    api.post(`/notes/${id}/viewed`).then(() => undefined),
-
-  duplicate: (id: string): Promise<Note> =>
-    api.post(`/notes/${id}/duplicate`).then(res => res.data),
-
-  convert: (id: string, data: ConvertNoteTypeRequest): Promise<Note> =>
-    api.post(`/notes/${id}/convert`, data).then(res => res.data),
-
-  share: (id: string, data: ShareNoteRequest): Promise<void> =>
-    api.post(`/notes/${id}/share`, data).then(() => undefined),
-
-  unshare: (id: string, userId: string): Promise<void> =>
-    api.delete(`/notes/${id}/shares/${userId}`).then(() => undefined),
-
-  getShares: (id: string): Promise<NoteShare[]> =>
-    api.get<NoteShareListResponse>(`/notes/${id}/shares`).then(res => res.data.shares),
-
-  reorder: (noteIDs: string[]): Promise<void> =>
-    api.post('/notes/reorder', { note_ids: noteIDs }),
-
-  importNotes: (
+  import: (
     payload:
       | { file: File; importType: FileImportType }
       | { importType: 'usememos'; url: string; token: string },
@@ -132,164 +75,50 @@ export const notes = {
     } else {
       formData.append('file', payload.file);
     }
-    return api.post('/notes/import', formData).then(res => res.data);
+    return jot.notes.import(formData);
   },
 
   exportNotes: (format: ExportFormat): Promise<{ blob: Blob; filename: string }> =>
-    api.get('/notes/export', { params: { format }, responseType: 'blob' }).then(res => {
+    api.get(apiPaths.notesExport, { params: { format }, responseType: 'blob' }).then(res => {
       const disposition = res.headers['content-disposition'] as string | undefined;
       const match = disposition?.match(/filename="?([^";\r\n]+)"?/);
       const filename = match?.[1] ?? (format === 'markdown' ? 'jot-markdown-export.zip' : 'jot-export.zip');
       return { blob: res.data as Blob, filename };
     }),
-
-  addLabel: (noteId: string, name: string): Promise<Note> =>
-    api.post(`/notes/${noteId}/labels`, { name }).then(res => res.data),
-
-  removeLabel: (noteId: string, labelId: string): Promise<Note> =>
-    api.delete(`/notes/${noteId}/labels/${labelId}`).then(res => res.data),
-
-  // Granular list-item operations. Editing items one at a time (rather than
-  // replacing the whole array) lets concurrent edits to a shared list merge
-  // server-side instead of overwriting each other.
-  createItem: (noteId: string, data: CreateNoteItemRequest): Promise<NoteItem> =>
-    api.post(`/notes/${noteId}/items`, data).then(res => res.data),
-
-  updateItem: (noteId: string, itemId: string, data: PatchNoteItemRequest): Promise<NoteItem> =>
-    api.patch(`/notes/${noteId}/items/${itemId}`, data).then(res => res.data),
-
-  deleteItem: (noteId: string, itemId: string): Promise<void> =>
-    api.delete(`/notes/${noteId}/items/${itemId}`).then(() => undefined),
-
-  reorderItems: (noteId: string, itemIds: string[]): Promise<void> =>
-    api.post(`/notes/${noteId}/items/reorder`, { item_ids: itemIds }).then(() => undefined),
-
-  // Toggles an item's completed flag atomically. When the item is a top-level
-  // (parent) item the same value cascades to all of its children server-side, so
-  // checking a group never splits it. Returns the note's full item list for the
-  // caller to reconcile every affected item from one response.
-  toggleItemCompleted: (noteId: string, itemId: string, completed: boolean): Promise<NoteItem[]> =>
-    api.post(`/notes/${noteId}/items/${itemId}/toggle-completed`, { completed }).then(res => res.data),
-
-  // Bulk operations over an explicit set of item IDs. Each is one atomic server
-  // request (rather than a per-item burst) and returns the note's item list for
-  // the caller to reconcile from a single response. Callers pass the exact set
-  // they captured, so an item toggled after the click is never affected.
-  setItemsCompleted: (noteId: string, itemIds: string[], completed: boolean): Promise<NoteItem[]> =>
-    api.post(`/notes/${noteId}/items/set-completed`, { item_ids: itemIds, completed }).then(res => res.data),
-
-  deleteItems: (noteId: string, itemIds: string[]): Promise<NoteItem[]> =>
-    api.post(`/notes/${noteId}/items/delete`, { item_ids: itemIds }).then(res => res.data),
-};
-
-export const labels = {
-  getAll: (): Promise<Label[]> =>
-    api.get<LabelListResponse>('/labels').then(res => res.data.labels),
-
-  getCounts: (): Promise<Record<string, number>> =>
-    api.get<LabelCountsResponse>('/labels/counts').then(res =>
-      Object.fromEntries(res.data.counts.map(({ label_id, count }) => [label_id, count]))
-    ),
-
-  create: (name: string): Promise<Label> =>
-    api.post('/labels', { name }).then(res => res.data),
-
-  rename: (id: string, name: string): Promise<Label> =>
-    api.patch(`/labels/${id}`, { name }).then(res => res.data),
-
-  delete: (id: string): Promise<void> =>
-    api.delete(`/labels/${id}`).then(() => undefined),
 };
 
 export const users = {
-  // Every user but the caller. Without a search term the server does not cap
-  // the list, which the share picker and avatar lookups rely on.
-  search: (): Promise<User[]> =>
-    api.get<UserSearchResponse>('/users').then(res => res.data.users),
-
-  updateMe: (data: UpdateMeRequest): Promise<AuthResponse> =>
-    api.patch('/users/me', data).then(res => res.data),
-
-  changePassword: (data: ChangePasswordRequest): Promise<void> =>
-    api.put('/users/me/password', data),
+  ...jot.users,
 
   uploadProfileIcon: (file: File): Promise<User> => {
     const formData = new FormData();
     formData.append('file', file);
-    return api.post('/users/me/profile-icon', formData).then(res => res.data);
+    return jot.users.uploadProfileIcon(formData);
   },
-
-  deleteProfileIcon: (): Promise<void> =>
-    api.delete('/users/me/profile-icon'),
-};
-
-export const sessions = {
-  list: (): Promise<ActiveSession[]> =>
-    api.get<SessionListResponse>('/sessions').then(res => res.data.sessions),
-
-  revoke: (id: string): Promise<void> =>
-    api.delete(`/sessions/${id}`).then(() => undefined),
-};
-
-export const pats = {
-  list: (): Promise<PersonalAccessToken[]> =>
-    api.get<PATListResponse>('/pats').then(res => res.data.pats),
-
-  create: (data: CreatePATRequest): Promise<PersonalAccessToken> =>
-    api.post('/pats', data).then(res => res.data),
-
-  revoke: (id: string): Promise<void> =>
-    api.delete(`/pats/${id}`).then(() => undefined),
 };
 
 // Note images are served inline (not via axios) so <img> tags can use the URL
 // directly as their src; the browser sends the session cookie automatically
 // for this same-origin request.
 export const images = {
-  url: (id: string): string => `/api/v1/images/${id}`,
+  url: (id: string): string => apiUrl(apiPaths.image(id)),
 
   // Resized JPEG tile for grid/cover thumbnails; the lightbox uses `url`
   // (the original) instead so a closer look never shows a downscaled image.
-  thumbnailUrl: (id: string): string => `/api/v1/images/${id}/thumbnail`,
+  thumbnailUrl: (id: string): string => apiUrl(apiPaths.imageThumbnail(id)),
 
   upload: (noteId: string, file: File, onProgress?: (percent: number) => void): Promise<NoteImage> => {
     const formData = new FormData();
     formData.append('file', file);
-    return api.post(`/notes/${noteId}/images`, formData, {
-      onUploadProgress: (event) => {
+    return jot.images.upload(noteId, formData, {
+      onUploadProgress: (event: { loaded: number; total?: number }) => {
         if (!onProgress || !event.total) return;
         onProgress(Math.round((event.loaded / event.total) * 100));
       },
-    }).then(res => res.data);
+    });
   },
 
-  delete: (id: string): Promise<void> =>
-    api.delete(`/images/${id}`).then(() => undefined),
-};
-
-export const about = {
-  get: (options: { skipAuthRedirect?: boolean } = {}): Promise<AboutInfo> =>
-    api.get('/about', options).then(res => res.data),
-};
-
-export const admin = {
-  getStats: (): Promise<AdminStatsResponse> =>
-    api.get('/admin/stats').then(res => res.data),
-
-  getUsers: (): Promise<UserListResponse> =>
-    api.get('/admin/users').then(res => res.data),
-
-  createUser: (data: CreateUserRequest): Promise<User> =>
-    api.post('/admin/users', data).then(res => res.data),
-
-  updateUserRole: (id: string, data: UpdateUserRoleRequest): Promise<User> =>
-    api.put(`/admin/users/${id}/role`, data).then(res => res.data),
-
-  setUserPassword: (id: string, data: SetUserPasswordRequest): Promise<void> =>
-    api.put(`/admin/users/${id}/password`, data).then(() => undefined),
-
-  deleteUser: (id: string): Promise<void> =>
-    api.delete(`/admin/users/${id}`).then(() => undefined),
+  delete: jot.images.delete,
 };
 
 export default api;

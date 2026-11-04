@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderHook, waitFor, act } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useLabelCounts } from '../src/hooks/useLabels';
+import { useLabels } from '../src/hooks/useLabels';
 import {
   useCreateNote,
   useDeleteNote,
@@ -9,14 +9,12 @@ import {
   useRestoreNote,
   useUpdateNote,
 } from '../src/hooks/useNotes';
-import * as labelsApi from '../src/api/labels';
-import * as notesApi from '../src/api/notes';
 import { saveNote } from '../src/db/noteQueries';
 import { makeLabel, makeTextNote } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
+import { jot } from '../src/api/jot';
 
-jest.mock('../src/api/labels');
-jest.mock('../src/api/notes');
+jest.mock('../src/api/jot');
 
 jest.mock('../src/hooks/useNetworkStatus', () => ({
   useNetworkStatus: jest.fn().mockReturnValue({ isConnected: true }),
@@ -26,8 +24,8 @@ jest.mock('../src/store/AuthContext', () => ({
   useAuth: jest.fn().mockReturnValue({ user: { id: 'u1', username: 'me' }, isAuthenticated: true }),
 }));
 
-const mockLabelsApi = labelsApi as jest.Mocked<typeof labelsApi>;
-const mockNotesApi = notesApi as jest.Mocked<typeof notesApi>;
+const mockJot = jest.mocked(jot);
+
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -40,9 +38,18 @@ function createWrapper() {
 
 const work = makeLabel({ id: 'l1', name: 'Work' });
 
+/** The drawer's label list reduced to { labelId: note_count } for non-empty labels. */
+function useLabelCounts() {
+  const { data, dataUpdatedAt } = useLabels();
+  return {
+    dataUpdatedAt,
+    data: data && Object.fromEntries(data.filter((l) => l.note_count > 0).map((l) => [l.id, l.note_count])),
+  };
+}
+
 /**
- * The drawer's per-label counts are derived from the notes table, not the labels
- * one, so a note write that touches no label still changes them. These cover the
+ * The drawer's per-label counts are derived offline from the notes table, not the
+ * labels one, so a note write that touches no label still changes them. These cover the
  * local-write paths: the counts must follow the SQLite rows without waiting for a
  * reconnect resync or an app restart.
  */
@@ -54,7 +61,7 @@ describe('label counts follow local note writes', () => {
     db = globalThis.testDb as TestDatabase;
     // The server agrees with SQLite at mount time; every later change below is
     // local, so only an invalidation can move the count.
-    mockLabelsApi.getLabelCounts.mockResolvedValue({ l1: 1 } as never);
+    mockJot.labels.getAll.mockResolvedValue([{ ...work, note_count: 1 }] as never);
     await saveNote(db, makeTextNote({ id: 'n1', content: 'hi', labels: [work] }));
   });
 
@@ -65,7 +72,7 @@ describe('label counts follow local note writes', () => {
     );
     await waitFor(() => expect(result.current.counts.data).toEqual({ l1: 1 }));
 
-    mockNotesApi.updateNote.mockResolvedValue(
+    mockJot.notes.update.mockResolvedValue(
       makeTextNote({ id: 'n1', content: 'hi', labels: [work], archived: true }) as never,
     );
     await act(async () => {
@@ -82,11 +89,11 @@ describe('label counts follow local note writes', () => {
     );
     await waitFor(() => expect(result.current.counts.data).toEqual({ l1: 1 }));
 
-    mockNotesApi.deleteNote.mockResolvedValue(undefined as never);
+    mockJot.notes.delete.mockResolvedValue(undefined as never);
     await act(async () => { await result.current.del.mutateAsync('n1'); });
     await waitFor(() => expect(result.current.counts.data).toEqual({}));
 
-    mockNotesApi.restoreNote.mockResolvedValue(undefined as never);
+    mockJot.notes.restore.mockResolvedValue(undefined as never);
     await act(async () => { await result.current.restore.mutateAsync('n1'); });
     await waitFor(() => expect(result.current.counts.data).toEqual({ l1: 1 }));
   });
@@ -98,7 +105,7 @@ describe('label counts follow local note writes', () => {
     );
     await waitFor(() => expect(result.current.counts.data).toEqual({ l1: 1 }));
 
-    mockNotesApi.duplicateNote.mockResolvedValue(
+    mockJot.notes.duplicate.mockResolvedValue(
       makeTextNote({ id: 'n2', content: 'hi', labels: [work] }) as never,
     );
     await act(async () => { await result.current.duplicate.mutateAsync('n1'); });
@@ -113,7 +120,7 @@ describe('label counts follow local note writes', () => {
     );
     await waitFor(() => expect(result.current.counts.data).toEqual({ l1: 1 }));
 
-    mockNotesApi.createNote.mockResolvedValue(
+    mockJot.notes.create.mockResolvedValue(
       makeTextNote({ id: 'n2', content: 'forked', labels: [work] }) as never,
     );
     await act(async () => {
@@ -131,7 +138,7 @@ describe('label counts follow local note writes', () => {
     await waitFor(() => expect(result.current.counts.data).toEqual({ l1: 1 }));
     const before = result.current.counts.dataUpdatedAt;
 
-    mockNotesApi.updateNote.mockResolvedValue(
+    mockJot.notes.update.mockResolvedValue(
       makeTextNote({ id: 'n1', content: 'edited', labels: [work] }) as never,
     );
     await act(async () => {

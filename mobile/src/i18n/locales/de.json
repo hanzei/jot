@@ -271,6 +271,8 @@
     "menuOptions": "Notizoptionen",
     "assignItem": "Element zuweisen",
     "removeItem": "Element entfernen",
+    "openItemLink": "Link öffnen: {{label}}",
+    "openItemLinks": "Einen Link öffnen",
     "unassign": "Zuweisung aufheben",
     "assignedTo": "Zugewiesen an {{name}}",
     "changeColor": "Notizfarbe",

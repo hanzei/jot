@@ -8,25 +8,25 @@ import {
   getDeadLetteredOperations,
   deleteDeadLetter,
   deadLetterAffectedNoteIds,
+  saveServerResponseNote,
   type DeadLetteredOperation,
 } from '../db/syncQueue';
 import {
   getLocalNote,
-  saveNote,
   clearNoteSyncFailed,
   permanentDeleteLocalNote,
   markLocalNoteDeleted,
 } from '../db/noteQueries';
 import { reassignPendingImageUploads } from '../db/imageUploadQueue';
-import { getNote } from '../api/notes';
 import { useCreateNote } from './useNotes';
 import { useOfflineContext } from '../store/OfflineContext';
 import {
   deadLettersQueryKey,
-  labelCountsQueryKey,
+  labelsQueryKey,
   noteLocalQueryScopeKey,
   notesLocalQueryScopeKey,
 } from './queryKeys';
+import { jot } from '../api/jot';
 
 /**
  * Build a fresh-note creation request from a note's preserved local content, so
@@ -82,8 +82,8 @@ export async function reconcileDiscard(db: SQLiteDatabase, dl: DeadLetteredOpera
     } else {
       await clearNoteSyncFailed(db, dl.note_id);
       try {
-        const serverNote = await getNote(dl.note_id);
-        await saveNote(db, serverNote);
+        const serverNote = await jot.notes.getById(dl.note_id);
+        await saveServerResponseNote(db, serverNote);
       } catch (err) {
         const status = axios.isAxiosError(err) ? err.response?.status : undefined;
         if (isGoneStatus(status)) {
@@ -173,7 +173,7 @@ export function useSyncFailures() {
     // Resolving can delete a discarded local create, tombstone a note the server
     // no longer has, or replace a note wholesale with the server's copy — each of
     // which changes what its labels count.
-    queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
+    queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
     refreshSyncFailures();
   }, [queryClient, refreshSyncFailures]);
 

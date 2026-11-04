@@ -317,6 +317,23 @@ describe('API Client', () => {
       expect(memory.get(getServerScopedStorageKey(serverId, 'session'))).toBe('still-valid');
     });
 
+    it('a GET /users/me 401 does not expire the session, but a PATCH does', async () => {
+      const serverId = await signInWithSession('still-valid');
+      const onUnauthorized = jest.fn();
+      setOnUnauthorized(onUnauthorized);
+
+      await expect(
+        getResponseErrorHandler()({ response: { status: 401 }, config: { url: '/users/me', method: 'get' } }),
+      ).rejects.toBeDefined();
+      expect(onUnauthorized).not.toHaveBeenCalled();
+      expect(memory.get(getServerScopedStorageKey(serverId, 'session'))).toBe('still-valid');
+
+      await expect(
+        getResponseErrorHandler()({ response: { status: 401 }, config: { url: '/users/me', method: 'patch' } }),
+      ).rejects.toBeDefined();
+      expect(onUnauthorized).toHaveBeenCalledTimes(1);
+    });
+
     it('a /auth/oidc/native/link 401 still means the session expired', async () => {
       const serverId = await signInWithSession('expired');
       const onUnauthorized = jest.fn();
@@ -429,7 +446,7 @@ describe('API Client', () => {
 
       const result = await auth.me();
 
-      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/me');
+      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/users/me');
       expect(result).toEqual(mockResponse.data);
     });
 

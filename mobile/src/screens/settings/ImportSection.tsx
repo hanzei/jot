@@ -5,11 +5,9 @@ import * as DocumentPicker from 'expo-document-picker';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '../../theme/ThemeContext';
-import { importFile, getNotes } from '../../api/notes';
-import { getLabels } from '../../api/labels';
+import { importFile } from '../../api/notes';
 import { saveServerLabels, saveServerNotes } from '../../db/syncQueue';
 import {
-  labelCountsQueryKey,
   labelsQueryKey,
   noteLocalQueryScopeKey,
   notesLocalQueryScopeKey,
@@ -18,6 +16,7 @@ import { displayMessage, extractApiError } from '../../i18n/utils';
 import type { FileImportType, ImportResponse } from '@jot/shared';
 import FormatRadioGroup, { type FormatOption } from './FormatRadioGroup';
 import { styles } from './styles';
+import { jot } from '../../api/jot';
 
 const ZIP_MIME_TYPES = ['application/zip', 'application/x-zip-compressed'];
 
@@ -97,7 +96,7 @@ export default function ImportSection() {
         // An import creates labels as well as notes, and every cache below reads
         // local SQLite — so both have to be pulled before the invalidations, or
         // the re-read just re-serves the pre-import rows.
-        const [latestNotes, latestLabels] = await Promise.all([getNotes(), getLabels()]);
+        const [latestNotes, latestLabels] = await Promise.all([jot.notes.getAll(), jot.labels.getAll()]);
         await saveServerNotes(db, latestNotes);
         await saveServerLabels(db, latestLabels);
       } catch (syncErr) {
@@ -106,8 +105,6 @@ export default function ImportSection() {
         queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
         queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
         queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
-        // Counts come from the note rows (labels_json), not the labels table.
-        queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
       }
     } catch (err: unknown) {
       setImportError(extractApiError(err) ?? 'import.importFailed');

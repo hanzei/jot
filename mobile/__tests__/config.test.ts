@@ -1,39 +1,12 @@
 import axios from 'axios';
-import { fetchServerConfig, probeServerConfig } from '../src/api/config';
-import api from '../src/api/client';
-
-jest.mock('../src/api/client', () => ({
-  __esModule: true,
-  default: { get: jest.fn() },
-}));
+import { probeServerConfig } from '../src/api/config';
 
 jest.mock('axios', () => ({
   __esModule: true,
   default: { get: jest.fn() },
 }));
 
-const mockApiGet = api.get as jest.Mock;
 const mockAxiosGet = axios.get as jest.Mock;
-
-describe('fetchServerConfig', () => {
-  beforeEach(() => {
-    mockApiGet.mockClear();
-  });
-
-  it('GETs /config through the shared (active-server) client', async () => {
-    const config = { registration_enabled: true, password_min_length: 8, upload_max_bytes: 1000 };
-    mockApiGet.mockResolvedValue({ data: config });
-
-    await expect(fetchServerConfig()).resolves.toEqual(config);
-    expect(mockApiGet).toHaveBeenCalledWith('/config');
-  });
-
-  it('propagates a network failure to the caller', async () => {
-    mockApiGet.mockRejectedValue(new Error('Network Error'));
-
-    await expect(fetchServerConfig()).rejects.toThrow('Network Error');
-  });
-});
 
 describe('probeServerConfig', () => {
   beforeEach(() => {

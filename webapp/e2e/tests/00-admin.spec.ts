@@ -12,7 +12,7 @@ type MeResponse = {
 const bootstrapAdmin = E2E_ADMIN_CREDENTIALS;
 
 async function ensureAdminSession(page: Page) {
-  const meResponse = await page.request.get('/api/v1/me');
+  const meResponse = await page.request.get('/api/v1/users/me');
   expect(meResponse.ok()).toBeTruthy();
   const meData = await meResponse.json() as MeResponse;
   if (meData.user?.role !== 'admin') {

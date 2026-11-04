@@ -102,18 +102,18 @@ export interface Label {
   updated_at: string;
 }
 
-export interface LabelCount {
-  label_id: string;
-  count: number;
-}
-
-export interface LabelCountsResponse {
-  counts: LabelCount[];
+/**
+ * A GET /labels list item. `note_count` is the number of non-trashed,
+ * non-archived notes carrying the label for the requesting user. Kept off
+ * `Label`, which is also embedded in notes and `labels_changed` SSE events.
+ */
+export interface LabelWithCount extends Label {
+  note_count: number;
 }
 
 /** GET /labels */
 export interface LabelListResponse {
-  labels: Label[];
+  labels: LabelWithCount[];
 }
 
 export type NoteType = 'text' | 'list';

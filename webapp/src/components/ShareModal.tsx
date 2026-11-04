@@ -141,7 +141,7 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
     // viewer name the owner at the head of the access list — the owner is never
     // a `shared_with` record — so both roles fetch it. It stays a single request
     // per open; a viewer never searches, so nothing else consumes it for them.
-    usersApi.search()
+    usersApi.list()
       .then(usersList => {
         if (cancelled) return;
         setUsers(usersList || []);

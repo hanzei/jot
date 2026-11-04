@@ -244,11 +244,18 @@ func TestLabelOrder(t *testing.T) {
 			}
 			return out
 		}
+		listed := func(labels []LabelWithCount) []string {
+			plain := make([]Label, 0, len(labels))
+			for _, l := range labels {
+				plain = append(plain, l.Label)
+			}
+			return names(plain)
+		}
 
 		t.Run("GetLabels", func(t *testing.T) {
 			labels, err := store.GetLabels(ctx, userID)
 			require.NoError(t, err)
-			assert.Equal(t, want, names(labels))
+			assert.Equal(t, want, listed(labels))
 		})
 
 		t.Run("GetNoteLabels", func(t *testing.T) {

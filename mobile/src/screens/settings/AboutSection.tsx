@@ -4,13 +4,13 @@ import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useAuth } from '../../store/AuthContext';
 import { useTheme } from '../../theme/ThemeContext';
-import { getAboutInfo } from '../../api/settings';
 import { subscribeToClientActiveServerChanges } from '../../api/client';
 import { getActiveServer } from '../../store/serverAccounts';
 import { displayMessage, getCurrentLocale } from '../../i18n/utils';
 import { getAppBuildInfo } from '../../utils/appInfo';
 import type { AboutInfo } from '@jot/shared';
 import { styles } from './styles';
+import { jot } from '../../api/jot';
 
 const appBuildInfo = getAppBuildInfo();
 
@@ -86,7 +86,7 @@ export default function AboutSection() {
     if (aboutExpanded && !aboutInfo && !aboutError) {
       let cancelled = false;
       const requestId = ++aboutRequestSeqRef.current;
-      getAboutInfo()
+      jot.about.get()
         .then((nextAboutInfo) => {
           if (!cancelled && aboutRequestSeqRef.current === requestId) {
             setAboutInfo(nextAboutInfo);

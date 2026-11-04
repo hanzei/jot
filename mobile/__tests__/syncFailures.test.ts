@@ -12,15 +12,18 @@ import {
   keepThenDiscard,
 } from '../src/hooks/useSyncFailures';
 import type { DeadLetteredOperation } from '../src/db/syncQueue';
-import { getNote } from '../src/api/notes';
 import type { Note } from '@jot/shared';
+import { jot } from '../src/api/jot';
 
-jest.mock('../src/api/notes', () => ({
-  __esModule: true,
-  getNote: jest.fn(),
+jest.mock('../src/api/jot', () => ({
+  jot: {
+    notes: {
+      getById: jest.fn(),
+    },
+  },
 }));
 
-const mockGetNote = getNote as jest.MockedFunction<typeof getNote>;
+const mockGetNote = jest.mocked(jot.notes.getById);
 
 function makeTextNote(id: string, content = 'hello'): Note {
   return {

@@ -7,6 +7,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"io/fs"
 
 	"github.com/golang-migrate/migrate/v4"
 	migratedatabase "github.com/golang-migrate/migrate/v4/database"
@@ -241,6 +242,10 @@ func runMigrations(db *sql.DB, driverName string) error {
 		return fmt.Errorf("create migrate instance: %w", err)
 	}
 
+	if err := refuseNewerSchema(m, src); err != nil {
+		return err
+	}
+
 	if err := m.Up(); err != nil {
 		if errors.Is(err, migrate.ErrNoChange) {
 			return nil
@@ -251,4 +256,67 @@ func runMigrations(db *sql.DB, driverName string) error {
 	version, _, _ := m.Version()
 	log.WithField("version", version).Info("Migrations applied successfully")
 	return nil
+}
+
+// SchemaNewerError reports a database whose schema was migrated past the
+// newest migration this build embeds — by a newer Jot release or a build of
+// another branch — so it cannot be run against it.
+type SchemaNewerError struct {
+	// DBVersion is the schema version recorded in the database.
+	DBVersion uint
+	// LatestVersion is the newest migration this build knows.
+	LatestVersion uint
+}
+
+func (e *SchemaNewerError) Error() string {
+	return fmt.Sprintf("database schema is at version %d, but this build of Jot only knows migrations up to %d: "+
+		"the database was upgraded by a newer version of Jot. Run that version again, "+
+		"or restore the database and upload directory from the backup taken before the upgrade",
+		e.DBVersion, e.LatestVersion)
+}
+
+// refuseNewerSchema returns a *SchemaNewerError when the database's schema
+// version is past the newest migration in src. Without it, golang-migrate
+// fails with "no migration found for version N: read down for version N",
+// which says nothing about why or what to do. Migrations are up-only, and a
+// build cannot undo a migration it has never seen, so there is no way to
+// carry on: only the newer build, or a backup, can bring the database back.
+//
+// It runs before the dirty check in m.Up, so a newer migration that was
+// interrupted still gets this message — the older build cannot repair it.
+func refuseNewerSchema(m *migrate.Migrate, src source.Driver) error {
+	dbVersion, _, err := m.Version()
+	if errors.Is(err, migrate.ErrNilVersion) {
+		return nil // a fresh database
+	}
+	if err != nil {
+		return fmt.Errorf("read schema version: %w", err)
+	}
+
+	latest, err := latestMigrationVersion(src)
+	if err != nil {
+		return err
+	}
+	if dbVersion > latest {
+		return &SchemaNewerError{DBVersion: dbVersion, LatestVersion: latest}
+	}
+	return nil
+}
+
+// latestMigrationVersion returns the newest migration version in src.
+func latestMigrationVersion(src source.Driver) (uint, error) {
+	version, err := src.First()
+	if err != nil {
+		return 0, fmt.Errorf("read first migration: %w", err)
+	}
+	for {
+		next, err := src.Next(version)
+		if errors.Is(err, fs.ErrNotExist) {
+			return version, nil
+		}
+		if err != nil {
+			return 0, fmt.Errorf("read migration after version %d: %w", version, err)
+		}
+		version = next
+	}
 }

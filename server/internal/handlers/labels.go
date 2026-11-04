@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"sort"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -41,32 +40,22 @@ type RenameLabelRequest struct {
 	Name string `json:"name"`
 }
 
-// LabelCount is the note count for a single label.
-type LabelCount struct {
-	LabelID string `json:"label_id"`
-	Count   int    `json:"count"`
-}
-
-// LabelCountsResponse is an extensible envelope wrapping per-label note counts.
-type LabelCountsResponse struct {
-	Counts []LabelCount `json:"counts"`
-}
-
 // LabelListResponse is the GET /labels body.
 type LabelListResponse struct {
-	Labels []models.Label `json:"labels"`
+	Labels []models.LabelWithCount `json:"labels"`
 }
 
 // GetLabels godoc
 //
-//	@Summary	List all labels for the current user
-//	@Tags		labels
-//	@Security	CookieAuth
-//	@Produce	json
-//	@Success	200	{object}	LabelListResponse
-//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
-//	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
-//	@Router		/labels [get]
+//	@Summary		List all labels for the current user
+//	@Description	Each label carries note_count: the number of non-trashed, non-archived notes carrying the label for the requesting user.
+//	@Tags			labels
+//	@Security		CookieAuth
+//	@Produce		json
+//	@Success		200	{object}	LabelListResponse
+//	@Failure		401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure		500	{object}	apierr.ErrorResponse	"internal server error"
+//	@Router			/labels [get]
 func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, authErr := requireUser(r)
 	if authErr != nil {
@@ -79,41 +68,6 @@ func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	return http.StatusOK, LabelListResponse{Labels: labels}, nil
-}
-
-// GetLabelCounts godoc
-//
-//	@Summary	Get note counts per label for the current user
-//	@Tags		labels
-//	@Security	CookieAuth
-//	@Produce	json
-//	@Success	200	{object}	LabelCountsResponse
-//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
-//	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
-//	@Router		/labels/counts [get]
-func (h *LabelsHandler) GetLabelCounts(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	user, authErr := requireUser(r)
-	if authErr != nil {
-		return http.StatusUnauthorized, nil, authErr
-	}
-
-	counts, err := h.labelStore.GetLabelCounts(r.Context(), user.ID)
-	if err != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("get label counts: %w", err)
-	}
-
-	labelIDs := make([]string, 0, len(counts))
-	for labelID := range counts {
-		labelIDs = append(labelIDs, labelID)
-	}
-	sort.Strings(labelIDs)
-
-	resp := LabelCountsResponse{Counts: make([]LabelCount, 0, len(counts))}
-	for _, labelID := range labelIDs {
-		resp.Counts = append(resp.Counts, LabelCount{LabelID: labelID, Count: counts[labelID]})
-	}
-
-	return http.StatusOK, resp, nil
 }
 
 // CreateLabel godoc
