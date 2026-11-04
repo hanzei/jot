@@ -7,6 +7,18 @@ import { useAuth } from '../src/store/AuthContext';
 import { getActiveServer, listServers } from '../src/store/serverAccounts';
 import type { AuthStackParamList } from '../src/navigation/AuthStack';
 
+jest.mock('../src/api/jot', () => ({
+  jot: {
+    config: {
+      get: jest.fn().mockResolvedValue({
+        registration_enabled: true,
+        password_min_length: 10,
+        upload_max_bytes: 26214400,
+      }),
+    },
+  },
+}));
+
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: jest.fn(),
 }));
@@ -35,11 +47,6 @@ jest.mock('../src/store/serverAccounts', () => ({
 // immediately rather than letting it hit the real (unmocked) `/config` call.
 jest.mock('../src/api/config', () => ({
   DEFAULT_SERVER_CONFIG: { registration_enabled: true, password_min_length: 10, upload_max_bytes: 26214400 },
-  fetchServerConfig: jest.fn().mockResolvedValue({
-    registration_enabled: true,
-    password_min_length: 10,
-    upload_max_bytes: 26214400,
-  }),
 }));
 
 jest.mock('../src/theme/ThemeContext', () => ({

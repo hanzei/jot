@@ -7,6 +7,17 @@ import { ConfirmContext } from '../src/hooks/useConfirm';
 import { markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
 import type { Label, NoteSort } from '@jot/shared';
 
+jest.mock('../src/api/jot', () => ({
+  jot: {
+    notes: {
+      emptyTrash: jest.fn(),
+    },
+    users: {
+      updateMe: jest.fn(),
+    },
+  },
+}));
+
 jest.mock('@react-navigation/native', () => {
   const mockDispatch = jest.fn();
   return {
@@ -67,13 +78,7 @@ jest.mock('../src/hooks/useToast', () => ({
   useToast: jest.fn(),
 }));
 
-jest.mock('../src/api/settings', () => ({
-  updateMe: jest.fn(),
-}));
 
-jest.mock('../src/api/notes', () => ({
-  emptyTrash: jest.fn(),
-}));
 
 jest.mock('../src/db/noteQueries', () => ({
   getLocalNotes: jest.fn().mockResolvedValue([]),
@@ -136,8 +141,8 @@ const mockUseUsers = jest.requireMock('../src/store/UsersContext').useUsers as j
 const mockUseAuth = jest.requireMock('../src/store/AuthContext').useAuth as jest.Mock;
 const mockUseTheme = jest.requireMock('../src/theme/ThemeContext').useTheme as jest.Mock;
 const mockUseToast = jest.requireMock('../src/hooks/useToast').useToast as jest.Mock;
-const mockUpdateMe = jest.requireMock('../src/api/settings').updateMe as jest.Mock;
-const mockEmptyTrash = jest.requireMock('../src/api/notes').emptyTrash as jest.Mock;
+const mockUpdateMe = jest.requireMock('../src/api/jot').jot.users.updateMe as jest.Mock;
+const mockEmptyTrash = jest.requireMock('../src/api/jot').jot.notes.emptyTrash as jest.Mock;
 const mockGetLocalNotes = jest.requireMock('../src/db/noteQueries').getLocalNotes as jest.Mock;
 const mockEnqueueOperation = jest.requireMock('../src/db/syncQueue').enqueueOperation as jest.Mock;
 

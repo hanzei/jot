@@ -6,6 +6,14 @@ import { DashboardPage } from '../pages/DashboardPage';
  * two tabs must merge per item instead of one tab overwriting the other.
  */
 test.describe('Concurrent list editing', () => {
+  // These tests check list items off with forced clicks, which skip
+  // Playwright's stability wait. The note modal is vertically centred and
+  // animates its height whenever the item counts change (useSizeTransition), as
+  // well as on open, so a forced click mid-animation lands on the row beside the
+  // checkbox. Reduced motion turns both animations off (canAnimate,
+  // motion-reduce:transition-none); these specs test list logic, not motion.
+  test.use({ reducedMotion: 'reduce' });
+
   test('edits to different items from two tabs both survive', async ({ page, dashboardPage, authenticatedUser }) => {
     expect(authenticatedUser.username).toBeTruthy();
 
@@ -34,5 +42,119 @@ test.describe('Concurrent list editing', () => {
     await dashboardPage.openNote('Shared Tasks');
     await dashboardPage.expectListItemValue(0, 'Buy oat milk');
     await dashboardPage.expectListItemValue(1, 'Walk the dog');
+  });
+
+  // The toggle endpoint returns the note's full item list as of its own write.
+  // Checking rows off faster than responses come back meant the response to the
+  // first tap still reported the later-tapped rows unchecked, and applying it
+  // put them back in the active list.
+  test('items checked off in quick succession stay checked as each response lands', async ({ page, dashboardPage, authenticatedUser }) => {
+    void authenticatedUser;
+    await dashboardPage.createListNote('Quick Checks', ['Eggs', 'Flour', 'Sugar']);
+    await dashboardPage.openNote('Quick Checks');
+
+    // Let each toggle reach the server — so its response body is a snapshot
+    // taken right after its own write — but hold the response back until the
+    // test releases it, as a slow connection would.
+    const held: Array<() => void> = [];
+    await page.route('**/api/v1/notes/*/items/set-completed', async route => {
+      const response = await route.fetch();
+      await new Promise<void>(resolve => { held.push(resolve); });
+      await route.fulfill({ response });
+    });
+    const toggleLanded = () => page.waitForResponse(res => res.url().includes('/set-completed'));
+
+    const activeCheckbox = page.locator('[data-testid="list-item-row"] input[type="checkbox"]:not(:checked)');
+    for (let tapped = 1; tapped <= 3; tapped++) {
+      // eslint-disable-next-line playwright/no-force-option -- one forced click checks exactly one item before it reflows into the completed section
+      await activeCheckbox.first().click({ force: true });
+      await expect(page.getByText(`Completed items (${tapped})`)).toBeVisible();
+      // Wait for this write to reach the server before the next tap, so the
+      // first response's snapshot predates the later writes.
+      await expect.poll(() => held.length).toBe(tapped);
+    }
+
+    // Without the fix the follow-up note refetch heals the list a round trip
+    // later, so a polling assertion alone would miss it: record the most rows
+    // ever back in the unchecked state from here on instead.
+    await page.evaluate(() => {
+      const w = window as unknown as { maxUnchecked: number };
+      w.maxUnchecked = 0;
+      const measure = () => {
+        const n = document.querySelectorAll('[data-testid="list-item-row"] input[type="checkbox"]:not(:checked)').length;
+        w.maxUnchecked = Math.max(w.maxUnchecked, n);
+      };
+      new MutationObserver(measure).observe(document.body, { subtree: true, childList: true, attributes: true });
+    });
+    const maxUnchecked = () => page.evaluate(() => (window as unknown as { maxUnchecked: number }).maxUnchecked);
+
+    // The first response lands, reporting Flour and Sugar unchecked.
+    let landed = toggleLanded();
+    held[0]!();
+    await landed;
+    await expect(page.getByText('Completed items (3)')).toBeVisible();
+    await expect(activeCheckbox).toHaveCount(0);
+
+    // The other two land out of order.
+    landed = toggleLanded();
+    held[2]!();
+    await landed;
+    landed = toggleLanded();
+    held[1]!();
+    await landed;
+    await expect(page.getByText('Completed items (3)')).toBeVisible();
+    await expect(activeCheckbox).toHaveCount(0);
+    expect(await maxUnchecked()).toBe(0);
+
+    // And the server agrees.
+    await page.unroute('**/api/v1/notes/*/items/set-completed');
+    await dashboardPage.closeNoteModal();
+    await page.reload();
+    await dashboardPage.openNote('Quick Checks');
+    await expect(page.getByText('Completed items (3)')).toBeVisible();
+  });
+
+  // Every completed write used to refresh the whole dashboard (note list, label
+  // counts, labels and the open note), so ticking through a list cost five
+  // requests a tap and a long list ran into the per-user rate limit (#1147).
+  // A burst of taps now owes one refresh, run once the writes have settled.
+  test('checking items off in quick succession refreshes the dashboard once', async ({ page, dashboardPage, authenticatedUser }) => {
+    void authenticatedUser;
+    const itemTexts = ['Eggs', 'Flour', 'Sugar', 'Butter', 'Milk'];
+    await dashboardPage.createListNote('Rapid Checks', itemTexts);
+    await dashboardPage.openNote('Rapid Checks');
+
+    const toggles: string[] = [];
+    const toggleResponses: string[] = [];
+    const noteListReads: { togglesLanded: number }[] = [];
+    const noteReads: string[] = [];
+    page.on('request', request => {
+      if (request.method() !== 'GET') return;
+      const path = new URL(request.url()).pathname;
+      if (path === '/api/v1/notes') noteListReads.push({ togglesLanded: toggleResponses.length });
+      else if (/^\/api\/v1\/notes\/[^/]+$/.test(path)) noteReads.push(path);
+    });
+    page.on('request', request => {
+      if (request.url().includes('/set-completed')) toggles.push(request.url());
+    });
+    page.on('response', response => {
+      if (response.url().includes('/set-completed')) toggleResponses.push(response.url());
+    });
+
+    const activeCheckbox = page.locator('[data-testid="list-item-row"] input[type="checkbox"]:not(:checked)');
+    for (let tapped = 1; tapped <= itemTexts.length; tapped++) {
+      // eslint-disable-next-line playwright/no-force-option -- one forced click checks exactly one item before it reflows into the completed section
+      await activeCheckbox.first().click({ force: true });
+      await expect(page.getByText(`Completed items (${tapped})`)).toBeVisible();
+    }
+
+    // The refresh runs once the burst settles, and the card behind the modal
+    // catches up with it.
+    await expect(dashboardPage.noteCard('Rapid Checks')).toContainText(`+${itemTexts.length} completed items`);
+    expect(toggles).toHaveLength(itemTexts.length);
+    expect(noteListReads).toEqual([{ togglesLanded: itemTexts.length }]);
+    expect(noteReads).toHaveLength(1);
+    await expect(page.getByText(`Completed items (${itemTexts.length})`)).toBeVisible();
+    await expect(activeCheckbox).toHaveCount(0);
   });
 });

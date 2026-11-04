@@ -23,10 +23,10 @@ func NewUserStore(db *sql.DB, d *dialect.Dialect, slowThreshold time.Duration) *
 	}
 }
 
-func (s *UserStore) Create(ctx context.Context, username, password string) (_ *User, err error) {
+func (s *UserStore) Create(ctx context.Context, username, password, role string) (_ *User, err error) {
 	ctx, end := startSpan(ctx, s.instr, "UserStore.Create", &err)
 	defer end()
-	return s.inner.Create(ctx, username, password)
+	return s.inner.Create(ctx, username, password, role)
 }
 
 func (s *UserStore) GetByUsername(ctx context.Context, username string) (_ *User, err error) {
@@ -109,12 +109,6 @@ func (s *UserStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 	)
 	defer end()
 	return s.inner.DeleteWithCleanup(ctx, id, requestingUserID, preDelete, postDelete)
-}
-
-func (s *UserStore) CreateByAdmin(ctx context.Context, username, password string, role string) (_ *User, err error) {
-	ctx, end := startSpan(ctx, s.instr, "UserStore.CreateByAdmin", &err)
-	defer end()
-	return s.inner.CreateByAdmin(ctx, username, password, role)
 }
 
 func (s *UserStore) GetByOIDCIdentity(ctx context.Context, issuer, subject string) (_ *User, err error) {

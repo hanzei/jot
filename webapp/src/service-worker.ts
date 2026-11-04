@@ -127,7 +127,7 @@ const retryablePostPaths = new Set([
 // endpoint only qualifies if its client ignores the response body: a queued
 // request is answered with the synthetic 202 plain-text response below, which
 // a body-reading caller would misparse (that rules out /notes/{id}/restore,
-// /notes/{id}/labels and .../toggle-completed, whose clients read the
+// /notes/{id}/labels and .../set-completed, whose clients read the
 // returned note/items).
 const retryablePostPatterns = [
   /^\/api\/v1\/notes\/[^/]+\/share$/,

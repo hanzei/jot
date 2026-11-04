@@ -160,7 +160,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         // Local mode is a first-class persistent state: when enabled, sign in
         // with the on-device identity and skip server context / session restore
-        // entirely (no `GET /me`).
+        // entirely (no `GET /users/me`).
         const localIdentity = await getLocalIdentity();
         if (localIdentity) {
           if (!cancelled) {

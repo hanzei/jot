@@ -12,7 +12,9 @@ import { Keyboard, Platform, type KeyboardEvent } from 'react-native';
  * content stays reachable.
  */
 export function useKeyboardHeight(): number {
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  // Seed from the current keyboard so a component mounted while it is already
+  // open (e.g. a sheet opened mid-edit) does not start at 0.
+  const [keyboardHeight, setKeyboardHeight] = useState(() => Keyboard.metrics()?.height ?? 0);
 
   useEffect(() => {
     // iOS exposes the smoother will* events; Android only fires did*.

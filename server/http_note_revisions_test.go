@@ -167,7 +167,7 @@ func TestNoteRevisionsEndpoints(t *testing.T) {
 			Items: []client.CreateNoteItem{{Text: "Dishes", Position: 0}},
 		})
 		require.NoError(t, err)
-		_, err = owner.Client.ToggleNoteItemCompleted(ctx, note.ID, note.Items[0].ID, true)
+		_, err = owner.Client.SetNoteItemsCompleted(ctx, note.ID, []string{note.Items[0].ID}, true)
 		require.NoError(t, err)
 
 		revisions, err := owner.Client.ListNoteRevisions(ctx, note.ID)

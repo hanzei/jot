@@ -9,7 +9,6 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../theme/ThemeContext';
-import { listPATs, createPAT, revokePAT } from '../../api/settings';
 import { subscribeToClientActiveServerChanges } from '../../api/client';
 import { getActiveServer } from '../../store/serverAccounts';
 import { displayMessage, getCurrentLocale } from '../../i18n/utils';
@@ -17,6 +16,7 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { VALIDATION } from '@jot/shared';
 import type { PersonalAccessToken } from '@jot/shared';
 import { styles } from './styles';
+import { jot } from '../../api/jot';
 
 export default function PATsSection() {
   const { colors } = useTheme();
@@ -53,7 +53,7 @@ export default function PATsSection() {
           setPats([]);
           setPatsError('');
           setPatsLoading(true);
-          void listPATs()
+          void jot.pats.list()
             .then((nextPATs) => {
               if (mounted && previousServerUrlRef.current === serverUrl) setPats(nextPATs);
             })
@@ -90,7 +90,7 @@ export default function PATsSection() {
     setCreatingPAT(true);
     setPatsError('');
     try {
-      const pat = await createPAT({ name });
+      const pat = await jot.pats.create({ name });
       if (!isMountedRef.current) return;
       setPats(prev => [pat, ...prev]);
       setNewPATName('');
@@ -118,7 +118,7 @@ export default function PATsSection() {
     if (!confirmed) return;
     setRevokingPATId(id);
     try {
-      await revokePAT(id);
+      await jot.pats.revoke(id);
       if (!isMountedRef.current) return;
       setPats(prev => prev.filter(p => p.id !== id));
     } catch {

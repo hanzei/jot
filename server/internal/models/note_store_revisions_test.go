@@ -124,10 +124,6 @@ func TestNoteRevisionsRecordEveryContentWrite(t *testing.T) {
 		// Each item write runs against a fresh list note; the revision must
 		// hold the items as they were before it.
 		itemWrites := map[string]func(t *testing.T, note *Note) error{
-			"item add": func(t *testing.T, note *Note) error {
-				_, err := store.CreateItemWithCompleted(t.Context(), note.ID, revisionOwnerID, "bread", 2, false, "", "")
-				return err
-			},
 			"item add with ID": func(t *testing.T, note *Note) error {
 				id, err := GenerateID()
 				require.NoError(t, err)
@@ -139,19 +135,12 @@ func TestNoteRevisionsRecordEveryContentWrite(t *testing.T) {
 				_, err := store.PatchItem(t.Context(), note.ID, revisionOwnerID, itemIDByText(t, store, note.ID, "milk"), NoteItemPatch{Text: &text})
 				return err
 			},
-			"item toggle": func(t *testing.T, note *Note) error {
-				_, err := store.ToggleItemCompleted(t.Context(), note.ID, revisionOwnerID, itemIDByText(t, store, note.ID, "milk"), true)
-				return err
-			},
 			"items set completed": func(t *testing.T, note *Note) error {
 				_, err := store.SetItemsCompleted(t.Context(), note.ID, revisionOwnerID, []string{itemIDByText(t, store, note.ID, "eggs")}, true)
 				return err
 			},
-			"item delete": func(t *testing.T, note *Note) error {
-				return store.DeleteItemFromNote(t.Context(), note.ID, revisionOwnerID, itemIDByText(t, store, note.ID, "milk"))
-			},
 			"items delete": func(t *testing.T, note *Note) error {
-				_, err := store.DeleteItems(t.Context(), note.ID, revisionOwnerID, []string{itemIDByText(t, store, note.ID, "eggs")})
+				_, _, err := store.DeleteItems(t.Context(), note.ID, revisionOwnerID, []string{itemIDByText(t, store, note.ID, "eggs")})
 				return err
 			},
 			"item reorder": func(t *testing.T, note *Note) error {
@@ -253,7 +242,7 @@ func TestNoteRevisionsCoalesce(t *testing.T) {
 			_, err := store.Update(t.Context(), note.ID, revisionOwnerID, NoteUpdate{Title: &title})
 			require.NoError(t, err)
 			milk := itemIDByText(t, store, note.ID, "milk")
-			_, err = store.ToggleItemCompleted(t.Context(), note.ID, revisionOwnerID, milk, false)
+			_, err = store.SetItemsCompleted(t.Context(), note.ID, revisionOwnerID, []string{milk}, false)
 			require.NoError(t, err)
 			text := "milk"
 			_, err = store.PatchItem(t.Context(), note.ID, revisionOwnerID, milk, NoteItemPatch{Text: &text})

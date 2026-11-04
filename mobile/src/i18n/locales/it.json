@@ -294,6 +294,8 @@
     "menuOptions": "Opzioni nota",
     "assignItem": "Assegna elemento",
     "removeItem": "Rimuovi elemento",
+    "openItemLink": "Apri link: {{label}}",
+    "openItemLinks": "Apri un link",
     "unassign": "Rimuovi assegnazione",
     "assignedTo": "Assegnato a {{name}}",
     "changeColor": "Colore nota",

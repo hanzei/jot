@@ -209,7 +209,7 @@ func TestDeleteItems(t *testing.T) {
 				})
 			require.NoError(t, err)
 
-			items, err := store.DeleteItems(ctx, note.ID, userID, []string{a, c})
+			items, _, err := store.DeleteItems(ctx, note.ID, userID, []string{a, c})
 			require.NoError(t, err)
 			require.Len(t, items, 1)
 			assert.Equal(t, "keep b", items[0].Text)
@@ -229,7 +229,7 @@ func TestDeleteItems(t *testing.T) {
 				})
 			require.NoError(t, err)
 
-			items, err := store.DeleteItems(ctx, note.ID, userID, []string{parentID})
+			items, _, err := store.DeleteItems(ctx, note.ID, userID, []string{parentID})
 			require.NoError(t, err)
 			require.Len(t, items, 1, "only the child remains")
 			child := bulkItemByText(t, items, "Child")
@@ -244,8 +244,9 @@ func TestDeleteItems(t *testing.T) {
 				[]NewNoteItem{{Text: "keep", Position: 0}})
 			require.NoError(t, err)
 
-			items, err := store.DeleteItems(ctx, note.ID, userID, []string{"doesnotexist1234567890"})
+			items, deleted, err := store.DeleteItems(ctx, note.ID, userID, []string{"doesnotexist1234567890"})
 			require.NoError(t, err)
+			assert.Zero(t, deleted)
 			assert.Len(t, items, 1, "unrelated ID must not delete anything")
 		})
 
@@ -259,7 +260,7 @@ func TestDeleteItems(t *testing.T) {
 
 			before := forceNoteUpdatedAtPast(t, store, note.ID, userID)
 
-			_, err = store.DeleteItems(ctx, note.ID, userID, []string{"doesnotexist1234567890"})
+			_, _, err = store.DeleteItems(ctx, note.ID, userID, []string{"doesnotexist1234567890"})
 			require.NoError(t, err)
 
 			after, err := store.GetByID(ctx, note.ID, userID)

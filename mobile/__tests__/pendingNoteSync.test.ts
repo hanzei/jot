@@ -55,7 +55,7 @@ describe('getPendingNoteIds', () => {
       '/notes/n1/items',
       '/notes/n2/items/i1',
       '/notes/n3/items/reorder',
-      '/notes/n4/items/i1/toggle-completed',
+      '/notes/n4/items/set-completed',
       '/notes/n5/share',
       '/notes/n7/labels',
     ]) {

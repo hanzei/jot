@@ -45,6 +45,14 @@ const conformance: Record<string, () => void> = {
     expect(html).not.toContain('<a');
   },
   'item-mailto': () => expect(render('item-mailto')).toContain('<a href="mailto:a@b.com"'),
+  'item-link-space-target': () =>
+    expect(render('item-link-space-target')).toBe(
+      '<a href="https://example.com/a%20b" target="_blank" rel="noopener noreferrer">docs</a>',
+    ),
+  'item-link-non-ascii-target': () =>
+    expect(render('item-link-non-ascii-target')).toBe(
+      '<a href="https://example.com/caf%C3%A9" target="_blank" rel="noopener noreferrer">café</a>',
+    ),
   'item-tel-link': () => {
     const html = render('item-tel-link');
     expect(html).toBe('call');

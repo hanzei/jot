@@ -105,16 +105,17 @@ A formatting-only commit goes in `.git-blame-ignore-revs`.
   added both as an invocation in `lint:ts` and to `references`, or it is
   silently unchecked.
 
-### `@jot/shared`: no array destructuring
-
-Mobile's Babel lowers array destructuring (`.map(([id]) => id)`,
-`const [a, b] = pair`) to a `@babel/runtime` helper resolved relative to
-`shared/`, which has none. Use index access (`entry[0]`) instead. Spread,
-`for...of`, and imports are fine. The failure shows up as **every** mobile suite
-failing to load, with an error pointing at an unrelated import line — so run
-`task test-mobile` after touching `shared/src`, not just `task test-shared`.
+### `@jot/shared`
 
 Domain types live in `shared/src/types.ts`; do not duplicate them in a client.
+
+REST calls live in `shared/src/api/`: `apiPaths` builds every path and
+`createJotApi(instance)` holds the endpoint functions, bound to each client's
+own axios instance. Add or change an endpoint there, not in
+`webapp/src/utils/api.ts` or `mobile/src/api/`, which keep only what is
+platform-specific (multipart bodies, downloads, mobile's session capture).
+Mobile's sync queue persists `apiPaths` output, so a builder's output must
+never change — `apiPaths.test.ts` pins it.
 
 ## Dependency Updates
 

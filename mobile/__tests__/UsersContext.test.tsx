@@ -4,9 +4,9 @@ import type { User } from '@jot/shared';
 import { UsersProvider, useUsers } from '../src/store/UsersContext';
 import { publishProfileIconUpdate } from '../src/store/profileIconEvents';
 import { publishReconnectResync } from '../src/store/resyncEvents';
-import { getUsers } from '../src/api/users';
 import { getLocalUsers, upsertUser } from '../src/db/userQueries';
 import type { TestDatabase } from './helpers/testDb';
+import { jot } from '../src/api/jot';
 
 const existingUser: User = {
   id: 'collab-1', username: 'bob', first_name: 'Bob', last_name: 'B',
@@ -14,6 +14,14 @@ const existingUser: User = {
 };
 
 let mockAuthState = { user: null as User | null, isAuthenticated: true };
+jest.mock('../src/api/jot', () => ({
+  jot: {
+    users: {
+      list: jest.fn(() => Promise.resolve([])),
+    },
+  },
+}));
+
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: () => mockAuthState,
 }));
@@ -23,9 +31,6 @@ jest.mock('../src/hooks/useNetworkStatus', () => ({
   useNetworkStatus: () => ({ isConnected: mockUsersConnected }),
 }));
 
-jest.mock('../src/api/users', () => ({
-  getUsers: jest.fn(() => Promise.resolve([])),
-}));
 
 jest.mock('../src/api/client', () => ({
   getBaseUrl: () => 'http://localhost',
@@ -50,7 +55,7 @@ jest.mock('../src/utils/profileIconCache', () => ({
   refreshIconCacheForUsers: (...args: unknown[]) => mockRefreshIconCache(...args),
 }));
 
-const mockGetUsers = getUsers as jest.Mock;
+const mockGetUsers = jot.users.list as jest.Mock;
 const mockGetLocalUsers = getLocalUsers as jest.Mock;
 const mockUpsertUser = upsertUser as jest.Mock;
 
@@ -162,7 +167,7 @@ describe('UsersContext catch-up on SSE reconnect', () => {
       </UsersProvider>,
     );
 
-    // The mount-time load is now in flight (getUsers pending).
+    // The mount-time load is now in flight (jot.users.list pending).
     await waitFor(() => expect(mockGetUsers).toHaveBeenCalledTimes(1));
 
     // A resync arriving mid-flight is skipped rather than firing a second load.

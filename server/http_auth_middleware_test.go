@@ -32,7 +32,7 @@ func TestAuthMiddlewareInvalidCookie(t *testing.T) {
 	t.Parallel()
 	ts := setupTestServer(t)
 	c := ts.newClient()
-	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/users/me", nil)
 	//nolint:gosec // outgoing cookie added to a test request, not a server response
 	req.AddCookie(&http.Cookie{Name: "jot_session", Value: "not-a-real-token"})
 	resp, err := c.HTTPClient().Do(req)
@@ -104,7 +104,7 @@ func TestSessionRenewedWhenLessThanSevenDaysLeft(t *testing.T) {
 	ts.exec(t, "UPDATE sessions SET expires_at = ? WHERE token_hash = ?", models.Timestamp(nearExpiry), token)
 
 	// Make an API call so the middleware can renew the session
-	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/users/me", nil)
 	resp, err := user.Client.HTTPClient().Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
@@ -131,7 +131,7 @@ func TestSessionNotRenewedWhenAtLeastSevenDaysLeft(t *testing.T) {
 	farExpiry := time.Now().Add(8 * 24 * time.Hour)
 	ts.exec(t, "UPDATE sessions SET expires_at = ? WHERE token_hash = ?", models.Timestamp(farExpiry), token)
 
-	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/users/me", nil)
 	resp, err := user.Client.HTTPClient().Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
@@ -154,7 +154,7 @@ func TestSessionNotRenewedWhenSlightlyAboveSevenDaysLeft(t *testing.T) {
 	justAboveThreshold := time.Now().Add(models.SessionRenewWindow + time.Minute)
 	ts.exec(t, "UPDATE sessions SET expires_at = ? WHERE token_hash = ?", models.Timestamp(justAboveThreshold), token)
 
-	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/users/me", nil)
 	resp, err := user.Client.HTTPClient().Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()

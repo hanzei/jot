@@ -480,6 +480,17 @@ Back up and restore the two together: the server periodically deletes files in
 than the upload directory permanently removes the newer images. Images whose
 files are missing are logged as warnings.
 
+#### Downgrading
+
+Schema migrations only go forward, and a Jot version cannot undo a migration it
+does not ship. So once a newer version has applied a migration an older one does
+not ship, the older one refuses to start on that database and names both schema
+versions in the log. (A newer version that adds no migrations leaves the
+database usable by the older one.) To go back, restore the database and
+`JOT_UPLOAD_DIR` from the backup taken before the upgrade, or keep running the
+newer version. Take that backup before trying a pre-release or a development
+build against data you want to keep.
+
 Separately, each user can export their own notes, images included, as a `.zip`
 bundle from Settings, in the webapp or the mobile app (which hands the file to
 the device's share sheet), and import it into any Jot server. Notes keep their
@@ -717,7 +728,9 @@ go build -o jot main.go
 ./jot
 ```
 
-The binary will serve both API and frontend from port 8080.
+The binary will serve both API and frontend from port 8080. It gzips the
+frontend's text assets (HTML, JS, CSS, JSON, SVG) itself, so a reverse proxy in
+front does not need to compress them.
 
 ### Environment Setup
 
@@ -847,6 +860,10 @@ services:
    delete the database**, which deletes all data. Stop the server, restore the
    database and `JOT_UPLOAD_DIR` together from the backup taken before the
    upgrade (see [Backups](#backups)), and open an issue with the log output.
+   If it says `database schema is at version N, but this build of Jot only
+   knows migrations up to M`, the database was already migrated by a newer
+   version of Jot, so this one refuses to run against it (see
+   [Downgrading](#downgrading)).
 
 2. **A setting has no effect**: Jot reads only `JOT_`-prefixed variables (plus
    the standard `OTEL_*` ones), so an unprefixed name such as `LOG_LEVEL` is

@@ -50,6 +50,19 @@ function staleListNote() {
   };
 }
 
+/** A list note with three unchecked items, A, B and C. */
+function threeItemListNote() {
+  const note = staleListNote();
+  const base = note.items[0]!;
+  note.items = ['A', 'B', 'C'].map((text, position) => ({
+    ...base,
+    id: `item${text}${'i'.repeat(17)}`,
+    text,
+    position,
+  }));
+  return note;
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((res) => { resolve = res; });
@@ -108,6 +121,60 @@ describe('NoteEditorScreen toggle / refresh race', () => {
     });
     await waitFor(() => {
       expect(getAllByTestId('icon-SquareCheck')).toHaveLength(1);
+    });
+    expect(queryAllByTestId('icon-Square')).toHaveLength(0);
+  });
+
+  // The endpoint returns the note's full item list as of its own write, so the
+  // response to an earlier tap still reports every later-tapped item unchecked.
+  // Reconciling from that whole list put the later rows back in the active
+  // list — and, when the stale response landed last, left them there.
+  it('keeps rows checked off in quick succession checked as earlier responses land', async () => {
+    const note = threeItemListNote();
+    mockUseOfflineNote.mockReturnValue({ data: note });
+    const ids = note.items.map((item) => item.id);
+    const pending = ids.map(() => deferred<{ id: string; completed: boolean; updated_at: string }[]>());
+    for (const p of pending) mockToggleMutateAsync.mockReturnValueOnce(p.promise);
+    // A snapshot as the server reports it: each checked item carries the time
+    // of its own write (one second per tap), an unchecked one its creation time.
+    const snapshot = (checked: string[]) => ids.map((id, i) => ({
+      id,
+      completed: checked.includes(id),
+      updated_at: checked.includes(id) ? `2026-01-01T00:00:0${i + 1}Z` : '2026-01-01T00:00:00Z',
+    }));
+
+    const { getAllByTestId, getByText, queryAllByTestId } = await render(<NoteEditorScreen />);
+    const press = (node: { props: unknown }) =>
+      (node.props as { onClick?: () => void }).onClick?.();
+
+    // Each optimistic check moves the row out of the active list, so the next
+    // unchecked row is always the first checkbox.
+    for (let i = 0; i < ids.length; i++) {
+      await act(() => {
+        press(getAllByTestId('list-item-checkbox')[0]!);
+      });
+    }
+    expect(getByText('3 completed items')).toBeTruthy();
+
+    // A's response was read before B's and C's writes reached the server.
+    await act(async () => {
+      pending[0]!.resolve(snapshot([ids[0]!]));
+      await pending[0]!.promise;
+    });
+    expect(queryAllByTestId('icon-Square')).toHaveLength(0);
+    expect(getByText('3 completed items')).toBeTruthy();
+
+    // Out of order: C's response lands before B's, whose snapshot predates C.
+    await act(async () => {
+      pending[2]!.resolve(snapshot(ids));
+      await pending[2]!.promise;
+    });
+    await act(async () => {
+      pending[1]!.resolve(snapshot([ids[0]!, ids[1]!]));
+      await pending[1]!.promise;
+    });
+    await waitFor(() => {
+      expect(getAllByTestId('icon-SquareCheck')).toHaveLength(3);
     });
     expect(queryAllByTestId('icon-Square')).toHaveLength(0);
   });

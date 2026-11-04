@@ -33,7 +33,7 @@ var passwordHashCost = func() int {
 	return bcrypt.DefaultCost
 }()
 
-// ErrUsernameTaken is returned by Register, UpdateProfile, and CreateByAdmin
+// ErrUsernameTaken is returned by Create and UpdateProfile
 // when the requested username is already in use by another account.
 var ErrUsernameTaken = errors.New("username already taken")
 
@@ -80,7 +80,30 @@ func newUserStore(db *sql.DB, d *dialect.Dialect) *userStore {
 	return &userStore{db: db, d: d}
 }
 
-func (s *userStore) Create(ctx context.Context, username, password string) (*User, error) {
+// isFirstUser reports whether the users table is empty. It must run inside tx
+// and be followed by the INSERT in the same transaction: on PostgreSQL it first
+// takes a transaction-scoped advisory lock, so a concurrent first-user check
+// waits until this transaction commits and then sees the new row. On SQLite the
+// open transaction already holds the only connection, which serializes the same
+// way. This is the single implementation of "is this the first user?" shared by
+// Create and ProvisionSSOUser.
+func (s *userStore) isFirstUser(ctx context.Context, tx *sql.Tx) (bool, error) {
+	if lock := s.d.LockFirstUserCheck(); lock != "" {
+		if _, err := tx.ExecContext(ctx, lock); err != nil {
+			return false, fmt.Errorf("failed to lock first-user check: %w", err)
+		}
+	}
+	var count int
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM users").Scan(&count); err != nil {
+		return false, fmt.Errorf("failed to count users: %w", err)
+	}
+	return count == 0, nil
+}
+
+// Create inserts a password-backed user. role == "" means "decide": admin if the
+// users table is empty at insert time, otherwise user. A non-empty role is used
+// as given (the admin-created-user path); the caller validates it.
+func (s *userStore) Create(ctx context.Context, username, password, role string) (*User, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), passwordHashCost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
@@ -91,17 +114,21 @@ func (s *userStore) Create(ctx context.Context, username, password string) (*Use
 		return nil, fmt.Errorf("failed to generate user ID: %w", err)
 	}
 
-	var isFirstUser bool
-	var count int
-	err = s.db.QueryRowContext(ctx, s.d.RewritePlaceholders("SELECT COUNT(*) FROM users")).Scan(&count)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to count users: %w", err)
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	isFirstUser = count == 0
+	defer func() { _ = tx.Rollback() }()
 
-	role := RoleUser
-	if isFirstUser {
-		role = RoleAdmin
+	if role == "" {
+		first, firstErr := s.isFirstUser(ctx, tx)
+		if firstErr != nil {
+			return nil, firstErr
+		}
+		role = RoleUser
+		if first {
+			role = RoleAdmin
+		}
 	}
 
 	now := Timestamp(Now())
@@ -109,7 +136,7 @@ func (s *userStore) Create(ctx context.Context, username, password string) (*Use
 			  VALUES (?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`
 
 	var user User
-	err = s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), userID, username, string(hashedPassword), role, now, now).Scan(
+	err = tx.QueryRowContext(ctx, s.d.RewritePlaceholders(query), userID, username, string(hashedPassword), role, now, now).Scan(
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
@@ -117,6 +144,9 @@ func (s *userStore) Create(ctx context.Context, username, password string) (*Use
 			return nil, ErrUsernameTaken
 		}
 		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit user: %w", err)
 	}
 
 	user.ID = userID
@@ -509,40 +539,6 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 	return nil
 }
 
-func (s *userStore) CreateByAdmin(ctx context.Context, username, password string, role string) (*User, error) {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), passwordHashCost)
-	if err != nil {
-		return nil, fmt.Errorf("failed to hash password: %w", err)
-	}
-
-	userID, err := generateID()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate user ID: %w", err)
-	}
-
-	now := Timestamp(Now())
-	query := `INSERT INTO users (id, username, password_hash, role, created_at, updated_at)
-			  VALUES (?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`
-
-	var user User
-	err = s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), userID, username, string(hashedPassword), role, now, now).Scan(
-		&user.CreatedAt, &user.UpdatedAt,
-	)
-	if err != nil {
-		if s.d.IsUniqueConstraintError(err) {
-			return nil, ErrUsernameTaken
-		}
-		return nil, fmt.Errorf("failed to create user: %w", err)
-	}
-
-	user.ID = userID
-	user.Username = username
-	user.Role = role
-	user.HasPassword = true
-
-	return &user, nil
-}
-
 // userSelectColumns is the column list every full-user SELECT shares, so they
 // all scan in the same order (see scanUser).
 const userSelectColumns = `id, username, first_name, last_name, COALESCE(password_hash, '') AS password_hash, role,
@@ -594,13 +590,21 @@ func (s *userStore) ProvisionSSOUser(ctx context.Context, issuer, subject, usern
 		return nil, fmt.Errorf("failed to generate user ID: %w", err)
 	}
 
-	var count int
-	if err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders("SELECT COUNT(*) FROM users")).Scan(&count); err != nil {
-		return nil, fmt.Errorf("failed to count users: %w", err)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
+	defer func() { _ = tx.Rollback() }()
+
 	role := RoleUser
-	if count == 0 && grantAdminIfFirst {
-		role = RoleAdmin
+	if grantAdminIfFirst {
+		first, err := s.isFirstUser(ctx, tx)
+		if err != nil {
+			return nil, err
+		}
+		if first {
+			role = RoleAdmin
+		}
 	}
 
 	now := Timestamp(Now())
@@ -618,30 +622,56 @@ func (s *userStore) ProvisionSSOUser(ctx context.Context, issuer, subject, usern
 			username = usernameWithSuffix(base, attempt)
 		}
 
-		var user User
-		err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query),
-			userID, username, role, issuer, subject, now, now).Scan(&user.CreatedAt, &user.UpdatedAt)
-		if err == nil {
-			user.ID = userID
-			user.Username = username
-			user.Role = role
-			// Match what a read of the row reports: callers return this user to
-			// the client as-is (e.g. the native exchange response).
-			user.HasSSOLinked = true
-			return &user, nil
+		user, retry, err := s.insertSSOUser(ctx, tx, query, userID, username, role, issuer, subject, now)
+		if err != nil {
+			return nil, err
 		}
-		if !s.d.IsUniqueConstraintError(err) {
-			return nil, fmt.Errorf("failed to provision SSO user: %w", err)
+		if !retry {
+			if err := tx.Commit(); err != nil {
+				return nil, fmt.Errorf("failed to commit SSO user: %w", err)
+			}
+			return user, nil
 		}
-		// A unique violation is either the username (retry with a suffix) or the
-		// OIDC identity (already linked — do not retry). Distinguish by checking
-		// whether the identity now resolves to an existing user.
-		if _, lookupErr := s.GetByOIDCIdentity(ctx, issuer, subject); lookupErr == nil {
-			return nil, ErrOIDCIdentityLinked
-		}
-		// Otherwise it was a username collision; loop to try the next suffix.
 	}
 	return nil, fmt.Errorf("failed to provision SSO user: exhausted username candidates for %q", base)
+}
+
+// insertSSOUser runs one insert attempt under a savepoint, because a failed
+// statement aborts a PostgreSQL transaction. retry is true when the attempt hit
+// a username collision that the savepoint rollback has undone.
+func (s *userStore) insertSSOUser(ctx context.Context, tx *sql.Tx, query, userID, username, role, issuer, subject string, now any) (user *User, retry bool, err error) {
+	if _, err = tx.ExecContext(ctx, "SAVEPOINT provision_attempt"); err != nil {
+		return nil, false, fmt.Errorf("failed to provision SSO user: %w", err)
+	}
+	u := User{ID: userID, Username: username, Role: role, HasSSOLinked: true}
+	err = tx.QueryRowContext(ctx, s.d.RewritePlaceholders(query),
+		userID, username, role, issuer, subject, now, now).Scan(&u.CreatedAt, &u.UpdatedAt)
+	if err == nil {
+		// HasSSOLinked matches what a read of the row reports: callers return
+		// this user to the client as-is (e.g. the native exchange response).
+		return &u, false, nil
+	}
+	if !s.d.IsUniqueConstraintError(err) {
+		return nil, false, fmt.Errorf("failed to provision SSO user: %w", err)
+	}
+	// A unique violation is either the username (retry with a suffix) or the
+	// OIDC identity (already linked — do not retry). Distinguish by checking
+	// whether the identity now resolves to an existing user.
+	if _, err = tx.ExecContext(ctx, "ROLLBACK TO SAVEPOINT provision_attempt"); err != nil {
+		return nil, false, fmt.Errorf("failed to provision SSO user: %w", err)
+	}
+	var linked int
+	lookupErr := tx.QueryRowContext(ctx,
+		s.d.RewritePlaceholders("SELECT 1 FROM users WHERE oidc_issuer = ? AND oidc_subject = ?"),
+		issuer, subject).Scan(&linked)
+	switch {
+	case lookupErr == nil:
+		return nil, false, ErrOIDCIdentityLinked
+	case errors.Is(lookupErr, sql.ErrNoRows):
+		return nil, true, nil
+	default:
+		return nil, false, fmt.Errorf("failed to provision SSO user: %w", lookupErr)
+	}
 }
 
 // LinkOIDCIdentity binds an (issuer, subject) pair to an existing user. Returns

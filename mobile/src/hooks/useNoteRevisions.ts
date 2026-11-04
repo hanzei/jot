@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import type { Note } from '@jot/shared';
-import { getNote, getNoteRevision, getNoteRevisions, restoreNoteRevision } from '../api/notes';
+import { jot } from '../api/jot';
 import { isOnlineWriteAllowed, isServerReachable, subscribeToServerReachability } from '../api/serverReachability';
 import { assertSwitchWriteAllowed } from '../api/client';
 import { isNotePendingCreate, saveNote } from '../db/noteQueries';
@@ -64,7 +64,7 @@ export function useNoteHistorySyncState(noteId: string) {
 export function useNoteRevisions(noteId: string, enabled: boolean) {
   return useQuery({
     queryKey: noteRevisionsQueryKey(noteId),
-    queryFn: () => getNoteRevisions(noteId),
+    queryFn: () => jot.notes.listRevisions(noteId),
     enabled,
     // No silent retries: a failed load shows an error with a Retry button.
     retry: false,
@@ -76,7 +76,7 @@ export function useNoteRevisions(noteId: string, enabled: boolean) {
 export function useNoteRevision(noteId: string, revisionId: string | null, enabled: boolean) {
   return useQuery({
     queryKey: noteRevisionQueryKey(noteId, revisionId),
-    queryFn: () => getNoteRevision(noteId, revisionId!), // enabled only with an id
+    queryFn: () => jot.notes.getRevision(noteId, revisionId!), // enabled only with an id
     enabled: enabled && revisionId !== null,
     retry: false,
     // A revision never changes once recorded.
@@ -92,6 +92,13 @@ export class UnsyncedNoteError extends Error {
     this.name = 'UnsyncedNoteError';
   }
 }
+
+/**
+ * Timeout for a restore. It is a one-shot op with no offline queue behind it,
+ * so it gets a read-sized budget instead of the short write one; the request
+ * interceptor only shortens a POST left at the default, hence its own value.
+ */
+export const RESTORE_REVISION_TIMEOUT_MS = 20000;
 
 /**
  * Restores a revision online and writes the returned note into SQLite and the
@@ -114,8 +121,13 @@ export function useRestoreNoteRevision() {
       // copy's: with nothing queued the restore replaces whatever the server
       // holds, and a local copy that has not caught up with another device's
       // edit would otherwise make every attempt conflict.
-      const current = await getNote(noteId);
-      const restored = await restoreNoteRevision(noteId, revisionId, { base_version: current.version });
+      const current = await jot.notes.getById(noteId);
+      const restored = await jot.notes.restoreRevision(
+        noteId,
+        revisionId,
+        { base_version: current.version },
+        { timeout: RESTORE_REVISION_TIMEOUT_MS },
+      );
       await saveNote(db, restored);
       return restored;
     },

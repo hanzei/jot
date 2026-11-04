@@ -121,14 +121,6 @@ func (s *NoteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Dur
 	return s.inner.PurgeOldTrashedNotes(ctx, olderThan)
 }
 
-func (s *NoteStore) CreateItemWithCompleted(ctx context.Context, noteID, actorID, text string, position int, completed bool, parentID string, assignedTo string) (_ *NoteItem, err error) {
-	ctx, end := startSpan(ctx, s.instr, "NoteStore.CreateItemWithCompleted", &err,
-		attribute.String("note.id", noteID),
-	)
-	defer end()
-	return s.inner.CreateItemWithCompleted(ctx, noteID, actorID, text, position, completed, parentID, assignedTo)
-}
-
 func (s *NoteStore) CreateItemWithID(ctx context.Context, noteID, actorID, itemID, text string, position int, completed bool, parentID string, assignedTo string, maxItems int) (_ *NoteItem, err error) {
 	ctx, end := startSpan(ctx, s.instr, "NoteStore.CreateItemWithID", &err,
 		attribute.String("note.id", noteID),
@@ -147,30 +139,12 @@ func (s *NoteStore) PatchItem(ctx context.Context, noteID, actorID, itemID strin
 	return s.inner.PatchItem(ctx, noteID, actorID, itemID, patch)
 }
 
-func (s *NoteStore) DeleteItemFromNote(ctx context.Context, noteID, actorID, itemID string) (err error) {
-	ctx, end := startSpan(ctx, s.instr, "NoteStore.DeleteItemFromNote", &err,
-		attribute.String("note.id", noteID),
-		attribute.String("item.id", itemID),
-	)
-	defer end()
-	return s.inner.DeleteItemFromNote(ctx, noteID, actorID, itemID)
-}
-
 func (s *NoteStore) ReorderItems(ctx context.Context, noteID, actorID string, itemIDs []string) (err error) {
 	ctx, end := startSpan(ctx, s.instr, "NoteStore.ReorderItems", &err,
 		attribute.String("note.id", noteID),
 	)
 	defer end()
 	return s.inner.ReorderItems(ctx, noteID, actorID, itemIDs)
-}
-
-func (s *NoteStore) ToggleItemCompleted(ctx context.Context, noteID, actorID, itemID string, completed bool) (_ []NoteItem, err error) {
-	ctx, end := startSpan(ctx, s.instr, "NoteStore.ToggleItemCompleted", &err,
-		attribute.String("note.id", noteID),
-		attribute.String("item.id", itemID),
-	)
-	defer end()
-	return s.inner.ToggleItemCompleted(ctx, noteID, actorID, itemID, completed)
 }
 
 func (s *NoteStore) SetItemsCompleted(ctx context.Context, noteID, actorID string, itemIDs []string, completed bool) (_ []NoteItem, err error) {
@@ -181,7 +155,7 @@ func (s *NoteStore) SetItemsCompleted(ctx context.Context, noteID, actorID strin
 	return s.inner.SetItemsCompleted(ctx, noteID, actorID, itemIDs, completed)
 }
 
-func (s *NoteStore) DeleteItems(ctx context.Context, noteID, actorID string, itemIDs []string) (_ []NoteItem, err error) {
+func (s *NoteStore) DeleteItems(ctx context.Context, noteID, actorID string, itemIDs []string) (_ []NoteItem, _ int, err error) {
 	ctx, end := startSpan(ctx, s.instr, "NoteStore.DeleteItems", &err,
 		attribute.String("note.id", noteID),
 	)

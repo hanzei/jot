@@ -9,7 +9,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import type { Note, NoteRevision, NoteRevisionSummary, User } from '@jot/shared';
 import NoteHistoryScreen from '../src/screens/NoteHistoryScreen';
-import { getNote, getNoteRevision, getNoteRevisions, restoreNoteRevision } from '../src/api/notes';
+import { jot } from '../src/api/jot';
+import { RESTORE_REVISION_TIMEOUT_MS } from '../src/hooks/useNoteRevisions';
 import { useNetworkStatus } from '../src/hooks/useNetworkStatus';
 import { useConfirm } from '../src/hooks/useConfirm';
 import { useToast } from '../src/hooks/useToast';
@@ -47,11 +48,15 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
-jest.mock('../src/api/notes', () => ({
-  getNote: jest.fn(),
-  getNoteRevisions: jest.fn(),
-  getNoteRevision: jest.fn(),
-  restoreNoteRevision: jest.fn(),
+jest.mock('../src/api/jot', () => ({
+  jot: {
+    notes: {
+      getById: jest.fn(),
+      listRevisions: jest.fn(),
+      getRevision: jest.fn(),
+      restoreRevision: jest.fn(),
+    },
+  },
 }));
 
 jest.mock('../src/api/client', () => ({
@@ -70,10 +75,10 @@ jest.mock('../src/store/AuthContext', () => ({ useAuth: jest.fn() }));
 // the local copy, which these tests hand it directly.
 jest.mock('../src/hooks/useOfflineNotes', () => ({ useOfflineNote: jest.fn() }));
 
-const mockGetRevisions = getNoteRevisions as jest.MockedFunction<typeof getNoteRevisions>;
-const mockGetRevision = getNoteRevision as jest.MockedFunction<typeof getNoteRevision>;
-const mockRestore = restoreNoteRevision as jest.MockedFunction<typeof restoreNoteRevision>;
-const mockGetNote = getNote as jest.MockedFunction<typeof getNote>;
+const mockGetRevisions = jest.mocked(jot.notes.listRevisions);
+const mockGetRevision = jest.mocked(jot.notes.getRevision);
+const mockRestore = jest.mocked(jot.notes.restoreRevision);
+const mockGetNote = jest.mocked(jot.notes.getById);
 const mockUseNetworkStatus = useNetworkStatus as jest.MockedFunction<typeof useNetworkStatus>;
 const mockUseConfirm = useConfirm as jest.MockedFunction<typeof useConfirm>;
 const mockUseToast = useToast as jest.MockedFunction<typeof useToast>;
@@ -228,7 +233,7 @@ describe('NoteHistoryScreen', () => {
     expect(mockConfirm).toHaveBeenCalledWith(expect.objectContaining({
       message: "The note's current content is kept in its history, so you can undo this.",
     }));
-    expect(mockRestore).toHaveBeenCalledWith('note-1', 'rev-1', { base_version: 3 });
+    expect(mockRestore).toHaveBeenCalledWith('note-1', 'rev-1', { base_version: 3 }, { timeout: RESTORE_REVISION_TIMEOUT_MS });
     expect(mockShowToast).toHaveBeenCalledWith('Version restored', 'success');
     expect(mockBeforeRemove.current).toBeNull();
     const local = await getLocalNote(globalThis.testDb, 'note-1');
@@ -285,7 +290,7 @@ describe('NoteHistoryScreen', () => {
     await fireEvent.press(screen.getByTestId('history-restore'));
 
     await waitFor(() => expect(mockGoBack).toHaveBeenCalled());
-    expect(mockRestore).toHaveBeenCalledWith('note-1', 'rev-1', { base_version: 7 });
+    expect(mockRestore).toHaveBeenCalledWith('note-1', 'rev-1', { base_version: 7 }, { timeout: RESTORE_REVISION_TIMEOUT_MS });
   });
 
   it('steps back from a preview to the list on a hardware back or swipe', async () => {

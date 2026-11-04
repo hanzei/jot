@@ -94,8 +94,8 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
 
     try {
       const response = importType === 'usememos'
-        ? await notes.importNotes({ importType: 'usememos', url: usememosURL.trim(), token: usememosToken.trim() })
-        : await notes.importNotes({ file: selectedFile!, importType });
+        ? await notes.import({ importType: 'usememos', url: usememosURL.trim(), token: usememosToken.trim() })
+        : await notes.import({ file: selectedFile!, importType });
       setResult(response);
       onSuccess();
     } catch (err: unknown) {

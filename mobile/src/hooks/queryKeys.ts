@@ -21,10 +21,6 @@ export function labelsQueryKey(): [string, string] {
   return ['labels', currentQueryServerScope()];
 }
 
-export function labelCountsQueryKey(): [string, string] {
-  return ['label-counts', currentQueryServerScope()];
-}
-
 export function noteSharesQueryKey(noteId: string | null): [string, string, string | null] {
   return ['noteShares', currentQueryServerScope(), noteId];
 }

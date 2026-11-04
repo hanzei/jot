@@ -10,11 +10,12 @@ import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../store/AuthContext';
 import { useTheme } from '../../theme/ThemeContext';
-import { uploadProfileIcon, deleteProfileIcon } from '../../api/settings';
+import { uploadProfileIcon } from '../../api/settings';
 import { useActiveServerBaseUrl } from '../../hooks/useActiveServerBaseUrl';
 import { useProfileIcon } from '../../hooks/useProfileIcon';
 import { displayMessage, extractApiError } from '../../i18n/utils';
 import { styles } from './styles';
+import { jot } from '../../api/jot';
 
 export default function ProfileIconSection() {
   const { user, setUser } = useAuth();
@@ -81,7 +82,7 @@ export default function ProfileIconSection() {
     setIconError('');
     setIconDeleting(true);
     try {
-      await deleteProfileIcon();
+      await jot.users.deleteProfileIcon();
       if (!isMountedRef.current) return;
       setUser(prev =>
         prev ? { ...prev, has_profile_icon: false, updated_at: new Date().toISOString() } : prev,

@@ -16,7 +16,7 @@ vi.mock('@/utils/api', () => ({
     unshare: mockUnshare,
   },
   users: {
-    search: mockUsersSearch,
+    list: mockUsersSearch,
   },
 }));
 

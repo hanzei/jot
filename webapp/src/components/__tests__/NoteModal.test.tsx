@@ -28,7 +28,6 @@ const {
   mockUpdateItem,
   mockDeleteItem,
   mockReorderItems,
-  mockToggleItemCompleted,
   mockSetItemsCompleted,
   mockDeleteItems,
   mockImagesUpload,
@@ -51,12 +50,9 @@ const {
   mockUpdateItem: vi.fn().mockImplementation((_noteId, itemId, data) => Promise.resolve({ id: itemId, ...data })),
   mockDeleteItem: vi.fn().mockResolvedValue(undefined),
   mockReorderItems: vi.fn().mockResolvedValue(undefined),
-  // By default the toggle endpoint echoes just the toggled item; individual
-  // tests that need cascade override this with the full item list.
-  mockToggleItemCompleted: vi.fn().mockImplementation((_noteId, itemId, completed) =>
-    Promise.resolve([{ id: itemId, completed }])),
-  // Bulk endpoints behind the checked-item overflow actions. Both echo back
-  // what the server would report so the reconcile paths run for real.
+  // set-completed backs both a single tap and the checked-item overflow
+  // actions. By default it echoes just the named items; individual tests that
+  // need cascade override this with the full item list.
   mockSetItemsCompleted: vi.fn().mockImplementation((_noteId, ids: string[], completed: boolean) =>
     Promise.resolve(ids.map(id => ({ id, completed })))),
   mockDeleteItems: vi.fn().mockResolvedValue([]),
@@ -77,7 +73,6 @@ vi.mock('@/utils/api', () => ({
     updateItem: mockUpdateItem,
     deleteItem: mockDeleteItem,
     reorderItems: mockReorderItems,
-    toggleItemCompleted: mockToggleItemCompleted,
     setItemsCompleted: mockSetItemsCompleted,
     deleteItems: mockDeleteItems,
     listRevisions: mockListRevisions,
@@ -1947,7 +1942,7 @@ describe('NoteModal', () => {
       fireEvent.click(checkbox);
       await vi.runAllTimersAsync();
 
-      expect(mockToggleItemCompleted).toHaveBeenCalledWith('1', 'item1', true);
+      expect(mockSetItemsCompleted).toHaveBeenCalledWith('1', ['item1'], true);
       // Completion must not be sent as a plain field patch (that would skip the cascade).
       expect(mockUpdateItem).not.toHaveBeenCalledWith('1', 'item1', expect.objectContaining({ completed: true }));
     });
@@ -1962,7 +1957,7 @@ describe('NoteModal', () => {
         ],
       });
       // Server reports the whole group completed.
-      mockToggleItemCompleted.mockResolvedValueOnce([
+      mockSetItemsCompleted.mockResolvedValueOnce([
         { id: 'parent', completed: true },
         { id: 'childA', completed: true },
         { id: 'childB', completed: true },
@@ -1973,7 +1968,7 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getAllByRole('checkbox')[0]!);
       await vi.runAllTimersAsync();
 
-      expect(mockToggleItemCompleted).toHaveBeenCalledWith('1', 'parent', true);
+      expect(mockSetItemsCompleted).toHaveBeenCalledWith('1', ['parent'], true);
       // All three rows cascade to completed → the Completed section shows count 3.
       expect(screen.getByText('Completed items (3)')).toBeInTheDocument();
       // Every checkbox now reflects the completed state.
@@ -1992,7 +1987,7 @@ describe('NoteModal', () => {
       });
       // Server enforces the same invariant: a parent can't stay completed once
       // one of its children is unchecked.
-      mockToggleItemCompleted.mockResolvedValueOnce([
+      mockSetItemsCompleted.mockResolvedValueOnce([
         { id: 'parent', completed: false },
         { id: 'childA', completed: false },
         { id: 'childB', completed: true },
@@ -2003,10 +1998,105 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getAllByRole('checkbox')[1]!);
       await vi.runAllTimersAsync();
 
-      expect(mockToggleItemCompleted).toHaveBeenCalledWith('1', 'childA', false);
+      expect(mockSetItemsCompleted).toHaveBeenCalledWith('1', ['childA'], false);
       expect(screen.getByText('Completed items (1)')).toBeInTheDocument();
       expect(screen.getByDisplayValue('Parent')).toBeInTheDocument();
       expect(screen.getByDisplayValue('Child A')).toBeInTheDocument();
+    });
+
+    // The endpoint returns the note's full item list as of its own write, so a
+    // response to an earlier tap still reports a later-tapped item unchecked.
+    // Applying that whole list put the later item back in the active list until
+    // its own response landed — the "checked rows come back" bug.
+    it('checking items in quick succession keeps each checked while earlier responses land', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [
+          item('a', { text: 'A', position: 0 }),
+          item('b', { text: 'B', position: 1 }),
+          item('c', { text: 'C', position: 2 }),
+        ],
+      });
+      const responses = new Map<string, (items: { id: string; completed: boolean; updated_at: string }[]) => void>();
+      // Server timestamps: t0 is every item's creation, tA..tC each tap's write.
+      const [t0, tA, tB, tC] = ['00', '01', '02', '03'].map(s => `2026-01-01T00:00:${s}Z`) as [string, string, string, string];
+      const hold = (_noteId: string, itemIds: string[]) =>
+        new Promise(resolve => { responses.set(itemIds[0]!, resolve); });
+      mockSetItemsCompleted.mockImplementationOnce(hold).mockImplementationOnce(hold).mockImplementationOnce(hold);
+      renderNoteModal({ ...defaultProps, note: listNote });
+
+      // Tap A, then B, then C; each optimistic check moves the row out of the
+      // active list, so the next unchecked row is always the first checkbox.
+      for (const id of ['a', 'b', 'c']) {
+        fireEvent.click(screen.getAllByRole('checkbox')[0]!);
+        await act(async () => {});
+        expect(mockSetItemsCompleted).toHaveBeenLastCalledWith('1', [id], true);
+      }
+      expect(screen.getByText('Completed items (3)')).toBeInTheDocument();
+
+      // A's response was read before B's and C's writes reached the server.
+      await act(async () => {
+        responses.get('a')!([
+          { id: 'a', completed: true, updated_at: tA },
+          { id: 'b', completed: false, updated_at: t0 },
+          { id: 'c', completed: false, updated_at: t0 },
+        ]);
+      });
+      expect(screen.getByText('Completed items (3)')).toBeInTheDocument();
+
+      // Responses can also land out of order: C's before B's, whose snapshot
+      // predates C's write.
+      await act(async () => {
+        responses.get('c')!([
+          { id: 'a', completed: true, updated_at: tA },
+          { id: 'b', completed: true, updated_at: tB },
+          { id: 'c', completed: true, updated_at: tC },
+        ]);
+      });
+      await act(async () => {
+        responses.get('b')!([
+          { id: 'a', completed: true, updated_at: tA },
+          { id: 'b', completed: true, updated_at: tB },
+          { id: 'c', completed: false, updated_at: t0 },
+        ]);
+      });
+      await vi.runAllTimersAsync();
+      expect(screen.getByText('Completed items (3)')).toBeInTheDocument();
+      const checkboxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
+      expect(checkboxes.every(cb => cb.checked)).toBe(true);
+    });
+
+    // Two overlapping writes to one item that both fail must unwind to where the
+    // item was before either — not stop at the first write's optimistic value,
+    // which also left the editor dirty against its baseline.
+    it('checking then unchecking an item, with both requests failing, leaves it unchecked', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [item('a', { text: 'A', position: 0 }), item('b', { text: 'B', position: 1 })],
+      });
+      const rejects: Array<(error: Error) => void> = [];
+      const hold = () => new Promise((_resolve, reject) => { rejects.push(reject); });
+      mockSetItemsCompleted.mockImplementationOnce(hold).mockImplementationOnce(hold);
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      renderNoteModal({ ...defaultProps, note: listNote });
+
+      // Check A (first active checkbox), then uncheck it (now the last checkbox).
+      fireEvent.click(screen.getAllByRole('checkbox')[0]!);
+      await act(async () => {});
+      const afterCheck = screen.getAllByRole('checkbox');
+      fireEvent.click(afterCheck[afterCheck.length - 1]!);
+      await act(async () => {});
+      expect(mockSetItemsCompleted).toHaveBeenNthCalledWith(1, '1', ['a'], true);
+      expect(mockSetItemsCompleted).toHaveBeenNthCalledWith(2, '1', ['a'], false);
+
+      // The uncheck fails first, then the check.
+      await act(async () => { rejects[1]!(new Error('offline')); });
+      await act(async () => { rejects[0]!(new Error('offline')); });
+      await vi.runAllTimersAsync();
+
+      expect(screen.queryByText(/Completed items/)).not.toBeInTheDocument();
+      const checkboxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
+      expect(checkboxes.some(cb => cb.checked)).toBe(false);
     });
 
     it('shows a ghost parent above a completed child whose parent is still active', async () => {
@@ -2115,7 +2205,7 @@ describe('NoteModal', () => {
       // Check TARGET (4th active checkbox) → it moves to the completed section.
       fireEvent.click(screen.getAllByRole('checkbox')[3]!);
       await vi.runAllTimersAsync();
-      expect(mockToggleItemCompleted).toHaveBeenCalledWith('1', 'target', true);
+      expect(mockSetItemsCompleted).toHaveBeenCalledWith('1', ['target'], true);
 
       // Remove the two items above TARGET (X0, X1).
       removeFirstRow();
@@ -2126,7 +2216,7 @@ describe('NoteModal', () => {
       const checkboxes = screen.getAllByRole('checkbox');
       fireEvent.click(checkboxes[checkboxes.length - 1]!);
       await vi.runAllTimersAsync();
-      expect(mockToggleItemCompleted).toHaveBeenCalledWith('1', 'target', false);
+      expect(mockSetItemsCompleted).toHaveBeenCalledWith('1', ['target'], false);
 
       // TARGET lands back between X2 and X4 — its relative slot — not at the end.
       const values = screen.getAllByTestId('list-item-input').map(el => (el as HTMLTextAreaElement).value);

@@ -1,6 +1,8 @@
 package models
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/hanzei/jot/server/internal/database/dbtest"
@@ -37,12 +39,12 @@ func TestUserSearchIsCaseInsensitive(t *testing.T) {
 		store := newTestUserStore(t, driver)
 		ctx := t.Context()
 
-		alice, err := store.Create(ctx, "alice", "password123")
+		alice, err := store.Create(ctx, "alice", "password123", "")
 		require.NoError(t, err)
 		_, err = store.UpdateProfile(ctx, alice.ID, "alice", "Alice", "Anderson")
 		require.NoError(t, err)
 
-		bob, err := store.Create(ctx, "bob", "password123")
+		bob, err := store.Create(ctx, "bob", "password123", "")
 		require.NoError(t, err)
 		_, err = store.UpdateProfile(ctx, bob.ID, "bob", "Bob", "Brown")
 		require.NoError(t, err)
@@ -84,7 +86,7 @@ func TestUserSearchExcludesAndLimits(t *testing.T) {
 
 		ids := make([]string, 0, 3)
 		for _, name := range []string{"match1", "match2", "match3"} {
-			u, err := store.Create(ctx, name, "password123")
+			u, err := store.Create(ctx, name, "password123", "")
 			require.NoError(t, err)
 			ids = append(ids, u.ID)
 		}
@@ -100,5 +102,67 @@ func TestUserSearchExcludesAndLimits(t *testing.T) {
 			require.NoError(t, err)
 			assert.Len(t, found, 2)
 		})
+	})
+}
+
+func TestConcurrentFirstUserGetsExactlyOneAdmin(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, driver string) {
+		const n = 8
+		adminCount := func(t *testing.T, users []*User) int {
+			admins := 0
+			for _, u := range users {
+				if u.Role == RoleAdmin {
+					admins++
+				}
+			}
+			return admins
+		}
+		run := func(t *testing.T, create func(store *userStore, i int) (*User, error)) []*User {
+			store := newTestUserStore(t, driver)
+			users := make([]*User, n)
+			errs := make([]error, n)
+			var wg sync.WaitGroup
+			start := make(chan struct{})
+			for i := range n {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					<-start
+					users[i], errs[i] = create(store, i)
+				}()
+			}
+			close(start)
+			wg.Wait()
+			for _, err := range errs {
+				require.NoError(t, err)
+			}
+			return users
+		}
+
+		t.Run("Create", func(t *testing.T) {
+			users := run(t, func(s *userStore, i int) (*User, error) {
+				return s.Create(t.Context(), fmt.Sprintf("user%d", i), "password123", "")
+			})
+			assert.Equal(t, 1, adminCount(t, users))
+		})
+
+		t.Run("ProvisionSSOUser", func(t *testing.T) {
+			users := run(t, func(s *userStore, i int) (*User, error) {
+				return s.ProvisionSSOUser(t.Context(), testIssuer, fmt.Sprintf("sub-%d", i), fmt.Sprintf("sso%d", i), true)
+			})
+			assert.Equal(t, 1, adminCount(t, users))
+		})
+	})
+}
+
+func TestCreateExplicitRole(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, driver string) {
+		store := newTestUserStore(t, driver)
+		first, err := store.Create(t.Context(), "first", "password123", RoleUser)
+		require.NoError(t, err)
+		assert.Equal(t, RoleUser, first.Role, "an explicit role overrides first-user admin")
+		second, err := store.Create(t.Context(), "second", "password123", RoleAdmin)
+		require.NoError(t, err)
+		assert.Equal(t, RoleAdmin, second.Role)
 	})
 }

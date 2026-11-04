@@ -123,7 +123,7 @@ func TestNoteUnread(t *testing.T) {
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
 		require.NoError(t, collab.Client.MarkNoteViewed(t.Context(), note.ID))
 
-		_, err = collab.Client.ToggleNoteItemCompleted(t.Context(), note.ID, note.Items[0].ID, true)
+		_, err = collab.Client.SetNoteItemsCompleted(t.Context(), note.ID, []string{note.Items[0].ID}, true)
 		require.NoError(t, err)
 		assert.Equal(t, client.NoteUnreadUpdated, unreadOf(t, owner.Client, note.ID))
 		assert.Empty(t, unreadOf(t, collab.Client, note.ID))

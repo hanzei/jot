@@ -16,7 +16,7 @@
 // degrades to, what happens to raw HTML — are made in exactly one place. Only the
 // leaf rendering differs: an HTML string in the webapp, a <Text> tree on mobile.
 
-import { formatLiteralImage, isAllowedLinkHref } from './markdown';
+import { encodeLinkHref, formatLiteralImage, isAllowedLinkHref } from './markdown';
 
 /**
  * The marked token fields this module reads, declared structurally rather than
@@ -27,8 +27,8 @@ import { formatLiteralImage, isAllowedLinkHref } from './markdown';
  * is a symlink and resolution follows the realpath, so a lookup never reaches the
  * consumer's `node_modules`. CI installs dependencies in `webapp/` and `mobile/`
  * only, so `shared/node_modules` does not exist there and even a *type-only*
- * `import from 'marked'` fails to resolve for both consumers. It is the same trap
- * the `@babel/runtime` note in CLAUDE.md describes.
+ * `import from 'marked'` fails to resolve for both consumers. `no-restricted-imports`
+ * in `shared/eslint.config.js` rejects any package import outside `__tests__/`.
  *
  * marked's `Token` union is structurally assignable to this, so callers pass
  * `Lexer.lexInline(...)` output directly with no cast.
@@ -116,21 +116,27 @@ function contentOffset(raw: string, content: string): number {
 }
 
 /**
- * Flattens a node list back to its visible text. Used for a link whose target
- * Jot will not follow: the spec renders it as its label, and the label keeps any
- * formatting it had, matching how the webapp's block renderer treats the same
- * case.
+ * A link node, or — for a link whose target Jot will not follow — its label.
+ * The label keeps any formatting it had, matching how the webapp's block
+ * renderer treats the same case.
+ *
+ * The node's `href` is the *encoded* target (`encodeLinkHref`), so both clients
+ * open, and de-duplicate on, the same address. A target that cannot be encoded
+ * is treated like a refused scheme.
  */
 function normalizeLink(token: InlineMarkdownToken, span: InlineSourceSpan | undefined): InlineNode[] {
   const children = normalizeInlineTokens(token.tokens ?? [], childSourceStart(token, span));
-  const href = token.href ?? '';
-
-  if (!isAllowedLinkHref(href)) return children;
+  // Trimmed first: the angle-bracket form keeps inner whitespace
+  // (`[a](< https://x>)`), and encoded as `%20https://x` that leading space
+  // would turn the link into a relative path on the Jot origin.
+  const target = (token.href ?? '').trim();
+  const href = isAllowedLinkHref(target) ? encodeLinkHref(target) : null;
+  if (href === null) return children;
 
   // `[](https://example.com)` lexes to a link with no children at all. Rendered
   // faithfully that is an invisible tappable region, so the target becomes its
-  // own label.
-  const label = children.length > 0 ? children : [textNode(href, span)];
+  // own label — as written, not encoded, since it is read rather than opened.
+  const label = children.length > 0 ? children : [textNode(target, span)];
   return [span ? { type: 'link', href, children: label, src: span } : { type: 'link', href, children: label }];
 }
 
@@ -179,6 +185,98 @@ export function flattenInlineNodes(nodes: InlineNode[]): string {
   }
 
   return out;
+}
+
+/** A link an item's text carries, as its target and its visible label. */
+export interface InlineLink {
+  href: string;
+  label: string;
+  /**
+   * Where the link goes, for telling apart entries whose labels look alike —
+   * the host, or the address of a `mailto:`. Null when the label already says
+   * it: a bare URL, a `www.` autolink, an autolinked email address.
+   */
+  host: string | null;
+}
+
+/**
+ * A link target's host (lower case, no credentials), or a `mailto:`'s address
+ * without its query. Parsed by hand rather than with `URL`, which Hermes only
+ * partly implements, so both clients get the same answer.
+ */
+function linkHost(href: string): string {
+  const mailto = /^mailto:([^?]*)/i.exec(href);
+  // `||`, not `??`: the group always matches, but `mailto:?subject=x` matches it
+  // empty, and an empty host line says nothing.
+  if (mailto) return mailto[1] || href;
+  const authority = /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/?#]*@)?([^/?#]+)/i.exec(href);
+  return authority?.[1]?.toLowerCase() ?? href;
+}
+
+/**
+ * Undoes `encodeLinkHref` for display, so a host line reads `café.example`
+ * rather than `caf%C3%A9.example`. Malformed escapes are shown as they are.
+ */
+function decodeForDisplay(text: string): string {
+  try {
+    return decodeURI(text);
+  } catch {
+    return text;
+  }
+}
+
+/**
+ * Whether a link's label already spells out where it goes — an autolink, or a
+ * label that is the URL. marked normalizes autolinked `www.example.com` and
+ * `someone@example.com` to `http://` and `mailto:` targets, so those count too.
+ */
+export function linkLabelIsTarget(label: string, href: string): boolean {
+  // A link node's `href` is encoded (`encodeLinkHref`) and an autolink's label
+  // is the target as written, so the label is encoded the same way first.
+  const target = encodeLinkHref(label) ?? label;
+  return href === target || href === `http://${target}` || href === `mailto:${target}`;
+}
+
+/**
+ * The links in a node tree, in reading order, one per distinct target.
+ *
+ * For the editable list-item row's "open link" control
+ * (docs/specs/markdown-rendering.md §1.2): that row renders its links as plain
+ * text, so this is the only way to reach their targets from it. Every `href`
+ * here is already allowed — `normalizeInlineTokens` turns a link Jot refuses
+ * into its label, so it never becomes a link node — and callers need no scheme
+ * check of their own.
+ *
+ * A target that appears twice is listed once, under its first label: a menu
+ * offering the same destination twice is noise, not a choice. Targets are
+ * compared encoded, as the normalizer leaves them, so `<https://x/a b>` and
+ * `https://x/a%20b` count once.
+ */
+export function inlineLinks(nodes: InlineNode[]): InlineLink[] {
+  const links: InlineLink[] = [];
+  const seen = new Set<string>();
+
+  function walk(list: InlineNode[]): void {
+    for (const node of list) {
+      if (node.type === 'link') {
+        const { href } = node;
+        if (!seen.has(href)) {
+          seen.add(href);
+          const label = flattenInlineNodes(node.children);
+          const host = decodeForDisplay(linkHost(href));
+          // A label that is the host is covered too: a second line repeating
+          // it says nothing.
+          const shown = linkLabelIsTarget(label, href) || label === host;
+          links.push({ href, label, host: shown ? null : host });
+        }
+      } else if (node.type === 'strong' || node.type === 'em' || node.type === 'del') {
+        walk(node.children);
+      }
+    }
+  }
+
+  walk(nodes);
+  return links;
 }
 
 /** How many characters of visible text a node contributes. */

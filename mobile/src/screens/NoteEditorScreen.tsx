@@ -653,6 +653,7 @@ export default function NoteEditorScreen() {
     savedOrderRef: sync.savedOrderRef,
     withPendingIndicator,
     withItemWriteInFlight: sync.withItemWriteInFlight,
+    completedWrites: sync.completedWrites,
     scrollViewRef,
     openAssigneePicker,
     confirm,
@@ -1239,6 +1240,7 @@ export default function NoteEditorScreen() {
       const originalIndex = itemIndexMapRef.current.get(item.id);
       if (originalIndex === undefined) return null;
       const baseLevel = item.parentId ? 1 : 0;
+      const hasChildren = itemHasChildren(itemsRef.current, item.id);
       return (
         <ActiveListRow
           dragTranslateX={dragTranslateX}
@@ -1247,7 +1249,7 @@ export default function NoteEditorScreen() {
           // there is a row above it to nest under (index > 0 in the active list).
           // Keeping this in step stops the preview showing an indent that the
           // drop would reject.
-          canIndent={!itemHasChildren(itemsRef.current, item.id) && index > 0}
+          canIndent={!hasChildren && index > 0}
           canOutdent={baseLevel === 1}
           listItemProps={{
             inputRef: getItemRef(item.id),
@@ -1264,6 +1266,7 @@ export default function NoteEditorScreen() {
             collaborators,
             hasNoteColor,
             completedItemTexts,
+            hasChildren,
             onToggle: () => listItemHandlers.onToggle(item.id, !item.completed),
             onChangeText: (text) => listItemHandlers.onChangeText(originalIndex, text),
             onDelete: () => listItemHandlers.onDelete(originalIndex),

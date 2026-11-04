@@ -882,6 +882,7 @@ const docTemplate = `{
         },
         "/labels": {
             "get": {
+                "description": "Each label carries note_count: the number of non-trashed, non-archived notes carrying the label for the requesting user.",
                 "produces": [
                     "application/json"
                 ],
@@ -970,42 +971,6 @@ const docTemplate = `{
                     },
                     "422": {
                         "description": "label name too long (label_name_too_long)",
-                        "schema": {
-                            "$ref": "#/definitions/apierr.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/apierr.ErrorResponse"
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "CookieAuth": []
-                    }
-                ]
-            }
-        },
-        "/labels/counts": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "labels"
-                ],
-                "summary": "Get note counts per label for the current user",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.LabelCountsResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "unauthorized",
                         "schema": {
                             "$ref": "#/definitions/apierr.ErrorResponse"
                         }
@@ -1202,42 +1167,6 @@ const docTemplate = `{
                 "responses": {
                     "204": {
                         "description": "no content"
-                    },
-                    "500": {
-                        "description": "internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/apierr.ErrorResponse"
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "CookieAuth": []
-                    }
-                ]
-            }
-        },
-        "/me": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "auth"
-                ],
-                "summary": "Get the current authenticated user and settings",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.AuthResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/apierr.ErrorResponse"
-                        }
                     },
                     "500": {
                         "description": "internal server error",
@@ -2271,7 +2200,7 @@ const docTemplate = `{
         },
         "/notes/{id}/items/set-completed": {
             "post": {
-                "description": "Sets completed to the given value on each of the named items (no cascade) and returns the note's full item list. Used for bulk \"uncheck all\" (completed=false) and its undo (completed=true); callers pass the complete set they want changed.",
+                "description": "Sets completed to the given value on each of the named items and returns the note's full item list. Each item that is checked or unchecked applies the parent/child cascade: a top-level (parent) item carries the same value to all of its children, and unchecking a child also unchecks its parent. A single tap is a one-element item_ids; bulk \"uncheck all\" (completed=false) and its undo (completed=true) pass the whole set. IDs that do not belong to the note are ignored, so a stale tap on a since-deleted item returns 200 with the current list.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2281,7 +2210,7 @@ const docTemplate = `{
                 "tags": [
                     "notes"
                 ],
-                "summary": "Set the completed flag on a set of list items",
+                "summary": "Set the completed flag on one or more list items, cascading to children",
                 "parameters": [
                     {
                         "type": "string",
@@ -2440,86 +2369,6 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/models.NoteItem"
-                        }
-                    },
-                    "400": {
-                        "description": "bad request",
-                        "schema": {
-                            "$ref": "#/definitions/apierr.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/apierr.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "not found",
-                        "schema": {
-                            "$ref": "#/definitions/apierr.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/apierr.ErrorResponse"
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "CookieAuth": []
-                    }
-                ]
-            }
-        },
-        "/notes/{id}/items/{item_id}/toggle-completed": {
-            "post": {
-                "description": "Sets the item's completed flag. When the item is a top-level (parent) item, the same value cascades to all of its children atomically. Returns the note's full item list.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "notes"
-                ],
-                "summary": "Toggle a list item's completed state, cascading to children",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Note ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Item ID",
-                        "name": "item_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Completed state",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handlers.ToggleNoteItemCompletedRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.NoteItem"
-                            }
                         }
                     },
                     "400": {
@@ -3519,6 +3368,40 @@ const docTemplate = `{
             }
         },
         "/users/me": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Get the current authenticated user and settings",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.AuthResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
+            },
             "patch": {
                 "consumes": [
                     "application/json"
@@ -4174,35 +4057,13 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.LabelCount": {
-            "type": "object",
-            "properties": {
-                "count": {
-                    "type": "integer"
-                },
-                "label_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "handlers.LabelCountsResponse": {
-            "type": "object",
-            "properties": {
-                "counts": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/handlers.LabelCount"
-                    }
-                }
-            }
-        },
         "handlers.LabelListResponse": {
             "type": "object",
             "properties": {
                 "labels": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.Label"
+                        "$ref": "#/definitions/models.LabelWithCount"
                     }
                 }
             }
@@ -4423,15 +4284,6 @@ const docTemplate = `{
             "properties": {
                 "user_id": {
                     "type": "string"
-                }
-            }
-        },
-        "handlers.ToggleNoteItemCompletedRequest": {
-            "type": "object",
-            "properties": {
-                "completed": {
-                    "description": "Completed is a pointer so an omitted field is rejected by the handler\nrather than silently decoding to false and unchecking the item.",
-                    "type": "boolean"
                 }
             }
         },
@@ -4756,6 +4608,30 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.LabelWithCount": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "note_count": {
+                    "description": "NoteCount is the number of non-trashed, non-archived notes that carry the\nlabel for the requesting user.",
+                    "type": "integer"
                 },
                 "updated_at": {
                     "type": "string"

@@ -155,23 +155,12 @@ func (c *Client) UpdateNoteItem(ctx context.Context, noteID, itemID string, req 
 	return &item, nil
 }
 
-// ToggleNoteItemCompleted sets an item's completed state. When the item is a
-// top-level (parent) item, the same value cascades to all of its children
-// atomically. Returns the note's full item list.
-func (c *Client) ToggleNoteItemCompleted(ctx context.Context, noteID, itemID string, completed bool) ([]NoteItem, error) {
-	var items []NoteItem
-	if err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/items/%s/toggle-completed", noteID, itemID), map[string]bool{
-		"completed": completed,
-	}, &items); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 // SetNoteItemsCompleted sets the completed flag to completed on each of the
-// named list items (no cascade) and returns the note's full item list. Pass the
-// complete set you want changed (e.g. every checked item to "uncheck all", or
-// that same snapshot with completed=true to undo).
+// named list items and returns the note's full item list. Checking a top-level
+// item cascades to its children and unchecking a child unchecks its parent.
+// Pass one ID for a single tap, or the complete set you want changed (e.g. every
+// checked item to "uncheck all", or that same snapshot with completed=true to
+// undo).
 func (c *Client) SetNoteItemsCompleted(ctx context.Context, noteID string, itemIDs []string, completed bool) ([]NoteItem, error) {
 	var items []NoteItem
 	if err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/items/set-completed", noteID), map[string]any{

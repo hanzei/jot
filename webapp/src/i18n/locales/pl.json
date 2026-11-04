@@ -500,6 +500,8 @@
     "menuOptions": "Opcje notatki",
     "assignItem": "Przypisz element",
     "removeItem": "Usuń element",
+    "openItemLink": "Otwórz link: {{label}}",
+    "openItemLinks": "Wybierz link do otwarcia",
     "unassign": "Usuń przypisanie",
     "assignedTo": "Przypisano do {{name}}",
     "completedSuggestions": "Podpowiedzi z ukończonych elementów",

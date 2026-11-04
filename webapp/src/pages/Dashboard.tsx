@@ -69,7 +69,6 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const {
     labels: labelsList,
     loadLabels,
-    loadLabelCounts,
     registerLabelCallbacks,
     registerSSECallbacks,
     setSearchBar,
@@ -251,7 +250,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   // continuations, so an effect can call them without setting state
   // synchronously (react-hooks/set-state-in-effect).
   const loadUsers = useCallback(() => {
-    return usersApi.search()
+    return usersApi.list()
       .then(usersData => {
         if (!isMountedRef.current) return;
         const map = new Map<string, User>();
@@ -282,19 +281,19 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
 
       if (showBin && debouncedSearchQuery) {
         const [loadedNotes, allTrashedNotes] = await Promise.all([
-          notes.getAll(showArchived, debouncedSearchQuery, showBin, selectedLabelId ?? '', showMyTasks),
-          notes.getAll(false, '', true),
+          notes.getAll({ archived: showArchived, search: debouncedSearchQuery, trashed: showBin, label: selectedLabelId ?? undefined, my_tasks: showMyTasks }),
+          notes.getAll({ archived: false, search: '', trashed: true }),
         ]);
         notesData = loadedNotes;
         nextTrashCount = allTrashedNotes.length;
       } else if (includeArchivedSplit) {
         const [activeMatches, archivedMatches] = await Promise.all([
-          notes.getAll(false, debouncedSearchQuery, false, selectedLabelId ?? '', false),
-          notes.getAll(true, debouncedSearchQuery, false, selectedLabelId ?? '', false),
+          notes.getAll({ archived: false, search: debouncedSearchQuery, trashed: false, label: selectedLabelId ?? undefined, my_tasks: false }),
+          notes.getAll({ archived: true, search: debouncedSearchQuery, trashed: false, label: selectedLabelId ?? undefined, my_tasks: false }),
         ]);
         notesData = [...activeMatches, ...archivedMatches];
       } else {
-        notesData = await notes.getAll(showArchived, debouncedSearchQuery, showBin, selectedLabelId ?? '', showMyTasks);
+        notesData = await notes.getAll({ archived: showArchived, search: debouncedSearchQuery, trashed: showBin, label: selectedLabelId ?? undefined, my_tasks: showMyTasks });
         if (showBin) {
           nextTrashCount = notesData.length;
         }
@@ -510,7 +509,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     }
     if (event.type === 'labels_changed') {
       void (async () => {
-        const [updatedLabels] = await Promise.all([loadLabels(), loadLabelCounts()]);
+        const updatedLabels = await loadLabels();
         const currentSelectedLabelId = selectedLabelIdRef.current;
         if (!isMountedRef.current || !currentSelectedLabelId || !updatedLabels) {
           return;
@@ -591,11 +590,10 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     }
 
     loadNotes();
-    loadLabelCounts();
-    if (event.type === 'note_created' || event.type === 'note_updated') {
-      loadLabels();
-    }
-  }, [editingNote, sharingNote, loadNotes, loadLabels, loadLabelCounts, setSearchParams, user?.id, restoreReturnUrl, updateNotesList, usersById, showToast, t]);
+    // Label note counts ride along with the label list, and every note event
+    // can change them (archive, trash, label add/remove).
+    loadLabels();
+  }, [editingNote, sharingNote, loadNotes, loadLabels, setSearchParams, user?.id, restoreReturnUrl, updateNotesList, usersById, showToast, t]);
 
   // Unread badges, from whichever path opened the note: opening an unread note
   // records the view, and closing it records another if a collaborator's
@@ -827,7 +825,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   });
 
   const reloadAfterNoteWrite = () => {
-    void Promise.all([loadNotes(), loadLabelCounts()]);
+    void loadNotes();
     loadLabels();
   };
 
@@ -874,7 +872,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const handleDeleteNote = async (noteId: string) => {
     try {
       await notes.delete(noteId);
-      await Promise.all([loadNotes(), loadLabelCounts()]);
+      await Promise.all([loadNotes(), loadLabels()]);
       showToast(t('dashboard.noteDeleted'), 'success', {
         label: t('dashboard.undo'),
         onClick: () => handleRestoreNote(noteId),
@@ -888,13 +886,13 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const handleRestoreNote = async (noteId: string) => {
     try {
       await notes.restore(noteId);
-      await Promise.all([loadNotes(), loadLabelCounts()]);
+      await Promise.all([loadNotes(), loadLabels()]);
       showToast(t('dashboard.noteRestored'), 'success', {
         label: t('dashboard.undo'),
         onClick: async () => {
           try {
             await notes.delete(noteId);
-            await Promise.all([loadNotes(), loadLabelCounts()]);
+            await Promise.all([loadNotes(), loadLabels()]);
           } catch (undoError) {
             console.error('Failed to undo restore:', undoError);
             showErrorToast(t('dashboard.failedDeleteNote'), undoError);
@@ -910,7 +908,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const handlePermanentlyDeleteNote = async (noteId: string) => {
     try {
       await notes.delete(noteId, { permanent: true });
-      await Promise.all([loadNotes(), loadLabelCounts()]);
+      await Promise.all([loadNotes(), loadLabels()]);
       showToast(t('dashboard.noteDeletedForever'));
     } catch (error) {
       console.error('Failed to permanently delete note:', error);
@@ -931,7 +929,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
       }
       setShowEmptyTrashConfirm(false);
       showToast(t('dashboard.trashEmptied'));
-      void Promise.all([loadNotes(), loadLabelCounts()]);
+      void Promise.all([loadNotes(), loadLabels()]);
     } catch (error) {
       console.error('Failed to empty trash:', error);
       showErrorToast(t('dashboard.emptyTrashFailed'), error);
@@ -943,13 +941,13 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const handleDuplicateNote = useCallback(async (noteId: string) => {
     try {
       const duplicatedNote = await notes.duplicate(noteId);
-      await Promise.all([loadNotes(), loadLabels(), loadLabelCounts()]);
+      await Promise.all([loadNotes(), loadLabels()]);
       showToast(t('dashboard.noteDuplicated'), 'success', {
         label: t('dashboard.undo'),
         onClick: async () => {
           try {
             await notes.delete(duplicatedNote.id);
-            await Promise.all([loadNotes(), loadLabels(), loadLabelCounts()]);
+            await Promise.all([loadNotes(), loadLabels()]);
           } catch (undoError) {
             console.error('Failed to undo duplicate note:', undoError);
             showErrorToast(t('dashboard.failedDeleteNote'), undoError);
@@ -960,7 +958,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
       console.error('Failed to duplicate note:', error);
       throw error;
     }
-  }, [loadLabelCounts, loadLabels, loadNotes, showToast, showErrorToast, t]);
+  }, [loadLabels, loadNotes, showToast, showErrorToast, t]);
 
   const handleConvertNote = useCallback(async (noteId: string, data: ConvertNoteTypeRequest) => {
     try {
@@ -973,11 +971,11 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     // The conversion already succeeded — a refresh hiccup here shouldn't be
     // reported to NoteModal as a conversion failure.
     try {
-      await Promise.all([loadNotes(), loadLabels(), loadLabelCounts()]);
+      await Promise.all([loadNotes(), loadLabels()]);
     } catch (error) {
       console.error('Failed to refresh after converting note:', error);
     }
-  }, [loadLabelCounts, loadLabels, loadNotes, showToast, t]);
+  }, [loadLabels, loadNotes, showToast, t]);
 
   const handleShareNote = (note: Note) => {
     setSharingNote(note);

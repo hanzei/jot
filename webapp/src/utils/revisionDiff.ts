@@ -54,6 +54,7 @@ const asText = (noteType: NoteType, title: string, content: string, items: ListI
 export function compareItems(revisionItems: ListItem[], currentItems: ListItem[]): ItemChange[] {
   const baseline = new Map<string, ItemSnapshot>(revisionItems.map(item => [item.id, itemSnapshot(item)]));
   const revisionIds = revisionItems.map(item => item.id);
+  const currentById = new Map(currentItems.map(item => [item.id, item]));
   const changes: ItemChange[] = [];
   for (const op of diffItems(baseline, revisionIds, currentItems)) {
     if (op.kind === 'create') {
@@ -66,7 +67,7 @@ export function compareItems(revisionItems: ListItem[], currentItems: ListItem[]
       continue;
     } else {
       const before = baseline.get(op.itemId)?.text ?? '';
-      const text = op.snapshot.text;
+      const text = currentById.get(op.itemId)?.text ?? '';
       if (op.patch.text !== undefined) changes.push({ kind: 'edited', before, after: text });
       if (op.patch.completed !== undefined) changes.push({ kind: op.patch.completed ? 'checked' : 'unchecked', text });
       if (op.patch.parent_id !== undefined) changes.push({ kind: 'moved', text });

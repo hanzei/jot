@@ -219,14 +219,14 @@ func (ts *TestServer) driveFlow(t *testing.T, mock *mockOIDC, c *http.Client, st
 	return cbResp
 }
 
-// meResponse is the subset of GET /me the OIDC tests assert on.
+// meResponse is the subset of GET /users/me the OIDC tests assert on.
 type meResponse struct {
 	User client.User `json:"user"`
 }
 
 func (ts *TestServer) me(t *testing.T, c *http.Client) (meResponse, int) {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/users/me", nil)
 	require.NoError(t, err)
 	resp, err := c.Do(req)
 	require.NoError(t, err)
@@ -710,7 +710,7 @@ func TestOIDCProvisionedUserCanUsePAT(t *testing.T) {
 	require.NotEmpty(t, rawToken)
 
 	// Use the PAT as a Bearer token on a cookie-less client.
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/users/me", nil)
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer "+rawToken)
 	patResp, err := ts.HTTPServer.Client().Do(req)

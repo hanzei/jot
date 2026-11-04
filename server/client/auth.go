@@ -55,7 +55,7 @@ func (c *Client) Logout(ctx context.Context) error {
 // Me returns the currently authenticated user and settings.
 func (c *Client) Me(ctx context.Context) (*AuthResponse, error) {
 	var resp AuthResponse
-	if err := c.doJSON(ctx, http.MethodGet, "/api/v1/me", nil, &resp); err != nil {
+	if err := c.doJSON(ctx, http.MethodGet, "/api/v1/users/me", nil, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

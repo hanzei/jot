@@ -1,16 +1,9 @@
-import React, { useContext } from 'react';
-import {
-  Modal,
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Pressable,
-} from 'react-native';
-import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { ArrowLeftRight, Copy, History, Share2, Square, Tag, Trash2, Undo2, UserPlus, Users, type LucideIcon } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
+import BottomSheet from './BottomSheet';
 import type { NoteType } from '@jot/shared';
 
 interface NoteEditorMenuProps {
@@ -92,7 +85,6 @@ export default function NoteEditorMenu({
 }: NoteEditorMenuProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
 
   // Wrap every action so the sheet closes before the action runs, matching the
   // dashboard menu's behavior.
@@ -198,95 +190,65 @@ export default function NoteEditorMenu({
   }
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      <Pressable style={[styles.overlay, { backgroundColor: colors.overlay }]} onPress={onClose}>
-        <View style={[styles.sheet, { backgroundColor: colors.sheetBackground, paddingBottom: insets.bottom || 8 }]}>
-          <Pressable>
-            <View style={[styles.handle, { backgroundColor: colors.handleColor }]} />
-            {title ? (
-              <Text style={[styles.noteTitle, { color: colors.text, borderBottomColor: colors.borderLight }]} numberOfLines={1}>
-                {title}
-              </Text>
-            ) : null}
-            {actions.map((action, index) => {
-              const isLast = index === actions.length - 1;
-              const isDestructive = action.destructive;
-              const prevNonDestructive = index > 0 && !actions[index - 1]!.destructive;
-              const nextIsDestructive = actions[index + 1]?.destructive;
-              return (
-                <React.Fragment key={action.testId}>
-                  {isDestructive && prevNonDestructive && (
-                    <View style={[styles.destructiveSeparator, { backgroundColor: colors.borderLight }]} />
-                  )}
-                  <TouchableOpacity
-                    style={[
-                      styles.actionRow,
-                      !isLast && !isDestructive && !nextIsDestructive && { borderBottomColor: colors.borderLight, borderBottomWidth: 1 },
-                    ]}
-                    onPress={action.onPress}
-                    disabled={action.disabled}
-                    testID={action.testId}
-                    accessibilityRole="menuitem"
-                    accessibilityLabel={action.label}
-                    accessibilityHint={action.hint}
-                    accessibilityState={action.disabled ? { disabled: true } : undefined}
-                  >
-                    <action.icon
-                      size={22}
-                      color={isDestructive ? colors.error : action.disabled ? colors.iconMuted : colors.text}
-                    />
-                    <View style={styles.actionText}>
-                      <Text
-                        style={[
-                          styles.actionLabel,
-                          { color: colors.text },
-                          isDestructive && { color: colors.error },
-                          action.disabled && { color: colors.textMuted },
-                        ]}
-                      >
-                        {action.label}
-                      </Text>
-                      {action.hint ? (
-                        <Text style={[styles.actionHint, { color: colors.textMuted }]} testID={`${action.testId}-hint`}>
-                          {action.hint}
-                        </Text>
-                      ) : null}
-                    </View>
-                  </TouchableOpacity>
-                </React.Fragment>
-              );
-            })}
-          </Pressable>
-        </View>
-      </Pressable>
-    </Modal>
+    <BottomSheet visible={visible} onClose={onClose} testID="note-editor-menu">
+      {title ? (
+        <Text style={[styles.noteTitle, { color: colors.text, borderBottomColor: colors.borderLight }]} numberOfLines={1}>
+          {title}
+        </Text>
+      ) : null}
+      {actions.map((action, index) => {
+        const isLast = index === actions.length - 1;
+        const isDestructive = action.destructive;
+        const prevNonDestructive = index > 0 && !actions[index - 1]!.destructive;
+        const nextIsDestructive = actions[index + 1]?.destructive;
+        return (
+          <React.Fragment key={action.testId}>
+            {isDestructive && prevNonDestructive && (
+              <View style={[styles.destructiveSeparator, { backgroundColor: colors.borderLight }]} />
+            )}
+            <TouchableOpacity
+              style={[
+                styles.actionRow,
+                !isLast && !isDestructive && !nextIsDestructive && { borderBottomColor: colors.borderLight, borderBottomWidth: 1 },
+              ]}
+              onPress={action.onPress}
+              disabled={action.disabled}
+              testID={action.testId}
+              accessibilityRole="menuitem"
+              accessibilityLabel={action.label}
+              accessibilityHint={action.hint}
+              accessibilityState={action.disabled ? { disabled: true } : undefined}
+            >
+              <action.icon
+                size={22}
+                color={isDestructive ? colors.error : action.disabled ? colors.iconMuted : colors.text}
+              />
+              <View style={styles.actionText}>
+                <Text
+                  style={[
+                    styles.actionLabel,
+                    { color: colors.text },
+                    isDestructive && { color: colors.error },
+                    action.disabled && { color: colors.textMuted },
+                  ]}
+                >
+                  {action.label}
+                </Text>
+                {action.hint ? (
+                  <Text style={[styles.actionHint, { color: colors.textMuted }]} testID={`${action.testId}-hint`}>
+                    {action.hint}
+                  </Text>
+                ) : null}
+              </View>
+            </TouchableOpacity>
+          </React.Fragment>
+        );
+      })}
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingTop: 16,
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
-  handle: {
-    width: 40,
-    height: 5,
-    borderRadius: 2.5,
-    alignSelf: 'center',
-    marginBottom: 16,
-  },
   noteTitle: {
     fontSize: 16,
     fontWeight: '600',
