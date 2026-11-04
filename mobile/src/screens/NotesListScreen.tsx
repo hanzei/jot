@@ -31,7 +31,6 @@ import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
 import { enqueueOperation, isQueueableError } from '../db/syncQueue';
 import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
-import { useBlurOnKeyboardHide } from '../hooks/useBlurOnKeyboardHide';
 import { styles } from './notesList/styles';
 import { buildNoteSections, type LocalReorderState } from './notesList/noteListUtils';
 import NotesListHeader from './notesList/NotesListHeader';
@@ -60,7 +59,6 @@ const EMPTY_NOTES: Note[] = [];
 const EMPTY_LOCAL_ORDER: LocalReorderState = { pinned: null, unpinned: null };
 
 export default function NotesListScreen({ variant = 'notes', labelId, labelName }: NotesListScreenProps) {
-  useBlurOnKeyboardHide();
   const [searchText, setSearchText] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const { user, settings, setSettings, isLocalMode } = useAuth();

@@ -14,6 +14,7 @@ describe('useBlurOnKeyboardHide', () => {
   let remove: jest.Mock;
 
   beforeEach(() => {
+    jest.useFakeTimers();
     originalOS = Platform.OS;
     listeners = {};
     blur = jest.fn();
@@ -23,18 +24,23 @@ describe('useBlurOnKeyboardHide', () => {
       return { remove } as unknown as EmitterSubscription;
     }) as never);
     jest.spyOn(TextInput.State, 'currentlyFocusedInput').mockReturnValue({ blur } as never);
+    jest.spyOn(Keyboard, 'isVisible').mockReturnValue(false);
   });
 
   afterEach(() => {
     setPlatformOS(originalOS);
     jest.restoreAllMocks();
+    jest.useRealTimers();
   });
 
   it('blurs the focused input when Android hides the keyboard', async () => {
     setPlatformOS('android');
     await renderHook(() => useBlurOnKeyboardHide());
 
-    await act(async () => listeners.keyboardDidHide?.());
+    await act(async () => {
+      listeners.keyboardDidHide?.();
+      jest.advanceTimersByTime(100);
+    });
 
     expect(blur).toHaveBeenCalledTimes(1);
   });
@@ -44,7 +50,24 @@ describe('useBlurOnKeyboardHide', () => {
     jest.spyOn(TextInput.State, 'currentlyFocusedInput').mockReturnValue(null as never);
     await renderHook(() => useBlurOnKeyboardHide());
 
-    await act(async () => listeners.keyboardDidHide?.());
+    await act(async () => {
+      listeners.keyboardDidHide?.();
+      jest.advanceTimersByTime(100);
+    });
+
+    expect(blur).not.toHaveBeenCalled();
+  });
+
+  it('leaves the input alone when the keyboard reopens straight away', async () => {
+    setPlatformOS('android');
+    const isVisible = jest.spyOn(Keyboard, 'isVisible').mockReturnValue(false);
+    await renderHook(() => useBlurOnKeyboardHide());
+
+    await act(async () => {
+      listeners.keyboardDidHide?.();
+      isVisible.mockReturnValue(true);
+      jest.advanceTimersByTime(100);
+    });
 
     expect(blur).not.toHaveBeenCalled();
   });

@@ -36,7 +36,6 @@ import { useTranslation } from 'react-i18next';
 import { useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, useMarkNoteViewed, NoteConversionCapError } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
-import { useBlurOnKeyboardHide } from '../hooks/useBlurOnKeyboardHide';
 import { useFailedNoteIds } from '../store/OfflineContext';
 import { useToast } from '../hooks/useToast';
 import { useConfirm } from '../hooks/useConfirm';
@@ -177,7 +176,6 @@ export default function NoteEditorScreen() {
   const { colors } = useTheme();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const keyboardHeight = useKeyboardHeight();
-  useBlurOnKeyboardHide();
   // On Android the window is edge-to-edge and is NOT resized for the keyboard,
   // so lift the whole editor (scroll area + toolbars) above it manually. iOS
   // relies on KeyboardAvoidingView's "padding" behavior instead.
