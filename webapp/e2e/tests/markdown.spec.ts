@@ -130,6 +130,37 @@ test.describe('Markdown note editing', () => {
       .toHaveValue('Packing\n\n- [x] passport\n- [ ] charger');
   });
 
+  // Spec §1.1: the open note renders live links, and following one is not a
+  // click on the text — the preview stays a preview.
+  test('follows a link in the preview without entering edit mode', async ({ page, dashboardPage, noteEditorPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createTextNote('Reading list: [docs](https://example.com/docs)');
+    await dashboardPage.openTextNote('Reading list');
+
+    // Stubbed, so the test never leaves for the network.
+    await page.context().route('https://example.com/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'text/html', body: '<title>docs</title>' }),
+    );
+    const editor = page.getByRole('dialog').locator('textarea[placeholder="Take a note..."]');
+    const link = noteEditorPage.preview().getByRole('link', { name: 'docs' });
+
+    let popupPromise = page.waitForEvent('popup');
+    await link.click();
+    let popup = await popupPromise;
+    expect(popup.url()).toBe('https://example.com/docs');
+    await popup.close();
+    await expect(editor).toHaveCount(0);
+
+    // Keyboard: Enter on the focused link follows it too.
+    popupPromise = page.waitForEvent('popup');
+    await link.focus();
+    await page.keyboard.press('Enter');
+    popup = await popupPromise;
+    await popup.close();
+    await expect(editor).toHaveCount(0);
+    await expect(noteEditorPage.preview()).toBeVisible();
+  });
+
   test('shows unsupported syntax as literal source and refuses unsupported link schemes', async ({ page, dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.clickNewNote();

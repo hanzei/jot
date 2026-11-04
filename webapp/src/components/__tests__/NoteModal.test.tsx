@@ -2772,10 +2772,18 @@ describe('NoteModal', () => {
       expect(screen.getByTestId('note-content-preview')).toHaveAttribute('role', 'textbox');
     });
 
-    it('still opens the editor on Enter from a link in the preview', () => {
-      const note = createMockNote({ note_type: 'text', content: '[docs](https://example.com)' });
+    it('follows a link in the preview without entering edit mode', () => {
+      const note = createMockNote({ note_type: 'text', content: 'see [**docs**](https://example.com)' });
       renderNoteModal({ ...defaultProps, note });
-      fireEvent.keyDown(screen.getByRole('link', { name: 'docs' }), { key: 'Enter' });
+      const link = screen.getByRole('link', { name: 'docs' });
+
+      // A click on the link's own text, which is nested inside it.
+      fireEvent.click(link.querySelector('strong')!);
+      fireEvent.keyDown(link, { key: 'Enter' });
+      expect(screen.queryByPlaceholderText('Take a note...')).not.toBeInTheDocument();
+
+      // The rest of the preview still opens the editor.
+      fireEvent.click(screen.getByTestId('note-content-preview'));
       expect(screen.getByPlaceholderText('Take a note...')).toBeInTheDocument();
     });
 

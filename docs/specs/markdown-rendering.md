@@ -34,7 +34,10 @@ colour that only signals "link" fails anyone who cannot use it. So the label
 renders exactly as the surrounding text.
 
 The open note is unaffected: the webapp's modal preview and mobile's editor both
-render live links, which is where a reader who wants the link already is. An
+render live links, which is where a reader who wants the link already is.
+Following one — a click, or Enter on the focused link — only opens the link; it
+does not also switch the webapp's preview into edit mode, which a click anywhere
+else in the preview does. An
 *editable* list-item row is the one other place a link stays inert, for a
 different reason, and it reaches its targets through a button of its own
 instead — §1.2.

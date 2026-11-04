@@ -169,6 +169,14 @@ function isTaskCheckbox(target: EventTarget): target is HTMLInputElement {
   return target instanceof HTMLInputElement && target.dataset.taskOffset !== undefined;
 }
 
+/**
+ * Whether an event came from inside a link in the rendered preview. Following
+ * a link is not a request to edit (docs/specs/markdown-rendering.md §1.1).
+ */
+function isInPreviewLink(target: EventTarget): boolean {
+  return target instanceof Element && target.closest('a[href]') !== null;
+}
+
 export default function NoteModal({ note = null, onClose, onSave, onCreated, onRefresh, onShare, onDelete, onDuplicate, onConvert, onRestore, onPermanentlyDelete, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent }: NoteModalProps) {
   const { t, i18n } = useTranslation();
   const { showToast, showErrorToast } = useToast();
@@ -2157,12 +2165,15 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                         toggleTask(e, e.target);
                         return;
                       }
+                      if (isInPreviewLink(e.target)) return;
                       setIsEditingContent(true);
                     }}
                     onKeyDown={(e) => {
                       if (isReadOnly) return;
-                      // Space on a task checkbox is the checkbox's own toggle.
+                      // Space on a task checkbox is the checkbox's own toggle, and
+                      // Enter on a link follows it.
                       if (isTaskCheckbox(e.target)) return;
+                      if (e.key === 'Enter' && isInPreviewLink(e.target)) return;
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
                         setIsEditingContent(true);
