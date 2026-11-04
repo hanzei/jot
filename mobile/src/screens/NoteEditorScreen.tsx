@@ -48,7 +48,7 @@ import AddImageActionSheet from '../components/AddImageActionSheet';
 import { useUploadNoteImage, useDeleteNoteImage } from '../hooks/useNoteImages';
 import { usePendingImageUploads, useRetryPendingImageUpload, useDismissPendingImageUpload } from '../hooks/usePendingImageUploads';
 import type { ImageUploadFile } from '../api/images';
-import { buildCollaborators, generateId, IMAGE_MAX_PER_NOTE, exceedsCodePointLimit, truncateToCodePoints, validateImageFile as validateImageFileRaw, imageMaxMB, type Collaborator, type NoteImage, type NoteUnread } from '@jot/shared';
+import { buildCollaborators, generateId, IMAGE_MAX_PER_NOTE, exceedsCodePointLimit, toggleTaskMarkerAt, truncateToCodePoints, validateImageFile as validateImageFileRaw, imageMaxMB, type Collaborator, type NoteImage, type NoteUnread } from '@jot/shared';
 import { useServerConfig } from '../hooks/useServerConfig';
 import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
@@ -835,6 +835,19 @@ export default function NoteEditorScreen() {
     [contentRef, markDirtyAndScheduleUpdate, setContent],
   );
 
+  // A tapped checkbox in read mode rewrites one marker and saves the way typing
+  // would: local DB and sync queue first, so it works offline. The length never
+  // changes, so the content cap cannot be hit.
+  const handleToggleTask = useCallback(
+    (offset: number) => {
+      const next = toggleTaskMarkerAt(contentRef.current, offset);
+      if (next === null) return;
+      setContent(next);
+      markDirtyAndScheduleUpdate();
+    },
+    [contentRef, markDirtyAndScheduleUpdate, setContent],
+  );
+
   const handleTitleSubmit = useCallback(() => {
     if (noteTypeRef.current === 'text') {
       contentInputRef.current?.focus();
@@ -1570,7 +1583,11 @@ export default function NoteEditorScreen() {
                 style={styles.contentPreview}
               >
                 {content ? (
-                  <Markdown content={content} onColoredNote={hasNoteColor} />
+                  <Markdown
+                    content={content}
+                    onColoredNote={hasNoteColor}
+                    onToggleTask={isReadOnly ? undefined : handleToggleTask}
+                  />
                 ) : (
                   <Text style={{ color: hasNoteColor ? '#999' : colors.placeholder, fontSize: 14 }}>
                     {t('note.contentPlaceholder')}

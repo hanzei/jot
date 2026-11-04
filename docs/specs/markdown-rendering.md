@@ -252,7 +252,7 @@ reach it differently.
 | `` `inline code` `` | Rendered |
 | Fenced and indented code | Rendered **with block layout**; a fence naming a known language is syntax highlighted (§2.3) |
 | Bullet and ordered lists | Rendered |
-| `- [ ]` / `- [x]` | Rendered as ☐ / ☑. Clickable in the webapp's open note only (§2.4) |
+| `- [ ]` / `- [x]` | Rendered as ☐ / ☑. Tappable in the open note on both clients (§2.4) |
 | Blockquotes | Rendered |
 | `[text](url)` and bare `https://…` | Rendered as links — **except on note cards** (§1.1) |
 | `---`, `***` | Horizontal rule |
@@ -485,7 +485,7 @@ to highlighting.
 
 ### 2.4 Task checkboxes in the open note
 
-In the **webapp's modal preview**, each `- [ ]` / `- [x]` renders as a real
+In the **webapp's modal preview** and **mobile's editor read mode**, each `- [ ]` / `- [x]` renders as a real
 checkbox. Ticking one rewrites that marker in `content` — `[ ]` ↔ `[x]`, the one
 character between the brackets — and saves through the normal autosave, exactly
 as typing the change would. The preview stays a preview: a click on a checkbox
@@ -502,7 +502,14 @@ open the editor; a preview without checkboxes keeps the `textbox` role.
 | Webapp modal preview | Checkboxes, named by their item's text |
 | Webapp modal preview of a note in the bin | ☐ / ☑ text |
 | Note cards, both clients | ☐ / ☑ text — a card is one control (§1.1) |
-| Mobile editor read mode | ☐ / ☑ text — not yet interactive |
+| Mobile editor read mode | Tappable checkboxes (nested `Text` with `onPress`, role `checkbox`, named by the item's text) |
+| Mobile editor read mode of a note in the bin | ☐ / ☑ text |
+
+On mobile the box is a nested `Text` with `onPress` — a `View` inside a `Text`
+breaks wrapping — so a tap on it does not reach the read-mode control that opens
+the editor. The toggle goes through the same save path as typing (local DB and
+sync queue), so it works offline. Only `Markdown.tsx` asks for offsets; the card
+renderer never does.
 
 **Locating the marker.** The normalizer tags the ☐ / ☑ text node it emits for
 each checkbox (`task` on the `text` node), so a ☐ typed into the note never
@@ -636,6 +643,7 @@ one client only is exactly the kind of drift this spec exists to prevent.
 | Mobile tap point → rendered offset | `mobile/src/utils/inlineCaret.ts` |
 | Card links-as-text switch | `links` option on both clients' renderers |
 | Task-marker source offsets (§2.4) | `shared/src/taskMarkers.ts` |
+| Mobile tappable checkboxes (§2.4) | `onToggleTask` in `mobile/src/components/inlineNodes.tsx`; save in `NoteEditorScreen.tsx` (`handleToggleTask`) |
 | Webapp interactive checkboxes (§2.4) | `renderInteractiveMarkdown` in `webapp/src/utils/markdown.ts`; click handling (`toggleTaskMarkerAt`) in `webapp/src/components/NoteModal.tsx` |
 | Card no-highlighting switch | `highlight` option on the webapp renderer; mobile's card renderer has no highlighting |
 | Mobile inline leaf rendering (shared by all three) | `mobile/src/components/inlineNodes.tsx` |
@@ -903,10 +911,8 @@ is on both bars but has no keyboard shortcut on either surface.
 
 ## 6. Deliberately not covered
 
-- **Interactive checkboxes on mobile and on cards.** §2.4 covers the webapp's
-  open note only. Mobile's editor read mode could reuse `taskMarkerOffsets`, but
-  a tappable box inside wrapped React Native `Text` is its own piece of work;
-  cards stay non-interactive for the reason in §1.1.
+- **Interactive checkboxes on cards.** §2.4 covers the open note on both
+  clients; cards stay non-interactive for the reason in §1.1.
 - **Block Markdown in list items.** Not a gap to be filled later — §2.1 explains
   why an item cannot hold it.
 - **Syntax highlighting beyond §2.3**: more languages, guessing a language, or
