@@ -12,6 +12,9 @@ interface MarkdownToolbarProps {
    */
   onOutdent?: () => void;
   onIndent?: () => void;
+  /** Dimmed and inert when the move is not allowed for the focused row. */
+  outdentDisabled?: boolean;
+  indentDisabled?: boolean;
   onBold: () => void;
   onItalic: () => void;
   onStrikethrough: () => void;
@@ -52,7 +55,7 @@ const ICON_SIZE = 20;
  * Bold would tear down the very input it was meant to edit. TalkBack is
  * unaffected; accessibility focus is separate from input focus.
  */
-export function MarkdownToolbarContent({ onOutdent, onIndent, onBold, onItalic, onStrikethrough, onHeading, onBullet, onCheckbox, backgroundColor, hasNoteColor }: MarkdownToolbarProps) {
+export function MarkdownToolbarContent({ onOutdent, onIndent, outdentDisabled = false, indentDisabled = false, onBold, onItalic, onStrikethrough, onHeading, onBullet, onCheckbox, backgroundColor, hasNoteColor }: MarkdownToolbarProps) {
   const { t } = useTranslation();
   const { colors } = useTheme();
   // Matches the action bar's barIconColor: a colored note's background is a
@@ -65,22 +68,26 @@ export function MarkdownToolbarContent({ onOutdent, onIndent, onBold, onItalic, 
         <>
           <TouchableOpacity
             onPress={onOutdent}
-            style={styles.fmtBtn}
+            disabled={outdentDisabled}
+            style={[styles.fmtBtn, outdentDisabled && styles.fmtBtnDisabled]}
             hitSlop={HIT_SLOP}
             focusable={false}
             accessibilityRole="button"
             accessibilityLabel={t('note.outdentItem')}
+            accessibilityState={{ disabled: outdentDisabled }}
             testID="format-outdent-btn"
           >
             <IndentDecrease size={ICON_SIZE} color={iconColor} />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={onIndent}
-            style={styles.fmtBtn}
+            disabled={indentDisabled}
+            style={[styles.fmtBtn, indentDisabled && styles.fmtBtnDisabled]}
             hitSlop={HIT_SLOP}
             focusable={false}
             accessibilityRole="button"
             accessibilityLabel={t('note.indentItem')}
+            accessibilityState={{ disabled: indentDisabled }}
             testID="format-indent-btn"
           >
             <IndentIncrease size={ICON_SIZE} color={iconColor} />

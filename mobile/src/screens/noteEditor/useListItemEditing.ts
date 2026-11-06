@@ -98,6 +98,8 @@ export interface ListItemEditing {
   popItemId: string | null;
   /** Whether any row currently holds the caret (drives the Android bar). */
   isEditingItem: boolean;
+  /** Id of the row holding the caret (held through the blur-settle window), or null. */
+  focusedItemId: string | null;
 
   getItemRef: (id: string) => React.RefObject<TextInputType | null>;
   getItemSelectionRef: (id: string) => React.RefObject<ListItemSelectionHandle | null>;
@@ -262,7 +264,10 @@ export function useListItemEditing({
   // Whether any row currently holds the caret. A ref drives the formatting
   // bar's *target* (above); this drives whether Android draws the bar at all,
   // which has to be state.
-  const [isEditingItem, setIsEditingItem] = useState(false);
+  // The id travels as state, not just the ref, so the bar's indent buttons can
+  // enable or disable themselves for whichever row has the caret.
+  const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
+  const isEditingItem = focusedItemId !== null;
   const clearEditingItemRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
@@ -910,7 +915,7 @@ export function useListItemEditing({
         clearTimeout(clearEditingItemRef.current);
         clearEditingItemRef.current = null;
       }
-      setIsEditingItem(true);
+      setFocusedItemId(itemId);
       handleListItemFocus(event);
     },
     [handleListItemFocus],
@@ -924,7 +929,7 @@ export function useListItemEditing({
     if (clearEditingItemRef.current) clearTimeout(clearEditingItemRef.current);
     clearEditingItemRef.current = setTimeout(() => {
       clearEditingItemRef.current = null;
-      setIsEditingItem(false);
+      setFocusedItemId(null);
     }, ITEM_BLUR_SETTLE_MS);
   }, []);
 
@@ -952,6 +957,7 @@ export function useListItemEditing({
     completedItemTexts,
     popItemId,
     isEditingItem,
+    focusedItemId,
     getItemRef,
     getItemSelectionRef,
     itemSelectionRefsMap,

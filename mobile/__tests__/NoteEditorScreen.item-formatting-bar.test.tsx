@@ -89,6 +89,30 @@ describe('NoteEditorScreen list-item formatting bar', () => {
     expect(getByTestId('format-indent-btn')).toBeTruthy();
   });
 
+  it('disables indent on the first row, where there is nothing to nest under', async () => {
+    const { getByTestId } = await renderListEditor();
+
+    expect(getByTestId('format-indent-btn').props.accessibilityState).toEqual({ disabled: true });
+    expect(getByTestId('format-outdent-btn').props.accessibilityState).toEqual({ disabled: true });
+  });
+
+  it('enables indent on a second row and follows the nesting as it changes', async () => {
+    const utils = await renderListEditor();
+    await fireEvent.press(utils.getByTestId('add-list-item'));
+    await act(async () => {
+      await fireEvent(utils.getAllByTestId('list-item-text')[1]!, 'focus', { nativeEvent: {} });
+    });
+    const state = (id: string) => utils.getByTestId(id).props.accessibilityState;
+
+    expect(state('format-indent-btn')).toEqual({ disabled: false });
+    expect(state('format-outdent-btn')).toEqual({ disabled: true });
+
+    await utils.press('format-indent-btn');
+
+    expect(state('format-indent-btn')).toEqual({ disabled: true });
+    expect(state('format-outdent-btn')).toEqual({ disabled: false });
+  });
+
   it('wraps the selected item text and keeps it selected', async () => {
     const { row, type, placeCaret, press } = await renderListEditor();
 

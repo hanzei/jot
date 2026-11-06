@@ -60,6 +60,7 @@ import { getActiveServer, listServers, type ServerAccountEntry } from '../store/
 import { setPendingShare, usePendingShare } from '../store/shareIntent';
 import {
   type LocalItem,
+  changeItemIndent,
   isBlankDraft,
   itemHasChildren,
 } from './noteEditor/listItemModel';
@@ -661,6 +662,7 @@ export default function NoteEditorScreen() {
     completedItemTexts,
     popItemId,
     isEditingItem,
+    focusedItemId,
     getItemRef,
     getItemSelectionRef,
     itemSelectionRefsMap,
@@ -1408,6 +1410,10 @@ export default function NoteEditorScreen() {
 
   const indentItem = useCallback(() => handleIndentFocusedItem(1), [handleIndentFocusedItem]);
   const outdentItem = useCallback(() => handleIndentFocusedItem(-1), [handleIndentFocusedItem]);
+  // Same rule the buttons apply on press, so a button is disabled exactly when
+  // pressing it would do nothing.
+  const canIndentItem = !!focusedItemId && changeItemIndent(items, focusedItemId, 1) !== null;
+  const canOutdentItem = !!focusedItemId && changeItemIndent(items, focusedItemId, -1) !== null;
 
   const noteBackground = hasNoteColor ? color : colors.surface;
   const completedSectionDividerColor = hasNoteColor
@@ -1707,6 +1713,8 @@ export default function NoteEditorScreen() {
                 <MarkdownToolbarContent
                   onOutdent={outdentItem}
                   onIndent={indentItem}
+                  outdentDisabled={!canOutdentItem}
+                  indentDisabled={!canIndentItem}
                   onBold={toggleItemBold}
                   onItalic={toggleItemItalic}
                   onStrikethrough={toggleItemStrikethrough}
@@ -1808,6 +1816,8 @@ export default function NoteEditorScreen() {
         <MarkdownToolbarContent
           onOutdent={outdentItem}
           onIndent={indentItem}
+          outdentDisabled={!canOutdentItem}
+          indentDisabled={!canIndentItem}
           onBold={toggleItemBold}
           onItalic={toggleItemItalic}
           onStrikethrough={toggleItemStrikethrough}

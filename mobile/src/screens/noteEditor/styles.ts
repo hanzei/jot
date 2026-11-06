@@ -248,6 +248,9 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  fmtBtnDisabled: {
+    opacity: 0.35,
+  },
   fmtSep: {
     width: StyleSheet.hairlineWidth,
     height: 18,
