@@ -87,7 +87,7 @@ interface ListItemProps {
 }
 
 // Press-and-hold duration on the drag handle before a reorder drag begins.
-const DRAG_HANDLE_LONG_PRESS_MS = 180;
+const DRAG_HANDLE_LONG_PRESS_MS = 120;
 
 // Drag handle geometry. These feed both styles.dragHandle / the GripVertical
 // icon below and the exported DRAG_HANDLE_WIDTH, so the reserved width stays in
