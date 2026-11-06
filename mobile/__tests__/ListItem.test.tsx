@@ -1,7 +1,7 @@
 import React from 'react';
-import { render, fireEvent, act } from '@testing-library/react-native';
+import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
 import type { TestInstance } from 'test-renderer';
-import { Animated, Platform, StyleSheet, type TextInput } from 'react-native';
+import { Animated, Linking, Platform, StyleSheet, type TextInput } from 'react-native';
 import { VALIDATION } from '@jot/shared';
 import ListItem from '../src/components/ListItem';
 import * as layoutAnimation from '../src/utils/layoutAnimation';
@@ -172,6 +172,97 @@ describe('ListItem', () => {
         <ListItem text="see [docs](https://example.com)" completed={false} editable={false} />,
       );
       expect(tappableTexts(readOnly.getByTestId('list-item-text-readonly'))).toEqual(['docs']);
+    });
+
+    describe('open-link button', () => {
+      function stubLinking() {
+        jest.spyOn(Linking, 'canOpenURL').mockResolvedValue(true);
+        return jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+      }
+
+      it('opens the single link of an editable row', async () => {
+        const openURL = stubLinking();
+        const { getByTestId } = await render(<ListItem text="see [docs](https://example.com/a)" completed={false} />);
+
+        const button = getByTestId('list-item-open-link');
+        expect(button.props.accessibilityLabel).toBe('Open link: docs');
+        await fireEvent.press(button);
+        await waitFor(() => expect(openURL).toHaveBeenCalledWith('https://example.com/a'));
+      });
+
+      it('cannot share a tap target with the delete button beside it', async () => {
+        // On a focused row whose text fills the width, the two buttons sit flush.
+        // Overlapping slops would make a tap on the link's edge land on delete.
+        const { getByTestId } = await render(
+          <ListItem text="see [docs](https://example.com)" completed={false} onDelete={jest.fn()} />,
+        );
+        await fireEvent(getByTestId('list-item-text'), 'focus');
+
+        expect(getByTestId('list-item-open-link').props.hitSlop.right).toBe(0);
+        expect(getByTestId('list-item-delete').props.hitSlop.left).toBe(0);
+      });
+
+      it('is shown without focus, and on completed rows', async () => {
+        const { getByTestId } = await render(<ListItem text="https://example.com" completed={true} />);
+        expect(getByTestId('list-item-open-link')).toBeTruthy();
+      });
+
+      it('is absent without a link Jot follows, and on a read-only row', async () => {
+        const plain = await render(<ListItem text="buy **milk** [call](tel:123)" completed={false} />);
+        expect(plain.queryByTestId('list-item-open-link')).toBeNull();
+
+        const readOnly = await render(
+          <ListItem text="see [docs](https://example.com)" completed={false} editable={false} />,
+        );
+        expect(readOnly.queryByTestId('list-item-open-link')).toBeNull();
+      });
+
+      it('offers a sheet of every distinct link when there are several', async () => {
+        const openURL = stubLinking();
+        const { getByTestId, getAllByTestId, queryAllByTestId } = await render(
+          <ListItem text="[a](https://a.example) [b](https://b.example) [again](https://a.example)" completed={false} />,
+        );
+
+        expect(queryAllByTestId('item-links-sheet-link')).toHaveLength(0);
+        await fireEvent.press(getByTestId('list-item-open-link'));
+        const entries = getAllByTestId('item-links-sheet-link');
+        expect(entries.map((entry) => entry.props.accessibilityLabel)).toEqual(['Open link: a', 'Open link: b']);
+
+        await fireEvent.press(entries[1]!);
+        await waitFor(() => expect(openURL).toHaveBeenCalledWith('https://b.example'));
+        expect(queryAllByTestId('item-links-sheet-link')).toHaveLength(0);
+      });
+
+      it('lists two spellings of one target once, and opens it encoded', async () => {
+        // The shared normalizer encodes every target, so a raw space and its
+        // `%20` are the same address — and the one opened has no raw space,
+        // which iOS would refuse.
+        const openURL = stubLinking();
+        const { getByTestId, queryAllByTestId } = await render(
+          <ListItem text="[a](<https://x.example/a b>) [b](https://x.example/a%20b)" completed={false} />,
+        );
+
+        expect(queryAllByTestId('item-links-sheet-link')).toHaveLength(0);
+        const button = getByTestId('list-item-open-link');
+        expect(button.props.accessibilityLabel).toBe('Open link: a');
+        await fireEvent.press(button);
+        await waitFor(() => expect(openURL).toHaveBeenCalledWith('https://x.example/a%20b'));
+      });
+    });
+
+    describe('open-link sheet state', () => {
+      it('does not reopen by itself after the item drops to one link and back', async () => {
+        const twoLinks = '[a](https://a.example) [b](https://b.example)';
+        const utils = await render(<ListItem text={twoLinks} completed={false} />);
+        await fireEvent.press(utils.getByTestId('list-item-open-link'));
+        expect(utils.getAllByTestId('item-links-sheet-link')).toHaveLength(2);
+
+        // A collaborator's edit removes a link while the sheet is open, then
+        // another adds one back.
+        await utils.rerender(<ListItem text="[a](https://a.example)" completed={false} />);
+        await utils.rerender(<ListItem text={twoLinks} completed={false} />);
+        expect(utils.queryAllByTestId('item-links-sheet-link')).toHaveLength(0);
+      });
     });
 
     it('mounts in source form when it mounts asking for the caret', async () => {
@@ -534,6 +625,43 @@ describe('ListItem', () => {
       // Keystroke 2: backspace on the empty row removes it.
       await backspace(input);
       expect(onBackspaceOnEmpty).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('completed-item suggestions', () => {
+    // Accepting a suggestion replaces the row being typed in, so it is only
+    // offered where nothing would be lost: a row that was empty when it took
+    // the caret and has no sub-items. The row is re-rendered with the typed
+    // text the way the editor does after each keystroke.
+    const row = (text: string, props: Partial<React.ComponentProps<typeof ListItem>> = {}) => (
+      <ListItem text={text} completed={false} completedItemTexts={['Buy milk']} {...props} />
+    );
+
+    it('offers suggestions on a row that was empty when focused', async () => {
+      const { getByTestId, queryByTestId, rerender } = await render(row(''));
+
+      await fireEvent(getByTestId('list-item-text'), 'focus');
+      await rerender(row('buy'));
+
+      expect(queryByTestId('suggestion-chip-Buy milk')).not.toBeNull();
+    });
+
+    it('offers none while editing an item that already had text', async () => {
+      const { getByTestId, queryByTestId, rerender } = await render(row('buy now'));
+
+      await fireEvent(getByTestId('list-item-text'), 'focus');
+      await rerender(row('buy'));
+
+      expect(queryByTestId('suggestion-chip-Buy milk')).toBeNull();
+    });
+
+    it('offers none on a row with sub-items', async () => {
+      const { getByTestId, queryByTestId, rerender } = await render(row('', { hasChildren: true }));
+
+      await fireEvent(getByTestId('list-item-text'), 'focus');
+      await rerender(row('buy', { hasChildren: true }));
+
+      expect(queryByTestId('suggestion-chip-Buy milk')).toBeNull();
     });
   });
 

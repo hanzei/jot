@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { MARKDOWN_CASES } from '@jot/shared';
-import { renderMarkdown } from '../markdown';
+import { MARKDOWN_CASES, toggleTaskMarkerAt } from '@jot/shared';
+import { renderMarkdown, renderInteractiveMarkdown } from '../markdown';
 
 /** The words a reader sees, with the markup removed. */
 function text(html: string): string {
@@ -33,8 +33,21 @@ const conformance: Record<string, () => void> = {
   'inline-code': () => expect(render('inline-code')).toContain('<code>code</code>'),
   'fenced-code': () => {
     const html = render('fenced-code');
-    expect(html).toContain('<pre><code>');
-    expect(html).toContain('const a = 1;');
+    expect(html).toContain(
+      '<pre><code><span data-code="keyword">const</span> a = <span data-code="literal">1</span>;</code></pre>',
+    );
+    expect(text(html).trim()).toBe('const a = 1;');
+  },
+  'fenced-code-unknown-language': () => {
+    expect(render('fenced-code-unknown-language')).toBe('<pre><code>+[-&gt;+&lt;]&gt;.</code></pre>\n');
+  },
+  'fenced-code-markup': () => {
+    const html = render('fenced-code-markup');
+    expect(html).toContain('<span data-code="keyword">b</span>');
+    expect(html).toContain('<span data-code="attribute">class</span>');
+    // The source shows as text; nothing in it became an element.
+    expect(text(html).trim()).toBe('<b class="x">hi</b>');
+    expect(html).not.toContain('<b');
   },
   'indented-code': () => {
     const html = render('indented-code');
@@ -81,6 +94,9 @@ const conformance: Record<string, () => void> = {
     expect(html).not.toContain('<a');
   },
   'mailto-link': () => expect(render('mailto-link')).toContain('href="mailto:a@b.com"'),
+  'link-space-target': () => expect(render('link-space-target')).toContain('href="https://example.com/a%20b"'),
+  'link-non-ascii-target': () =>
+    expect(render('link-non-ascii-target')).toContain('href="https://example.com/caf%C3%A9"'),
   'tel-link': () => {
     const html = render('tel-link');
     expect(html).toContain('call');
@@ -207,6 +223,33 @@ describe('renderMarkdown', () => {
     expect(renderMarkdown('hello world')).toContain('hello world');
   });
 
+  // docs/specs/markdown-rendering.md §2.3. The corpus pins what a highlighted
+  // block looks like; these pin where highlighting does and does not happen.
+  describe('syntax highlighting', () => {
+    it('is off with highlight: false, which note cards pass', () => {
+      const source = MARKDOWN_CASES.find((c) => c.id === 'fenced-code')!.markdown;
+      expect(renderMarkdown(source, { highlight: false })).toBe('<pre><code>const a = 1;</code></pre>\n');
+    });
+
+    it('reaches a fence nested in a list or a blockquote', () => {
+      for (const source of ['- item\n\n  ```js\n  let x;\n  ```', '> ```js\n> let x;\n> ```']) {
+        expect(renderMarkdown(source), source).toContain('<span data-code="keyword">let</span>');
+      }
+    });
+
+    it('leaves inline code alone, language or not', () => {
+      expect(renderMarkdown('`const a = 1;`')).toContain('<code>const a = 1;</code>');
+    });
+
+    // DOMPurify keeps `data-*` with a custom ALLOWED_ATTR; this pins that the
+    // tokens survive the sanitizer, and that no class is ever emitted.
+    it('marks tokens with data-code, never class', () => {
+      const html = renderMarkdown('```js\nconst a = 1;\n```');
+      expect(html).toContain('<span data-code="keyword">const</span>');
+      expect(html).not.toContain('class=');
+    });
+  });
+
   // Note cards render links as text: the card is one control that opens the
   // note, and an anchor inside it would follow the link *and* open the note,
   // since both handlers fire. docs/specs/markdown-rendering.md §1.1.
@@ -235,5 +278,61 @@ describe('renderMarkdown', () => {
       expect(html).toContain('<code>c</code>');
       expect(html).toContain('<li>one</li>');
     });
+  });
+
+  describe('renderInteractiveMarkdown', () => {
+    const interactive = (content: string) => renderInteractiveMarkdown(content).html;
+
+    it('renders task markers as checkboxes named by their item', () => {
+      const { html, hasTasks } = renderInteractiveMarkdown('- [ ] milk\n- [x] **eggs**');
+      expect(hasTasks).toBe(true);
+      expect(html).toContain('<input type="checkbox" data-task-offset="3" aria-label="milk"> milk');
+      expect(html).toContain('<input type="checkbox" data-task-offset="14" checked="" aria-label="eggs"> <strong>eggs</strong>');
+      expect(html).not.toContain('☐');
+    });
+
+    it('keeps ☐ / ☑ text without it, as note cards do', () => {
+      const html = renderMarkdown('- [ ] milk', { links: false });
+      expect(html).not.toContain('<input');
+      expect(html).toContain('☐ milk');
+    });
+
+    it('never turns a ☐ the note itself contains into a checkbox', () => {
+      expect(interactive('☐ typed')).not.toContain('<input');
+      // Nor does text that merely spells the attribute.
+      expect(renderInteractiveMarkdown('`data-task-offset="1"`').hasTasks).toBe(false);
+    });
+
+    it('keeps raw HTML inputs out even with the input tag allowed', () => {
+      const html = interactive('<input type="checkbox"> and - [ ] x');
+      expect(html).not.toContain('<input');
+    });
+
+    it('leaves a checkbox it cannot locate as text', () => {
+      const { html, hasTasks } = renderInteractiveMarkdown('- [ ] real\n  ```\n  - [ ] fake\n  ```');
+      expect(hasTasks).toBe(false);
+      expect(html).not.toContain('<input');
+      expect(html).toContain('☐ real');
+    });
+  });
+});
+
+describe('task checkbox offsets', () => {
+  /** Renders, then toggles the `index`th checkbox by its `data-task-offset`. */
+  function toggleRendered(content: string, index: number): string | null {
+    const host = document.createElement('div');
+    host.innerHTML = renderInteractiveMarkdown(content).html;
+    const checkbox = host.querySelectorAll<HTMLInputElement>('input[data-task-offset]')[index];
+    if (!checkbox) throw new Error(`no checkbox ${index}`);
+    return toggleTaskMarkerAt(content, Number(checkbox.dataset.taskOffset));
+  }
+
+  it('flips the rendered checkbox\'s own marker', () => {
+    expect(toggleRendered('- [ ] a\n- [ ] b', 1)).toBe('- [ ] a\n- [x] b');
+    expect(toggleRendered('> - [x] a', 0)).toBe('> - [ ] a');
+  });
+
+  it('keeps CRLF line endings', () => {
+    expect(toggleRendered('- [ ] a\r\n- [ ] b\r\n', 1)).toBe('- [ ] a\r\n- [x] b\r\n');
   });
 });

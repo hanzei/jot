@@ -48,7 +48,7 @@ import AddImageActionSheet from '../components/AddImageActionSheet';
 import { useUploadNoteImage, useDeleteNoteImage } from '../hooks/useNoteImages';
 import { usePendingImageUploads, useRetryPendingImageUpload, useDismissPendingImageUpload } from '../hooks/usePendingImageUploads';
 import type { ImageUploadFile } from '../api/images';
-import { buildCollaborators, generateId, IMAGE_MAX_PER_NOTE, exceedsCodePointLimit, truncateToCodePoints, validateImageFile as validateImageFileRaw, imageMaxMB, type Collaborator, type NoteImage, type NoteUnread } from '@jot/shared';
+import { buildCollaborators, generateId, IMAGE_MAX_PER_NOTE, exceedsCodePointLimit, toggleTaskMarkerAt, truncateToCodePoints, validateImageFile as validateImageFileRaw, imageMaxMB, type Collaborator, type NoteImage, type NoteUnread } from '@jot/shared';
 import { useServerConfig } from '../hooks/useServerConfig';
 import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
@@ -60,6 +60,7 @@ import { getActiveServer, listServers, type ServerAccountEntry } from '../store/
 import { setPendingShare, usePendingShare } from '../store/shareIntent';
 import {
   type LocalItem,
+  canChangeItemIndent,
   isBlankDraft,
   itemHasChildren,
 } from './noteEditor/listItemModel';
@@ -646,6 +647,7 @@ export default function NoteEditorScreen() {
     savedOrderRef: sync.savedOrderRef,
     withPendingIndicator,
     withItemWriteInFlight: sync.withItemWriteInFlight,
+    completedWrites: sync.completedWrites,
     scrollViewRef,
     openAssigneePicker,
     confirm,
@@ -660,6 +662,7 @@ export default function NoteEditorScreen() {
     completedItemTexts,
     popItemId,
     isEditingItem,
+    focusedItemId,
     getItemRef,
     getItemSelectionRef,
     itemSelectionRefsMap,
@@ -678,6 +681,7 @@ export default function NoteEditorScreen() {
     handleListDragStart,
     handleListDragEnd,
     handleListReorder,
+    handleIndentFocusedItem,
   } = listEditing;
 
   // Pre-filled share content must be flagged dirty so it auto-saves (and is not
@@ -833,6 +837,23 @@ export default function NoteEditorScreen() {
     },
     [contentRef, markDirtyAndScheduleUpdate, setContent],
   );
+
+  // A tapped checkbox in read mode rewrites one marker and saves the way typing
+  // would: local DB and sync queue first, so it works offline. The length never
+  // changes, so the content cap cannot be hit.
+  const handleToggleTask = useCallback(
+    (offset: number) => {
+      const next = toggleTaskMarkerAt(contentRef.current, offset);
+      if (next === null) return;
+      setContent(next);
+      markDirtyAndScheduleUpdate();
+    },
+    [contentRef, markDirtyAndScheduleUpdate, setContent],
+  );
+
+  // Checkboxes are only tappable when the note is editable; a stray `[ ]` in
+  // prose only costs a redundant screen-reader button.
+  const hasTappableTasks = !isReadOnly && /\[[ xX]\]/.test(content);
 
   const handleTitleSubmit = useCallback(() => {
     if (noteTypeRef.current === 'text') {
@@ -1227,6 +1248,7 @@ export default function NoteEditorScreen() {
       const originalIndex = itemIndexMapRef.current.get(item.id);
       if (originalIndex === undefined) return null;
       const baseLevel = item.parentId ? 1 : 0;
+      const hasChildren = itemHasChildren(itemsRef.current, item.id);
       return (
         <ActiveListRow
           dragTranslateX={dragTranslateX}
@@ -1235,7 +1257,7 @@ export default function NoteEditorScreen() {
           // there is a row above it to nest under (index > 0 in the active list).
           // Keeping this in step stops the preview showing an indent that the
           // drop would reject.
-          canIndent={!itemHasChildren(itemsRef.current, item.id) && index > 0}
+          canIndent={!hasChildren && index > 0}
           canOutdent={baseLevel === 1}
           listItemProps={{
             inputRef: getItemRef(item.id),
@@ -1252,6 +1274,7 @@ export default function NoteEditorScreen() {
             collaborators,
             hasNoteColor,
             completedItemTexts,
+            hasChildren,
             onToggle: () => listItemHandlers.onToggle(item.id, !item.completed),
             onChangeText: (text) => listItemHandlers.onChangeText(originalIndex, text),
             onDelete: () => listItemHandlers.onDelete(originalIndex),
@@ -1384,6 +1407,20 @@ export default function NoteEditorScreen() {
   const toggleItemStrikethrough = useCallback(() => {
     applyItemToolbarEdit((state) => toggleInlineMarker(state, '~~'));
   }, [applyItemToolbarEdit]);
+
+  // Same rule the buttons apply on press, so a button is disabled exactly when
+  // pressing it would do nothing.
+  const canIndentItem = !!focusedItemId && canChangeItemIndent(items, focusedItemId, 1);
+  const canOutdentItem = !!focusedItemId && canChangeItemIndent(items, focusedItemId, -1);
+  const itemIndent = useMemo(
+    () => ({
+      onOutdent: () => handleIndentFocusedItem(-1),
+      onIndent: () => handleIndentFocusedItem(1),
+      outdentDisabled: !canOutdentItem,
+      indentDisabled: !canIndentItem,
+    }),
+    [canIndentItem, canOutdentItem, handleIndentFocusedItem],
+  );
 
   const noteBackground = hasNoteColor ? color : colors.surface;
   const completedSectionDividerColor = hasNoteColor
@@ -1559,21 +1596,40 @@ export default function NoteEditorScreen() {
                 testID="note-content-input"
               />
             ) : (
+              <>
               <TouchableOpacity
                 onPress={isReadOnly ? undefined : () => setIsEditingContent(true)}
                 disabled={isReadOnly}
+                // An accessible touchable is one screen-reader element and can hide
+                // the checkboxes inside it, so with tappable checkboxes it stops
+                // being one; `edit-content` below carries its role instead.
+                accessible={!hasTappableTasks}
                 activeOpacity={1}
                 testID="content-preview"
                 style={styles.contentPreview}
               >
                 {content ? (
-                  <Markdown content={content} onColoredNote={hasNoteColor} />
+                  <Markdown
+                    content={content}
+                    onColoredNote={hasNoteColor}
+                    onToggleTask={isReadOnly ? undefined : handleToggleTask}
+                  />
                 ) : (
                   <Text style={{ color: hasNoteColor ? '#999' : colors.placeholder, fontSize: 14 }}>
                     {t('note.contentPlaceholder')}
                   </Text>
                 )}
               </TouchableOpacity>
+              {hasTappableTasks && (
+                <TouchableOpacity
+                  onPress={() => setIsEditingContent(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('note.editContent')}
+                  style={styles.screenReaderOnly}
+                  testID="edit-content"
+                />
+              )}
+              </>
             )}
 
             {/* iOS: formatting toolbar as InputAccessoryView (docks above keyboard).
@@ -1662,6 +1718,7 @@ export default function NoteEditorScreen() {
             {Platform.OS === 'ios' && !isReadOnly && (
               <InputAccessoryView nativeID={ITEM_MARKDOWN_TOOLBAR_ID}>
                 <MarkdownToolbarContent
+                  indent={itemIndent}
                   onBold={toggleItemBold}
                   onItalic={toggleItemItalic}
                   onStrikethrough={toggleItemStrikethrough}
@@ -1761,6 +1818,7 @@ export default function NoteEditorScreen() {
           accessory view instead. */}
       {Platform.OS === 'android' && noteType === 'list' && isEditingItem && !isReadOnly && (
         <MarkdownToolbarContent
+          indent={itemIndent}
           onBold={toggleItemBold}
           onItalic={toggleItemItalic}
           onStrikethrough={toggleItemStrikethrough}

@@ -17,7 +17,6 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { useSQLiteContext } from 'expo-sqlite';
-import { searchUsers } from '../api/users';
 import { useNoteShares, useShareNote, useUnshareNote, useLeaveNote } from '../hooks/useNotes';
 import UserAvatar from '../components/UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
@@ -29,6 +28,7 @@ import { useUsers } from '../store/UsersContext';
 import { getLocalShareHistory } from '../db/noteQueries';
 import { buildShareSuggestions, recentShareTargets, type User, type NoteShare } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import { jot } from '../api/jot';
 
 type ShareRouteProp = RouteProp<RootStackParamList, 'Share'>;
 
@@ -156,7 +156,7 @@ export default function ShareScreen() {
     setSearchError(false);
     setSearchTruncated(false);
 
-    searchUsers(debouncedQuery)
+    jot.users.search(debouncedQuery)
       .then((res) => {
         if (cancelled) return;
         setSearchResults(res.users);

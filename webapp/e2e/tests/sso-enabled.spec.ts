@@ -26,7 +26,7 @@ interface Me {
 
 /** The logged-in user as the server sees it, through the page's own session cookie. */
 async function currentUser(page: Page): Promise<Me> {
-  const response = await page.request.get('/api/v1/me');
+  const response = await page.request.get('/api/v1/users/me');
   expect(response.ok(), `GET /me failed with ${response.status()}`).toBeTruthy();
   const body = (await response.json()) as { user: Me };
   return body.user;
@@ -176,7 +176,7 @@ test.describe('SSO enabled (mock IdP)', () => {
     await expect(ssoLoginLink(page)).toBeVisible();
 
     // And no session was created.
-    const me = await page.request.get('/api/v1/me');
+    const me = await page.request.get('/api/v1/users/me');
     expect(me.status()).toBe(401);
 
     await page.reload();

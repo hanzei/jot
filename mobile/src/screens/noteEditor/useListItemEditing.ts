@@ -12,9 +12,18 @@ import * as Haptics from 'expo-haptics';
 import type { TFunction } from 'i18next';
 import {
   VALIDATION,
+  applyCompletedValues,
+  completedCascadeScope,
+  completedPriorById,
+  distinctCompletedTexts,
+  findSuggestedItem,
   generateId,
+  reinsertIds,
+  reviveSuggestedItem,
   splitPasteIntoItems,
   truncateToCodePoints,
+  type CompletedWriteTracker,
+  type ServerCompletedItem,
 } from '@jot/shared';
 import {
   useDeleteCompletedItems,
@@ -27,6 +36,7 @@ import { animateListReflow } from '../../utils/layoutAnimation';
 import type { ListItemSelectionHandle } from '../../components/ListItem';
 import {
   applyCompletedCascade,
+  changeItemIndent,
   dropTargetParentId,
   indentLevelFromDrag,
   itemHasChildren,
@@ -41,33 +51,6 @@ const FOCUSED_INPUT_KEYBOARD_MARGIN = 120;
 // How long the Android bar outlives a row's blur before hiding, so tapping from
 // one row to the next does not flash it away and back.
 const ITEM_BLUR_SETTLE_MS = 150;
-
-// Re-inserts each id in `idsToRestore` back into `currentIds`, anchored right
-// after its nearest still-present predecessor in `originalOrder` (or at the
-// start, if none precedes it). Used to revert a failed bulk delete: reverting
-// to a stale full snapshot would also discard any edit or addition made to
-// *other* items while the request was in flight, so instead only the deleted
-// ids are restored, on top of whatever `currentIds` has become by the time
-// the failure is handled.
-function reinsertIds(currentIds: string[], originalOrder: string[], idsToRestore: Set<string>): string[] {
-  const present = new Set(currentIds);
-  const result = [...currentIds];
-  for (const [i, id] of originalOrder.entries()) {
-    if (!idsToRestore.has(id)) continue;
-    let anchor: string | null = null;
-    for (let j = i - 1; j >= 0; j--) {
-      const candidate = originalOrder[j]!;
-      if (present.has(candidate)) {
-        anchor = candidate;
-        break;
-      }
-    }
-    const insertAt = anchor ? result.indexOf(anchor) + 1 : 0;
-    result.splice(insertAt, 0, id);
-    present.add(id);
-  }
-  return result;
-}
 
 export interface UseListItemEditingParams {
   doc: EditorDocHandle;
@@ -90,6 +73,8 @@ export interface UseListItemEditingParams {
    * the optimistic one.
    */
   withItemWriteInFlight: <T>(op: () => Promise<T>) => Promise<T>;
+  /** The editor's completed-write tracker (owned by useNoteEditorSync). */
+  completedWrites: CompletedWriteTracker;
   /** The editor's scroll container, kept scrolled to the focused row. */
   scrollViewRef: React.RefObject<ScrollView | null>;
   /** Opens the assignee picker for a row (the picker's state lives in the screen). */
@@ -113,6 +98,8 @@ export interface ListItemEditing {
   popItemId: string | null;
   /** Whether any row currently holds the caret (drives the Android bar). */
   isEditingItem: boolean;
+  /** Id of the row holding the caret (held through the blur-settle window), or null. */
+  focusedItemId: string | null;
 
   getItemRef: (id: string) => React.RefObject<TextInputType | null>;
   getItemSelectionRef: (id: string) => React.RefObject<ListItemSelectionHandle | null>;
@@ -144,6 +131,8 @@ export interface ListItemEditing {
   handleListDragStart: (event: ReorderableListDragStartEvent) => void;
   handleListDragEnd: (event: ReorderableListDragEndEvent) => void;
   handleListReorder: (event: ReorderableListReorderEvent) => void;
+  /** Indents (1) or outdents (-1) the row holding the caret by one level. */
+  handleIndentFocusedItem: (delta: 1 | -1) => void;
 }
 
 /**
@@ -173,6 +162,7 @@ export function useListItemEditing({
   savedOrderRef,
   withPendingIndicator,
   withItemWriteInFlight,
+  completedWrites,
   scrollViewRef,
   openAssigneePicker,
   confirm,
@@ -195,6 +185,61 @@ export function useListItemEditing({
   // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   deleteCompletedItemsRef.current = deleteCompletedItemsMutation.mutateAsync;
 
+  // Persists a completed-flag change already applied to the editor. `priorById`
+  // holds the value each changed item had before it; `request` sends the write
+  // and resolves to the note's full item list, or to [] when it was queued
+  // offline. Runs inside the item-write in-flight window, so until the
+  // reconciled state is set no note re-read is applied over it. Resolves false
+  // only when the request failed and the flags were reverted.
+  const persistCompletedWrite = useCallback(async (
+    priorById: ReadonlyMap<string, boolean>,
+    request: () => Promise<ServerCompletedItem[]>,
+  ): Promise<boolean> => {
+    const applyItems = (completedById: ReadonlyMap<string, boolean>) => {
+      const next = applyCompletedValues(itemsRef.current, completedById);
+      if (next === itemsRef.current) return;
+      itemsRef.current = next;
+      setItems(next);
+    };
+    // Advance the baseline so the diff engine does not re-patch completed
+    const syncBaseline = (completedById: ReadonlyMap<string, boolean>) => {
+      for (const entry of completedById) {
+        const snap = savedItemsRef.current.get(entry[0]);
+        if (snap) savedItemsRef.current.set(entry[0], { ...snap, completed: entry[1] });
+      }
+    };
+    const write = completedWrites.begin(priorById);
+    try {
+      const serverItems = await request();
+      if (serverItems.length > 0) {
+        // Online: the response is the note's full item list as of this write, so
+        // it still reports any row tapped after this one unchecked — apply only
+        // what the gate says it may still decide, composing on the latest state
+        // so a concurrent write's optimistic change is preserved.
+        const completedById = completedWrites.accept(write, serverItems);
+        applyItems(completedById);
+        syncBaseline(completedById);
+      } else {
+        // Offline: the local DB already holds the change; advance the baseline
+        // for the items no later write has taken over.
+        const decided = new Map<string, boolean>();
+        for (const entry of priorById) {
+          if (completedWrites.decides(write, entry[0])) decided.set(entry[0], !entry[1]);
+        }
+        syncBaseline(decided);
+      }
+      return true;
+    } catch {
+      // Revert only the items no later write has taken over, so a concurrent
+      // write's optimistic state survives.
+      applyItems(completedWrites.fail(write));
+      setSaveError('note.failedSaveChanges');
+      return false;
+    } finally {
+      completedWrites.end(write);
+    }
+  }, [completedWrites, itemsRef, savedItemsRef, setItems, setSaveError]);
+
   // Id of the item the user just checked off, so its completed-section row pops
   // on mount. Cleared shortly after so a later collapse/expand doesn't re-pop.
   const [popItemId, setPopItemId] = useState<string | null>(null);
@@ -209,6 +254,15 @@ export function useListItemEditing({
   const itemInputRefsMap = useRef(new Map<string, React.RefObject<TextInputType | null>>());
   const autoFocusItemIdRef = useRef<string | null>(null);
   const autoFocusClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // autoFocus is only consumed at mount, so arm it for the row that is about to
+  // (re)mount and clear it after a short delay: a later unmount/remount of the
+  // same id must not re-open the keyboard. Cancels any pending clear from a
+  // previous call before rescheduling.
+  const armAutoFocus = useCallback((itemId: string) => {
+    autoFocusItemIdRef.current = itemId;
+    if (autoFocusClearTimerRef.current !== null) clearTimeout(autoFocusClearTimerRef.current);
+    autoFocusClearTimerRef.current = setTimeout(() => { autoFocusItemIdRef.current = null; }, 500);
+  }, []);
   // Id of the list item whose input currently has focus, if any. Tracked so a
   // drag-triggered reorder can restore focus to it (see commitDrag) — the
   // reorderable list forces a remount of any row whose slot changes, which
@@ -219,7 +273,13 @@ export function useListItemEditing({
   // Whether any row currently holds the caret. A ref drives the formatting
   // bar's *target* (above); this drives whether Android draws the bar at all,
   // which has to be state.
-  const [isEditingItem, setIsEditingItem] = useState(false);
+  // The id travels as state, not just the ref, so the bar's indent buttons can
+  // enable or disable themselves for whichever row has the caret.
+  const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
+  // The same id as `focusedItemId`, readable without a dependency: held through
+  // the blur-settle window, unlike `focusedItemIdRef`, which blur clears at once.
+  const heldFocusedItemIdRef = useRef<string | null>(null);
+  const isEditingItem = focusedItemId !== null;
   const clearEditingItemRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
@@ -271,8 +331,9 @@ export function useListItemEditing({
     return generateId();
   }
 
+  // Resolves false only when the request failed and the flags were reverted.
   const handleItemCompletedToggle = useCallback(
-    async (itemId: string, completed: boolean) => {
+    async (itemId: string, completed: boolean): Promise<boolean> => {
       // itemsRef.current is the authoritative latest state here: each branch
       // below writes the new array back to it synchronously, so a rapid
       // follow-up toggle (fired before React re-renders) composes on the most
@@ -282,26 +343,15 @@ export function useListItemEditing({
       // rollback and save baseline (issue: mobile item flicker).
       const before = itemsRef.current;
       const target = before.find((item) => item.id === itemId);
-      if (!target || target.completed === completed) return;
+      if (!target || target.completed === completed) return true;
 
-      // Capture the prior completed state of just the items this toggle touches
+      // Capture the prior completed state of just the items this toggle changes
       // (the item plus, for a top-level item, its children — or, for a child
       // being unchecked, its parent) from that latest state. Used to advance
       // the save baseline and to revert precisely on failure — without
       // clobbering any other item whose state may change before this async
       // call settles.
-      const cascadeToChildren = target.parentId === null;
-      const uncompleteParent = target.parentId !== null && !completed;
-      const priorCompletedById = new Map(
-        before
-          .filter(
-            (item) =>
-              item.id === itemId ||
-              (cascadeToChildren && item.parentId === itemId) ||
-              (uncompleteParent && item.id === target.parentId),
-          )
-          .map((item) => [item.id, item.completed]),
-      );
+      const priorById = completedPriorById(before, completedCascadeScope(before, itemId, completed), completed);
 
       // Optimistic cascade applied immediately, with a subtle settle as the
       // item moves between the active list and the completed section.
@@ -323,7 +373,7 @@ export function useListItemEditing({
       const currentNoteId = noteIdRef.current;
       if (!currentNoteId) {
         markDirtyAndScheduleUpdate();
-        return;
+        return true;
       }
 
       // Cancel any pending debounced save to avoid a race with the toggle API call
@@ -332,52 +382,10 @@ export function useListItemEditing({
       // The request and the reconcile that follows it both run inside the
       // in-flight window: until the reconciled state is set, a note re-read
       // still describes this item as it was before the tap.
-      await withItemWriteInFlight(async () => {
-        try {
-          const serverItems = await toggleItemCompletedRef.current({
-            noteId: currentNoteId,
-            itemId,
-            completed,
-          });
-          if (serverItems.length > 0) {
-            // Online: reconcile only completed flags from server response,
-            // composing on (and writing back) the latest state so a concurrent
-            // toggle's optimistic change is preserved.
-            const completedById = new Map(serverItems.map((item) => [item.id, item.completed]));
-            const reconciled = itemsRef.current.map((item) => {
-              const serverCompleted = completedById.get(item.id);
-              return serverCompleted === undefined ? item : { ...item, completed: serverCompleted };
-            });
-            itemsRef.current = reconciled;
-            setItems(reconciled);
-            // Advance the baseline so the diff engine does not re-patch completed
-            for (const [id, comp] of completedById) {
-              const snap = savedItemsRef.current.get(id);
-              if (snap) savedItemsRef.current.set(id, { ...snap, completed: comp });
-            }
-          } else {
-            // Offline: cascade was applied to local DB; advance baseline here too
-            for (const [id, prior] of priorCompletedById) {
-              if (prior === completed) continue;
-              const snap = savedItemsRef.current.get(id);
-              if (snap) savedItemsRef.current.set(id, { ...snap, completed });
-            }
-          }
-        } catch {
-          // Revert only the items this toggle changed, restoring their prior
-          // completed values, so a concurrent toggle's optimistic state survives.
-          const reverted = itemsRef.current.map((item) =>
-            priorCompletedById.has(item.id)
-              ? { ...item, completed: priorCompletedById.get(item.id)! }
-              : item,
-          );
-          itemsRef.current = reverted;
-          setItems(reverted);
-          setSaveError('note.failedSaveChanges');
-        }
-      });
+      return withItemWriteInFlight(() => persistCompletedWrite(priorById, () =>
+        toggleItemCompletedRef.current({ noteId: currentNoteId, itemId, completed })));
     },
-    [cancelScheduledSave, itemsRef, markDirtyAndScheduleUpdate, noteIdRef, savedItemsRef, setItems, setSaveError, withItemWriteInFlight],
+    [cancelScheduledSave, itemsRef, markDirtyAndScheduleUpdate, noteIdRef, persistCompletedWrite, setItems, withItemWriteInFlight],
   );
 
   // Unchecks every currently-completed item in one bulk request (overflow
@@ -399,37 +407,10 @@ export function useListItemEditing({
       return;
     }
 
-    await withItemWriteInFlight(() => withPendingIndicator(async () => {
-      try {
-        const serverItems = await uncheckAllItemsRef.current({ noteId, itemIds: ids });
-        if (serverItems.length > 0) {
-          const completedById = new Map(serverItems.map((item) => [item.id, item.completed]));
-          const reconciled = itemsRef.current.map((item) => {
-            const c = completedById.get(item.id);
-            return c === undefined ? item : { ...item, completed: c };
-          });
-          itemsRef.current = reconciled;
-          setItems(reconciled);
-          for (const [id, comp] of completedById) {
-            const snap = savedItemsRef.current.get(id);
-            if (snap) savedItemsRef.current.set(id, { ...snap, completed: comp });
-          }
-        } else {
-          // Offline: the local write already applied the uncheck; advance the
-          // save baseline so the diff engine does not re-patch it later.
-          for (const id of ids) {
-            const snap = savedItemsRef.current.get(id);
-            if (snap) savedItemsRef.current.set(id, { ...snap, completed: false });
-          }
-        }
-      } catch {
-        const reverted = itemsRef.current.map((item) => (ids.includes(item.id) ? { ...item, completed: true } : item));
-        itemsRef.current = reverted;
-        setItems(reverted);
-        setSaveError('note.failedSaveChanges');
-      }
-    }));
-  }, [itemsRef, markDirtyAndScheduleUpdate, noteIdRef, savedItemsRef, setItems, setSaveError, withItemWriteInFlight, withPendingIndicator]);
+    await withItemWriteInFlight(() => withPendingIndicator(() =>
+      persistCompletedWrite(new Map(ids.map((id) => [id, true])), () =>
+        uncheckAllItemsRef.current({ noteId, itemIds: ids }))));
+  }, [itemsRef, markDirtyAndScheduleUpdate, noteIdRef, persistCompletedWrite, setItems, withItemWriteInFlight, withPendingIndicator]);
 
   // Deletes every currently-completed item after a confirm dialog (overflow
   // menu); mobile has no in-editor undo-bar equivalent to the web's
@@ -564,7 +545,7 @@ export function useListItemEditing({
     // Mark before setItems so the item mounts with autoFocus={true}, which
     // reliably opens the soft keyboard (programmatic focus() doesn't always
     // trigger the IME on Android for newly mounted inputs).
-    autoFocusItemIdRef.current = newId;
+    armAutoFocus(newId);
     // Ease the new row in rather than having the list jump to make room.
     animateListReflow();
     setItems((prev) => [
@@ -572,12 +553,7 @@ export function useListItemEditing({
       { id: newId, text: '', completed: false, position: prev.length, parentId: null, assigned_to: '' },
     ]);
     markDirtyAndScheduleUpdate();
-    // autoFocus is only consumed at mount; clear after a short delay so a
-    // later unmount/remount of the same ID doesn't re-open the keyboard.
-    // Cancel any pending clear from a previous rapid tap before rescheduling.
-    if (autoFocusClearTimerRef.current !== null) clearTimeout(autoFocusClearTimerRef.current);
-    autoFocusClearTimerRef.current = setTimeout(() => { autoFocusItemIdRef.current = null; }, 500);
-  }, [markDirtyAndScheduleUpdate, setItems]);
+  }, [armAutoFocus, markDirtyAndScheduleUpdate, setItems]);
 
   // handleItemEnterAtCursor mirrors the webapp's Enter-key handling:
   //  - cursor at the very start of a non-empty item -> insert a blank item
@@ -685,53 +661,32 @@ export function useListItemEditing({
 
   const handleAcceptSuggestion = useCallback(
     (itemId: string, suggestionText: string) => {
-      // Capture the completed item ID from the ref snapshot so we can focus it after setItems
-      const restoredId = itemsRef.current.find(
-        (item) => item.completed && item.text.trim().toLowerCase() === suggestionText.toLowerCase(),
-      )?.id;
+      const current = itemsRef.current;
+      const completedItem = findSuggestedItem(current, suggestionText);
 
-      setItems((prev) => {
-        const completedItem = prev.find(
-          (item) => item.completed && item.text.trim().toLowerCase() === suggestionText.toLowerCase(),
-        );
+      if (!completedItem) {
+        const updated = current.map((item) => (item.id === itemId ? { ...item, text: suggestionText } : item));
+        itemsRef.current = updated;
+        setItems(updated);
+        markDirtyAndScheduleUpdate();
+        return;
+      }
 
-        if (!completedItem) {
-          return prev.map((item) => (item.id === itemId ? { ...item, text: suggestionText } : item));
-        }
-
-        const currentUnchecked = prev.filter((item) => !item.completed);
-        // itemId is always an unchecked item so findIndex should never return -1; Math.max guards against stale ref races
-        const insertAt = Math.max(0, currentUnchecked.findIndex((item) => item.id === itemId));
-
-        const filtered = prev.filter(
-          (item) => item.id !== itemId && item.id !== completedItem.id,
-        );
-
-        const restoredItem: LocalItem = { ...completedItem, completed: false };
-        const remainingUncompleted = filtered.filter((item) => !item.completed);
-        const remainingCompleted = filtered.filter((item) => item.completed);
-
-        const newUncompleted = [
-          ...remainingUncompleted.slice(0, insertAt),
-          restoredItem,
-          ...remainingUncompleted.slice(insertAt),
-        ].map((item, i) => ({ ...item, position: i }));
-
-        return [
-          ...newUncompleted,
-          ...remainingCompleted.map((item, i) => ({ ...item, position: newUncompleted.length + i })),
-        ];
+      void reviveSuggestedItem(itemId, completedItem.id, {
+        read: () => itemsRef.current,
+        commit: (next) => {
+          itemsRef.current = next;
+          setItems(next);
+        },
+        uncheck: (id) => handleItemCompletedToggle(id, false),
+        save: markDirtyAndScheduleUpdate,
       });
 
-      markDirtyAndScheduleUpdate();
-
-      if (restoredId) {
-        setTimeout(() => {
-          itemInputRefsMap.current.get(restoredId)?.current?.focus();
-        }, 50);
-      }
+      setTimeout(() => {
+        itemInputRefsMap.current.get(completedItem.id)?.current?.focus();
+      }, 50);
     },
-    [itemsRef, markDirtyAndScheduleUpdate, setItems],
+    [handleItemCompletedToggle, itemsRef, markDirtyAndScheduleUpdate, setItems],
   );
 
   const handleAssignItem = useCallback(
@@ -774,18 +729,7 @@ export function useListItemEditing({
   const uncheckedItems = useMemo(() => items.filter((item) => !item.completed), [items]);
   const checkedItems = useMemo(() => items.filter((item) => item.completed), [items]);
 
-  const completedItemTexts = useMemo(() => {
-    const seen = new Set<string>();
-    const texts: string[] = [];
-    for (const item of checkedItems) {
-      const trimmed = item.text.trim();
-      if (trimmed && !seen.has(trimmed.toLowerCase())) {
-        seen.add(trimmed.toLowerCase());
-        texts.push(trimmed);
-      }
-    }
-    return texts;
-  }, [checkedItems]);
+  const completedItemTexts = useMemo(() => distinctCompletedTexts(checkedItems), [checkedItems]);
 
   // Refs to avoid recreating handleListReorder on every items change
   const checkedItemsRef = useRef(checkedItems);
@@ -875,17 +819,38 @@ export function useListItemEditing({
       // Re-arm the same autoFocus-on-mount mechanism handleAddItem uses so the
       // remounted row re-opens the keyboard on itself instead of leaving focus
       // to fall back elsewhere (observed: the title input).
-      if (focusedItemIdRef.current) {
-        autoFocusItemIdRef.current = focusedItemIdRef.current;
-        if (autoFocusClearTimerRef.current !== null) clearTimeout(autoFocusClearTimerRef.current);
-        autoFocusClearTimerRef.current = setTimeout(() => { autoFocusItemIdRef.current = null; }, 500);
-      }
+      if (focusedItemIdRef.current) armAutoFocus(focusedItemIdRef.current);
       // Merge with existing checked items and normalize so each parent's
       // children stay contiguous.
       setItems(normalizeItemOrder([...reorderedUnchecked, ...checkedItemsRef.current]));
       markDirtyAndScheduleUpdate();
     },
-    [markDirtyAndScheduleUpdate, dragTranslateX, itemsRef, setItems],
+    [armAutoFocus, markDirtyAndScheduleUpdate, dragTranslateX, itemsRef, setItems],
+  );
+
+  // The formatting bar's indent / outdent buttons: moves the row holding the
+  // caret one level, the tap equivalent of dragging it sideways. A no-op when
+  // no row has focus or the move isn't allowed (see changeItemIndent).
+  const handleIndentFocusedItem = useCallback(
+    (delta: 1 | -1) => {
+      // The ref is nulled the instant a row blurs, but the buttons follow the
+      // state, which holds the id through the blur-settle window (and while a
+      // moved row remounts). Fall back to it so a button that looks enabled in
+      // that window still acts on the row it was enabled for.
+      const itemId = focusedItemIdRef.current ?? heldFocusedItemIdRef.current;
+      if (!itemId) return;
+      const next = changeItemIndent(itemsRef.current, itemId, delta);
+      if (!next) return;
+      // Outdenting a middle child re-seats its later siblings above it, so the
+      // row's slot can change and the list remounts it — re-arm focus exactly as
+      // commitDrag does so the keyboard stays up on the row being moved.
+      armAutoFocus(itemId);
+      animateListReflow();
+      itemsRef.current = next;
+      setItems(next);
+      markDirtyAndScheduleUpdate();
+    },
+    [armAutoFocus, itemsRef, markDirtyAndScheduleUpdate, setItems],
   );
 
   const handleListReorder = useCallback(
@@ -955,7 +920,8 @@ export function useListItemEditing({
         clearTimeout(clearEditingItemRef.current);
         clearEditingItemRef.current = null;
       }
-      setIsEditingItem(true);
+      heldFocusedItemIdRef.current = itemId;
+      setFocusedItemId(itemId);
       handleListItemFocus(event);
     },
     [handleListItemFocus],
@@ -969,7 +935,8 @@ export function useListItemEditing({
     if (clearEditingItemRef.current) clearTimeout(clearEditingItemRef.current);
     clearEditingItemRef.current = setTimeout(() => {
       clearEditingItemRef.current = null;
-      setIsEditingItem(false);
+      heldFocusedItemIdRef.current = null;
+      setFocusedItemId(null);
     }, ITEM_BLUR_SETTLE_MS);
   }, []);
 
@@ -997,6 +964,7 @@ export function useListItemEditing({
     completedItemTexts,
     popItemId,
     isEditingItem,
+    focusedItemId,
     getItemRef,
     getItemSelectionRef,
     itemSelectionRefsMap,
@@ -1015,5 +983,6 @@ export function useListItemEditing({
     handleListDragStart,
     handleListDragEnd,
     handleListReorder,
+    handleIndentFocusedItem,
   };
 }

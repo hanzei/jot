@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyCompletedCascade, dropTargetParentId, groupNoteItems, itemHasChildren, normalizeItemOrder, type ListItem } from '../listItems';
+import { applyCompletedCascade, applyCompletedValues, canChangeItemIndent, changeItemIndent, completedCascadeScope, completedPriorById, dropTargetParentId, groupNoteItems, itemHasChildren, moveItemIntoSlot, normalizeItemOrder, reinsertIds, undoMoveItemIntoSlot, type ListItem } from '../listItems';
 
 // Terse builder so each case reads as the structure under test rather than as
 // six fields of boilerplate per item.
@@ -158,6 +158,129 @@ describe('applyCompletedCascade', () => {
   });
 });
 
+describe('moveItemIntoSlot', () => {
+  const byId = (items: ListItem[], id: string) => items.find(it => it.id === id)!;
+
+  it('replaces the slot row with the moved item and renumbers', () => {
+    const result = moveItemIntoSlot([
+      item('a'),
+      item('typing', { text: 'mil' }),
+      item('b'),
+      item('milk', { completed: true }),
+    ], 'typing', 'milk');
+    expect(ids(result)).toEqual(['a', 'milk', 'b']);
+    expect(result.map(it => it.position)).toEqual([0, 1, 2]);
+  });
+
+  it('leaves the completed flag alone; unchecking is the toggle path\'s job', () => {
+    const result = moveItemIntoSlot([
+      item('typing'),
+      item('p', { completed: true }),
+      item('p1', { parentId: 'p', completed: true }),
+    ], 'typing', 'p1');
+    expect(result.map(it => it.completed)).toEqual([true, true]);
+  });
+
+  it('takes the slot even when the moved item sat above it', () => {
+    const result = moveItemIntoSlot([
+      item('milk', { completed: true }),
+      item('a'),
+      item('b'),
+      item('typing'),
+      item('c'),
+    ], 'typing', 'milk');
+    expect(ids(result)).toEqual(['a', 'b', 'milk', 'c']);
+  });
+
+  it('keeps a moved child in its own group, ignoring the slot row\'s indent', () => {
+    const result = moveItemIntoSlot([
+      item('a'),
+      item('typing', { parentId: 'a' }),
+      item('b'),
+      item('b1', { parentId: 'b', completed: true }),
+    ], 'typing', 'b1');
+    expect(ids(result)).toEqual(['a', 'b', 'b1']);
+    expect(byId(result, 'b1').parentId).toBe('b');
+  });
+
+  it('keeps a moved top-level item at top level when the slot row was indented', () => {
+    const result = moveItemIntoSlot([
+      item('a'),
+      item('typing', { parentId: 'a' }),
+      item('milk', { completed: true }),
+    ], 'typing', 'milk');
+    expect(byId(result, 'milk').parentId).toBeNull();
+  });
+
+  it('promotes the children of a slot row that was a parent', () => {
+    const result = moveItemIntoSlot([
+      item('typing'),
+      item('t1', { parentId: 'typing' }),
+      item('milk', { completed: true }),
+    ], 'typing', 'milk');
+    expect(ids(result)).toEqual(['milk', 't1']);
+    expect(parents(result)).toEqual([null, null]);
+  });
+
+  it('returns the input unchanged for an unknown item id', () => {
+    const items = [item('typing'), item('milk', { completed: true })];
+    expect(moveItemIntoSlot(items, 'typing', 'nope')).toBe(items);
+  });
+});
+
+describe('reinsertIds', () => {
+  it('puts each id back after its nearest still-present original predecessor', () => {
+    // "c" was added meanwhile; "b" and "d" are restored around it.
+    expect(reinsertIds(['a', 'c'], ['a', 'b', 'd'], new Set(['b', 'd']))).toEqual(['a', 'b', 'd', 'c']);
+  });
+
+  it('puts an id with no surviving predecessor at the start', () => {
+    expect(reinsertIds(['b'], ['a', 'b'], new Set(['a']))).toEqual(['a', 'b']);
+  });
+});
+
+describe('undoMoveItemIntoSlot', () => {
+  const original = () => [
+    item('a'),
+    item('typing', { text: 'mil' }),
+    item('b'),
+    item('milk', { completed: true }),
+  ];
+
+  it('restores the list the move started from', () => {
+    const before = original();
+    const moved = moveItemIntoSlot(before, 'typing', 'milk');
+    const undone = undoMoveItemIntoSlot(moved, before, 'typing', 'milk');
+    expect(ids(undone)).toEqual(['a', 'typing', 'b', 'milk']);
+    expect(undone.find(it => it.id === 'typing')?.text).toBe('mil');
+  });
+
+  it('puts a child back in its group and the typed row back in its own place', () => {
+    const before = [
+      item('a'),
+      item('typing'),
+      item('p'),
+      item('p1', { parentId: 'p', completed: true }),
+    ];
+    const moved = moveItemIntoSlot(before, 'typing', 'p1');
+    const undone = undoMoveItemIntoSlot(moved, before, 'typing', 'p1');
+    expect(ids(undone)).toEqual(['a', 'typing', 'p', 'p1']);
+  });
+
+  it('keeps edits made to the moved item meanwhile', () => {
+    const before = original();
+    const moved = moveItemIntoSlot(before, 'typing', 'milk')
+      .map(it => (it.id === 'milk' ? { ...it, text: 'Milk 2L' } : it));
+    const undone = undoMoveItemIntoSlot(moved, before, 'typing', 'milk');
+    expect(undone.find(it => it.id === 'milk')?.text).toBe('Milk 2L');
+  });
+
+  it('returns the input unchanged when the slot row is already present', () => {
+    const before = original();
+    expect(undoMoveItemIntoSlot(before, before, 'typing', 'milk')).toBe(before);
+  });
+});
+
 describe('groupNoteItems', () => {
   const noteItem = (id: string, position: number, parent_id: string | null = null) => ({ id, position, parent_id });
   const idsOf = (items: { id: string }[]) => items.map(it => it.id);
@@ -197,5 +320,95 @@ describe('groupNoteItems', () => {
     const input = [noteItem('a1', 0, 'a'), noteItem('a', 1)];
     groupNoteItems(input);
     expect(idsOf(input)).toEqual(['a1', 'a']);
+  });
+});
+
+describe('completedCascadeScope', () => {
+  const items = [
+    { id: 'p', parentId: null },
+    { id: 'c1', parentId: 'p' },
+    { id: 'c2', parentId: 'p' },
+    { id: 'solo', parentId: null },
+  ];
+
+  it('covers a top-level item and all of its children, in either direction', () => {
+    expect(completedCascadeScope(items, 'p', true)).toEqual(['p', 'c1', 'c2']);
+    expect(completedCascadeScope(items, 'p', false)).toEqual(['p', 'c1', 'c2']);
+  });
+
+  it('covers a child alone when checked, and its parent too when unchecked', () => {
+    expect(completedCascadeScope(items, 'c1', true)).toEqual(['c1']);
+    expect(completedCascadeScope(items, 'c1', false)).toEqual(['c1', 'p']);
+  });
+
+  it('is empty for an unknown item', () => {
+    expect(completedCascadeScope(items, 'missing', true)).toEqual([]);
+  });
+});
+
+describe('completedPriorById', () => {
+  it('maps only the ids whose value would change to their current value', () => {
+    const items = [item('a', { completed: false }), item('b', { completed: true }), item('c', { completed: false })];
+    expect(completedPriorById(items, ['a', 'b'], true)).toEqual(new Map([['a', false]]));
+  });
+});
+
+describe('applyCompletedValues', () => {
+  it('sets the given completed flags and keeps every other item as it is', () => {
+    const items = [item('a'), item('b')];
+    const next = applyCompletedValues(items, new Map([['a', true]]));
+    expect(next.map(it => it.completed)).toEqual([true, false]);
+    expect(next[1]).toBe(items[1]);
+  });
+
+  it('returns the same array when no value changes', () => {
+    const items = [item('a', { completed: true })];
+    expect(applyCompletedValues(items, new Map([['a', true], ['missing', false]]))).toBe(items);
+  });
+});
+
+describe('changeItemIndent / canChangeItemIndent', () => {
+  const edges = (items: ListItem[] | null) => items?.map(it => [it.id, it.parentId]);
+
+  it('nests an item under the nearest preceding top-level item, skipping children', () => {
+    const items = [item('a'), item('b', { parentId: 'a' }), item('c')];
+    expect(edges(changeItemIndent(items, 'c', 1))).toEqual([['a', null], ['b', 'a'], ['c', 'a']]);
+  });
+
+  it('skips a completed top-level row when looking for the parent', () => {
+    const items = [item('a'), item('x', { completed: true }), item('c')];
+    expect(edges(changeItemIndent(items, 'c', 1))).toEqual([['a', null], ['c', 'a'], ['x', null]]);
+  });
+
+  it('refuses the first row, a child, a parent, a completed row and an unknown id', () => {
+    const items = [item('a'), item('b', { parentId: 'a' }), item('c'), item('d', { completed: true })];
+    expect(changeItemIndent(items, 'a', 1)).toBeNull(); // nothing above
+    expect(changeItemIndent(items, 'b', 1)).toBeNull(); // already nested
+    expect(changeItemIndent([item('a'), item('b'), item('c', { parentId: 'b' })], 'b', 1)).toBeNull(); // has children
+    expect(changeItemIndent(items, 'd', 1)).toBeNull(); // completed
+    expect(changeItemIndent(items, 'd', -1)).toBeNull();
+    expect(changeItemIndent(items, 'missing', 1)).toBeNull();
+  });
+
+  it('promotes a child to top-level, re-seating its later siblings above it', () => {
+    const items = [item('a'), item('b', { parentId: 'a' }), item('c', { parentId: 'a' })];
+    const out = changeItemIndent(items, 'b', -1);
+    expect(edges(out)).toEqual([['a', null], ['c', 'a'], ['b', null]]);
+    expect(out?.map(it => it.position)).toEqual([0, 1, 2]);
+  });
+
+  it('refuses to outdent a top-level row', () => {
+    expect(changeItemIndent([item('a')], 'a', -1)).toBeNull();
+  });
+
+  it('canChangeItemIndent agrees with changeItemIndent and does not touch its input', () => {
+    const items = [item('a'), item('b'), item('c', { parentId: 'b' })];
+    const snapshot = JSON.stringify(items);
+    for (const id of ['a', 'b', 'c']) {
+      for (const delta of [1, -1] as const) {
+        expect(canChangeItemIndent(items, id, delta)).toBe(changeItemIndent(items, id, delta) !== null);
+      }
+    }
+    expect(JSON.stringify(items)).toBe(snapshot);
   });
 });

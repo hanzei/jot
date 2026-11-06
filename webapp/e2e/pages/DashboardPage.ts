@@ -1,6 +1,6 @@
 import type { Page, Locator } from '@playwright/test';
 import { expect } from '@playwright/test';
-import { confirmDialog } from './dialogs';
+import { confirmDialog, expectDialogSettled } from './dialogs';
 
 const escapeForRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -81,7 +81,11 @@ export class DashboardPage {
     const existingCount = await inputs.count();
     await this.page.click('button:has-text("Add item")');
     await expect(inputs).toHaveCount(existingCount + 1);
-    await inputs.nth(existingCount).fill(text);
+    // "Add item" focuses the new row. Fill that rather than the last input:
+    // with checked items present the last input is a completed row.
+    const added = this.page.locator('[data-testid="list-item-input"]:focus');
+    await expect(added).toHaveValue('');
+    await added.fill(text);
   }
 
   listItemInput(index: number): Locator {
@@ -92,6 +96,10 @@ export class DashboardPage {
     return this.page.locator('[data-testid="list-item-row"]').nth(index);
   }
 
+  listItemCheckbox(index: number): Locator {
+    return this.listItemRow(index).locator('input[type="checkbox"]');
+  }
+
   /**
    * The rendered form of the row at `index`, present only while that row is
    * showing Markdown rather than source (docs/specs/markdown-rendering.md §1.2).
@@ -100,6 +108,14 @@ export class DashboardPage {
    */
   listItemRendered(index: number): Locator {
     return this.page.locator('[data-testid="list-item-rendered"]').nth(index);
+  }
+
+  /**
+   * The row's "open link" control — an anchor for one link, a menu button for
+   * several. Absent on a row with no link (docs/specs/markdown-rendering.md §1.2).
+   */
+  listItemOpenLink(index: number): Locator {
+    return this.listItemRow(index).getByTestId('list-item-open-link');
   }
 
   async focusListItem(index: number) {
@@ -193,11 +209,19 @@ export class DashboardPage {
   // out. Keyboard activation needs no positional stability; and the open button
   // is pointer-events-none (a pointer click falls through to the card), so it is
   // also the interaction that actually targets the control. Mirrors openNoteMenu.
+  //
+  // Returns once the modal has finished entering. Until then its panel is
+  // scaled to 95% (data-closed), even under reduced motion, so a forced click
+  // inside it aims at a point that moves when the scale lifts. The settled
+  // check passes vacuously before the dialog exists, hence the attached wait.
   private async activateNoteCard(card: Locator) {
     await expect(card).toBeVisible();
     const openButton = card.locator('[data-note-card="true"]');
     await openButton.focus();
     await this.page.keyboard.press('Enter');
+    const dialog = this.page.getByRole('dialog').last();
+    await expect(dialog).toBeAttached();
+    await expectDialogSettled(dialog);
   }
 
   async closeNoteModal() {

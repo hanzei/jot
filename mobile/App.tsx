@@ -35,6 +35,7 @@ import { ShareIntentProvider } from 'expo-share-intent';
 import { useShareIntentNavigation } from './src/hooks/useShareIntentNavigation';
 import { useQuickActionRouting } from './src/hooks/useQuickActionRouting';
 import { useDeepLinkRouting } from './src/hooks/useDeepLinkRouting';
+import { useBlurOnKeyboardHide } from './src/hooks/useBlurOnKeyboardHide';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import CrashScreen from './src/components/CrashScreen';
 import './src/i18n';
@@ -96,6 +97,8 @@ function NavigationWrapper() {
 
 function AppContent() {
   const { t } = useTranslation();
+  // Once for the whole app: the focused input is global, and so is the bug.
+  useBlurOnKeyboardHide();
   const [activeServerId, setActiveServerId] = React.useState<string | null>(null);
   const [isServerContextReady, setIsServerContextReady] = React.useState(false);
   const [serverContextInitError, setServerContextInitError] = React.useState<string | null>(null);

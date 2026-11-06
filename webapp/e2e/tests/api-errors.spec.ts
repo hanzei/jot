@@ -27,7 +27,7 @@ async function useGerman(page: Page, settingsPage: SettingsPage) {
   // Select only after Settings has loaded the saved preference, or the load
   // overwrites the selection.
   const loaded = page.waitForResponse((resp) =>
-    resp.url().includes('/api/v1/me') && resp.request().method() === 'GET' && resp.ok(),
+    resp.url().includes('/api/v1/users/me') && resp.request().method() === 'GET' && resp.ok(),
   );
   await settingsPage.goto();
   await loaded;

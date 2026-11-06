@@ -21,6 +21,19 @@ import { lightColors } from '../src/theme/colors';
 import type { Note } from '@jot/shared';
 import { getDefaultTestDb } from './helpers/testDb';
 
+jest.mock('../src/api/jot', () => ({
+  jot: {
+    notes: {
+      getAll: jest.fn(),
+      reorder: jest.fn(),
+      update: jest.fn(),
+    },
+    users: {
+      updateMe: jest.fn(),
+    },
+  },
+}));
+
 jest.mock('@react-navigation/native', () => ({
   useNavigation: jest.fn().mockReturnValue({ navigate: jest.fn(), dispatch: jest.fn() }),
   DrawerActions: { toggleDrawer: () => ({ type: 'DRAWER_TOGGLE' }) },
@@ -54,7 +67,6 @@ jest.mock('../src/theme/ThemeContext', () => ({
   useTheme: jest.fn(),
 }));
 
-jest.mock('../src/api/settings', () => ({ updateMe: jest.fn() }));
 
 jest.mock('../src/hooks/useNetworkStatus', () => ({
   useNetworkStatus: jest.fn().mockReturnValue({ isConnected: true }),
@@ -68,7 +80,6 @@ jest.mock('../src/api/client', () => ({
 
 // Auto-mocked network layer: getNotes() is left permanently pending so
 // useOfflineNotes's background sync never touches the seeded local rows.
-jest.mock('../src/api/notes');
 
 jest.mock('../src/components/NoteCard', () => {
   const ReactNative = jest.requireActual<typeof import('react-native')>('react-native');
@@ -120,11 +131,9 @@ jest.mock('../src/screens/notesList/DraggableMasonry', () => {
 });
 
 const mockTheme = jest.requireMock('../src/theme/ThemeContext').useTheme as jest.Mock;
-const notesApi = jest.requireMock('../src/api/notes') as {
-  getNotes: jest.Mock;
-  reorderNotes: jest.Mock;
-  updateNote: jest.Mock;
-};
+const notesApi = (jest.requireMock('../src/api/jot') as {
+  jot: { notes: { getAll: jest.Mock; reorder: jest.Mock; update: jest.Mock } };
+}).jot.notes;
 
 function makeNote(id: string, position: number): Note {
   return {
@@ -189,7 +198,7 @@ describe('NotesListScreen: archive during an in-flight manual reorder', () => {
     mockTheme.mockReturnValue({ colors: lightColors });
     // Never resolves: keeps useOfflineNotes's background sync from ever
     // running saveServerNotesScope against the seeded local rows.
-    notesApi.getNotes.mockImplementation(() => new Promise(() => {}));
+    notesApi.getAll.mockImplementation(() => new Promise(() => {}));
   });
 
   it('does not revert the dragged note to the front while its reorder is still in flight', async () => {
@@ -204,9 +213,9 @@ describe('NotesListScreen: archive during an in-flight manual reorder', () => {
     ]);
 
     const reorderDeferred = deferred<void>();
-    notesApi.reorderNotes.mockImplementation(() => reorderDeferred.promise);
+    notesApi.reorder.mockImplementation(() => reorderDeferred.promise);
     const updateDeferred = deferred<Note>();
-    notesApi.updateNote.mockImplementation(() => updateDeferred.promise);
+    notesApi.update.mockImplementation(() => updateDeferred.promise);
 
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -225,7 +234,7 @@ describe('NotesListScreen: archive during an in-flight manual reorder', () => {
     // Drag note-A from the front to the end (position 5 of 6).
     await fireEvent.press(screen.getByTestId('reorder-trigger-notes'));
     expect(orderedCardIds()).toEqual(['note-B', 'note-C', 'note-D', 'note-E', 'note-F', 'note-A']);
-    await waitFor(() => expect(notesApi.reorderNotes).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(notesApi.reorder).toHaveBeenCalledTimes(1));
 
     // While that reorder is still in flight (network promise unresolved),
     // archive note-A — mirroring tapping Archive in the single-note editor

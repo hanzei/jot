@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Label } from '@jot/shared';
+import type { Label, LabelWithCount } from '@jot/shared';
 import { labels as labelsApi } from '@/utils/api';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/utils/apiError';
@@ -22,8 +22,7 @@ export const useSidebarLabelsController = ({
 }: SidebarLabelsControllerOptions = {}) => {
   const { t } = useTranslation();
   const { showToast, showErrorToast } = useToast();
-  const [labels, setLabels] = useState<Label[]>([]);
-  const [labelCounts, setLabelCounts] = useState<Record<string, number> | null>(null);
+  const [labels, setLabels] = useState<LabelWithCount[]>([]);
 
   const loadLabels = useCallback(async ({ preserveOnError = false }: LoadOptions = {}) => {
     try {
@@ -38,19 +37,6 @@ export const useSidebarLabelsController = ({
     }
   }, []);
 
-  const loadLabelCounts = useCallback(async ({ preserveOnError = false }: LoadOptions = {}) => {
-    try {
-      const counts = await labelsApi.getCounts();
-      setLabelCounts(counts);
-      return counts;
-    } catch {
-      if (!preserveOnError) {
-        setLabelCounts(null);
-      }
-      return null;
-    }
-  }, []);
-
   const handleCreateLabel = useCallback(async (name: string): Promise<boolean> => {
     try {
       const createdLabel = await labelsApi.create(name);
@@ -58,7 +44,7 @@ export const useSidebarLabelsController = ({
         if (prev.some((label) => label.id === createdLabel.id)) {
           return prev;
         }
-        return [...prev, createdLabel];
+        return [...prev, { ...createdLabel, note_count: 0 }];
       });
       if (onCreateSuccess) {
         try {
@@ -68,17 +54,14 @@ export const useSidebarLabelsController = ({
           console.error('Sidebar label create success callback failed:', callbackError);
         }
       }
-      await Promise.all([
-        loadLabels({ preserveOnError: true }),
-        loadLabelCounts({ preserveOnError: true }),
-      ]);
+      await loadLabels({ preserveOnError: true });
       showToast(t('labels.createSuccess'), 'success');
       return true;
     } catch (err: unknown) {
       showErrorToast(apiErrorMessage(err, t, 'labels.createError'), err);
       return false;
     }
-  }, [loadLabelCounts, loadLabels, onCreateSuccess, showToast, showErrorToast, t]);
+  }, [loadLabels, onCreateSuccess, showToast, showErrorToast, t]);
 
   const handleRenameLabel = useCallback(async (label: Label, newName: string): Promise<boolean> => {
     try {
@@ -91,17 +74,14 @@ export const useSidebarLabelsController = ({
           console.error('Sidebar label rename success callback failed:', callbackError);
         }
       }
-      await Promise.all([
-        loadLabels({ preserveOnError: true }),
-        loadLabelCounts({ preserveOnError: true }),
-      ]);
+      await loadLabels({ preserveOnError: true });
       showToast(t('labels.renameSuccess'), 'success');
       return true;
     } catch (err: unknown) {
       showErrorToast(apiErrorMessage(err, t, 'labels.renameError'), err);
       return false;
     }
-  }, [loadLabelCounts, loadLabels, onRenameSuccess, showToast, showErrorToast, t]);
+  }, [loadLabels, onRenameSuccess, showToast, showErrorToast, t]);
 
   const handleDeleteLabel = useCallback(async (label: Label): Promise<boolean> => {
     try {
@@ -114,23 +94,18 @@ export const useSidebarLabelsController = ({
           console.error('Sidebar label delete success callback failed:', callbackError);
         }
       }
-      await Promise.all([
-        loadLabels({ preserveOnError: true }),
-        loadLabelCounts({ preserveOnError: true }),
-      ]);
+      await loadLabels({ preserveOnError: true });
       showToast(t('labels.deleteSuccess'), 'success');
       return true;
     } catch (err: unknown) {
       showErrorToast(apiErrorMessage(err, t, 'labels.deleteError'), err);
       return false;
     }
-  }, [loadLabelCounts, loadLabels, onDeleteSuccess, showToast, showErrorToast, t]);
+  }, [loadLabels, onDeleteSuccess, showToast, showErrorToast, t]);
 
   return {
     labels,
-    labelCounts,
     loadLabels,
-    loadLabelCounts,
     handleCreateLabel,
     handleRenameLabel,
     handleDeleteLabel,

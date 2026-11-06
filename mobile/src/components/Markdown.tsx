@@ -1,8 +1,9 @@
 import React, { memo, useMemo } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
-import { type BlockNode } from '@jot/shared';
+import { CODE_ITALIC_SCOPES, highlightCode, type BlockNode, type CodeRun } from '@jot/shared';
 import { blockMarkdownNodes } from '../utils/markdown';
+import { getCodeHighlighter } from '../utils/codeHighlighter';
 import {
   fullMarkdownStyles,
   headingStyle,
@@ -16,7 +17,7 @@ import { renderInlineNodes } from './inlineNodes';
 // specified in docs/specs/markdown-rendering.md and the parsing lives in
 // utils/markdown.ts; this file is only layout.
 //
-// Every block that needs a box of its own — a code block's tint, the blockquote
+// Every block that needs a box of its own — a code block's panel, the blockquote
 // bar, a list's marker column — is a <View>, and the text inside it is a <Text>.
 // A View nested *inside* a Text breaks wrapping on React Native, so the two
 // levels never interleave: a block owns Views, and everything below the block
@@ -28,6 +29,29 @@ interface RenderContext {
   textStyles: MarkdownTextStyles;
   /** Body colour at this depth — a blockquote renders its contents muted. */
   color: string;
+  /** Present only when checkboxes are tappable (the note is editable). */
+  onToggleTask?: ((offset: number) => void) | undefined;
+}
+
+/**
+ * A highlighted block's tokens, as Text nested in the block's own Text — so the
+ * whole block still wraps and selects as one, and plain runs stay bare strings
+ * that inherit the block's colour.
+ */
+function renderCodeRuns(runs: CodeRun[], theme: MarkdownTheme): React.ReactNode[] {
+  return runs.map(({ text, scope }, index) =>
+    scope === null ? text : (
+      <Text
+        key={index}
+        style={[
+          { color: theme.code.scopes[scope] },
+          CODE_ITALIC_SCOPES.has(scope) && styles.codeItalic,
+        ]}
+      >
+        {text}
+      </Text>
+    ),
+  );
 }
 
 function renderBlocks(nodes: BlockNode[], ctx: RenderContext, keyPrefix = ''): React.ReactNode[] {
@@ -38,7 +62,7 @@ function renderBlocks(nodes: BlockNode[], ctx: RenderContext, keyPrefix = ''): R
       case 'paragraph':
         return (
           <Text key={key} style={[ctx.textStyles.body, { color: ctx.color }]}>
-            {renderInlineNodes(node.children, { linkColor: ctx.theme.link }, `${key}.`)}
+            {renderInlineNodes(node.children, { linkColor: ctx.theme.link, onToggleTask: ctx.onToggleTask }, `${key}.`)}
           </Text>
         );
 
@@ -53,18 +77,27 @@ function renderBlocks(nodes: BlockNode[], ctx: RenderContext, keyPrefix = ''): R
             accessibilityRole="header"
             style={[headingStyle(ctx.textStyles, node.depth), { color: ctx.color }]}
           >
-            {renderInlineNodes(node.children, { linkColor: ctx.theme.link }, `${key}.`)}
+            {renderInlineNodes(node.children, { linkColor: ctx.theme.link, onToggleTask: ctx.onToggleTask }, `${key}.`)}
           </Text>
         );
 
-      case 'code':
+      case 'code': {
+        // A language Jot does not highlight, or none, renders the same block
+        // plain (docs/specs/markdown-rendering.md §2.3).
+        const runs = highlightCode(getCodeHighlighter(), node.text, node.lang);
         return (
-          <View key={key} style={[styles.code, { backgroundColor: ctx.theme.tint }]}>
-            <Text style={[ctx.textStyles.body, styles.codeText, { color: ctx.color }]}>
-              {node.text}
+          <View
+            key={key}
+            style={[styles.code, { backgroundColor: ctx.theme.code.panel, borderColor: ctx.theme.code.border }]}
+          >
+            {/* The palette's text, not ctx.color: a blockquote's muted colour
+                does not hold 4.5:1 on the panel. */}
+            <Text style={[ctx.textStyles.body, styles.codeText, { color: ctx.theme.code.text }]}>
+              {runs ? renderCodeRuns(runs, ctx.theme) : node.text}
             </Text>
           </View>
         );
+      }
 
       case 'blockquote':
         return (
@@ -99,11 +132,18 @@ interface MarkdownProps {
   content: string;
   /** True when the note carries a colour, so the body reads dark-on-swatch. */
   onColoredNote?: boolean;
+  /**
+   * Called with a task marker's source offset when its checkbox is tapped. When
+   * omitted (a trashed note) checkboxes stay ☐ / ☑ text, and no offsets are
+   * computed (docs/specs/markdown-rendering.md §2.4).
+   */
+  onToggleTask?: ((offset: number) => void) | undefined;
 }
 
-function Markdown({ content, onColoredNote = false }: MarkdownProps) {
+function Markdown({ content, onColoredNote = false, onToggleTask }: MarkdownProps) {
   const { colors, isDark } = useTheme();
-  const nodes = useMemo(() => blockMarkdownNodes(content), [content]);
+  const tappable = onToggleTask !== undefined;
+  const nodes = useMemo(() => blockMarkdownNodes(content, tappable), [content, tappable]);
   const theme = useMemo(
     () => markdownTheme(colors, isDark, onColoredNote),
     [colors, isDark, onColoredNote],
@@ -111,7 +151,7 @@ function Markdown({ content, onColoredNote = false }: MarkdownProps) {
 
   return (
     <View style={styles.blocks}>
-      {renderBlocks(nodes, { theme, textStyles: fullMarkdownStyles, color: theme.text })}
+      {renderBlocks(nodes, { theme, textStyles: fullMarkdownStyles, color: theme.text, onToggleTask })}
     </View>
   );
 }
@@ -123,12 +163,14 @@ const styles = StyleSheet.create({
   blocks: { gap: 8 },
   code: {
     borderRadius: 4,
+    borderWidth: 1,
     paddingHorizontal: 8,
     paddingVertical: 6,
   },
   codeText: {
     fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }),
   },
+  codeItalic: { fontStyle: 'italic' },
   blockquote: {
     borderLeftWidth: 2,
     paddingLeft: 10,

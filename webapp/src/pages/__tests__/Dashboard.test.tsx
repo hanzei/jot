@@ -5,7 +5,7 @@ import { MemoryRouter, useLocation, useNavigate, Routes, Route } from 'react-rou
 import { type ReactNode, useCallback, useEffect, useRef } from 'react';
 import React from 'react';
 import Dashboard from '../Dashboard';
-import type { AuthResponse, Note, Label, NoteSort, UserSettings } from '@jot/shared';
+import type { AuthResponse, Note, Label, LabelWithCount, NoteSort, UserSettings } from '@jot/shared';
 import { notes, labels, users } from '@/utils/api';
 import * as auth from '@/utils/auth';
 import { useAuthenticatedLayout, type AuthenticatedLayoutContext } from '@/components/AuthenticatedLayout';
@@ -29,12 +29,11 @@ vi.mock('@/utils/api', () => ({
   labels: {
     getAll: vi.fn().mockResolvedValue([]),
     create: vi.fn(),
-    getCounts: vi.fn().mockResolvedValue({}),
     rename: vi.fn(),
     delete: vi.fn(),
   },
   users: {
-    search: vi.fn().mockResolvedValue([]),
+    list: vi.fn().mockResolvedValue([]),
     updateMe: vi.fn().mockResolvedValue({
       settings: {
         user_id: 'user1',
@@ -247,9 +246,7 @@ describe('Dashboard', () => {
 
       const {
         labels: labelsList,
-        labelCounts,
         loadLabels,
-        loadLabelCounts,
         handleCreateLabel,
         handleRenameLabel,
         handleDeleteLabel,
@@ -259,8 +256,8 @@ describe('Dashboard', () => {
       });
 
       useEffect(() => {
-        void Promise.all([loadLabels(), loadLabelCounts()]);
-      }, [loadLabels, loadLabelCounts]);
+        void loadLabels();
+      }, [loadLabels]);
 
       const registerLabelCallbacks = useCallback((callbacks: Parameters<AuthenticatedLayoutContext['registerLabelCallbacks']>[0]) => {
         labelCallbacksRef.current = callbacks;
@@ -268,9 +265,7 @@ describe('Dashboard', () => {
 
       return {
         labels: labelsList,
-        labelCounts,
         loadLabels,
-        loadLabelCounts,
         handleCreateLabel,
         handleRenameLabel,
         handleDeleteLabel,
@@ -295,8 +290,8 @@ describe('Dashboard', () => {
       // Look for the loading spinner by test id
       expect(screen.getByTestId('loading-spinner')).toBeInTheDocument();
 
-      // Flush the sidebar labels controller's initial load — labels.getAll/
-      // getCounts resolve immediately, and notes.getAll never does — so its
+      // Flush the sidebar labels controller's initial load — labels.getAll
+      // resolves immediately, and notes.getAll never does — so its
       // state updates settle inside act() instead of firing after the test
       // has already returned.
       await act(async () => {
@@ -367,7 +362,7 @@ describe('Dashboard', () => {
         const searchInput = screen.getByPlaceholderText('Search notes...');
         expect(searchInput).toBeInTheDocument();
         expect(searchInput).toHaveValue('escape query');
-        expect(mockGetAll).toHaveBeenCalledWith(false, 'escape query', false, '', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: 'escape query', trashed: false, label: undefined, my_tasks: false });
       });
 
       const searchInput = screen.getByPlaceholderText('Search notes...');
@@ -375,7 +370,7 @@ describe('Dashboard', () => {
 
       await waitFor(() => {
         expect(searchInput).toHaveValue('');
-        expect(mockGetAll).toHaveBeenLastCalledWith(false, '', false, '', false);
+        expect(mockGetAll).toHaveBeenLastCalledWith({ archived: false, search: '', trashed: false, label: undefined, my_tasks: false });
       });
     });
 
@@ -393,14 +388,14 @@ describe('Dashboard', () => {
       await user.type(searchInput, 'search term');
       
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, 'search term', false, '', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: 'search term', trashed: false, label: undefined, my_tasks: false });
       });
     });
 
     it('fetches and separates archived results when searching', async () => {
       const user = userEvent.setup();
       const mockGetAll = vi.mocked(notes.getAll);
-      mockGetAll.mockImplementation((archived = false) =>
+      mockGetAll.mockImplementation(({ archived = false } = {}) =>
         Promise.resolve(
           archived
             ? [createMockNote({ id: 'arch1', content: 'Archived match', archived: true })]
@@ -419,9 +414,9 @@ describe('Dashboard', () => {
 
       // Both an active (archived=false) and archived (archived=true) fetch happen
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(true, 'match', false, '', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: true, search: 'match', trashed: false, label: undefined, my_tasks: false });
       });
-      expect(mockGetAll).toHaveBeenCalledWith(false, 'match', false, '', false);
+      expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: 'match', trashed: false, label: undefined, my_tasks: false });
 
       // Archived matches surface under a dedicated "Archived" splitter
       await waitFor(() => {
@@ -460,7 +455,7 @@ describe('Dashboard', () => {
       await user.type(searchInput, specialChars);
       
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, specialChars, false, '', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: specialChars, trashed: false, label: undefined, my_tasks: false });
       });
     });
 
@@ -480,7 +475,7 @@ describe('Dashboard', () => {
       fireEvent.change(searchInput, { target: { value: longQuery } });
 
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, longQuery, false, '', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: longQuery, trashed: false, label: undefined, my_tasks: false });
       });
     });
 
@@ -501,7 +496,7 @@ describe('Dashboard', () => {
 
       // Should have been called with the final value
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, 'abc', false, '', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: 'abc', trashed: false, label: undefined, my_tasks: false });
       });
     });
   });
@@ -701,7 +696,7 @@ describe('Dashboard', () => {
       renderDashboard(['/?view=archive']);
 
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: true, search: '', trashed: false, label: undefined, my_tasks: false });
       });
     });
 
@@ -711,7 +706,7 @@ describe('Dashboard', () => {
       renderDashboard(['/?view=archive']);
       
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: true, search: '', trashed: false, label: undefined, my_tasks: false });
       });
     });
 
@@ -733,7 +728,7 @@ describe('Dashboard', () => {
       renderDashboard(['/?view=bin']);
 
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, '', true, '', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: '', trashed: true, label: undefined, my_tasks: false });
       });
 
       expect(await screen.findByText('Notes in the bin are deleted after 7 days')).toBeInTheDocument();
@@ -765,7 +760,7 @@ describe('Dashboard', () => {
       renderDashboard(['/?view=invalid']);
 
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: '', trashed: false, label: undefined, my_tasks: false });
       });
     });
 
@@ -1273,13 +1268,14 @@ describe('Dashboard', () => {
   });
 
   describe('Label Filtering', () => {
-    const mockLabels: Label[] = [
+    const mockLabels: LabelWithCount[] = [
       {
         id: 'label-work',
         user_id: 'user1',
         name: 'work',
         created_at: '2024-01-01T00:00:00Z',
         updated_at: '2024-01-01T00:00:00Z',
+        note_count: 0,
       },
       {
         id: 'label-personal',
@@ -1287,6 +1283,7 @@ describe('Dashboard', () => {
         name: 'personal',
         created_at: '2024-01-01T00:00:00Z',
         updated_at: '2024-01-01T00:00:00Z',
+        note_count: 0,
       },
     ];
 
@@ -1300,7 +1297,7 @@ describe('Dashboard', () => {
     renderDashboard(['/?label=label-work']);
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false);
+      expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: '', trashed: false, label: 'label-work', my_tasks: false });
     });
   });
 
@@ -1330,13 +1327,13 @@ describe('Dashboard', () => {
     );
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false);
+      expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: '', trashed: false, label: 'label-work', my_tasks: false });
     });
 
     await user.click(screen.getByTestId('go-home'));
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false);
+      expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: '', trashed: false, label: undefined, my_tasks: false });
     });
   });
 
@@ -1366,13 +1363,13 @@ describe('Dashboard', () => {
     );
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false);
+      expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: '', trashed: false, label: 'label-work', my_tasks: false });
     });
 
     await user.click(screen.getByTestId('go-archive'));
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '', false);
+      expect(mockGetAll).toHaveBeenCalledWith({ archived: true, search: '', trashed: false, label: undefined, my_tasks: false });
     });
   });
 
@@ -1390,7 +1387,7 @@ describe('Dashboard', () => {
     renderDashboard(['/?view=archive&label=label-work']);
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false);
+      expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: '', trashed: false, label: 'label-work', my_tasks: false });
     });
   });
 
@@ -1400,7 +1397,7 @@ describe('Dashboard', () => {
     renderDashboard(['/?view=bin&label=label-work']);
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false);
+      expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: '', trashed: false, label: 'label-work', my_tasks: false });
     });
   });
 
@@ -1423,12 +1420,13 @@ describe('Dashboard', () => {
   });
 
   describe('Real-time label updates', () => {
-    const realtimeLabel: Label = {
+    const realtimeLabel: LabelWithCount = {
       id: 'label-realtime',
       user_id: 'user1',
       name: 'realtime',
       created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-01T00:00:00Z',
+      note_count: 1,
     };
 
     it('refreshes sidebar labels when an open note refreshes locally', async () => {
@@ -1499,20 +1497,16 @@ describe('Dashboard', () => {
       });
     });
 
-    it('refreshes labels and counts when SSE reports labels_changed', async () => {
+    it('refreshes labels when SSE reports labels_changed', async () => {
       vi.mocked(labels.getAll)
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([realtimeLabel]);
-      vi.mocked(labels.getCounts)
-        .mockResolvedValueOnce({})
-        .mockResolvedValueOnce({ 'label-realtime': 1 });
 
       renderDashboard();
 
       await waitFor(() => {
         expect(mockRegisterSSECallbacks).toHaveBeenCalled();
         expect(labels.getAll).toHaveBeenCalledTimes(1);
-        expect(labels.getCounts).toHaveBeenCalledTimes(1);
       });
 
       const sseCallbacks = mockRegisterSSECallbacks.mock.calls[0]?.[0];
@@ -1528,7 +1522,6 @@ describe('Dashboard', () => {
 
       await waitFor(() => {
         expect(labels.getAll).toHaveBeenCalledTimes(2);
-        expect(labels.getCounts).toHaveBeenCalledTimes(2);
       });
     });
 
@@ -1537,9 +1530,6 @@ describe('Dashboard', () => {
       vi.mocked(labels.getAll)
         .mockResolvedValueOnce([realtimeLabel])
         .mockResolvedValueOnce([]);
-      vi.mocked(labels.getCounts)
-        .mockResolvedValueOnce({ 'label-realtime': 1 })
-        .mockResolvedValueOnce({});
 
       const LocationProbe = () => {
         const { search } = useLocation();
@@ -1561,7 +1551,7 @@ describe('Dashboard', () => {
       );
 
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-realtime', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: '', trashed: false, label: 'label-realtime', my_tasks: false });
       });
 
       await waitFor(() => {
@@ -1584,7 +1574,7 @@ describe('Dashboard', () => {
       });
 
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: '', trashed: false, label: undefined, my_tasks: false });
       });
 
       await waitFor(() => {
@@ -1597,7 +1587,7 @@ describe('Dashboard', () => {
     const sharedNote = () => createMockListNote({ id: 'shared-1', user_id: 'owner1', title: 'Trip plan', unread: 'new' });
 
     beforeEach(() => {
-      vi.mocked(users.search).mockResolvedValue([{
+      vi.mocked(users.list).mockResolvedValue([{
         id: 'owner1',
         username: 'alice',
         first_name: 'Alice',
@@ -1624,7 +1614,7 @@ describe('Dashboard', () => {
 
     it('tells the recipient who shared which note, and opens it from the toast', async () => {
       renderDashboard();
-      await waitFor(() => expect(users.search).toHaveBeenCalled());
+      await waitFor(() => expect(users.list).toHaveBeenCalled());
       await waitFor(() => expect(latestSSECallbacks()).toBeDefined());
 
       await act(async () => {
@@ -1762,7 +1752,7 @@ describe('Dashboard', () => {
       renderDashboard(['/?view=my-tasks']);
 
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true);
+        expect(mockGetAll).toHaveBeenCalledWith({ archived: false, search: '', trashed: false, label: undefined, my_tasks: true });
       });
     });
 

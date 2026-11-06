@@ -434,7 +434,7 @@ func (s *Server) setupRoutes() error {
 			r.Get("/events", s.eventsHandler.ServeSSE)
 
 			r.Get("/about", s.wrapHandler(s.handleAbout))
-			r.Get("/me", s.wrapHandler(s.authHandler.Me))
+			r.Get("/users/me", s.wrapHandler(s.authHandler.Me))
 			r.Patch("/users/me", s.wrapHandler(s.authHandler.UpdateUser))
 			r.Put("/users/me/password", s.wrapHandler(s.authHandler.ChangePassword))
 			r.Post("/users/me/profile-icon", s.wrapHandler(s.authHandler.UploadProfileIcon))
@@ -471,7 +471,6 @@ func (s *Server) setupRoutes() error {
 			r.Post("/notes/{id}/items/set-completed", s.wrapHandler(s.notesHandler.SetNoteItemsCompleted))
 			r.Post("/notes/{id}/items/delete", s.wrapHandler(s.notesHandler.DeleteNoteItems))
 			r.Patch("/notes/{id}/items/{item_id}", s.wrapHandler(s.notesHandler.UpdateNoteItem))
-			r.Post("/notes/{id}/items/{item_id}/toggle-completed", s.wrapHandler(s.notesHandler.ToggleNoteItemCompleted))
 			r.Delete("/notes/{id}/items/{item_id}", s.wrapHandler(s.notesHandler.DeleteNoteItem))
 
 			r.Post("/notes/{id}/restore", s.wrapHandler(s.notesHandler.RestoreNote))
@@ -485,7 +484,6 @@ func (s *Server) setupRoutes() error {
 			r.Delete("/notes/{id}/labels/{label_id}", s.wrapHandler(s.labelsHandler.RemoveLabel))
 
 			r.Get("/labels", s.wrapHandler(s.labelsHandler.GetLabels))
-			r.Get("/labels/counts", s.wrapHandler(s.labelsHandler.GetLabelCounts))
 			r.Post("/labels", s.wrapHandler(s.labelsHandler.CreateLabel))
 			r.Patch("/labels/{id}", s.wrapHandler(s.labelsHandler.RenameLabel))
 			r.Delete("/labels/{id}", s.wrapHandler(s.labelsHandler.DeleteLabel))
@@ -555,7 +553,14 @@ func FileServer(r chi.Router, path string, root *os.Root) {
 	fsys := root.FS()
 	fileServer := http.FileServerFS(fsys)
 
-	r.Get(path, func(w http.ResponseWriter, req *http.Request) {
+	// Gzip the build's text formats: on a slow connection, transferring the JS
+	// bundle is most of first-load time (#1164). Images are already compressed.
+	compressor := middleware.NewCompressor(5,
+		"text/html", "text/css", "text/plain", "text/javascript",
+		"application/javascript", "application/json", "application/manifest+json",
+		"image/svg+xml",
+	)
+	serveStatic := func(w http.ResponseWriter, req *http.Request) {
 		rctx := chi.RouteContext(req.Context())
 		pathPrefix := strings.TrimSuffix(rctx.RoutePattern(), "/*")
 
@@ -594,8 +599,32 @@ func FileServer(r chi.Router, path string, root *os.Root) {
 		// File exists, serve it via the traversal-safe FS
 		fs := http.StripPrefix(pathPrefix, fileServer)
 		fs.ServeHTTP(w, req)
+	}
+	compressed := compressor.Handler(http.HandlerFunc(serveStatic))
+
+	r.Get(path, func(w http.ResponseWriter, req *http.Request) {
+		// A range answer's Content-Range counts uncompressed bytes, so gzipping
+		// it would hand the client a body that does not match its headers.
+		if req.Header.Get("Range") != "" {
+			serveStatic(w, req)
+			return
+		}
+		compressed.ServeHTTP(encodedRangeStripper{w}, req)
 	})
 }
+
+// encodedRangeStripper drops the "Accept-Ranges: bytes" http.ServeContent sets
+// once the compressor has encoded the response; ranges are only served uncompressed.
+type encodedRangeStripper struct{ http.ResponseWriter }
+
+func (w encodedRangeStripper) WriteHeader(code int) {
+	if w.Header().Get("Content-Encoding") != "" {
+		w.Header().Del("Accept-Ranges")
+	}
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w encodedRangeStripper) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request) (int, any, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

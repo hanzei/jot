@@ -11,14 +11,13 @@ import {
 } from 'lucide-react';
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, type Label } from '@jot/shared';
+import { VALIDATION, type Label, type LabelWithCount } from '@jot/shared';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
 interface SidebarLabelsProps {
-  labels: Label[];
+  labels: LabelWithCount[];
   selectedLabelId?: string | null;
   onSelect?: (labelId: string) => void;
-  labelCounts?: Record<string, number> | null;
   onCreate?: (name: string) => Promise<boolean>;
   onRename?: (label: Label, newName: string) => Promise<boolean>;
   onDelete?: (label: Label) => Promise<boolean>;
@@ -28,7 +27,6 @@ const SidebarLabels = ({
   labels,
   selectedLabelId,
   onSelect,
-  labelCounts,
   onCreate,
   onRename,
   onDelete,
@@ -216,22 +214,20 @@ const SidebarLabels = ({
                     type="button"
                     onClick={() => onSelect?.(label.id)}
                     className={buttonClass}
-                    aria-describedby={labelCounts ? `label-count-${label.id}` : undefined}
+                    aria-describedby={`label-count-${label.id}`}
                     aria-pressed={isActive ? true : undefined}
                   >
                     <span className="flex items-center justify-center shrink-0 w-8">
                       <Tag className="h-4 w-4" />
                     </span>
                     <span className={`truncate min-w-0 overflow-hidden transition-[max-width,opacity] duration-200 ${isExpanded ? 'max-w-[12rem] opacity-100' : 'max-w-0 opacity-0'}`}>{label.name}</span>
-                    {labelCounts && (
-                      <span
-                        id={`label-count-${label.id}`}
-                        data-testid={`label-count-${label.id}`}
-                        className={`ml-auto shrink-0 text-xs transition-opacity opacity-0 group-hover/label:opacity-100 ${isActive ? 'text-blue-600 dark:text-blue-300' : 'text-gray-400 dark:text-gray-500'}`}
-                      >
-                        {labelCounts[label.id] ?? 0}
-                      </span>
-                    )}
+                    <span
+                      id={`label-count-${label.id}`}
+                      data-testid={`label-count-${label.id}`}
+                      className={`ml-auto shrink-0 text-xs transition-opacity opacity-0 group-hover/label:opacity-100 ${isActive ? 'text-blue-600 dark:text-blue-300' : 'text-gray-400 dark:text-gray-500'}`}
+                    >
+                      {label.note_count}
+                    </span>
                   </button>
                   {onRename && onDelete && (
                     <Menu as="div" className="relative shrink-0">

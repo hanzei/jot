@@ -152,13 +152,13 @@ Two that are easy to skip:
 - The **Code Review Loop** is for large, architecturally significant PRs only. Most issues
   are not that. Don't run it by default.
 - Scope the fast checks while iterating (`task check-server`, `task test-server -- -run
-  TestX`) and save the full gate for just before pushing.
+  TestX`) and save `task check-changed` for just before pushing.
 
 ## 5. Ship it
 
-1. `task check` — the full pre-PR gate. Not conditional.
-2. `task test-e2e` if the change is user-facing, plus a new spec covering it.
-3. Commit, push with `git push -u origin <branch>`, open a **draft** PR.
+1. `task check-changed` — the pre-PR gate from `CLAUDE.md`. For a user-facing change, add
+   a Playwright spec first; it runs that spec.
+2. Commit, push with `git push -u origin <branch>`, open a **draft** PR.
 
 In the PR description:
 
@@ -169,3 +169,25 @@ In the PR description:
   Development Status Notice.
 - Anything you deliberately left out of the issue's scope, and why.
 - If you raised a concern in step 3 and built it anyway, one line recording the tradeoff.
+
+## 6. Check CI once, a few minutes later
+
+CI runs the full suite, including all of e2e, so a green local gate is not a green PR.
+Do **not** subscribe to the PR. Instead, right after opening it, schedule one check-in
+about 5 minutes out with whatever delayed-message tool the session has (`send_later` in a
+cloud session, `ScheduleWakeup` or a cron entry elsewhere). Never `sleep` or poll in a
+loop. If no scheduling tool exists, say so in your final message and tell the user to
+look at CI.
+
+When the check-in fires, read the PR's check runs (`pull_request_read` with
+`get_check_runs`):
+
+- **All green:** say so in one line and stop.
+- **Still running:** report which checks are pending and stop. Don't schedule more than
+  one further check-in.
+- **Red:** read the failing job's log (`get_job_logs`), reproduce it locally with the
+  narrowest task (`task test-e2e -- the.spec.ts` for an e2e failure), fix the cause, rerun
+  the same check to see it pass, then push. Never skip, disable, or quarantine a test to
+  get green, and never push an empty commit to re-run CI. Then one more check-in.
+
+After two check-ins, stop and tell the user where CI stands.

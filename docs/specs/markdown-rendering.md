@@ -34,9 +34,13 @@ colour that only signals "link" fails anyone who cannot use it. So the label
 renders exactly as the surrounding text.
 
 The open note is unaffected: the webapp's modal preview and mobile's editor both
-render live links, which is where a reader who wants the link already is. An
+render live links, which is where a reader who wants the link already is.
+Following one — a click, or Enter on the focused link — only opens the link; it
+does not also switch the webapp's preview into edit mode, which a click anywhere
+else in the preview does. An
 *editable* list-item row is the one other place a link stays inert, for a
-different reason — §1.2.
+different reason, and it reaches its targets through a button of its own
+instead — §1.2.
 
 Both clients render the same feature set from the same source string, so a note
 written on a phone reads identically in a browser and the other way round.
@@ -94,6 +98,29 @@ Four consequences, each of which is a trap avoided rather than a preference:
   by a different route. A read-only row has no caret to place, so its links work
   and it drops the hidden field entirely rather than leaving a focusable copy
   of the text behind the rendered one.
+
+  **The targets are reached through a separate control instead.** An editable
+  row with at least one link Jot follows gets an "open link" button (↗) among
+  its trailing controls. It is a second target rather than a second meaning for
+  the text, so the rule above still holds. Two alternatives were rejected:
+  modifier-click (undiscoverable, and absent on touch and from the keyboard) and
+  a dialog asking "edit or open?" on every click on a link, which taxes editing,
+  the common case, to make the rare one possible and never appears for a row
+  reached by keyboard.
+
+  - **Always visible**, unlike the row's hover- or focus-gated delete and assign
+    controls. The label carries no link styling, so the icon is the only sign
+    the item has a link at all.
+  - **One link** opens directly. On the webapp the button *is* an `<a
+    target="_blank">`, so middle-click and "copy link address" work; on mobile
+    it calls `openUrl`.
+  - **Several links** open a list to choose from — a menu on the webapp, a
+    bottom sheet on mobile — with each entry's label and host. A target that
+    appears twice, in any spelling of it (§2), is listed once (`inlineLinks`).
+  - **Completed rows get it too**; a ticked item's link is no less useful.
+  - **Read-only rows do not**: their links already work.
+  - The accessible name is "Open link: {label}", from the flattened label, for
+    the same reason as the checkbox label below (§5).
 - **Completed rows render like any other**, `~~strike~~` and all, which §2.1
   already accepted for display surfaces. A struck word inside an already-struck
   row is indistinguishable; that is the cost of the subset staying a subset.
@@ -223,9 +250,9 @@ reach it differently.
 | `####`, `#####`, `######` | Headings, rendered as **bold body-size text** |
 | `**bold**`, `*italic*`, `~~strike~~` | Rendered |
 | `` `inline code` `` | Rendered |
-| Fenced and indented code | Rendered **with block layout** |
+| Fenced and indented code | Rendered **with block layout**; a fence naming a known language is syntax highlighted (§2.3) |
 | Bullet and ordered lists | Rendered |
-| `- [ ]` / `- [x]` | Rendered as ☐ / ☑, **non-interactive** |
+| `- [ ]` / `- [x]` | Rendered as ☐ / ☑. Tappable in the open note on both clients (§2.4) |
 | Blockquotes | Rendered |
 | `[text](url)` and bare `https://…` | Rendered as links — **except on note cards** (§1.1) |
 | `---`, `***` | Horizontal rule |
@@ -238,7 +265,17 @@ scheme at all (`/dashboard`, `example.com`). Notes are shareable, so the target
 of a link can come from a collaborator, and following it is a navigation the
 reader did not choose.
 
-Syntax highlighting inside code blocks is deliberately absent (§6).
+**Link targets are encoded in the shared normalizer**, with the same step
+marked's HTML renderer uses (`encodeURI`, then `%25` back to `%`, so an
+already-encoded target is unchanged). A link node's `href` is therefore the
+address both clients open: `[docs](<https://example.com/a b>)` opens
+`https://example.com/a%20b` on the webapp and on mobile, where the target goes
+straight to the OS and iOS refuses a raw space. Duplicates are judged on the
+encoded form, so `<https://x/a b>` and `https://x/a%20b` are one link. A target
+that cannot be encoded renders as its label, like a refused scheme.
+
+A fenced block that names one of ten languages is syntax highlighted in the
+open note; everything else about it is unchanged (§2.3).
 
 ### 2.1 The list-item subset
 
@@ -384,6 +421,123 @@ offline apply/enqueue — so an oversized conversion is never written to local
 SQLite or queued for replay, and `NoteEditorScreen` maps the thrown error to
 the same two messages via `Alert.alert`.
 
+### 2.3 Syntax highlighting in code blocks
+
+A fence whose info string names a known language renders highlighted **in the
+open note** — the webapp's modal preview and mobile's editor read mode — on both
+clients, in the same colours.
+
+| Fence | Behaviour |
+|---|---|
+| ` ```js `, ` ```TypeScript `, ` ```py title="x" ` | Highlighted. The language is the info string's first word, case-insensitive |
+| ` ```brainfuck ` | Plain monospace — a language Jot does not ship |
+| ` ``` ` with no language, or an indented block | Plain monospace — nothing is guessed |
+| Any fence, on a note card | Plain monospace, on both clients |
+
+**The languages** are `bash`, `css`, `go`, `javascript`, `json`, `python`,
+`sql`, `typescript`, `xml` and `yaml`, plus each grammar's own aliases (`js`,
+`ts`, `py`, `sh`, `html`, `yml`, …). The list is `HIGHLIGHT_LANGUAGES` in
+`shared/src/codeHighlight.ts`. It is short because every grammar ships in both
+bundles — the ten cost the webapp about 23 KB gzipped — and there is no
+auto-detection, which runs every grammar and still mislabels prose.
+
+**Seven token kinds, one palette per text colour.** highlight.js's few dozen
+scopes collapse to keyword, type, string, attribute, literal, title and comment
+(`CodeScope`); comments are italic as well as coloured. The colours are
+`CODE_PALETTE`: one set for dark-on-light text, one for light-on-dark. Which one
+a block takes follows its text, not the app theme — a coloured note on mobile
+keeps its light swatch in dark mode, so its code is drawn in the light set.
+
+**A code block sits on an opaque panel.** It used to be a translucent tint,
+which lets the note colour through. A palette that holds 4.5:1 on all ten
+swatches — coral is the worst — comes out nearly as dark as body text, so the
+highlighting all but disappears. On one known panel per text colour, the shared
+suite can check every token colour against the only background it ever gets.
+Plain code on the panel takes the palette's own text colour too — inside a
+blockquote it would otherwise inherit the quote's muted grey, which falls just
+short of 4.5:1 there. A faint translucent border edges the panel, because the
+light panel is the Gray swatch's own colour and would vanish into a Gray note.
+Inline code keeps its tint; it is never highlighted.
+
+**Long lines wrap; nothing scrolls sideways.** On both clients and both forms, a
+code line wider than the note wraps at the panel's edge, breaking inside a word
+only when the word alone is too wide. Mobile's Text wraps natively; the webapp
+sets `white-space: pre-wrap` and `overflow-wrap: anywhere` on
+`.markdown-content pre`. A horizontally
+scrolling block is a region keyboard users cannot scroll (axe's
+`scrollable-region-focusable`), and the fix for that — a `tabindex` on each
+`<pre>` — would put tab stops inside the open note's preview, which is itself a
+control that switches to edit mode, and would need `tabindex` on the sanitizer's
+allowlist. Wrapping removes the region instead, at the cost of indentation on a
+wrapped continuation line.
+
+**Cards stay plain.** A card is six clamped lines, the dashboard would pay for
+highlighting every note on it, and the tokens would be too small to read there
+anyway — the same reasoning, on both clients, as cards not linking (§1.1).
+With nothing to highlight a card needs no panel either: its code keeps the
+translucent tint and the card's text colour (`.markdown-card` on the webapp;
+mobile's card draws no box at all, §5).
+
+**A failure renders plain.** The highlighter's output is read back into runs and
+checked to reassemble the source exactly; if it does not, or highlight.js
+throws, the block renders as it would with no language. No content is ever lost
+to highlighting.
+
+### 2.4 Task checkboxes in the open note
+
+In the **webapp's modal preview** and **mobile's editor read mode**, each `- [ ]` / `- [x]` renders as a real
+checkbox. Ticking one rewrites that marker in `content` — `[ ]` ↔ `[x]`, the one
+character between the brackets — and saves through the normal autosave, exactly
+as typing the change would. The preview stays a preview: a click on a checkbox
+does not enter edit mode, and Space toggles a focused checkbox rather than
+opening the editor. Focus stays on the checkbox across the re-render.
+
+A preview holding checkboxes is a `group` labelled "Note content" rather than a
+`textbox`: `textbox` is a leaf role, and assistive technology may flatten what
+is inside it, checkboxes included. Enter and Space on the preview itself still
+open the editor; a preview without checkboxes keeps the `textbox` role.
+
+| Surface | Task markers |
+|---|---|
+| Webapp modal preview | Checkboxes, named by their item's text |
+| Webapp modal preview of a note in the bin | ☐ / ☑ text |
+| Note cards, both clients | ☐ / ☑ text — a card is one control (§1.1) |
+| Mobile editor read mode | Tappable checkboxes (nested `Text` with `onPress`, role `checkbox`, named by the item's text) |
+| Mobile editor read mode of a note in the bin | ☐ / ☑ text |
+
+On mobile the box is a nested `Text` with `onPress` — a `View` inside a `Text`
+breaks wrapping — so a tap on it does not reach the read-mode control that opens
+the editor. The toggle goes through the same save path as typing (local DB and
+sync queue), so it works offline. Only `Markdown.tsx` asks for offsets; the card
+renderer never does.
+
+**Locating the marker.** The normalizer tags the ☐ / ☑ text node it emits for
+each checkbox (`task` on the `text` node), so a ☐ typed into the note never
+becomes a checkbox. Checkboxes are numbered in document order, and
+`taskMarkerOffsets` (`shared/src/taskMarkers.ts`) finds the source offset of
+each one's marker: the top-level tokens' `raw` slices rebuild the source exactly,
+so each block's start is known, and within a block the lines matching one
+pattern — indentation, then any run of quote and list markers, then the box —
+are paired with the block's checkboxes in order. `normalizeBlockTokens` called
+with `taskSource` carries each checkbox's offset and accessible label on its
+`task` tag, so a renderer reads them rather than re-deriving them; the webapp
+writes the offset onto the checkbox (`data-task-offset`), and a toggle is a
+one-character splice with no re-parse. The approach follows Memos'
+`markdown-task-actions.ts`.
+
+**When in doubt, a checkbox stays text.** A line can match the pattern without
+being a task (`- [ ]` with nothing after it, task syntax in a code block nested
+inside a list item), and a construct the pattern does not describe could hide a
+real one. A count check alone cannot catch both at once — a miss and a false
+match cancel out — so **each pair is verified**: the source line from its `[`
+must equal the first line of the list item that owns the checkbox, from its
+`[`. A block whose counts or lines disagree gets no offsets, and its checkboxes
+render as ☐ / ☑. A toggle therefore never rewrites another item's line.
+
+**Line endings.** marked lexes CRLF as LF, so offsets index the LF-normalized
+source; a toggle maps its offset back onto the original and changes only the
+marker, keeping CRLF content CRLF.
+
 ---
 
 ## 3. How unsupported formatting is handled
@@ -464,14 +618,19 @@ one client only is exactly the kind of drift this spec exists to prevent.
 
 | Concern | File |
 |---|---|
-| Shared link-scheme policy + literal-image format | `shared/src/markdown.ts` |
+| Shared link-scheme policy, link-target encoding + literal-image format | `shared/src/markdown.ts` |
 | Shared block normalizer (§2) | `shared/src/blockMarkdown.ts` |
 | Shared inline-subset normalizer (§2.1) | `shared/src/inlineMarkdown.ts` |
 | Shared text ↔ list conversion (§2.2) | `shared/src/noteConversion.ts` |
+| Shared highlighting policy: languages, scopes, palette (§2.3) | `shared/src/codeHighlight.ts` |
+| Each client's highlight.js instance | `utils/codeHighlighter.ts` in `webapp/src` and `mobile/src` |
+| Webapp token colours + code panel (a copy of `CODE_PALETTE`) | `.markdown-content` in `webapp/src/index.css` |
 | Shared conformance corpora (both test suites) | `shared/src/markdownCases.ts` |
 | Webapp node-to-HTML renderer + tag allowlist | `webapp/src/utils/markdown.ts` |
 | Webapp item renderer | `webapp/src/components/InlineMarkdown.tsx` |
 | Webapp editable-row swap (§1.2) | `webapp/src/components/SortableItem.tsx` |
+| Shared link list for the open-link control (§1.2) | `inlineLinks` in `shared/src/inlineMarkdown.ts` |
+| Webapp open-link control | `webapp/src/components/ItemLinkButton.tsx` |
 | Shared rendered-offset → source-offset map | `inlineSourceOffset` in `shared/src/inlineMarkdown.ts` |
 | Webapp click point → rendered offset | `webapp/src/utils/inlineCaret.ts` |
 | Mobile block lexing entry point | `mobile/src/utils/markdown.ts` |
@@ -479,9 +638,14 @@ one client only is exactly the kind of drift this spec exists to prevent.
 | Mobile card preview renderer | `mobile/src/components/MarkdownPreview.tsx` |
 | Mobile item lexing + plain-text flattening | `mobile/src/utils/inlineMarkdown.ts` |
 | Mobile item renderer | `mobile/src/components/InlineMarkdown.tsx` |
-| Mobile editable-row swap (§1.2) | `mobile/src/components/ListItem.tsx` |
+| Mobile editable-row swap and open-link button (§1.2) | `mobile/src/components/ListItem.tsx` |
+| Mobile several-links sheet | `mobile/src/components/ItemLinksSheet.tsx` |
 | Mobile tap point → rendered offset | `mobile/src/utils/inlineCaret.ts` |
 | Card links-as-text switch | `links` option on both clients' renderers |
+| Task-marker source offsets (§2.4) | `shared/src/taskMarkers.ts` |
+| Mobile tappable checkboxes (§2.4) | `onToggleTask` in `mobile/src/components/inlineNodes.tsx`; save in `NoteEditorScreen.tsx` (`handleToggleTask`) |
+| Webapp interactive checkboxes (§2.4) | `renderInteractiveMarkdown` in `webapp/src/utils/markdown.ts`; click handling (`toggleTaskMarkerAt`) in `webapp/src/components/NoteModal.tsx` |
+| Card no-highlighting switch | `highlight` option on the webapp renderer; mobile's card renderer has no highlighting |
 | Mobile inline leaf rendering (shared by all three) | `mobile/src/components/inlineNodes.tsx` |
 | Mobile text metrics + colours | `mobile/src/utils/markdownStyles.ts` |
 
@@ -511,14 +675,9 @@ allowed by construction**, which is why no renderer re-checks the scheme: the
 normalizer has already turned every other link into its own label.
 
 `shared/src/inlineMarkdown.ts` **declares the marked token fields it reads
-structurally and imports nothing from `marked`** — not even types. Both consumers
-compile `shared/src` with their own tsc and resolution runs from `shared/`
-(mobile's `@jot/shared` is a symlink and resolution follows the realpath), while
-CI installs dependencies in `webapp/` and `mobile/` only. So `shared/node_modules`
-does not exist during a consumer's typecheck and even a type-only import fails to
-resolve — the same trap as the `@babel/runtime` note in `CLAUDE.md`. `marked`
-stays a devDependency of `shared/` for its own test suite, which `shared-ci.yml`
-does install, and is a real dependency of both consumers, which do the lexing.
+structurally and imports nothing from `marked`** — not even types; the doc comment
+on `InlineMarkdownToken` explains why. The consumers depend on `marked` and do the
+lexing.
 
 ### What the card preview substitutes
 
@@ -531,7 +690,7 @@ dropped, so the card shows the same content as the editor:
 
 | Block | Editor | Card |
 |---|---|---|
-| Code block | Monospace in a tinted box | Monospace, no tint |
+| Code block | Monospace on an opaque panel, highlighted (§2.3) | Monospace, no panel, plain |
 | Blockquote | A bar down the left | Muted text colour |
 | Bullet / ordered item | A marker column | A `•` or `1.` prefix plus a space; nested items indented by spaces |
 | Horizontal rule | A hairline View | A short run of `─` |
@@ -601,6 +760,34 @@ here so the next person does not have to rediscover them.
   both clients skip it. It is the one token type that is neither rendered nor
   degraded to source, and it is not an exception to §3: there is no source left
   to show once the reference has been substituted.
+- **`shared/` cannot import highlight.js**, for the same reason it does not
+  import `marked`: it has no runtime dependencies, and a package import there
+  breaks both clients' typecheck in CI. So the policy lives in
+  `shared/src/codeHighlight.ts`, and each client builds its own instance from a
+  `Record<HighlightLanguage, LanguageFn>` — a language added to the shared list
+  fails to compile on a client until that client imports its grammar.
+- **Runs come from highlight.js's HTML, not its token tree.** The tree is
+  private API; `lowlight`, the usual wrapper around it, pins its own
+  highlight.js minor and would ship a second copy. The HTML is public and closed
+  — `<span class="…">`, `</span>`, and five escaped characters — so a scan reads
+  it without an HTML parser, which mobile does not have.
+- **A webapp code block must not scroll sideways.** `overflow-x: auto` on
+  `<pre>` makes a region axe reports as `scrollable-region-focusable`, and the
+  usual fix, `tabindex="0"` on the block, would put a tab stop inside the open
+  note's preview and on every card — both are themselves controls. Lines wrap
+  instead (§2.3). `overflow-wrap: anywhere` rather than `break-word`, because
+  only `anywhere` lowers the block's min-content width, so a single long token
+  cannot widen a content-sized ancestor. `accessibility.spec.ts` measures the
+  container, not the `<pre>`, for the same reason.
+- **Webapp tokens carry `data-code`, not `class`.** A token is
+  `<span data-code="keyword">`, styled by an attribute selector in `index.css`.
+  DOMPurify keeps `data-*` attributes by default, so only `span` joins the
+  allowlist; allowing `class` instead would have let anything reaching the
+  sanitizer borrow the app's own utility classes, and needed a hook to stop it.
+- **Hermes is not what Jest runs.** Two grammars (`python`, `xml`) build regexes
+  with Unicode property escapes. Every regex the ten grammars produce was checked
+  against the app's own `hermesc`; on a device, a grammar that still failed
+  would cost only its highlighting, since a failure renders plain.
 
 ---
 
@@ -724,13 +911,13 @@ is on both bars but has no keyboard shortcut on either surface.
 
 ## 6. Deliberately not covered
 
-- **Interactive checkboxes.** Toggling a rendered ☐ would mean writing back into
-  `content` — a much larger feature than rendering.
+- **Interactive checkboxes on cards.** §2.4 covers the open note on both
+  clients; cards stay non-interactive for the reason in §1.1.
 - **Block Markdown in list items.** Not a gap to be filled later — §2.1 explains
   why an item cannot hold it.
-- **Syntax highlighting** in code blocks. The webapp allowlist drops the
-  `class="language-js"` attribute `marked` emits, so the language tag is parsed
-  and ignored on both clients.
+- **Syntax highlighting beyond §2.3**: more languages, guessing a language, or
+  highlighting on cards and in inline code. Each costs bundle size or
+  dashboard render time on both clients; §2.3 says why the line is where it is.
 
 ---
 
@@ -750,13 +937,31 @@ the other. Adding a case breaks both suites until both are updated.
 `shared/src/__tests__/inlineMarkdown.test.ts` covers the item corpus a third
 time, at the normalizer, where the policy actually lives.
 
+Syntax highlighting (§2.3) adds three cases to `MARKDOWN_CASES` and a suite of
+its own, `shared/src/__tests__/codeHighlight.test.ts`, which runs the shared
+policy against the real grammars: every language highlights and reassembles
+its source exactly, aliases resolve, the token mapping holds, failures fall back
+to plain, and every palette colour holds 4.5:1 on its panel. The webapp's copy
+of the palette in `index.css` is pinned to `CODE_PALETTE` by
+`webapp/src/utils/__tests__/codeHighlightStyles.test.ts`, and
+`e2e/tests/accessibility.spec.ts` scans highlighted code in every note colour
+in both themes.
+
+Task checkboxes (§2.4) are covered by `shared/src/__tests__/taskMarkers.test.ts`
+(offsets per list shape, the inert fallbacks, numbering matching the rendered
+order), the `renderInteractiveMarkdown` cases in `webapp/src/utils/__tests__/markdown.test.ts`,
+the preview wiring in `NoteModal.test.tsx`, and `markdown.spec.ts` end to end —
+tick, Space, save, reload. `accessibility.spec.ts` scans them in both themes.
+
 The editable row's swap (§1.2) is covered per client rather than by the corpus,
 since it is a state machine rather than a rendering:
 `webapp/src/components/__tests__/SortableItem.test.tsx` and
 `mobile/__tests__/ListItem.test.tsx` for which form is showing and that the
 field survives it, `webapp/src/utils/__tests__/inlineCaret.test.ts` and
 `mobile/__tests__/inlineCaret.test.ts` for the point-to-caret mapping — the
-half of it that exists without a layout engine.
+half of it that exists without a layout engine. The same two row suites cover
+the open-link button (present, absent, one link, several), and `markdown.spec.ts`
+follows it into a real popup and menu.
 
 The formatting bars (§5.1) are covered per client too, since what they write is
 already tested at the shared transforms and what is left is per-surface wiring:

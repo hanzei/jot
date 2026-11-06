@@ -459,11 +459,12 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
 
         {note.note_type === 'text' ? (
           <div
-            className="text-sm text-gray-700 dark:text-gray-200 line-clamp-6 markdown-content"
+            className="text-sm text-gray-700 dark:text-gray-200 line-clamp-6 markdown-content markdown-card"
             // links={false} in effect: the card is one control that opens the
             // note, so an anchor here would follow the link *and* open the note.
-            // docs/specs/markdown-rendering.md §1.1.
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(note.content, { links: false }) }}
+            // docs/specs/markdown-rendering.md §1.1. No syntax highlighting
+            // either, on either client (§2.3).
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(note.content, { links: false, highlight: false }) }}
           />
         ) : (
           <div className="space-y-1">

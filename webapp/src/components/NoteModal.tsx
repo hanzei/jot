@@ -3,9 +3,9 @@ import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Users, Check
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, distinctCompletedTexts, findSuggestedItem, generateId, reviveSuggestedItem, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, toggleTaskMarkerAt, completedCascadeScope, completedPriorById, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
-import { renderMarkdown, inlineMarkdownToText } from '@/utils/markdown';
+import { renderMarkdown, renderInteractiveMarkdown, inlineMarkdownToText, type InteractiveMarkdownRender } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
 import NoteImageGallery from '@/components/NoteImageGallery';
 import LetterAvatar from '@/components/LetterAvatar';
@@ -25,12 +25,11 @@ import { buildMobileDeepLink } from '@/utils/deepLink';
 import { isEditableElementFocused } from '@/utils/keyboardShortcuts';
 import {
   applyCompletedCascade,
+  changeItemIndent,
   dropTargetParentId,
   indentOf,
-  itemHasChildren,
   itemTextareaId,
   normalizeItemOrder,
-  precedingTopLevelId,
   type ListItem,
 } from '@/utils/noteItems';
 import type {
@@ -164,6 +163,23 @@ interface NoteModalProps {
   initialContent?: string | undefined;
 }
 
+/** A task checkbox in the rendered preview (`renderInteractiveMarkdown`). */
+function isTaskCheckbox(target: EventTarget): target is HTMLInputElement {
+  return target instanceof HTMLInputElement && target.dataset.taskOffset !== undefined;
+}
+
+/**
+ * Whether an event came from a control inside the rendered preview — a link,
+ * a task checkbox, or anything interactive rendering may add later. Using a
+ * control is not a request to edit (docs/specs/markdown-rendering.md §1.1), so
+ * the preview leaves its clicks and keys to it.
+ */
+function isPreviewControl(target: EventTarget, preview: Element): boolean {
+  if (!(target instanceof Element)) return false;
+  const control = target.closest('a[href], input, button, select, textarea, summary, label');
+  return control !== null && preview.contains(control);
+}
+
 export default function NoteModal({ note = null, onClose, onSave, onCreated, onRefresh, onShare, onDelete, onDuplicate, onConvert, onRestore, onPermanentlyDelete, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent }: NoteModalProps) {
   const { t, i18n } = useTranslation();
   const { showToast, showErrorToast } = useToast();
@@ -211,7 +227,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     noteLabels, setNoteLabels,
     showSaved, flashSaved, markDirty,
     conflict, overwriteConflict,
-    setSavedBaseline, markScalarSaved, applyDraftScalars, isDirty, hasUnflushedWork, baseline,
+    setSavedBaseline, markScalarSaved, applyDraftScalars, isDirty, hasUnflushedWork, baseline, completedWrites,
     reportSaveFailure, autoSaveNote, scheduleAutoSave, cancelPendingSave, flushSave,
     beginExclusiveSave, endExclusiveSave, isSaving, requestAnotherSavePass, isMounted,
   } = useNoteDraft({ note, onRefresh, showError });
@@ -330,8 +346,9 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     })
   );
 
-  // Bulk actions on the checked items: deferred delete and uncheck-all, each
-  // behind its own in-modal undo bar.
+  // Completed-flag writes: the single-item toggle, and the bulk actions on the
+  // checked items (deferred delete and uncheck-all, each behind its own in-modal
+  // undo bar).
   const {
     removedCompletedItems,
     hiddenCompletedItemIds,
@@ -341,11 +358,13 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     handleUncheckAllItems,
     undoUncheckAll,
     resetForNoteSwitch: resetCompletedItemsForNoteSwitch,
+    writeCompleted,
   } = useCompletedItems({
     note,
     itemsRef,
     commitItems,
     baseline,
+    completedWrites,
     cancelPendingSave,
     markDirty,
     flashSaved,
@@ -359,17 +378,19 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     // Items mid-undo-window are completed but hidden from view until their
     // deferred bulk delete lands (or is undone), mirroring image removal.
     const completedItems = items.filter(item => item.completed && !hiddenCompletedItemIds.has(item.id));
-    const seen = new Set<string>();
-    const completedItemTexts: string[] = [];
-    for (const item of completedItems) {
-      const trimmed = item.text.trim();
-      if (trimmed && !seen.has(trimmed.toLowerCase())) {
-        seen.add(trimmed.toLowerCase());
-        completedItemTexts.push(trimmed);
-      }
-    }
+    const completedItemTexts = distinctCompletedTexts(completedItems);
     return { uncompletedItems, completedItems, completedItemTexts };
   }, [items, hiddenCompletedItemIds]);
+
+  // Ids of items that have children, so each row's hasChildren is a lookup
+  // rather than a scan of the whole list on every render.
+  const parentIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const item of items) {
+      if (item.parentId !== null) ids.add(item.parentId);
+    }
+    return ids;
+  }, [items]);
 
   // Softly animate the modal's height when its contents structurally change
   // (an item checked off, added/removed, or the completed section toggled), so
@@ -423,11 +444,15 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
         setCheckedItemsCollapsed(next.checked_items_collapsed);
         // Items arrive ordered by position from the server. normalizeItemOrder
         // keeps each group contiguous and re-sequences positions so all later
-        // mutations build on a consistent ordering.
-        listItems = normalizeItemOrder((next.items ?? []).map((item, index) => ({
+        // mutations build on a consistent ordering. Their completed flags go
+        // through the completed-write gate, so a snapshot older than a write
+        // response already seen cannot put a checked row back.
+        const serverItems = next.items ?? [];
+        const completedById = completedWrites.accept(null, serverItems);
+        listItems = normalizeItemOrder(serverItems.map((item, index) => ({
           id: item.id || `existing_${item.position}_${index}`,
           text: item.text,
-          completed: item.completed,
+          completed: completedById.get(item.id) ?? item.completed,
           position: item.position,
           parentId: item.parent_id ?? null,
           assigned_to: item.assigned_to ?? '',
@@ -452,7 +477,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
       setNoteLabels([]);
       setSavedBaseline({ title: '', content: '', pinned: false, archived: false, color: DEFAULT_NOTE_COLOR, checked_items_collapsed: false }, [], null);
     }
-  }, [commitItems, setSavedBaseline, setTitle, setContent, setNoteType, setColor, setPinned, setArchived,
+  }, [commitItems, completedWrites, setSavedBaseline, setTitle, setContent, setNoteType, setColor, setPinned, setArchived,
       setCheckedItemsCollapsed, setNoteLabels, initialType, initialContent]);
 
   useEffect(() => {
@@ -652,14 +677,52 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
   // If markdown renders to nothing but content is non-empty (e.g. plain text
   // with HTML-special chars that DOMPurify stripped), fall back to an
   // HTML-escaped version of the raw content so it is never silently hidden.
-  const renderedContent = useMemo(() => {
-    if (!content?.trim()) return '';
-    const md = renderMarkdown(content);
-    if (md) return md;
-    return content.replace(/[&<>"']/g, (c) => (
+  // Skipped while the textarea replaces the preview: it would otherwise lex and
+  // syntax-highlight the whole note on every keystroke for nothing on screen.
+  const isEditingText = isEditingContent && !isReadOnly;
+  // A note in the bin is read-only, so its task markers stay ☐ / ☑ text.
+  const { html: renderedContent, hasTasks: previewHasTasks } = useMemo((): InteractiveMarkdownRender => {
+    if (isEditingText || !content?.trim()) return { html: '', hasTasks: false };
+    const md = isReadOnly ? { html: renderMarkdown(content), hasTasks: false } : renderInteractiveMarkdown(content);
+    if (md.html) return md;
+    const escaped = content.replace(/[&<>"']/g, (c) => (
       { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c] ?? c
     ));
-  }, [content]);
+    return { html: escaped, hasTasks: false };
+  }, [content, isEditingText, isReadOnly]);
+
+  // Task checkboxes in the preview (docs/specs/markdown-rendering.md §2.4).
+  // A toggle rewrites one character of `content`, which re-renders the
+  // preview's HTML and so replaces the checkbox that had focus. A toggle swaps
+  // one character for one, so the replacement has the same offset; it is kept
+  // here so the effect below can hand focus to it.
+  const previewRef = useRef<HTMLDivElement>(null);
+  const focusTaskOffsetRef = useRef<string | null>(null);
+  const toggleTask = (e: React.MouseEvent, checkbox: HTMLInputElement) => {
+    // The offset was computed from this same `content` when the checkbox was
+    // rendered, so it still points at the marker; the bracket check in
+    // toggleTaskMarkerAt is the net behind that.
+    const offset = checkbox.dataset.taskOffset ?? '';
+    const next = toggleTaskMarkerAt(content, Number(offset));
+    if (next === null) {
+      e.preventDefault();
+      return;
+    }
+    focusTaskOffsetRef.current = document.activeElement === checkbox ? offset : null;
+    setContent(next);
+    if (note) {
+      markDirty();
+      scheduleAutoSave();
+    }
+  };
+  useEffect(() => {
+    const offset = focusTaskOffsetRef.current;
+    if (offset === null) return;
+    focusTaskOffsetRef.current = null;
+    previewRef.current
+      ?.querySelector<HTMLInputElement>(`input[data-task-offset="${offset}"]`)
+      ?.focus();
+  }, [renderedContent]);
 
   // Mobile snaps indent level to the nearest INDENT_PX_PER_LEVEL step (rounding),
   // so it takes half a step — 12px — to commit to nesting. The desktop drag has no
@@ -669,32 +732,16 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
   const INDENT_DRAG_THRESHOLD = VALIDATION.INDENT_PX_PER_LEVEL;
 
   // indentListItem nests (delta 1) or un-nests (delta -1) an item by changing its
-  // parentId, the source of truth for grouping. Indenting attaches the item to
-  // the nearest preceding top-level item; un-indenting promotes it to top-level.
-  // It refuses to nest an item that already has children (that would create a
-  // grandchild, which the server rejects) and is a no-op when nothing changes.
+  // parentId, the source of truth for grouping. The rule (and when it refuses)
+  // is changeItemIndent's, shared with mobile's indent buttons.
   const indentListItem = async (itemId: string, delta: 1 | -1) => {
     if (isReadOnly) return;
+    const updated = changeItemIndent(itemsRef.current, itemId, delta);
+    // Nothing to change (see changeItemIndent for the rule). Decide this before
+    // cancelling the pending save: a refused Tab must not drop the debounced
+    // save of text typed just before it.
+    if (!updated) return;
     cancelPendingSave();
-    const currentItems = itemsRef.current;
-    const target = currentItems.find(item => item.id === itemId);
-    if (!target) return;
-
-    let newParentId: string | null = target.parentId;
-    if (delta === 1) {
-      if (target.parentId !== null) return; // already nested (max one level)
-      if (itemHasChildren(currentItems, itemId)) return; // would create a grandchild
-      const parentId = precedingTopLevelId(currentItems, itemId);
-      if (!parentId) return; // nothing to nest under
-      newParentId = parentId;
-    } else {
-      if (target.parentId === null) return; // already top-level
-      newParentId = null;
-    }
-
-    const updated = normalizeItemOrder(
-      currentItems.map(item => (item.id === itemId ? { ...item, parentId: newParentId } : item)),
-    );
     commitItems(updated);
     await autoSaveNote();
   };
@@ -1119,60 +1166,27 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     autoSaveNote();
   };
 
-  // handleItemCompletedToggle checks/unchecks an item through the dedicated
-  // toggle-completed endpoint so a parent's children cascade atomically in one
-  // request. It applies an optimistic local cascade first, then reconciles only
-  // the completed flags the server reports — never replacing the whole list, so
-  // unsaved edits and not-yet-created items are preserved. Items keep their slot
-  // in the single ordered array, so unchecking returns an item to where it was.
-  const handleItemCompletedToggle = async (itemId: string, completed: boolean) => {
-    if (isReadOnly) return;
+  // handleItemCompletedToggle checks/unchecks an item through the
+  // set-completed endpoint so a parent's children cascade atomically in one
+  // request. It applies an optimistic local cascade first; writeCompleted then
+  // reconciles only the completed flags the response may still decide (the
+  // response is the note's full item list as of this write, so it still reports
+  // any row tapped after it unchecked). Items keep their slot in the single
+  // ordered array, so unchecking returns an item to where it was. Resolves
+  // false only when the request failed and the flags were reverted.
+  const handleItemCompletedToggle = async (itemId: string, completed: boolean): Promise<boolean> => {
+    if (isReadOnly) return true;
     const before = itemsRef.current;
     const target = before.find(item => item.id === itemId);
-    if (!target || target.completed === completed) return;
+    if (!target || target.completed === completed) return true;
 
-    // Remember the pre-toggle completed state of just the items this toggle
-    // touches (the target and, for a parent, its children — or, for a child
-    // being unchecked, its parent), so an error reverts only those flags
-    // without clobbering edits made to other items meanwhile.
-    const revertCompleted = new Map<string, boolean>([[target.id, target.completed]]);
-    if (target.parentId === null) {
-      for (const item of before) {
-        if (item.parentId === itemId) revertCompleted.set(item.id, item.completed);
-      }
-    } else if (!completed) {
-      const parent = before.find(item => item.id === target.parentId);
-      if (parent) revertCompleted.set(parent.id, parent.completed);
-    }
+    // The pre-toggle state of just the items this toggle changes (the target
+    // and, for a parent, its children — or, for a child being unchecked, its
+    // parent), so a failure reverts only those flags.
+    const priorById = completedPriorById(before, completedCascadeScope(before, itemId, completed), completed);
 
     commitItems(applyCompletedCascade(before, itemId, completed));
-
-    // A not-yet-persisted note has no server-side item to toggle; the bulk
-    // create on save carries the completed flags instead.
-    if (!note?.id) return;
-
-    cancelPendingSave();
-
-    try {
-      const serverItems = await notes.toggleItemCompleted(note.id, itemId, completed);
-      const completedById = new Map(serverItems.map(item => [item.id, item.completed]));
-      commitItems(itemsRef.current.map(item => {
-        const serverCompleted = completedById.get(item.id);
-        return serverCompleted === undefined ? item : { ...item, completed: serverCompleted };
-      }));
-      // Advance the baseline so the diff engine does not re-patch completed.
-      baseline.syncCompleted(completedById);
-      onRefresh?.();
-      flashSaved();
-    } catch (error) {
-      console.error('Failed to toggle item:', error);
-      // Revert only the toggled completed flags; leave any concurrent edits.
-      commitItems(itemsRef.current.map(item => {
-        const original = revertCompleted.get(item.id);
-        return original === undefined ? item : { ...item, completed: original };
-      }));
-      showError(t('note.failedSaveChanges'));
-    }
+    return writeCompleted(priorById, noteId => notes.setItemsCompleted(noteId, [itemId], completed));
   };
 
   // Helper function to handle text updates with debouncing
@@ -1309,13 +1323,11 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     applyItemMarkdownEdit(editingItemId, textarea, (state) => toggleInlineMarker(state, marker));
   };
 
-  // Restores a completed item at the position of the current (placeholder) item,
-  // keeping its assignment, and removes the placeholder.
+  // Restores a completed item at the position of the row being typed in,
+  // keeping its assignment and group, and removes the typed row.
   const acceptSuggestion = (currentItemId: string, suggestionText: string) => {
     if (isReadOnly) return;
-    const completedItem = completedItems.find(
-      item => item.text.trim().toLowerCase() === suggestionText.toLowerCase()
-    );
+    const completedItem = findSuggestedItem(completedItems, suggestionText);
 
     if (!completedItem) {
       // No matching completed item — fall back to just updating the text
@@ -1329,26 +1341,17 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
       return;
     }
 
-    // Drop the empty placeholder and re-activate the matched completed item in
-    // its place, keeping its assignee and group (parentId). normalizeItemOrder
-    // settles it back into its group and re-sequences positions.
-    const currentItems = itemsRef.current;
-    const placeholderIndex = currentItems.findIndex(item => item.id === currentItemId);
-    const withoutBoth = currentItems.filter(
-      item => item.id !== currentItemId && item.id !== completedItem.id
-    );
-    const restoredItem: ListItem = { ...completedItem, completed: false };
-    const insertIndex = placeholderIndex >= 0 ? Math.min(placeholderIndex, withoutBoth.length) : withoutBoth.length;
-    withoutBoth.splice(insertIndex, 0, restoredItem);
+    void reviveSuggestedItem(currentItemId, completedItem.id, {
+      read: () => itemsRef.current,
+      commit: commitItems,
+      uncheck: id => handleItemCompletedToggle(id, false),
+      save: () => { autoSaveNote(); },
+    });
 
-    commitItems(normalizeItemOrder(withoutBoth));
-
-    cancelPendingSave();
-    autoSaveNote();
-
-    // Restore focus to the item now sitting at the same position
+    // Focus the revived item, which sits in the typed row's place (or, for a
+    // child, back in its own group)
     setTimeout(() => {
-      const el = itemInputRefs.current.get(restoredItem.id);
+      const el = itemInputRefs.current.get(completedItem.id);
       if (el) {
         el.focus();
         el.setSelectionRange(el.value.length, el.value.length);
@@ -2070,7 +2073,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
             {/* Content based on type */}
             {noteType === 'text' ? (
               <>
-                {isEditingContent && !isReadOnly ? (
+                {isEditingText ? (
                   <textarea
                     ref={contentRef}
                     id={contentTextareaId}
@@ -2128,15 +2131,35 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                   />
                 ) : (
                   <div
+                    ref={previewRef}
                     data-testid="note-content-preview"
-                    role="textbox"
-                    aria-label={t('note.contentPlaceholder')}
-                    aria-multiline="true"
-                    aria-readonly={isReadOnly}
+                    // Interactive checkboxes cannot live inside role="textbox", a
+                    // leaf role whose content assistive technology may flatten —
+                    // so a preview holding any is a labelled group instead.
+                    // Enter and Space on it still open the editor.
+                    {...(previewHasTasks
+                      ? { role: 'group', 'aria-label': t('note.contentPreview') }
+                      : {
+                          role: 'textbox',
+                          'aria-label': t('note.contentPlaceholder'),
+                          'aria-multiline': true,
+                          'aria-readonly': isReadOnly,
+                        })}
                     tabIndex={0}
-                    onClick={() => !isReadOnly && setIsEditingContent(true)}
+                    onClick={(e) => {
+                      if (isReadOnly) return;
+                      if (isTaskCheckbox(e.target)) {
+                        toggleTask(e, e.target);
+                        return;
+                      }
+                      if (isPreviewControl(e.target, e.currentTarget)) return;
+                      setIsEditingContent(true);
+                    }}
                     onKeyDown={(e) => {
                       if (isReadOnly) return;
+                      // A control's own keys are its own: Space toggles a task
+                      // checkbox, Enter follows a link.
+                      if (isPreviewControl(e.target, e.currentTarget)) return;
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
                         setIsEditingContent(true);
@@ -2185,6 +2208,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                           usersById={usersById}
                           onAssignItem={assignItem}
                           completedItemTexts={completedItemTexts}
+                          hasChildren={parentIds.has(item.id)}
                           onAcceptSuggestion={acceptSuggestion}
                           onEditingChange={handleItemEditingChange}
                           keepSourceVisible={editingItemId === item.id}

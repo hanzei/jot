@@ -211,57 +211,6 @@ func normalizeItemOrderTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, n
 	return positions, nil
 }
 
-func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID, actorID, text string, position int, completed bool, parentID string, assignedTo string) (*NoteItem, error) {
-	itemID, err := generateID()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate item ID: %w", err)
-	}
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	now := Timestamp(Now())
-
-	if err = validateParentRefTx(ctx, tx, s.d, noteID, itemID, parentID); err != nil {
-		return nil, err
-	}
-
-	query := s.d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, parent_id, assigned_to, created_at, updated_at)
-			  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`)
-	var item NoteItem
-	if err = tx.QueryRowContext(ctx, query, itemID, noteID, text, position, completed, nullableParentID(parentID),
-		nullableAssignedTo(assignedTo), now, now,
-	).Scan(
-		&item.CreatedAt, &item.UpdatedAt,
-	); err != nil {
-		return nil, fmt.Errorf("failed to create note item: %w", err)
-	}
-
-	positions, err := normalizeItemOrderTx(ctx, tx, s.d, noteID, now)
-	if err != nil {
-		return nil, err
-	}
-	if err = touchNoteTx(ctx, tx, s.d, noteID, actorID, now); err != nil {
-		return nil, err
-	}
-	if err = tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit create note item: %w", err)
-	}
-
-	item.ID = itemID
-	item.NoteID = noteID
-	item.Text = text
-	item.Position = positions[itemID]
-	item.Completed = completed
-	item.ParentID = parentIDPtr(nullableParentID(parentID))
-	item.AssignedTo = assignedTo
-
-	return &item, nil
-}
-
 // CreateItemWithID inserts a list item using a caller-supplied ID. Returns
 // ErrNoteItemExists if an item with that ID already exists, and bumps the
 // parent note's updated_at. When maxItems > 0 the note's item count is checked
@@ -392,7 +341,7 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, actorID, itemID strin
 		return nil, fmt.Errorf("failed to update note item: %w", err)
 	}
 
-	// Keep the same parent/child completion invariant as ToggleItemCompleted.
+	// Keep the same parent/child completion invariant as SetItemsCompleted.
 	// Runs whenever completed or parent_id changes: a plain re-parent (no
 	// Completed in the request) can just as easily violate the invariant —
 	// moving an incomplete child under an already-completed parent — even
@@ -443,41 +392,6 @@ func patchChangesItem(current *NoteItem, currentParent, text string, completed b
 	return text != current.Text || completed != current.Completed ||
 		parent != currentParent || assignedTo != current.AssignedTo ||
 		(position != nil && *position != current.Position)
-}
-
-// DeleteItemFromNote deletes a single item scoped to its note and bumps the
-// parent note's updated_at. Returns ErrNoteItemNotFound if no such item exists.
-func (s *noteStore) DeleteItemFromNote(ctx context.Context, noteID, actorID, itemID string) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	now := Timestamp(Now())
-
-	result, err := tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`DELETE FROM note_items WHERE id = ? AND note_id = ?`),
-		itemID, noteID,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to delete note item: %w", err)
-	}
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-	if rowsAffected == 0 {
-		return ErrNoteItemNotFound
-	}
-
-	if err = touchNoteTx(ctx, tx, s.d, noteID, actorID, now); err != nil {
-		return err
-	}
-	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("commit delete note item: %w", err)
-	}
-	return nil
 }
 
 // ReorderItems sets each item's position to its index in itemIDs, then
@@ -538,7 +452,7 @@ func (s *noteStore) ReorderItems(ctx context.Context, noteID, actorID string, it
 // un-completes its parent. The reverse does not happen: completing the last
 // incomplete child never auto-completes the parent — that still requires
 // checking the parent itself. parentID is the parent the item belongs to
-// after this change, as passed by ToggleItemCompleted (its unchanged parent)
+// after this change, as passed by SetItemsCompleted (its unchanged parent)
 // and PatchItem (its resolved, post-patch parent).
 func cascadeItemCompletion(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, itemID string, parentID sql.NullString, newCompleted bool, now string) (changed bool, err error) {
 	if !parentID.Valid {
@@ -573,65 +487,18 @@ func execChanged(ctx context.Context, tx *sql.Tx, query, errMsg string, args ...
 	return n > 0, nil
 }
 
-// ToggleItemCompleted sets an item's completed flag and cascades per
-// cascadeItemCompletion in a single transaction. It returns the note's full
-// item list so callers reconcile every affected item from one response.
-// Returns ErrNoteItemNotFound if the item does not belong to the note.
-func (s *noteStore) ToggleItemCompleted(ctx context.Context, noteID, actorID, itemID string, completed bool) ([]NoteItem, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	now := Timestamp(Now())
-
-	var parentID sql.NullString
-	err = tx.QueryRowContext(ctx,
-		s.d.RewritePlaceholders(`SELECT parent_id FROM note_items WHERE id = ? AND note_id = ?`),
-		itemID, noteID,
-	).Scan(&parentID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNoteItemNotFound
-		}
-		return nil, fmt.Errorf("failed to load note item: %w", err)
-	}
-
-	itemChanged, err := execChanged(ctx, tx,
-		s.d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = ? WHERE id = ? AND note_id = ? AND completed <> ?`),
-		"failed to update note item",
-		completed, now, itemID, noteID, completed,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	cascadeChanged, err := cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, parentID, completed, now)
-	if err != nil {
-		return nil, err
-	}
-
-	if err = touchNoteIfChangedTx(ctx, tx, s.d, itemChanged || cascadeChanged, noteID, actorID, now); err != nil {
-		return nil, err
-	}
-	if err = tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit toggle item completed: %w", err)
-	}
-
-	return s.getItemsByNoteID(ctx, noteID)
-}
-
 // SetItemsCompleted sets the completed flag to the given value on each of the
 // named items (that belong to the note) in a single transaction and returns the
 // note's full item list so callers reconcile every affected item from one
-// response. Each flip applies the same parent/child cascade as
-// ToggleItemCompleted (checking/unchecking a top-level item carries to its
+// response. Each named item applies the parent/child cascade of
+// cascadeItemCompletion (checking/unchecking a top-level item carries to its
 // children; unchecking a child un-completes its parent), so the completion
-// invariant holds even for an arbitrary ID subset — not just the complete
-// snapshot the webapp sends. IDs that do not belong to the note are ignored, so
-// a replay/undo referencing a since-deleted item is a no-op. The note's
-// updated_at is bumped only when at least one item actually changed.
+// invariant holds even for an arbitrary ID subset — a single tap is just a
+// one-element list. The cascade runs even when the item's own row did not
+// change, so a group that had drifted out of sync is repaired by the next write.
+// IDs that do not belong to the note are ignored, so a replay/undo referencing
+// a since-deleted item is a no-op. The note's updated_at is bumped only when at
+// least one row actually changed.
 func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID, actorID string, itemIDs []string, completed bool) ([]NoteItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -641,7 +508,7 @@ func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID, actorID strin
 
 	now := Timestamp(Now())
 
-	var changed int64
+	var changed bool
 	for _, itemID := range itemIDs {
 		var parentID sql.NullString
 		scanErr := tx.QueryRowContext(ctx,
@@ -656,33 +523,25 @@ func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID, actorID strin
 			return nil, fmt.Errorf("failed to load note item: %w", scanErr)
 		}
 
-		res, execErr := tx.ExecContext(ctx,
-			s.d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = ? WHERE note_id = ? AND id = ? AND completed != ?`),
+		itemChanged, execErr := execChanged(ctx, tx,
+			s.d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = ? WHERE note_id = ? AND id = ? AND completed <> ?`),
+			"failed to set note item completed",
 			completed, now, noteID, itemID, completed,
 		)
 		if execErr != nil {
-			return nil, fmt.Errorf("failed to set note item completed: %w", execErr)
+			return nil, execErr
 		}
-		n, raErr := res.RowsAffected()
-		if raErr != nil {
-			return nil, fmt.Errorf("failed to get rows affected: %w", raErr)
+		cascadeChanged, cascadeErr := cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, parentID, completed, now)
+		if cascadeErr != nil {
+			return nil, cascadeErr
 		}
-		// Only cascade when this item actually flipped, so a no-op call touches
-		// nothing (and a group already consistent is left alone).
-		if n > 0 {
-			changed += n
-			if _, err = cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, parentID, completed, now); err != nil {
-				return nil, err
-			}
-		}
+		changed = changed || itemChanged || cascadeChanged
 	}
 
 	// Only bump the note when something actually changed, so a no-op call does
 	// not spuriously reorder the dashboard or emit an update to collaborators.
-	if changed > 0 {
-		if err = touchNoteTx(ctx, tx, s.d, noteID, actorID, now); err != nil {
-			return nil, err
-		}
+	if err = touchNoteIfChangedTx(ctx, tx, s.d, changed, noteID, actorID, now); err != nil {
+		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit set items completed: %w", err)
@@ -695,13 +554,14 @@ func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID, actorID strin
 // single transaction and returns the note's remaining items so callers reconcile
 // from one response. As defense-in-depth against a drifted row, an item orphaned
 // by the delete (its parent was among those removed) is re-homed to top level to
-// preserve the parent-reference invariant. Positions are left with gaps, matching
-// DeleteItemFromNote. IDs that do not belong to the note are ignored. The note's
+// preserve the parent-reference invariant. Positions are left with gaps. IDs that
+// do not belong to the note are ignored; the returned count is the number of rows
+// actually deleted, so single-item callers can report not-found on 0. The note's
 // updated_at is bumped only when at least one row was actually deleted.
-func (s *noteStore) DeleteItems(ctx context.Context, noteID, actorID string, itemIDs []string) ([]NoteItem, error) {
+func (s *noteStore) DeleteItems(ctx context.Context, noteID, actorID string, itemIDs []string) ([]NoteItem, int, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, 0, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -714,11 +574,11 @@ func (s *noteStore) DeleteItems(ctx context.Context, noteID, actorID string, ite
 			noteID, itemID,
 		)
 		if execErr != nil {
-			return nil, fmt.Errorf("failed to delete note item: %w", execErr)
+			return nil, 0, fmt.Errorf("failed to delete note item: %w", execErr)
 		}
 		n, raErr := res.RowsAffected()
 		if raErr != nil {
-			return nil, fmt.Errorf("failed to get rows affected: %w", raErr)
+			return nil, 0, fmt.Errorf("failed to get rows affected: %w", raErr)
 		}
 		deleted += n
 	}
@@ -731,17 +591,21 @@ func (s *noteStore) DeleteItems(ctx context.Context, noteID, actorID string, ite
 				  AND parent_id NOT IN (SELECT id FROM note_items WHERE note_id = ?)`),
 			now, noteID, noteID,
 		); err != nil {
-			return nil, fmt.Errorf("failed to re-home orphaned note items: %w", err)
+			return nil, 0, fmt.Errorf("failed to re-home orphaned note items: %w", err)
 		}
 
 		// Only bump the note when something was actually deleted.
 		if err = touchNoteTx(ctx, tx, s.d, noteID, actorID, now); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 	}
 	if err = tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit delete note items: %w", err)
+		return nil, 0, fmt.Errorf("commit delete note items: %w", err)
 	}
 
-	return s.getItemsByNoteID(ctx, noteID)
+	items, err := s.getItemsByNoteID(ctx, noteID)
+	if err != nil {
+		return nil, 0, err
+	}
+	return items, int(deleted), nil
 }

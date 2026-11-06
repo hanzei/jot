@@ -217,6 +217,15 @@ export const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  // Reachable by screen readers only: a 1px target in the corner of the preview.
+  screenReaderOnly: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 1,
+    height: 1,
+    opacity: 0,
+  },
   contentPreview: {
     flex: 1,
     paddingHorizontal: 0,
@@ -238,6 +247,9 @@ export const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  fmtBtnDisabled: {
+    opacity: 0.35,
   },
   fmtSep: {
     width: StyleSheet.hairlineWidth,

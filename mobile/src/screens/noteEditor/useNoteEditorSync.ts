@@ -4,8 +4,11 @@ import type { TFunction } from 'i18next';
 import {
   DEFAULT_NOTE_COLOR,
   VALIDATION,
+  advanceSnapshot,
   buildScalarPatch,
+  createCompletedWriteTracker,
   diffItems,
+  type CompletedWriteTracker,
   type CreateNoteRequest,
   type Note,
   type NoteScalars,
@@ -101,6 +104,8 @@ export interface NoteEditorSync {
    * effect held off for its duration. See `itemWritesInFlightRef` for why.
    */
   withItemWriteInFlight: <T>(op: () => Promise<T>) => Promise<T>;
+  /** The editor's completed-write tracker; see completedWrites in @jot/shared. */
+  completedWrites: CompletedWriteTracker;
 
   exitSavePrompt: ExitSavePrompt | null;
   isExitRetrying: boolean;
@@ -190,6 +195,11 @@ export function useNoteEditorSync({
   // it. A counter rather than a boolean, since rows can be checked off faster
   // than the requests come back.
   const itemWritesInFlightRef = useRef(0);
+  // Which in-flight completed writes claim which items (see completedWrites in
+  // @jot/shared). Owned here, next to the save baseline, because the save diff
+  // leaves the flags it claims to those writes; the editing hook runs the
+  // writes through it.
+  const [completedWrites] = useState(createCompletedWriteTracker);
   const requiresHydrationRef = useRef(initialNoteId !== null);
 
   // Auto-dismiss sync toast after 4 seconds
@@ -331,7 +341,7 @@ export function useNoteEditorSync({
     // Advance the baseline incrementally after each successful op so a later
     // failure does not re-send already-applied ops on the next retry (which
     // would re-create items and get stuck on 409 Conflict).
-    for (const op of diffItems(base, savedOrderRef.current, currentItems)) {
+    for (const op of diffItems(base, savedOrderRef.current, currentItems, completedWrites.claimed())) {
       switch (op.kind) {
         case 'create':
           try {
@@ -343,10 +353,13 @@ export function useNoteEditorSync({
           }
           base.set(op.itemId, op.snapshot);
           break;
-        case 'patch':
+        case 'patch': {
           await updateItemRef.current({ noteId: currentNoteId, itemId: op.itemId, data: op.patch });
-          base.set(op.itemId, op.snapshot);
+          // An entry that vanished meanwhile (a bulk delete absorbed it) stays gone.
+          const current = base.get(op.itemId);
+          if (current) base.set(op.itemId, advanceSnapshot(current, op.patch));
           break;
+        }
         case 'delete':
           await deleteItemRef.current({ noteId: currentNoteId, itemId: op.itemId });
           base.delete(op.itemId);
@@ -357,7 +370,7 @@ export function useNoteEditorSync({
       }
     }
     savedOrderRef.current = currentItems.map((it) => it.id);
-  }, []);
+  }, [completedWrites]);
 
   const flushSave = useCallback(async (unmounting = false, { createIfEmpty = false }: FlushOptions = {}): Promise<boolean> => {
     const mustCreate = createIfEmpty && !noteIdRef.current;
@@ -402,7 +415,11 @@ export function useNoteEditorSync({
         }
       };
 
-      const captureBaseline = () => {
+      // `items` is false after a list save: persistItemDiff has already advanced
+      // the item baseline op by op, and re-snapshotting `currentItems` (read
+      // before the save's awaits) would roll back completed flags a toggle
+      // reconciled meanwhile — and record held optimistic ones as saved.
+      const captureBaseline = ({ items = true }: { items?: boolean } = {}) => {
         savedScalarsRef.current = {
           title: currentTitle,
           content: currentContent,
@@ -411,6 +428,7 @@ export function useNoteEditorSync({
           color: currentColor,
           checked_items_collapsed: currentCollapsed,
         };
+        if (!items) return;
         savedItemsRef.current = new Map(currentItems.map((it) => [it.id, itemSnapshot(it)]));
         savedOrderRef.current = currentItems.map((it) => it.id);
       };
@@ -463,7 +481,7 @@ export function useNoteEditorSync({
         }
 
         clearPendingUnlessEditedMidSave();
-        captureBaseline();
+        captureBaseline({ items: currentNoteType !== 'list' });
         if (!isMountedRef.current || unmounting) return true;
         setSaveError(null);
       }
@@ -720,6 +738,7 @@ export function useNoteEditorSync({
     isClosingRef,
     saveInFlightRef,
     withItemWriteInFlight,
+    completedWrites,
     exitSavePrompt,
     isExitRetrying,
     handleExitRetry,

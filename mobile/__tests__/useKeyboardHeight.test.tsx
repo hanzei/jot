@@ -44,6 +44,12 @@ describe('useKeyboardHeight', () => {
       expect(result.current).toBe(0);
     });
 
+    it('starts at the current height when mounted with the keyboard already open', async () => {
+      jest.spyOn(Keyboard, 'metrics').mockReturnValue({ screenX: 0, screenY: 0, width: 0, height: 280 });
+      const { result } = await renderHook(() => useKeyboardHeight());
+      expect(result.current).toBe(280);
+    });
+
     it(`reports the keyboard height on ${showEvent}`, async () => {
       const { result } = await renderHook(() => useKeyboardHeight());
       await act(() => {

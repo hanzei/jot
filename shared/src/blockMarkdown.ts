@@ -11,10 +11,14 @@
 // Native components on mobile. The feature set itself is specified in
 // docs/specs/markdown-rendering.md.
 
+import { codeLanguage } from './codeHighlight';
+import { taskMarkerOffsets } from './taskMarkers';
 import {
+  flattenInlineNodes,
   normalizeInlineTokens,
   type InlineMarkdownToken,
   type InlineNode,
+  linkLabelIsTarget,
 } from './inlineMarkdown';
 
 /**
@@ -38,6 +42,8 @@ export interface BlockMarkdownToken extends InlineMarkdownToken {
   /** Whether list items hold block content — see the `loose` note on `BlockNode`. */
   loose?: boolean;
   items?: BlockMarkdownToken[];
+  /** A code fence's info string; absent on an indented block. */
+  lang?: string;
 }
 
 /**
@@ -50,7 +56,8 @@ export interface BlockMarkdownToken extends InlineMarkdownToken {
 export type BlockNode =
   | { type: 'paragraph'; children: InlineNode[] }
   | { type: 'heading'; depth: number; children: InlineNode[] }
-  | { type: 'code'; text: string }
+  /** `lang` is the fence's language, normalized by `codeLanguage`. */
+  | { type: 'code'; text: string; lang: string | null }
   | { type: 'blockquote'; children: BlockNode[] }
   | { type: 'list'; ordered: boolean; start: number; loose: boolean; items: BlockNode[][] }
   | { type: 'hr' };
@@ -66,8 +73,17 @@ export type BlockNode =
 export const BLOCK_LEXER_OPTIONS = { gfm: true, breaks: true };
 
 /** The ☐ / ☑ a task-list marker renders as, with the space marked keeps. */
-function checkboxText(token: BlockMarkdownToken): string {
-  return token.checked ? '☑ ' : '☐ ';
+function checkboxText(checked: boolean): string {
+  return checked ? '☑ ' : '☐ ';
+}
+
+/**
+ * The marker offsets for one `normalizeBlockTokens` call, handed out in the
+ * order the walk meets checkboxes — the order `taskMarkerOffsets` numbers them.
+ */
+interface TaskOffsets {
+  offsets: (number | null)[];
+  next: number;
 }
 
 /**
@@ -80,14 +96,29 @@ function checkboxText(token: BlockMarkdownToken): string {
  * position, which is why this sits on the inline path and not only on the block
  * one.
  */
-function inlineNodes(tokens: BlockMarkdownToken[]): InlineNode[] {
-  return normalizeInlineTokens(
-    tokens.map((token) =>
-      token.type === 'checkbox'
-        ? { type: 'text', raw: token.raw, text: checkboxText(token) }
-        : token,
-    ),
-  );
+function inlineNodes(tokens: BlockMarkdownToken[], tasks: TaskOffsets | null): InlineNode[] {
+  const nodes: InlineNode[] = [];
+  let run: BlockMarkdownToken[] = [];
+  let taskAt = -1;
+  for (const token of tokens) {
+    if (token.type !== 'checkbox') {
+      run.push(token);
+      continue;
+    }
+    nodes.push(...normalizeInlineTokens(run));
+    run = [];
+    // Tagged so a renderer can make it interactive (docs/specs §2.4) without
+    // mistaking a ☐ the user typed for one. A checkbox only ever opens its
+    // item, so there is at most one per run and its label is what follows it.
+    const checked = token.checked ?? false;
+    const offset = tasks ? tasks.offsets[tasks.next++] ?? null : null;
+    taskAt = nodes.length;
+    nodes.push({ type: 'text', value: checkboxText(checked), task: { checked, offset, label: '' } });
+  }
+  nodes.push(...normalizeInlineTokens(run));
+  const task = nodes[taskAt];
+  if (task?.type === 'text' && task.task) task.task.label = flattenInlineNodes(nodes.slice(taskAt + 1)).trim();
+  return nodes;
 }
 
 /**
@@ -102,11 +133,28 @@ function literalParagraph(text: string): BlockNode {
   return { type: 'paragraph', children: [{ type: 'text', value: text }] };
 }
 
+export interface NormalizeBlockOptions {
+  /**
+   * The source `tokens` were lexed from. When given, each task checkbox's
+   * `offset` is located in it (`taskMarkerOffsets`), so a renderer can make the
+   * checkbox interactive; otherwise every `offset` is `null`.
+   */
+  taskSource?: string;
+}
+
 /**
  * Converts marked block tokens into `BlockNode`s, degrading everything outside
  * the supported set to a paragraph of literal source.
  */
-export function normalizeBlockTokens(tokens: BlockMarkdownToken[]): BlockNode[] {
+export function normalizeBlockTokens(
+  tokens: BlockMarkdownToken[],
+  { taskSource }: NormalizeBlockOptions = {},
+): BlockNode[] {
+  const tasks = taskSource === undefined ? null : { offsets: taskMarkerOffsets(taskSource, tokens), next: 0 };
+  return normalizeBlocks(tokens, tasks);
+}
+
+function normalizeBlocks(tokens: BlockMarkdownToken[], tasks: TaskOffsets | null): BlockNode[] {
   const nodes: BlockNode[] = [];
 
   // A tight list item's tokens are a bare run of `checkbox` / `text` rather than
@@ -116,7 +164,7 @@ export function normalizeBlockTokens(tokens: BlockMarkdownToken[]): BlockNode[] 
   let run: BlockMarkdownToken[] = [];
   const flushRun = () => {
     if (run.length === 0) return;
-    nodes.push({ type: 'paragraph', children: inlineNodes(run) });
+    nodes.push({ type: 'paragraph', children: inlineNodes(run, tasks) });
     run = [];
   };
 
@@ -137,7 +185,7 @@ export function normalizeBlockTokens(tokens: BlockMarkdownToken[]): BlockNode[] 
         break;
 
       case 'paragraph':
-        nodes.push({ type: 'paragraph', children: inlineNodes(token.tokens ?? []) });
+        nodes.push({ type: 'paragraph', children: inlineNodes(token.tokens ?? [], tasks) });
         break;
 
       case 'heading':
@@ -146,18 +194,18 @@ export function normalizeBlockTokens(tokens: BlockMarkdownToken[]): BlockNode[] 
         nodes.push({
           type: 'heading',
           depth: token.depth ?? 1,
-          children: inlineNodes(token.tokens ?? []),
+          children: inlineNodes(token.tokens ?? [], tasks),
         });
         break;
 
       case 'code':
-        // The language tag is deliberately dropped — no syntax highlighting
-        // (docs/specs §6).
-        nodes.push({ type: 'code', text: token.text ?? '' });
+        // The language is kept for highlighting (codeHighlight.ts); whether it
+        // is one Jot highlights is decided at render time.
+        nodes.push({ type: 'code', text: token.text ?? '', lang: codeLanguage(token.lang) });
         break;
 
       case 'blockquote':
-        nodes.push({ type: 'blockquote', children: normalizeBlockTokens(token.tokens ?? []) });
+        nodes.push({ type: 'blockquote', children: normalizeBlocks(token.tokens ?? [], tasks) });
         break;
 
       case 'list':
@@ -167,7 +215,7 @@ export function normalizeBlockTokens(tokens: BlockMarkdownToken[]): BlockNode[] 
           // marked leaves `start` as '' for an unordered list and for `1.`.
           start: typeof token.start === 'number' ? token.start : 1,
           loose: token.loose ?? false,
-          items: (token.items ?? []).map((item) => normalizeBlockTokens(item.tokens ?? [])),
+          items: (token.items ?? []).map((item) => normalizeBlocks(item.tokens ?? [], tasks)),
         });
         break;
 
@@ -279,11 +327,3 @@ function inlinePlainText(nodes: InlineNode[]): string {
   return out;
 }
 
-/**
- * Whether a link's label already spells out where it goes — an autolink, or a
- * label that is the URL. marked normalizes autolinked `www.example.com` and
- * `someone@example.com` to `http://` and `mailto:` targets, so those count too.
- */
-function linkLabelIsTarget(label: string, href: string): boolean {
-  return href === label || href === `http://${label}` || href === `mailto:${label}`;
-}

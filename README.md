@@ -162,7 +162,8 @@ go install github.com/go-task/task/v3/cmd/task@<TASK_VERSION>
 task bootstrap       # Run scripts/bootstrap.sh: task, npm deps, Playwright's Chromium, Go cache warm-up
 task run-server      # Start the Jot server
 task run-webapp      # Start webapp dev server with HMR
-task check           # Pre-PR gate: everything CI runs except e2e
+task check-changed   # Pre-PR gate scoped to the workspaces your diff touches (+ changed e2e specs)
+task check           # Full gate: everything CI runs except e2e
 task check-server    # Lint + test the server, plus the docs and migration checks
 task check-webapp    # Lint + test the webapp, plus the translation check
 task check-mobile    # Lint + test the mobile app (check-shared likewise)
@@ -192,11 +193,12 @@ task build-jotctl    # Build the jotctl admin CLI binary
 task clean           # Remove generated files and node packages
 ```
 
-`task check` is the single command to run before opening a PR — it covers every
-CI job except e2e, so there is nothing else to remember. `task lint` reports
-every linter that failed rather than stopping at the first, while `task test`
-stops at the first failing suite (a broken `shared/` or `server/` would make
-everything downstream fail for reasons that are not its own).
+`task check-changed` is the command to run before opening a PR: it scopes the
+gate to the workspaces your diff touches (mapping in `scripts/check-changed.sh`;
+`-- --dry-run` previews it). `task check` is the full gate; CI runs everything
+either way. `task lint` and `task test` run their suites in parallel and print
+each suite's output in order, reporting every failure. Read the report top-down:
+a broken `shared/` is listed first because both clients compile it.
 
 Every `test-*` task forwards extra arguments after `--`, so you can scope a run
 instead of waiting for the whole suite:
@@ -476,6 +478,17 @@ Back up and restore the two together: the server periodically deletes files in
 than the upload directory permanently removes the newer images. Images whose
 files are missing are logged as warnings.
 
+#### Downgrading
+
+Schema migrations only go forward, and a Jot version cannot undo a migration it
+does not ship. So once a newer version has applied a migration an older one does
+not ship, the older one refuses to start on that database and names both schema
+versions in the log. (A newer version that adds no migrations leaves the
+database usable by the older one.) To go back, restore the database and
+`JOT_UPLOAD_DIR` from the backup taken before the upgrade, or keep running the
+newer version. Take that backup before trying a pre-release or a development
+build against data you want to keep.
+
 Separately, each user can export their own notes, images included, as a `.zip`
 bundle from Settings, in the webapp or the mobile app (which hands the file to
 the device's share sheet), and import it into any Jot server. Notes keep their
@@ -713,7 +726,9 @@ go build -o jot main.go
 ./jot
 ```
 
-The binary will serve both API and frontend from port 8080.
+The binary will serve both API and frontend from port 8080. It gzips the
+frontend's text assets (HTML, JS, CSS, JSON, SVG) itself, so a reverse proxy in
+front does not need to compress them.
 
 ### Environment Setup
 
@@ -843,6 +858,10 @@ services:
    delete the database**, which deletes all data. Stop the server, restore the
    database and `JOT_UPLOAD_DIR` together from the backup taken before the
    upgrade (see [Backups](#backups)), and open an issue with the log output.
+   If it says `database schema is at version N, but this build of Jot only
+   knows migrations up to M`, the database was already migrated by a newer
+   version of Jot, so this one refuses to run against it (see
+   [Downgrading](#downgrading)).
 
 2. **A setting has no effect**: Jot reads only `JOT_`-prefixed variables (plus
    the standard `OTEL_*` ones), so an unprefixed name such as `LOG_LEVEL` is
@@ -944,8 +963,8 @@ code execution, SSRF, and blob-storage escapes.
 
 ### PR checklist
 
-- `task check` — lint, all tests, and the docs/migration/translation gates
-- `task test-e2e` — not part of `task check`, since it needs a browser install
+- `task check-changed` — the pre-PR gate, scoped to your diff
+- `task test-e2e` — optional locally (CI runs it); not part of `task check`, since it needs a browser install
 - `task test-mobile-e2e` — only when you touched the mobile app; not part of
   `task check`, since it needs Maestro and a booted emulator
 
