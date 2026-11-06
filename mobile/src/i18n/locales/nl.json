@@ -328,6 +328,8 @@
     "formatHeading": "Kop",
     "formatBulletList": "Opsommingsteken",
     "formatChecklist": "Checklist",
+    "indentItem": "Item inspringen",
+    "outdentItem": "Item uitspringen",
     "contentLimitReached": "De notitie heeft de maximale lengte bereikt",
     "itemLimitReached": "Het item heeft de maximale lengte bereikt",
     "completedSuggestions": "Suggesties van voltooide items",

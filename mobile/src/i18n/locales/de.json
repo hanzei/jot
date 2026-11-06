@@ -305,6 +305,8 @@
     "formatHeading": "Überschrift",
     "formatBulletList": "Aufzählung",
     "formatChecklist": "Checkliste",
+    "indentItem": "Eintrag einrücken",
+    "outdentItem": "Einrückung des Eintrags verringern",
     "contentLimitReached": "Die Notiz hat die maximale Länge erreicht",
     "itemLimitReached": "Das Element hat die maximale Länge erreicht",
     "completedSuggestions": "Vorschläge aus erledigten Einträgen",

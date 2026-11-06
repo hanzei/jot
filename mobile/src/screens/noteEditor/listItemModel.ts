@@ -1,6 +1,8 @@
 import {
   VALIDATION,
   applyCompletedCascade,
+  canChangeItemIndent,
+  changeItemIndent,
   dropTargetParentId,
   itemHasChildren,
   normalizeItemOrder,
@@ -22,7 +24,7 @@ const INDENT_PX = VALIDATION.INDENT_PX_PER_LEVEL;
 // that have no webapp equivalent.
 export type LocalItem = ListItem;
 
-export { applyCompletedCascade, dropTargetParentId, itemHasChildren, normalizeItemOrder };
+export { applyCompletedCascade, canChangeItemIndent, changeItemIndent, dropTargetParentId, itemHasChildren, normalizeItemOrder };
 
 export function toLocalItems(serverItems: NoteItem[]): LocalItem[] {
   return [...serverItems]

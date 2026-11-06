@@ -1,6 +1,6 @@
 // Pure item-model helpers for a list note's checklist items, shared by the
 // webapp and mobile note editors. Everything here takes plain data and
-// returns plain data, so the ordering/cascade/drop-target rules can be
+// returns plain data, so the ordering/cascade/drop-target/indent rules can be
 // unit-tested without rendering either editor, and so both clients apply
 // exactly one implementation instead of hand-kept copies. Mirrors the
 // server's authoritative behavior — cascadeItemCompletion in
@@ -20,7 +20,7 @@ export interface ListItem {
 // itemHasChildren reports whether any item is nested under itemId. Indenting
 // an item that has children would create grandchildren, which the server
 // rejects (nesting is capped at one level), so callers must refuse it.
-export const itemHasChildren = (items: ListItem[], itemId: string): boolean =>
+export const itemHasChildren = (items: readonly ListItem[], itemId: string): boolean =>
   items.some(it => it.parentId === itemId);
 
 // normalizeItemOrder is the single source of item ordering. It walks top-level
@@ -30,7 +30,7 @@ export const itemHasChildren = (items: ListItem[], itemId: string): boolean =>
 // whole set. Calling it after every structural mutation keeps each group intact
 // and keeps a checked item's slot relative to its neighbours, so unchecking
 // lands it back where it belongs even after items above were added or removed.
-export const normalizeItemOrder = (items: ListItem[]): ListItem[] => {
+export const normalizeItemOrder = (items: readonly ListItem[]): ListItem[] => {
   const childrenByParent = new Map<string, ListItem[]>();
   for (const it of items) {
     if (it.parentId !== null) {
@@ -93,6 +93,49 @@ export const groupNoteItems = <T extends { id: string; position: number; parent_
     ordered.push(it, ...(childrenByParent.get(it.id) ?? []));
   }
   return ordered;
+};
+
+// indentTargetParent resolves the parent an item would take on a one-level
+// indent move (delta 1 nests, -1 un-nests): the single statement of the rule
+// behind the webapp's Tab / Shift+Tab and mobile's indent buttons. Indenting
+// attaches the item to the nearest preceding active top-level item; un-indenting
+// promotes it to top-level. Returns undefined when nothing can change: the item
+// is completed, is already at that edge of the one-level hierarchy, has children
+// (it would become a grandchild, which the server rejects), or has nothing above
+// to nest under. (null is a valid answer: top-level.)
+const indentTargetParent = (
+  items: readonly ListItem[],
+  itemId: string,
+  delta: 1 | -1,
+): string | null | undefined => {
+  const target = items.find(it => it.id === itemId);
+  if (!target || target.completed) return undefined;
+
+  if (delta === -1) return target.parentId === null ? undefined : null;
+
+  if (target.parentId !== null || itemHasChildren(items, itemId)) return undefined;
+  let preceding: string | undefined;
+  for (const it of items) {
+    if (it.id === itemId) break;
+    if (it.parentId === null && !it.completed) preceding = it.id;
+  }
+  return preceding;
+};
+
+// canChangeItemIndent reports whether changeItemIndent would move the item. It
+// does the guard checks without building the re-normalized list, so a UI can
+// call it on every render to enable or dim an indent control.
+export const canChangeItemIndent = (items: readonly ListItem[], itemId: string, delta: 1 | -1): boolean =>
+  indentTargetParent(items, itemId, delta) !== undefined;
+
+// changeItemIndent nests (delta 1) or un-nests (delta -1) one active item by one
+// level. Returns the re-normalized items, or null when canChangeItemIndent is
+// false. Un-nesting a middle child re-seats its later siblings above it, since
+// normalizeItemOrder keeps each group contiguous.
+export const changeItemIndent = (items: readonly ListItem[], itemId: string, delta: 1 | -1): ListItem[] | null => {
+  const parentId = indentTargetParent(items, itemId, delta);
+  if (parentId === undefined) return null;
+  return normalizeItemOrder(items.map(it => (it.id === itemId ? { ...it, parentId } : it)));
 };
 
 // dropTargetParentId decides which group a vertically-dragged item joins,

@@ -328,6 +328,8 @@
     "formatHeading": "Encabezado",
     "formatBulletList": "Lista de viñetas",
     "formatChecklist": "Lista de tareas",
+    "indentItem": "Aumentar sangría del elemento",
+    "outdentItem": "Reducir sangría del elemento",
     "contentLimitReached": "La nota ha alcanzado su longitud máxima",
     "itemLimitReached": "El elemento ha alcanzado su longitud máxima",
     "completedSuggestions": "Sugerencias de elementos completados",

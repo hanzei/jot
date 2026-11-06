@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyCompletedCascade, applyCompletedValues, completedCascadeScope, completedPriorById, dropTargetParentId, groupNoteItems, itemHasChildren, moveItemIntoSlot, normalizeItemOrder, reinsertIds, undoMoveItemIntoSlot, type ListItem } from '../listItems';
+import { applyCompletedCascade, applyCompletedValues, canChangeItemIndent, changeItemIndent, completedCascadeScope, completedPriorById, dropTargetParentId, groupNoteItems, itemHasChildren, moveItemIntoSlot, normalizeItemOrder, reinsertIds, undoMoveItemIntoSlot, type ListItem } from '../listItems';
 
 // Terse builder so each case reads as the structure under test rather than as
 // six fields of boilerplate per item.
@@ -364,5 +364,51 @@ describe('applyCompletedValues', () => {
   it('returns the same array when no value changes', () => {
     const items = [item('a', { completed: true })];
     expect(applyCompletedValues(items, new Map([['a', true], ['missing', false]]))).toBe(items);
+  });
+});
+
+describe('changeItemIndent / canChangeItemIndent', () => {
+  const edges = (items: ListItem[] | null) => items?.map(it => [it.id, it.parentId]);
+
+  it('nests an item under the nearest preceding top-level item, skipping children', () => {
+    const items = [item('a'), item('b', { parentId: 'a' }), item('c')];
+    expect(edges(changeItemIndent(items, 'c', 1))).toEqual([['a', null], ['b', 'a'], ['c', 'a']]);
+  });
+
+  it('skips a completed top-level row when looking for the parent', () => {
+    const items = [item('a'), item('x', { completed: true }), item('c')];
+    expect(edges(changeItemIndent(items, 'c', 1))).toEqual([['a', null], ['c', 'a'], ['x', null]]);
+  });
+
+  it('refuses the first row, a child, a parent, a completed row and an unknown id', () => {
+    const items = [item('a'), item('b', { parentId: 'a' }), item('c'), item('d', { completed: true })];
+    expect(changeItemIndent(items, 'a', 1)).toBeNull(); // nothing above
+    expect(changeItemIndent(items, 'b', 1)).toBeNull(); // already nested
+    expect(changeItemIndent([item('a'), item('b'), item('c', { parentId: 'b' })], 'b', 1)).toBeNull(); // has children
+    expect(changeItemIndent(items, 'd', 1)).toBeNull(); // completed
+    expect(changeItemIndent(items, 'd', -1)).toBeNull();
+    expect(changeItemIndent(items, 'missing', 1)).toBeNull();
+  });
+
+  it('promotes a child to top-level, re-seating its later siblings above it', () => {
+    const items = [item('a'), item('b', { parentId: 'a' }), item('c', { parentId: 'a' })];
+    const out = changeItemIndent(items, 'b', -1);
+    expect(edges(out)).toEqual([['a', null], ['c', 'a'], ['b', null]]);
+    expect(out?.map(it => it.position)).toEqual([0, 1, 2]);
+  });
+
+  it('refuses to outdent a top-level row', () => {
+    expect(changeItemIndent([item('a')], 'a', -1)).toBeNull();
+  });
+
+  it('canChangeItemIndent agrees with changeItemIndent and does not touch its input', () => {
+    const items = [item('a'), item('b'), item('c', { parentId: 'b' })];
+    const snapshot = JSON.stringify(items);
+    for (const id of ['a', 'b', 'c']) {
+      for (const delta of [1, -1] as const) {
+        expect(canChangeItemIndent(items, id, delta)).toBe(changeItemIndent(items, id, delta) !== null);
+      }
+    }
+    expect(JSON.stringify(items)).toBe(snapshot);
   });
 });

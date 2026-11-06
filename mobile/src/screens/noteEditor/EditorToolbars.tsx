@@ -1,10 +1,21 @@
 import { View, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Bold, Heading, Italic, List, ListTodo, Strikethrough } from 'lucide-react-native';
+import { Bold, Heading, IndentDecrease, IndentIncrease, Italic, List, ListTodo, Strikethrough } from 'lucide-react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { styles } from './styles';
 
 interface MarkdownToolbarProps {
+  /**
+   * Outdent / indent buttons for the focused list row, leading the bar. Only a
+   * list-item bar passes them: a text note has no hierarchy. A button is dimmed
+   * and inert when the move is not allowed for the focused row.
+   */
+  indent?: {
+    onOutdent: () => void;
+    onIndent: () => void;
+    outdentDisabled: boolean;
+    indentDisabled: boolean;
+  };
   onBold: () => void;
   onItalic: () => void;
   onStrikethrough: () => void;
@@ -45,7 +56,7 @@ const ICON_SIZE = 20;
  * Bold would tear down the very input it was meant to edit. TalkBack is
  * unaffected; accessibility focus is separate from input focus.
  */
-export function MarkdownToolbarContent({ onBold, onItalic, onStrikethrough, onHeading, onBullet, onCheckbox, backgroundColor, hasNoteColor }: MarkdownToolbarProps) {
+export function MarkdownToolbarContent({ indent, onBold, onItalic, onStrikethrough, onHeading, onBullet, onCheckbox, backgroundColor, hasNoteColor }: MarkdownToolbarProps) {
   const { t } = useTranslation();
   const { colors } = useTheme();
   // Matches the action bar's barIconColor: a colored note's background is a
@@ -54,6 +65,30 @@ export function MarkdownToolbarContent({ onBold, onItalic, onStrikethrough, onHe
   const iconColor = hasNoteColor ? '#444' : colors.text;
   return (
     <View style={[styles.formattingToolbar, { backgroundColor, borderTopColor: hasNoteColor ? 'transparent' : colors.border }]}>
+      {indent && (
+        <>
+          {[
+            { id: 'outdent', Icon: IndentDecrease, label: t('note.outdentItem'), onPress: indent.onOutdent, disabled: indent.outdentDisabled },
+            { id: 'indent', Icon: IndentIncrease, label: t('note.indentItem'), onPress: indent.onIndent, disabled: indent.indentDisabled },
+          ].map(({ id, Icon, label, onPress, disabled }) => (
+            <TouchableOpacity
+              key={id}
+              onPress={onPress}
+              disabled={disabled}
+              style={[styles.fmtBtn, disabled && styles.fmtBtnDisabled]}
+              hitSlop={HIT_SLOP}
+              focusable={false}
+              accessibilityRole="button"
+              accessibilityLabel={label}
+              accessibilityState={{ disabled }}
+              testID={`format-${id}-btn`}
+            >
+              <Icon size={ICON_SIZE} color={iconColor} />
+            </TouchableOpacity>
+          ))}
+          <View style={[styles.fmtSep, { backgroundColor: colors.border }]} />
+        </>
+      )}
       <TouchableOpacity
         onPress={onBold}
         style={styles.fmtBtn}

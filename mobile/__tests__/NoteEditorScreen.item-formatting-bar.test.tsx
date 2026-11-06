@@ -82,6 +82,37 @@ describe('NoteEditorScreen list-item formatting bar', () => {
     expect(queryByTestId('format-checkbox-btn')).toBeNull();
   });
 
+  it('leads with outdent and indent buttons, which the text note bar lacks', async () => {
+    const { getByTestId } = await renderListEditor();
+
+    expect(getByTestId('format-outdent-btn')).toBeTruthy();
+    expect(getByTestId('format-indent-btn')).toBeTruthy();
+  });
+
+  it('disables indent on the first row, where there is nothing to nest under', async () => {
+    const { getByTestId } = await renderListEditor();
+
+    expect(getByTestId('format-indent-btn').props.accessibilityState).toEqual({ disabled: true });
+    expect(getByTestId('format-outdent-btn').props.accessibilityState).toEqual({ disabled: true });
+  });
+
+  it('enables indent on a second row and follows the nesting as it changes', async () => {
+    const utils = await renderListEditor();
+    await fireEvent.press(utils.getByTestId('add-list-item'));
+    await act(async () => {
+      await fireEvent(utils.getAllByTestId('list-item-text')[1]!, 'focus', { nativeEvent: {} });
+    });
+    const state = (id: string) => utils.getByTestId(id).props.accessibilityState;
+
+    expect(state('format-indent-btn')).toEqual({ disabled: false });
+    expect(state('format-outdent-btn')).toEqual({ disabled: true });
+
+    await utils.press('format-indent-btn');
+
+    expect(state('format-indent-btn')).toEqual({ disabled: true });
+    expect(state('format-outdent-btn')).toEqual({ disabled: false });
+  });
+
   it('wraps the selected item text and keeps it selected', async () => {
     const { row, type, placeCaret, press } = await renderListEditor();
 
@@ -135,7 +166,7 @@ describe('NoteEditorScreen list-item formatting bar', () => {
 
     // A focusable button takes input focus from the row on tap, which hides the
     // keyboard — and the row treats losing the caret as leaving edit mode.
-    for (const id of ['format-bold-btn', 'format-italic-btn', 'format-strikethrough-btn']) {
+    for (const id of ['format-outdent-btn', 'format-indent-btn', 'format-bold-btn', 'format-italic-btn', 'format-strikethrough-btn']) {
       expect(getByTestId(id).props.focusable).toBe(false);
     }
   });
