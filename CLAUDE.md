@@ -45,7 +45,9 @@ connectivity, deep linking, Markdown rendering) live in `docs/specs/` — read t
 
 Run `task check-changed`. It maps your diff to workspaces and runs only their
 lint and tests (in parallel), always the `check-docs`, `check-migrations`, and
-`check-translations` gates, and any e2e spec you added or edited. A diff outside
+`check-translations` gates, and any e2e spec you added or edited. It applies
+formatting (`task fmt`) to the touched workspaces first, so review `git diff`
+afterwards. A diff outside
 every workspace (`Taskfile.yml`, `scripts/`, `.github/`, root config) falls back
 to the full `task check`, which you can also run yourself. CI runs everything, so
 this is the fast first line. Do not run the whole `task test-e2e` suite before a

@@ -16,6 +16,10 @@
 #   anything else                  -> full `task check` (Taskfile, scripts/,
 #                                     .github/, root config: unknown blast radius)
 #
+# Formatting is applied first (fmt-* for the touched workspaces), so a stray
+# semicolon or quote style is fixed instead of failing a minute-long lint run.
+# It only rewrites layout, and only in workspaces you already changed.
+#
 # Limits worth knowing: e2e runs only specs the branch changes, not specs that a
 # server or page-object change could break — CI covers those. A schema or query
 # change still wants `task test-server-postgres`.
@@ -30,7 +34,8 @@ dry=0
 
 if ! files="$("$here/changed-files.sh")"; then
   echo "check-changed: cannot tell what changed — running the full gate" >&2
-  if [ $dry -eq 1 ]; then echo "plan: task check"; exit 0; fi
+  if [ $dry -eq 1 ]; then echo "plan: task fmt, then task check"; exit 0; fi
+  task fmt || exit 1
   exec task check
 fi
 
@@ -50,18 +55,19 @@ done <<<"$files"
 
 if [ $full -eq 1 ]; then
   echo "check-changed: the diff touches files outside any workspace — running the full gate"
-  if [ $dry -eq 1 ]; then echo "plan: task check"; exit 0; fi
+  if [ $dry -eq 1 ]; then echo "plan: task fmt, then task check"; exit 0; fi
+  task fmt || exit 1
   exec task check
 fi
 
 # Both clients compile @jot/shared from source.
 if [ $shared -eq 1 ]; then webapp=1 mobile=1; fi
 
-par=()
-[ $shared -eq 1 ] && par+=(lint-shared test-shared)
-[ $server -eq 1 ] && par+=(lint-server test-server)
-[ $webapp -eq 1 ] && par+=(lint-webapp test-webapp)
-[ $mobile -eq 1 ] && par+=(lint-mobile test-mobile test-mobile-e2e-scripts)
+fmt=() par=()
+[ $shared -eq 1 ] && fmt+=(fmt-shared) par+=(lint-shared test-shared)
+[ $server -eq 1 ] && fmt+=(fmt-server) par+=(lint-server test-server)
+[ $webapp -eq 1 ] && fmt+=(fmt-webapp) par+=(lint-webapp test-webapp)
+[ $mobile -eq 1 ] && fmt+=(fmt-mobile) par+=(lint-mobile test-mobile test-mobile-e2e-scripts)
 
 if [ ${#par[@]} -eq 0 ]; then
   echo "check-changed: only docs/notes changed — nothing to run"
@@ -79,10 +85,13 @@ while IFS= read -r f; do
   esac
 done <<<"$files"
 
-echo "check-changed: running ${par[*]} (in parallel), then ${ser[*]}$([ $e2e -eq 1 ] && echo ", then test-e2e-changed")"
+echo "check-changed: formatting (${fmt[*]}), then running ${par[*]} (in parallel), then ${ser[*]}$([ $e2e -eq 1 ] && echo ", then test-e2e-changed")"
 if [ $dry -eq 1 ]; then exit 0; fi
 
 rc=0
+# Disjoint workspaces, so the formatters can run side by side. A formatter that
+# cannot fix something is a lint error; the lint run below reports it properly.
+"$here/run-tasks.sh" --parallel "${fmt[@]}" >/dev/null 2>&1 || true
 "$here/run-tasks.sh" --parallel "${par[@]}" || rc=1
 "$here/run-tasks.sh" "${ser[@]}" || rc=1
 if [ $e2e -eq 1 ]; then

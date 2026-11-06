@@ -198,7 +198,8 @@ task clean           # Remove generated files and node packages
 diff to workspaces (a `shared/` change covers both clients; a change outside any
 workspace, such as `Taskfile.yml` or `scripts/`, runs the full `task check`) and
 runs only their lint and tests, the docs/migration/translation gates, and any
-e2e spec you added or edited. `task check` is the full gate, covering every CI
+e2e spec you added or edited. It applies formatting to those workspaces first,
+so a style slip is fixed instead of failing lint. `task check` is the full gate, covering every CI
 job except e2e; CI runs everything either way. `task lint` and `task test` run
 their suites in parallel and print each suite's output in order, reporting every
 failure rather than stopping at the first. Read the report top-down: a broken
