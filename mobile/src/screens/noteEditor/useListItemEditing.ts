@@ -254,6 +254,15 @@ export function useListItemEditing({
   const itemInputRefsMap = useRef(new Map<string, React.RefObject<TextInputType | null>>());
   const autoFocusItemIdRef = useRef<string | null>(null);
   const autoFocusClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // autoFocus is only consumed at mount, so arm it for the row that is about to
+  // (re)mount and clear it after a short delay: a later unmount/remount of the
+  // same id must not re-open the keyboard. Cancels any pending clear from a
+  // previous call before rescheduling.
+  const armAutoFocus = useCallback((itemId: string) => {
+    autoFocusItemIdRef.current = itemId;
+    if (autoFocusClearTimerRef.current !== null) clearTimeout(autoFocusClearTimerRef.current);
+    autoFocusClearTimerRef.current = setTimeout(() => { autoFocusItemIdRef.current = null; }, 500);
+  }, []);
   // Id of the list item whose input currently has focus, if any. Tracked so a
   // drag-triggered reorder can restore focus to it (see commitDrag) — the
   // reorderable list forces a remount of any row whose slot changes, which
@@ -533,7 +542,7 @@ export function useListItemEditing({
     // Mark before setItems so the item mounts with autoFocus={true}, which
     // reliably opens the soft keyboard (programmatic focus() doesn't always
     // trigger the IME on Android for newly mounted inputs).
-    autoFocusItemIdRef.current = newId;
+    armAutoFocus(newId);
     // Ease the new row in rather than having the list jump to make room.
     animateListReflow();
     setItems((prev) => [
@@ -541,12 +550,7 @@ export function useListItemEditing({
       { id: newId, text: '', completed: false, position: prev.length, parentId: null, assigned_to: '' },
     ]);
     markDirtyAndScheduleUpdate();
-    // autoFocus is only consumed at mount; clear after a short delay so a
-    // later unmount/remount of the same ID doesn't re-open the keyboard.
-    // Cancel any pending clear from a previous rapid tap before rescheduling.
-    if (autoFocusClearTimerRef.current !== null) clearTimeout(autoFocusClearTimerRef.current);
-    autoFocusClearTimerRef.current = setTimeout(() => { autoFocusItemIdRef.current = null; }, 500);
-  }, [markDirtyAndScheduleUpdate, setItems]);
+  }, [armAutoFocus, markDirtyAndScheduleUpdate, setItems]);
 
   // handleItemEnterAtCursor mirrors the webapp's Enter-key handling:
   //  - cursor at the very start of a non-empty item -> insert a blank item
@@ -812,17 +816,13 @@ export function useListItemEditing({
       // Re-arm the same autoFocus-on-mount mechanism handleAddItem uses so the
       // remounted row re-opens the keyboard on itself instead of leaving focus
       // to fall back elsewhere (observed: the title input).
-      if (focusedItemIdRef.current) {
-        autoFocusItemIdRef.current = focusedItemIdRef.current;
-        if (autoFocusClearTimerRef.current !== null) clearTimeout(autoFocusClearTimerRef.current);
-        autoFocusClearTimerRef.current = setTimeout(() => { autoFocusItemIdRef.current = null; }, 500);
-      }
+      if (focusedItemIdRef.current) armAutoFocus(focusedItemIdRef.current);
       // Merge with existing checked items and normalize so each parent's
       // children stay contiguous.
       setItems(normalizeItemOrder([...reorderedUnchecked, ...checkedItemsRef.current]));
       markDirtyAndScheduleUpdate();
     },
-    [markDirtyAndScheduleUpdate, dragTranslateX, itemsRef, setItems],
+    [armAutoFocus, markDirtyAndScheduleUpdate, dragTranslateX, itemsRef, setItems],
   );
 
   // The formatting bar's indent / outdent buttons: moves the row holding the
@@ -837,15 +837,13 @@ export function useListItemEditing({
       // Outdenting a middle child re-seats its later siblings above it, so the
       // row's slot can change and the list remounts it — re-arm focus exactly as
       // commitDrag does so the keyboard stays up on the row being moved.
-      autoFocusItemIdRef.current = itemId;
-      if (autoFocusClearTimerRef.current !== null) clearTimeout(autoFocusClearTimerRef.current);
-      autoFocusClearTimerRef.current = setTimeout(() => { autoFocusItemIdRef.current = null; }, 500);
+      armAutoFocus(itemId);
       animateListReflow();
       itemsRef.current = next;
       setItems(next);
       markDirtyAndScheduleUpdate();
     },
-    [itemsRef, markDirtyAndScheduleUpdate, setItems],
+    [armAutoFocus, itemsRef, markDirtyAndScheduleUpdate, setItems],
   );
 
   const handleListReorder = useCallback(

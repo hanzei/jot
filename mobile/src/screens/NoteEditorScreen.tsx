@@ -60,7 +60,7 @@ import { getActiveServer, listServers, type ServerAccountEntry } from '../store/
 import { setPendingShare, usePendingShare } from '../store/shareIntent';
 import {
   type LocalItem,
-  changeItemIndent,
+  canChangeItemIndent,
   isBlankDraft,
   itemHasChildren,
 } from './noteEditor/listItemModel';
@@ -1412,8 +1412,8 @@ export default function NoteEditorScreen() {
   const outdentItem = useCallback(() => handleIndentFocusedItem(-1), [handleIndentFocusedItem]);
   // Same rule the buttons apply on press, so a button is disabled exactly when
   // pressing it would do nothing.
-  const canIndentItem = !!focusedItemId && changeItemIndent(items, focusedItemId, 1) !== null;
-  const canOutdentItem = !!focusedItemId && changeItemIndent(items, focusedItemId, -1) !== null;
+  const canIndentItem = !!focusedItemId && canChangeItemIndent(items, focusedItemId, 1);
+  const canOutdentItem = !!focusedItemId && canChangeItemIndent(items, focusedItemId, -1);
 
   const noteBackground = hasNoteColor ? color : colors.surface;
   const completedSectionDividerColor = hasNoteColor
