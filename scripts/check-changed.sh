@@ -33,7 +33,8 @@ dry=0
 full_gate() {
   echo "check-changed: $1 — running the full gate"
   if [ $dry -eq 1 ]; then echo "plan: task fmt, then task check"; exit 0; fi
-  task fmt || exit 1
+  # An unfixable lint error fails fmt; let `task check` report it with the rest.
+  task fmt || echo "check-changed: task fmt failed — continuing so the gate reports everything"
   exec task check
 }
 
@@ -46,9 +47,15 @@ if [ -z "$base" ]; then
     fi
   done
 fi
-[ -n "$base" ] || full_gate "no origin/master or master to compare against"
+# No origin/master, or no merge base (e.g. a shallow clone that cannot reach the fork point).
+[ -n "$base" ] || full_gate "cannot find a merge base with master"
 
 files="$({ git diff --name-only --no-renames "$base"; git ls-files --others --exclude-standard; } | sort -u)"
+
+if [ -z "$files" ]; then
+  echo "check-changed: no changes relative to ${base:0:12} — nothing to run"
+  exit 0
+fi
 
 server=0 shared=0 webapp=0 mobile=0 specs=()
 while IFS= read -r f; do
@@ -81,7 +88,10 @@ fi
 # Seconds each, and each catches a class of failure the suites cannot see.
 ser=(check-docs check-migrations check-translations)
 
-echo "check-changed: fmt (${fmt[*]}), then ${par[*]} in parallel, then ${ser[*]}${specs[*]:+, then e2e: ${specs[*]}}"
+# Not ${specs[*]:+...}: an empty array trips `set -u` on bash < 4.4 (macOS ships 3.2).
+e2e_note=""
+[ ${#specs[@]} -gt 0 ] && e2e_note=", then e2e: ${specs[*]}"
+echo "check-changed: fmt (${fmt[*]}), then ${par[*]} in parallel, then ${ser[*]}${e2e_note}"
 [ $dry -eq 1 ] && exit 0
 
 rc=0

@@ -152,7 +152,7 @@ Two that are easy to skip:
 - The **Code Review Loop** is for large, architecturally significant PRs only. Most issues
   are not that. Don't run it by default.
 - Scope the fast checks while iterating (`task check-server`, `task test-server -- -run
-  TestX`) and save the full gate for just before pushing.
+  TestX`) and save `task check-changed` for just before pushing.
 
 ## 5. Ship it
 
