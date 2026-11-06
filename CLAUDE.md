@@ -43,9 +43,12 @@ connectivity, deep linking, Markdown rendering) live in `docs/specs/` — read t
 
 ### Before opening a PR
 
-Run `task check` (lint, all tests, and the `check-docs`, `check-migrations`, and
-`check-translations` gates) **and** `task test-e2e`, which `task check` does not
-include. Neither is conditional on what you touched. While iterating, prefer the
+Run `task check-changed`: lint and tests for the workspaces your diff touches, the
+`check-docs`, `check-migrations`, and `check-translations` gates, and any e2e spec
+you added or edited. It applies `task fmt` first, so review `git diff` afterwards.
+A diff outside every workspace (`Taskfile.yml`, `scripts/`, `.github/`) runs the
+full `task check`. CI runs everything, so do not run the whole `task test-e2e`
+suite; a new feature still needs its e2e spec. While iterating, prefer the
 narrowest task (`task check-server`, `task test-server -- -run TestX`; every
 `test-*` task forwards arguments after `--`).
 
