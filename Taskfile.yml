@@ -30,11 +30,17 @@ tasks:
     dir: webapp
     cmd: npx vite
 
+  # The fast pre-PR gate: only the workspaces the diff touches (see
+  # scripts/check-changed.sh for the mapping). CI runs everything.
+  check-changed:
+    desc: Pre-PR gate scoped to the workspaces your diff touches, plus any e2e spec you changed (--dry-run to preview)
+    cmd: ./scripts/check-changed.sh {{.CLI_ARGS}}
+
   # Everything CI enforces except e2e. Each of the three checks below is
   # seconds long and catches a class of failure the lint/test suites cannot
   # see, so they are unconditional rather than something to remember.
   check:
-    desc: Pre-PR gate — lint + all tests except e2e, plus the docs/migration/translation gates
+    desc: Full gate — lint + all tests except e2e, plus the docs/migration/translation gates
     cmds:
       - task: lint
       - task: test
@@ -71,16 +77,13 @@ tasks:
       - task: lint-shared
       - task: test-shared
 
-  # Suites run serially rather than as parallel `deps` so a failure is
-  # attributable to one suite instead of buried in interleaved output.
+  # Suites run in parallel but through run-tasks.sh rather than `deps`: each
+  # suite's output is buffered and printed in order, so a failure stays
+  # attributable to one suite instead of buried in interleaved output. shared
+  # is first because both clients compile it — read the report top-down.
   test:
-    desc: Run all tests (except e2e)
-    cmds:
-      - task: test-shared
-      - task: test-server
-      - task: test-webapp
-      - task: test-mobile
-      - task: test-mobile-e2e-scripts
+    desc: Run all tests (except e2e), suites in parallel
+    cmd: ./scripts/run-tasks.sh --parallel test-shared test-server test-webapp test-mobile test-mobile-e2e-scripts
 
   # Every test task forwards {{.CLI_ARGS}}, so a scoped run is
   # `task test-server -- -run TestCreateNote` (note the `--`).
@@ -109,10 +112,10 @@ tasks:
       - go tool cover -html=coverage.out -o coverage.html
 
   # Runs every linter even after one fails, so a single pass reports all of
-  # them — see scripts/run-tasks.sh for why `test` above does not do the same.
+  # them — see scripts/run-tasks.sh.
   lint:
-    desc: Run linters (reports every failing suite, not just the first)
-    cmd: ./scripts/run-tasks.sh lint-shared lint-server lint-webapp lint-mobile
+    desc: Run linters in parallel (reports every failing suite, not just the first)
+    cmd: ./scripts/run-tasks.sh --parallel lint-shared lint-server lint-webapp lint-mobile
 
   lint-server:
     desc: Run server linting with golangci-lint
@@ -213,6 +216,12 @@ tasks:
       - ../scripts/check-playwright-browser.sh
       - task: warm-server-build
       - npm run test:e2e -- {{.CLI_ARGS}}
+
+  # Only the specs this branch adds or edits — what check-changed runs. The
+  # full suite is CI's job.
+  test-e2e-changed:
+    desc: Run only the Playwright specs this branch adds or edits
+    cmd: ./scripts/test-e2e-changed.sh
 
   # Playwright's webServer runs `go run main.go` under a fixed startup
   # timeout. Compiling the server here first means that step hits a warm
