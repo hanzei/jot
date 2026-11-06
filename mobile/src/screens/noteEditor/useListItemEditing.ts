@@ -830,7 +830,11 @@ export function useListItemEditing({
   // no row has focus or the move isn't allowed (see changeItemIndent).
   const handleIndentFocusedItem = useCallback(
     (delta: 1 | -1) => {
-      const itemId = focusedItemIdRef.current;
+      // The ref is nulled the instant a row blurs, but the buttons follow the
+      // state, which holds the id through the blur-settle window (and while a
+      // moved row remounts). Fall back to it so a button that looks enabled in
+      // that window still acts on the row it was enabled for.
+      const itemId = focusedItemIdRef.current ?? focusedItemId;
       if (!itemId) return;
       const next = changeItemIndent(itemsRef.current, itemId, delta);
       if (!next) return;
@@ -843,7 +847,7 @@ export function useListItemEditing({
       setItems(next);
       markDirtyAndScheduleUpdate();
     },
-    [armAutoFocus, itemsRef, markDirtyAndScheduleUpdate, setItems],
+    [armAutoFocus, focusedItemId, itemsRef, markDirtyAndScheduleUpdate, setItems],
   );
 
   const handleListReorder = useCallback(

@@ -501,4 +501,20 @@ describe('useListItemEditing — indent buttons', () => {
     expect(result.current.doc.items.map((it) => it.parentId)).toEqual([null, null]);
     expect(markDirty).not.toHaveBeenCalled();
   });
+
+  it('still acts on the row the buttons were enabled for after its blur clears the ref', async () => {
+    const { result } = await mountWith([item('a'), item('b')]);
+    // Focus sets both the ref and the state the buttons follow...
+    await act(async () => {
+      result.current.editing.listItemHandlers.onFocus('b', { nativeEvent: {} } as never);
+    });
+    // ...and a blur nulls the ref at once, while the state holds the id through
+    // the settle window.
+    result.current.editing.focusedItemIdRef.current = null;
+    expect(result.current.editing.focusedItemId).toBe('b');
+
+    await act(async () => { result.current.editing.handleIndentFocusedItem(1); });
+
+    expect(result.current.doc.items.map((it) => [it.id, it.parentId])).toEqual([['a', null], ['b', 'a']]);
+  });
 });
