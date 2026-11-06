@@ -173,7 +173,6 @@ task fmt             # Apply formatting to every workspace (Go and TypeScript)
 task test-server     # Run server tests
 task test-webapp     # Run webapp tests
 task test-e2e        # Run Playwright end-to-end tests
-task test-e2e-changed # Run only the Playwright specs this branch adds or edits
 task test-mobile     # Run mobile app tests
 task test-mobile-e2e # Run mobile device tests on an emulator (needs Maestro)
 task test-mobile-e2e-scripts # Test the e2e harness's retry classification (no emulator)
@@ -194,17 +193,12 @@ task build-jotctl    # Build the jotctl admin CLI binary
 task clean           # Remove generated files and node packages
 ```
 
-`task check-changed` is the command to run before opening a PR. It maps your
-diff to workspaces (a `shared/` change covers both clients; a change outside any
-workspace, such as `Taskfile.yml` or `scripts/`, runs the full `task check`) and
-runs only their lint and tests, the docs/migration/translation gates, and any
-e2e spec you added or edited. It applies formatting to those workspaces first,
-so a style slip is fixed instead of failing lint. `task check` is the full gate, covering every CI
-job except e2e; CI runs everything either way. `task lint` and `task test` run
-their suites in parallel and print each suite's output in order, reporting every
-failure rather than stopping at the first. Read the report top-down: a broken
-`shared/` is listed first because both clients compile it, and fails the suites
-after it for reasons that are not their own.
+`task check-changed` is the command to run before opening a PR: it scopes the
+gate to the workspaces your diff touches (mapping in `scripts/check-changed.sh`;
+`-- --dry-run` previews it). `task check` is the full gate; CI runs everything
+either way. `task lint` and `task test` run their suites in parallel and print
+each suite's output in order, reporting every failure. Read the report top-down:
+a broken `shared/` is listed first because both clients compile it.
 
 Every `test-*` task forwards extra arguments after `--`, so you can scope a run
 instead of waiting for the whole suite:
@@ -969,7 +963,7 @@ code execution, SSRF, and blob-storage escapes.
 
 ### PR checklist
 
-- `task check-changed` — the same gates scoped to your diff (`task check` runs all of them)
+- `task check-changed` — the pre-PR gate, scoped to your diff
 - `task test-e2e` — optional locally (CI runs it); not part of `task check`, since it needs a browser install
 - `task test-mobile-e2e` — only when you touched the mobile app; not part of
   `task check`, since it needs Maestro and a booted emulator

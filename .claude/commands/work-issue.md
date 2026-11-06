@@ -156,12 +156,9 @@ Two that are easy to skip:
 
 ## 5. Ship it
 
-1. `task check-changed` — the pre-PR gate, scoped to the workspaces your diff touches
-   (falls back to the full `task check` for changes outside any workspace).
-2. For a user-facing change, add a Playwright spec covering it. `check-changed` runs the
-   specs you add or edit; CI runs the rest of the e2e suite, so don't run `task test-e2e`
-   locally.
-3. Commit, push with `git push -u origin <branch>`, open a **draft** PR.
+1. `task check-changed` — the pre-PR gate from `CLAUDE.md`. For a user-facing change, add
+   a Playwright spec first; it runs that spec.
+2. Commit, push with `git push -u origin <branch>`, open a **draft** PR.
 
 In the PR description:
 

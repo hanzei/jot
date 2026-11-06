@@ -30,10 +30,8 @@ tasks:
     dir: webapp
     cmd: npx vite
 
-  # The fast pre-PR gate: only the workspaces the diff touches (see
-  # scripts/check-changed.sh for the mapping). CI runs everything.
   check-changed:
-    desc: Pre-PR gate scoped to the workspaces your diff touches, plus any e2e spec you changed (--dry-run to preview)
+    desc: Pre-PR gate scoped to the workspaces your diff touches, plus any e2e spec you changed (-- --dry-run to preview)
     cmd: ./scripts/check-changed.sh {{.CLI_ARGS}}
 
   # Everything CI enforces except e2e. Each of the three checks below is
@@ -216,12 +214,6 @@ tasks:
       - ../scripts/check-playwright-browser.sh
       - task: warm-server-build
       - npm run test:e2e -- {{.CLI_ARGS}}
-
-  # Only the specs this branch adds or edits — what check-changed runs. The
-  # full suite is CI's job.
-  test-e2e-changed:
-    desc: Run only the Playwright specs this branch adds or edits
-    cmd: ./scripts/test-e2e-changed.sh
 
   # Playwright's webServer runs `go run main.go` under a fixed startup
   # timeout. Compiling the server here first means that step hits a warm

@@ -43,18 +43,14 @@ connectivity, deep linking, Markdown rendering) live in `docs/specs/` — read t
 
 ### Before opening a PR
 
-Run `task check-changed`. It maps your diff to workspaces and runs only their
-lint and tests (in parallel), always the `check-docs`, `check-migrations`, and
-`check-translations` gates, and any e2e spec you added or edited. It applies
-formatting (`task fmt`) to the touched workspaces first, so review `git diff`
-afterwards. A diff outside
-every workspace (`Taskfile.yml`, `scripts/`, `.github/`, root config) falls back
-to the full `task check`, which you can also run yourself. CI runs everything, so
-this is the fast first line. Do not run the whole `task test-e2e` suite before a
-PR: a new feature still needs its e2e spec, and `check-changed` runs that spec.
-While iterating, prefer the narrowest task (`task check-server`,
-`task test-server -- -run TestX`; every `test-*` task forwards arguments after
-`--`).
+Run `task check-changed`: lint and tests for the workspaces your diff touches, the
+`check-docs`, `check-migrations`, and `check-translations` gates, and any e2e spec
+you added or edited. It applies `task fmt` first, so review `git diff` afterwards.
+A diff outside every workspace (`Taskfile.yml`, `scripts/`, `.github/`) runs the
+full `task check`. CI runs everything, so do not run the whole `task test-e2e`
+suite; a new feature still needs its e2e spec. While iterating, prefer the
+narrowest task (`task check-server`, `task test-server -- -run TestX`; every
+`test-*` task forwards arguments after `--`).
 
 If `check-docs` fails, `task gen-docs` has already regenerated `server/docs/` —
 commit the result.
