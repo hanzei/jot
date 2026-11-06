@@ -1,6 +1,6 @@
 // Pure item-model helpers for a list note's checklist items, shared by the
 // webapp and mobile note editors. Everything here takes plain data and
-// returns plain data, so the ordering/cascade/drop-target rules can be
+// returns plain data, so the ordering/cascade/drop-target/indent rules can be
 // unit-tested without rendering either editor, and so both clients apply
 // exactly one implementation instead of hand-kept copies. Mirrors the
 // server's authoritative behavior — cascadeItemCompletion in

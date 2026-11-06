@@ -736,10 +736,12 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
   // is changeItemIndent's, shared with mobile's indent buttons.
   const indentListItem = async (itemId: string, delta: 1 | -1) => {
     if (isReadOnly) return;
+    const updated = changeItemIndent(itemsRef.current, itemId, delta);
+    // Nothing to change (see changeItemIndent for the rule). Decide this before
+    // cancelling the pending save: a refused Tab must not drop the debounced
+    // save of text typed just before it.
+    if (!updated) return;
     cancelPendingSave();
-    const currentItems = itemsRef.current;
-    const updated = changeItemIndent(currentItems, itemId, delta);
-    if (!updated) return; // nothing to change; see changeItemIndent for the rule
     commitItems(updated);
     await autoSaveNote();
   };
