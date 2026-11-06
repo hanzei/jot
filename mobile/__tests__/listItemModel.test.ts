@@ -5,7 +5,6 @@ import {
   serializeItems,
   itemSnapshot,
   indentLevelFromDrag,
-  changeItemIndent,
 } from '../src/screens/noteEditor/listItemModel';
 import { VALIDATION } from '@jot/shared';
 
@@ -106,34 +105,5 @@ describe('itemSnapshot', () => {
       parentId: 'p',
       assigned_to: 'u',
     });
-  });
-});
-
-describe('changeItemIndent', () => {
-  const parentIds = (items: LocalItem[] | null) => items?.map((i) => [i.id, i.parentId]);
-
-  it('nests an item under the nearest preceding top-level item', () => {
-    const items = [local({ id: 'a' }), local({ id: 'b', parentId: 'a' }), local({ id: 'c' })];
-    expect(parentIds(changeItemIndent(items, 'c', 1))).toEqual([['a', null], ['b', 'a'], ['c', 'a']]);
-  });
-
-  it('refuses to indent the first row, a child, a parent, or a completed row', () => {
-    const items = [local({ id: 'a' }), local({ id: 'b', parentId: 'a' }), local({ id: 'c' }), local({ id: 'd', completed: true })];
-    expect(changeItemIndent(items, 'a', 1)).toBeNull(); // nothing above
-    expect(changeItemIndent(items, 'b', 1)).toBeNull(); // already nested
-    expect(changeItemIndent([local({ id: 'a' }), local({ id: 'b' }), local({ id: 'c', parentId: 'b' })], 'b', 1)).toBeNull(); // has children
-    expect(changeItemIndent(items, 'd', 1)).toBeNull(); // completed
-    expect(changeItemIndent(items, 'missing', 1)).toBeNull();
-  });
-
-  it('promotes a child to top-level, re-seating its later siblings above it', () => {
-    const items = [local({ id: 'a' }), local({ id: 'b', parentId: 'a' }), local({ id: 'c', parentId: 'a' })];
-    const out = changeItemIndent(items, 'b', -1);
-    expect(parentIds(out)).toEqual([['a', null], ['c', 'a'], ['b', null]]);
-    expect(out?.map((i) => i.position)).toEqual([0, 1, 2]);
-  });
-
-  it('refuses to outdent a top-level row', () => {
-    expect(changeItemIndent([local({ id: 'a' })], 'a', -1)).toBeNull();
   });
 });

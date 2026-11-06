@@ -25,12 +25,11 @@ import { buildMobileDeepLink } from '@/utils/deepLink';
 import { isEditableElementFocused } from '@/utils/keyboardShortcuts';
 import {
   applyCompletedCascade,
+  changeItemIndent,
   dropTargetParentId,
   indentOf,
-  itemHasChildren,
   itemTextareaId,
   normalizeItemOrder,
-  precedingTopLevelId,
   type ListItem,
 } from '@/utils/noteItems';
 import type {
@@ -733,32 +732,14 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
   const INDENT_DRAG_THRESHOLD = VALIDATION.INDENT_PX_PER_LEVEL;
 
   // indentListItem nests (delta 1) or un-nests (delta -1) an item by changing its
-  // parentId, the source of truth for grouping. Indenting attaches the item to
-  // the nearest preceding top-level item; un-indenting promotes it to top-level.
-  // It refuses to nest an item that already has children (that would create a
-  // grandchild, which the server rejects) and is a no-op when nothing changes.
+  // parentId, the source of truth for grouping. The rule (and when it refuses)
+  // is changeItemIndent's, shared with mobile's indent buttons.
   const indentListItem = async (itemId: string, delta: 1 | -1) => {
     if (isReadOnly) return;
     cancelPendingSave();
     const currentItems = itemsRef.current;
-    const target = currentItems.find(item => item.id === itemId);
-    if (!target) return;
-
-    let newParentId: string | null = target.parentId;
-    if (delta === 1) {
-      if (target.parentId !== null) return; // already nested (max one level)
-      if (itemHasChildren(currentItems, itemId)) return; // would create a grandchild
-      const parentId = precedingTopLevelId(currentItems, itemId);
-      if (!parentId) return; // nothing to nest under
-      newParentId = parentId;
-    } else {
-      if (target.parentId === null) return; // already top-level
-      newParentId = null;
-    }
-
-    const updated = normalizeItemOrder(
-      currentItems.map(item => (item.id === itemId ? { ...item, parentId: newParentId } : item)),
-    );
+    const updated = changeItemIndent(currentItems, itemId, delta);
+    if (!updated) return; // nothing to change; see changeItemIndent for the rule
     commitItems(updated);
     await autoSaveNote();
   };
