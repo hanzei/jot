@@ -962,7 +962,7 @@ code execution, SSRF, and blob-storage escapes.
 ### PR checklist
 
 - `task check` — lint, all tests, and the docs/migration/translation gates
-- `task test-e2e` — not part of `task check`, since it needs a browser install
+- `task test-e2e` — optional locally (CI runs it); not part of `task check`, since it needs a browser install
 - `task test-mobile-e2e` — only when you touched the mobile app; not part of
   `task check`, since it needs Maestro and a booted emulator
 

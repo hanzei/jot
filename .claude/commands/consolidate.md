@@ -196,7 +196,7 @@ they fit:
 - `## Callers to move`, by workspace;
 - `## API break`: what changes for clients, for the PR description;
 - device-persisted data, with the migration or rewrite (see **Ground rules**);
-- `## Verification`: `task check` and `task test-e2e`, plus `task test-server-postgres`
+- `## Verification`: `task check`, plus `task test-server-postgres`
   when a store or query changes;
 - `## Related`: the other tickets from the same review.
 

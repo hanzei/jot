@@ -157,7 +157,7 @@ Two that are easy to skip:
 ## 5. Ship it
 
 1. `task check` — the full pre-PR gate. Not conditional.
-2. `task test-e2e` if the change is user-facing, plus a new spec covering it.
+2. For a user-facing change, add a Playwright spec covering it; CI runs the e2e suite, so don't run `task test-e2e` locally.
 3. Commit, push with `git push -u origin <branch>`, open a **draft** PR.
 
 In the PR description:

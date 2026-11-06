@@ -44,9 +44,10 @@ connectivity, deep linking, Markdown rendering) live in `docs/specs/` — read t
 ### Before opening a PR
 
 Run `task check` (lint, all tests, and the `check-docs`, `check-migrations`, and
-`check-translations` gates) **and** `task test-e2e`, which `task check` does not
-include. Neither is conditional on what you touched. While iterating, prefer the
-narrowest task (`task check-server`, `task test-server -- -run TestX`; every
+`check-translations` gates). It is not conditional on what you touched. Do not run
+`task test-e2e` before a PR: CI runs the Playwright suite, so a new feature still
+needs its e2e spec but you don't need to execute the suite locally. While
+iterating, prefer the narrowest task (`task check-server`, `task test-server -- -run TestX`; every
 `test-*` task forwards arguments after `--`).
 
 If `check-docs` fails, `task gen-docs` has already regenerated `server/docs/` —
