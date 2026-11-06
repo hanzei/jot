@@ -305,6 +305,8 @@
     "formatHeading": "Nagłówek",
     "formatBulletList": "Lista punktowana",
     "formatChecklist": "Lista kontrolna",
+    "indentItem": "Zwiększ wcięcie elementu",
+    "outdentItem": "Zmniejsz wcięcie elementu",
     "contentLimitReached": "Notatka osiągnęła maksymalną długość",
     "itemLimitReached": "Element osiągnął maksymalną długość",
     "completedSuggestions": "Sugestie z ukończonych elementów",

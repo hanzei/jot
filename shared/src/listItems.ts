@@ -20,7 +20,7 @@ export interface ListItem {
 // itemHasChildren reports whether any item is nested under itemId. Indenting
 // an item that has children would create grandchildren, which the server
 // rejects (nesting is capped at one level), so callers must refuse it.
-export const itemHasChildren = (items: ListItem[], itemId: string): boolean =>
+export const itemHasChildren = (items: readonly ListItem[], itemId: string): boolean =>
   items.some(it => it.parentId === itemId);
 
 // normalizeItemOrder is the single source of item ordering. It walks top-level
@@ -30,7 +30,7 @@ export const itemHasChildren = (items: ListItem[], itemId: string): boolean =>
 // whole set. Calling it after every structural mutation keeps each group intact
 // and keeps a checked item's slot relative to its neighbours, so unchecking
 // lands it back where it belongs even after items above were added or removed.
-export const normalizeItemOrder = (items: ListItem[]): ListItem[] => {
+export const normalizeItemOrder = (items: readonly ListItem[]): ListItem[] => {
   const childrenByParent = new Map<string, ListItem[]>();
   for (const it of items) {
     if (it.parentId !== null) {

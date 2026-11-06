@@ -60,6 +60,44 @@ export function isBlankDraft(noteType: NoteType, title: string, content: string,
 // of the diff engine; re-exported so the editor's hooks keep one import site.
 export { itemSnapshot, type ItemSnapshot } from '@jot/shared';
 
+// indentTargetParent resolves the parent an item would take on a one-level
+// indent move (delta 1 nests, -1 un-nests), mirroring the webapp's Tab /
+// Shift+Tab. Indenting attaches the item to the nearest preceding active
+// top-level item; un-indenting promotes it to top-level. Returns undefined when
+// nothing can change: the item is completed, is already at that edge of the
+// one-level hierarchy, has children (it would become a grandchild), or has
+// nothing above to nest under. (null is a valid answer: top-level.)
+function indentTargetParent(items: readonly LocalItem[], itemId: string, delta: 1 | -1): string | null | undefined {
+  const target = items.find((item) => item.id === itemId);
+  if (!target || target.completed) return undefined;
+
+  if (delta === -1) return target.parentId === null ? undefined : null;
+
+  if (target.parentId !== null || itemHasChildren(items, itemId)) return undefined;
+  let preceding: string | undefined;
+  for (const item of items) {
+    if (item.id === itemId) break;
+    if (item.parentId === null && !item.completed) preceding = item.id;
+  }
+  return preceding;
+}
+
+// canChangeItemIndent reports whether changeItemIndent would move the item. The
+// formatting bar calls it on every render to dim its buttons, so it does the
+// guard checks without building the re-normalized list.
+export function canChangeItemIndent(items: readonly LocalItem[], itemId: string, delta: 1 | -1): boolean {
+  return indentTargetParent(items, itemId, delta) !== undefined;
+}
+
+// changeItemIndent nests (delta 1) or un-nests (delta -1) one active item by one
+// level for the formatting bar's indent buttons. Returns the re-normalized
+// items, or null when canChangeItemIndent is false.
+export function changeItemIndent(items: readonly LocalItem[], itemId: string, delta: 1 | -1): LocalItem[] | null {
+  const parentId = indentTargetParent(items, itemId, delta);
+  if (parentId === undefined) return null;
+  return normalizeItemOrder(items.map((item) => (item.id === itemId ? { ...item, parentId } : item)));
+}
+
 // indentLevelFromDrag maps a horizontal drag distance to a target indent level
 // (0 = top-level, 1 = nested) for the one-level hierarchy, snapping every
 // INDENT_PX of travel to one level and clamping to what the dragged item is

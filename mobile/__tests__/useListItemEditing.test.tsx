@@ -466,3 +466,55 @@ describe('useListItemEditing — derived lists', () => {
     expect(itemIndexMap.get('c')).toBe(2);
   });
 });
+
+describe('useListItemEditing — indent buttons', () => {
+  const focus = (result: { current: ReturnType<typeof useHarness> }, id: string) => {
+    result.current.editing.focusedItemIdRef.current = id;
+  };
+
+  it('indents the focused row under the row above and saves', async () => {
+    const { result } = await mountWith([item('a'), item('b')]);
+    focus(result, 'b');
+
+    await act(async () => { result.current.editing.handleIndentFocusedItem(1); });
+
+    expect(result.current.doc.items.map((it) => [it.id, it.parentId])).toEqual([['a', null], ['b', 'a']]);
+    expect(markDirty).toHaveBeenCalled();
+  });
+
+  it('outdents a nested row back to top-level', async () => {
+    const { result } = await mountWith([item('a'), item('b', { parentId: 'a' })]);
+    focus(result, 'b');
+
+    await act(async () => { result.current.editing.handleIndentFocusedItem(-1); });
+
+    expect(result.current.doc.items.map((it) => it.parentId)).toEqual([null, null]);
+  });
+
+  it('does nothing when no row is focused or the move is not allowed', async () => {
+    const { result } = await mountWith([item('a'), item('b')]);
+
+    await act(async () => { result.current.editing.handleIndentFocusedItem(1); });
+    focus(result, 'a'); // first row: nothing above to nest under
+    await act(async () => { result.current.editing.handleIndentFocusedItem(1); });
+
+    expect(result.current.doc.items.map((it) => it.parentId)).toEqual([null, null]);
+    expect(markDirty).not.toHaveBeenCalled();
+  });
+
+  it('still acts on the row the buttons were enabled for after its blur clears the ref', async () => {
+    const { result } = await mountWith([item('a'), item('b')]);
+    // Focus sets both the ref and the state the buttons follow...
+    await act(async () => {
+      result.current.editing.listItemHandlers.onFocus('b', { nativeEvent: {} } as never);
+    });
+    // ...and a blur nulls the ref at once, while the state holds the id through
+    // the settle window.
+    result.current.editing.focusedItemIdRef.current = null;
+    expect(result.current.editing.focusedItemId).toBe('b');
+
+    await act(async () => { result.current.editing.handleIndentFocusedItem(1); });
+
+    expect(result.current.doc.items.map((it) => [it.id, it.parentId])).toEqual([['a', null], ['b', 'a']]);
+  });
+});

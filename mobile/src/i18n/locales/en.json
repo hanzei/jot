@@ -328,6 +328,8 @@
     "formatHeading": "Heading",
     "formatBulletList": "Bullet list",
     "formatChecklist": "Checklist",
+    "indentItem": "Indent item",
+    "outdentItem": "Outdent item",
     "contentLimitReached": "Note has reached its maximum length",
     "itemLimitReached": "Item has reached its maximum length",
     "completedSuggestions": "Suggestions from completed items",
