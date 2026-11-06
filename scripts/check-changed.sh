@@ -30,12 +30,20 @@ cd "$root"
 dry=0
 [ "${1:-}" = "--dry-run" ] && dry=1
 
+specs=()
+
+# `task check` plus any changed e2e spec (empty when the diff was never read).
 full_gate() {
-  echo "check-changed: $1 — running the full gate"
-  if [ $dry -eq 1 ]; then echo "plan: task fmt, then task check"; exit 0; fi
+  local note=""
+  [ ${#specs[@]} -gt 0 ] && note=" and e2e: ${specs[*]}"
+  echo "check-changed: $1 — running the full gate${note}"
+  if [ $dry -eq 1 ]; then echo "plan: task fmt, then task check${note}"; exit 0; fi
   # An unfixable lint error fails fmt; let `task check` report it with the rest.
   task fmt || echo "check-changed: task fmt failed — continuing so the gate reports everything"
-  exec task check
+  local rc=0
+  task check || rc=1
+  if [ ${#specs[@]} -gt 0 ]; then task test-e2e -- "${specs[@]}" || rc=1; fi
+  exit $rc
 }
 
 base="${JOT_CHECK_BASE:-}"
@@ -57,7 +65,7 @@ if [ -z "$files" ]; then
   exit 0
 fi
 
-server=0 shared=0 webapp=0 mobile=0 specs=()
+server=0 shared=0 webapp=0 mobile=0 full=""
 while IFS= read -r f; do
   [ -z "$f" ] && continue
   case "$f" in
@@ -68,9 +76,12 @@ while IFS= read -r f; do
     webapp/*) webapp=1
       case "$f" in webapp/e2e/tests/*.spec.ts) [ -f "$f" ] && specs+=("${f#webapp/}") ;; esac ;;
     mobile/*) mobile=1 ;;
-    *) full_gate "the diff touches files outside any workspace" ;;
+    *) full="the diff touches files outside any workspace" ;;
   esac
 done <<<"$files"
+
+# After the loop, so a changed spec elsewhere in the diff is still run.
+[ -n "$full" ] && full_gate "$full"
 
 [ $shared -eq 1 ] && webapp=1 mobile=1
 
@@ -88,7 +99,7 @@ fi
 # Seconds each, and each catches a class of failure the suites cannot see.
 ser=(check-docs check-migrations check-translations)
 
-# Not ${specs[*]:+...}: an empty array trips `set -u` on bash < 4.4 (macOS ships 3.2).
+# Avoid ${specs[*]:+...} (also in full_gate): an empty array trips `set -u` on bash < 4.4 (macOS ships 3.2).
 e2e_note=""
 [ ${#specs[@]} -gt 0 ] && e2e_note=", then e2e: ${specs[*]}"
 echo "check-changed: fmt (${fmt[*]}), then ${par[*]} in parallel, then ${ser[*]}${e2e_note}"
