@@ -679,6 +679,7 @@ export default function NoteEditorScreen() {
     handleListDragStart,
     handleListDragEnd,
     handleListReorder,
+    handleIndentFocusedItem,
   } = listEditing;
 
   // Pre-filled share content must be flagged dirty so it auto-saves (and is not
@@ -1405,6 +1406,9 @@ export default function NoteEditorScreen() {
     applyItemToolbarEdit((state) => toggleInlineMarker(state, '~~'));
   }, [applyItemToolbarEdit]);
 
+  const indentItem = useCallback(() => handleIndentFocusedItem(1), [handleIndentFocusedItem]);
+  const outdentItem = useCallback(() => handleIndentFocusedItem(-1), [handleIndentFocusedItem]);
+
   const noteBackground = hasNoteColor ? color : colors.surface;
   const completedSectionDividerColor = hasNoteColor
     ? getCompletedSectionDividerColor(noteBackground)
@@ -1701,6 +1705,8 @@ export default function NoteEditorScreen() {
             {Platform.OS === 'ios' && !isReadOnly && (
               <InputAccessoryView nativeID={ITEM_MARKDOWN_TOOLBAR_ID}>
                 <MarkdownToolbarContent
+                  onOutdent={outdentItem}
+                  onIndent={indentItem}
                   onBold={toggleItemBold}
                   onItalic={toggleItemItalic}
                   onStrikethrough={toggleItemStrikethrough}
@@ -1800,6 +1806,8 @@ export default function NoteEditorScreen() {
           accessory view instead. */}
       {Platform.OS === 'android' && noteType === 'list' && isEditingItem && !isReadOnly && (
         <MarkdownToolbarContent
+          onOutdent={outdentItem}
+          onIndent={indentItem}
           onBold={toggleItemBold}
           onItalic={toggleItemItalic}
           onStrikethrough={toggleItemStrikethrough}

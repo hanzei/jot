@@ -36,6 +36,7 @@ import { animateListReflow } from '../../utils/layoutAnimation';
 import type { ListItemSelectionHandle } from '../../components/ListItem';
 import {
   applyCompletedCascade,
+  changeItemIndent,
   dropTargetParentId,
   indentLevelFromDrag,
   itemHasChildren,
@@ -128,6 +129,8 @@ export interface ListItemEditing {
   handleListDragStart: (event: ReorderableListDragStartEvent) => void;
   handleListDragEnd: (event: ReorderableListDragEndEvent) => void;
   handleListReorder: (event: ReorderableListReorderEvent) => void;
+  /** Indents (1) or outdents (-1) the row holding the caret by one level. */
+  handleIndentFocusedItem: (delta: 1 | -1) => void;
 }
 
 /**
@@ -817,6 +820,29 @@ export function useListItemEditing({
     [markDirtyAndScheduleUpdate, dragTranslateX, itemsRef, setItems],
   );
 
+  // The formatting bar's indent / outdent buttons: moves the row holding the
+  // caret one level, the tap equivalent of dragging it sideways. A no-op when
+  // no row has focus or the move isn't allowed (see changeItemIndent).
+  const handleIndentFocusedItem = useCallback(
+    (delta: 1 | -1) => {
+      const itemId = focusedItemIdRef.current;
+      if (!itemId) return;
+      const next = changeItemIndent(itemsRef.current, itemId, delta);
+      if (!next) return;
+      // Outdenting a middle child re-seats its later siblings above it, so the
+      // row's slot can change and the list remounts it — re-arm focus exactly as
+      // commitDrag does so the keyboard stays up on the row being moved.
+      autoFocusItemIdRef.current = itemId;
+      if (autoFocusClearTimerRef.current !== null) clearTimeout(autoFocusClearTimerRef.current);
+      autoFocusClearTimerRef.current = setTimeout(() => { autoFocusItemIdRef.current = null; }, 500);
+      animateListReflow();
+      itemsRef.current = next;
+      setItems(next);
+      markDirtyAndScheduleUpdate();
+    },
+    [itemsRef, markDirtyAndScheduleUpdate, setItems],
+  );
+
   const handleListReorder = useCallback(
     ({ from, to }: ReorderableListReorderEvent) => commitDrag(from, to),
     [commitDrag],
@@ -944,5 +970,6 @@ export function useListItemEditing({
     handleListDragStart,
     handleListDragEnd,
     handleListReorder,
+    handleIndentFocusedItem,
   };
 }

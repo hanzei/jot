@@ -305,6 +305,8 @@
     "formatHeading": "Titre",
     "formatBulletList": "Liste à puces",
     "formatChecklist": "Liste de tâches",
+    "indentItem": "Indenter l'élément",
+    "outdentItem": "Désindenter l'élément",
     "contentLimitReached": "La note a atteint sa longueur maximale",
     "itemLimitReached": "L'élément a atteint sa longueur maximale",
     "completedSuggestions": "Suggestions d'éléments complétés",

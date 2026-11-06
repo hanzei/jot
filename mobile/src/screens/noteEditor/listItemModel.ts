@@ -60,6 +60,35 @@ export function isBlankDraft(noteType: NoteType, title: string, content: string,
 // of the diff engine; re-exported so the editor's hooks keep one import site.
 export { itemSnapshot, type ItemSnapshot } from '@jot/shared';
 
+// changeItemIndent nests (delta 1) or un-nests (delta -1) one active item by one
+// level for the formatting bar's indent buttons, mirroring the webapp's Tab /
+// Shift+Tab. Indenting attaches the item to the nearest preceding active
+// top-level item; un-indenting promotes it to top-level. Returns the
+// re-normalized items, or null when nothing can change: the item is completed,
+// is already at that edge of the one-level hierarchy, has children (it would
+// become a grandchild), or has nothing above to nest under.
+export function changeItemIndent(items: readonly LocalItem[], itemId: string, delta: 1 | -1): LocalItem[] | null {
+  const target = items.find((item) => item.id === itemId);
+  if (!target || target.completed) return null;
+
+  let parentId: string | null;
+  if (delta === 1) {
+    if (target.parentId !== null || itemHasChildren([...items], itemId)) return null;
+    let preceding: string | null = null;
+    for (const item of items) {
+      if (item.id === itemId) break;
+      if (item.parentId === null && !item.completed) preceding = item.id;
+    }
+    if (!preceding) return null;
+    parentId = preceding;
+  } else {
+    if (target.parentId === null) return null;
+    parentId = null;
+  }
+
+  return normalizeItemOrder(items.map((item) => (item.id === itemId ? { ...item, parentId } : item)));
+}
+
 // indentLevelFromDrag maps a horizontal drag distance to a target indent level
 // (0 = top-level, 1 = nested) for the one-level hierarchy, snapping every
 // INDENT_PX of travel to one level and clamping to what the dragged item is
