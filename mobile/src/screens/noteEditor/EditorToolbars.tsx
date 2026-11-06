@@ -6,15 +6,16 @@ import { styles } from './styles';
 
 interface MarkdownToolbarProps {
   /**
-   * Move the focused list row one level out / in, supplied together or not at
-   * all. Only a list-item bar passes them: a text note has no hierarchy. They
-   * lead the bar, ahead of the formatting buttons.
+   * Outdent / indent buttons for the focused list row, leading the bar. Only a
+   * list-item bar passes them: a text note has no hierarchy. A button is dimmed
+   * and inert when the move is not allowed for the focused row.
    */
-  onOutdent?: () => void;
-  onIndent?: () => void;
-  /** Dimmed and inert when the move is not allowed for the focused row. */
-  outdentDisabled?: boolean;
-  indentDisabled?: boolean;
+  indent?: {
+    onOutdent: () => void;
+    onIndent: () => void;
+    outdentDisabled: boolean;
+    indentDisabled: boolean;
+  };
   onBold: () => void;
   onItalic: () => void;
   onStrikethrough: () => void;
@@ -55,7 +56,7 @@ const ICON_SIZE = 20;
  * Bold would tear down the very input it was meant to edit. TalkBack is
  * unaffected; accessibility focus is separate from input focus.
  */
-export function MarkdownToolbarContent({ onOutdent, onIndent, outdentDisabled = false, indentDisabled = false, onBold, onItalic, onStrikethrough, onHeading, onBullet, onCheckbox, backgroundColor, hasNoteColor }: MarkdownToolbarProps) {
+export function MarkdownToolbarContent({ indent, onBold, onItalic, onStrikethrough, onHeading, onBullet, onCheckbox, backgroundColor, hasNoteColor }: MarkdownToolbarProps) {
   const { t } = useTranslation();
   const { colors } = useTheme();
   // Matches the action bar's barIconColor: a colored note's background is a
@@ -64,34 +65,27 @@ export function MarkdownToolbarContent({ onOutdent, onIndent, outdentDisabled = 
   const iconColor = hasNoteColor ? '#444' : colors.text;
   return (
     <View style={[styles.formattingToolbar, { backgroundColor, borderTopColor: hasNoteColor ? 'transparent' : colors.border }]}>
-      {onOutdent && onIndent && (
+      {indent && (
         <>
-          <TouchableOpacity
-            onPress={onOutdent}
-            disabled={outdentDisabled}
-            style={[styles.fmtBtn, outdentDisabled && styles.fmtBtnDisabled]}
-            hitSlop={HIT_SLOP}
-            focusable={false}
-            accessibilityRole="button"
-            accessibilityLabel={t('note.outdentItem')}
-            accessibilityState={{ disabled: outdentDisabled }}
-            testID="format-outdent-btn"
-          >
-            <IndentDecrease size={ICON_SIZE} color={iconColor} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={onIndent}
-            disabled={indentDisabled}
-            style={[styles.fmtBtn, indentDisabled && styles.fmtBtnDisabled]}
-            hitSlop={HIT_SLOP}
-            focusable={false}
-            accessibilityRole="button"
-            accessibilityLabel={t('note.indentItem')}
-            accessibilityState={{ disabled: indentDisabled }}
-            testID="format-indent-btn"
-          >
-            <IndentIncrease size={ICON_SIZE} color={iconColor} />
-          </TouchableOpacity>
+          {[
+            { id: 'outdent', Icon: IndentDecrease, label: t('note.outdentItem'), onPress: indent.onOutdent, disabled: indent.outdentDisabled },
+            { id: 'indent', Icon: IndentIncrease, label: t('note.indentItem'), onPress: indent.onIndent, disabled: indent.indentDisabled },
+          ].map(({ id, Icon, label, onPress, disabled }) => (
+            <TouchableOpacity
+              key={id}
+              onPress={onPress}
+              disabled={disabled}
+              style={[styles.fmtBtn, disabled && styles.fmtBtnDisabled]}
+              hitSlop={HIT_SLOP}
+              focusable={false}
+              accessibilityRole="button"
+              accessibilityLabel={label}
+              accessibilityState={{ disabled }}
+              testID={`format-${id}-btn`}
+            >
+              <Icon size={ICON_SIZE} color={iconColor} />
+            </TouchableOpacity>
+          ))}
           <View style={[styles.fmtSep, { backgroundColor: colors.border }]} />
         </>
       )}

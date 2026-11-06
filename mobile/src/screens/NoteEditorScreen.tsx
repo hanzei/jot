@@ -1408,12 +1408,19 @@ export default function NoteEditorScreen() {
     applyItemToolbarEdit((state) => toggleInlineMarker(state, '~~'));
   }, [applyItemToolbarEdit]);
 
-  const indentItem = useCallback(() => handleIndentFocusedItem(1), [handleIndentFocusedItem]);
-  const outdentItem = useCallback(() => handleIndentFocusedItem(-1), [handleIndentFocusedItem]);
   // Same rule the buttons apply on press, so a button is disabled exactly when
   // pressing it would do nothing.
   const canIndentItem = !!focusedItemId && canChangeItemIndent(items, focusedItemId, 1);
   const canOutdentItem = !!focusedItemId && canChangeItemIndent(items, focusedItemId, -1);
+  const itemIndent = useMemo(
+    () => ({
+      onOutdent: () => handleIndentFocusedItem(-1),
+      onIndent: () => handleIndentFocusedItem(1),
+      outdentDisabled: !canOutdentItem,
+      indentDisabled: !canIndentItem,
+    }),
+    [canIndentItem, canOutdentItem, handleIndentFocusedItem],
+  );
 
   const noteBackground = hasNoteColor ? color : colors.surface;
   const completedSectionDividerColor = hasNoteColor
@@ -1711,10 +1718,7 @@ export default function NoteEditorScreen() {
             {Platform.OS === 'ios' && !isReadOnly && (
               <InputAccessoryView nativeID={ITEM_MARKDOWN_TOOLBAR_ID}>
                 <MarkdownToolbarContent
-                  onOutdent={outdentItem}
-                  onIndent={indentItem}
-                  outdentDisabled={!canOutdentItem}
-                  indentDisabled={!canIndentItem}
+                  indent={itemIndent}
                   onBold={toggleItemBold}
                   onItalic={toggleItemItalic}
                   onStrikethrough={toggleItemStrikethrough}
@@ -1814,10 +1818,7 @@ export default function NoteEditorScreen() {
           accessory view instead. */}
       {Platform.OS === 'android' && noteType === 'list' && isEditingItem && !isReadOnly && (
         <MarkdownToolbarContent
-          onOutdent={outdentItem}
-          onIndent={indentItem}
-          outdentDisabled={!canOutdentItem}
-          indentDisabled={!canIndentItem}
+          indent={itemIndent}
           onBold={toggleItemBold}
           onItalic={toggleItemItalic}
           onStrikethrough={toggleItemStrikethrough}

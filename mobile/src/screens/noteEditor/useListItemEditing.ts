@@ -276,6 +276,9 @@ export function useListItemEditing({
   // The id travels as state, not just the ref, so the bar's indent buttons can
   // enable or disable themselves for whichever row has the caret.
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
+  // The same id as `focusedItemId`, readable without a dependency: held through
+  // the blur-settle window, unlike `focusedItemIdRef`, which blur clears at once.
+  const heldFocusedItemIdRef = useRef<string | null>(null);
   const isEditingItem = focusedItemId !== null;
   const clearEditingItemRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -834,7 +837,7 @@ export function useListItemEditing({
       // state, which holds the id through the blur-settle window (and while a
       // moved row remounts). Fall back to it so a button that looks enabled in
       // that window still acts on the row it was enabled for.
-      const itemId = focusedItemIdRef.current ?? focusedItemId;
+      const itemId = focusedItemIdRef.current ?? heldFocusedItemIdRef.current;
       if (!itemId) return;
       const next = changeItemIndent(itemsRef.current, itemId, delta);
       if (!next) return;
@@ -847,7 +850,7 @@ export function useListItemEditing({
       setItems(next);
       markDirtyAndScheduleUpdate();
     },
-    [armAutoFocus, focusedItemId, itemsRef, markDirtyAndScheduleUpdate, setItems],
+    [armAutoFocus, itemsRef, markDirtyAndScheduleUpdate, setItems],
   );
 
   const handleListReorder = useCallback(
@@ -917,6 +920,7 @@ export function useListItemEditing({
         clearTimeout(clearEditingItemRef.current);
         clearEditingItemRef.current = null;
       }
+      heldFocusedItemIdRef.current = itemId;
       setFocusedItemId(itemId);
       handleListItemFocus(event);
     },
@@ -931,6 +935,7 @@ export function useListItemEditing({
     if (clearEditingItemRef.current) clearTimeout(clearEditingItemRef.current);
     clearEditingItemRef.current = setTimeout(() => {
       clearEditingItemRef.current = null;
+      heldFocusedItemIdRef.current = null;
       setFocusedItemId(null);
     }, ITEM_BLUR_SETTLE_MS);
   }, []);
