@@ -278,6 +278,12 @@ jest.mock('react-native-reanimated', () => {
     useSharedValue: (init) => makeSharedValue(init),
     useAnimatedRef: () => ({ current: null }),
     useScrollViewOffset: () => makeSharedValue(0),
+    // Runs the worklet on the JS thread with the event's payload, as the
+    // real handler does on the UI thread.
+    useAnimatedScrollHandler: (handlers) => {
+      const onScroll = typeof handlers === 'function' ? handlers : handlers?.onScroll;
+      return (event) => onScroll?.(event?.nativeEvent ?? event);
+    },
     useFrameCallback: () => ({ setActive: jest.fn(), isActive: false }),
     useDerivedValue: (fn) => makeSharedValue(typeof fn === 'function' ? undefined : fn),
     withTiming: (val) => val,

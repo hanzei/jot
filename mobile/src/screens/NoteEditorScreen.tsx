@@ -29,7 +29,7 @@ import {
   ScrollViewContainer,
   type ReorderableListRenderItemInfo,
 } from 'react-native-reorderable-list';
-import { LinearTransition } from 'react-native-reanimated';
+import { LinearTransition, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { Archive, ArrowLeft, Check, ChevronRight, CircleAlert, EllipsisVertical, FileText, Image, List, Palette, Pin, Plus } from 'lucide-react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -630,6 +630,12 @@ export default function NoteEditorScreen() {
   // uncontrolled with respect to selection.
   const contentSelectionRef = useRef<TextSelection>({ start: 0, end: 0 });
   const scrollViewRef = useRef<ScrollView>(null);
+  // The editor's content offset, tracked so a focused list row can be scrolled
+  // into view by exactly the distance it is hidden.
+  const scrollOffsetY = useSharedValue(0);
+  const handleEditorScroll = useAnimatedScrollHandler((event) => {
+    scrollOffsetY.set(event.contentOffset.y);
+  });
 
   const openAssigneePicker = useCallback((itemId: string) => {
     if (isReadOnly) return;
@@ -649,6 +655,7 @@ export default function NoteEditorScreen() {
     withItemWriteInFlight: sync.withItemWriteInFlight,
     completedWrites: sync.completedWrites,
     scrollViewRef,
+    scrollOffsetY,
     openAssigneePicker,
     confirm,
     showToast,
@@ -682,6 +689,7 @@ export default function NoteEditorScreen() {
     handleListDragEnd,
     handleListReorder,
     handleIndentFocusedItem,
+    revealFocusedItem,
   } = listEditing;
 
   // Pre-filled share content must be flagged dirty so it auto-saves (and is not
@@ -1546,6 +1554,10 @@ export default function NoteEditorScreen() {
         style={styles.scrollContent}
         contentContainerStyle={styles.scrollContentContainer}
         keyboardShouldPersistTaps="handled"
+        onScroll={handleEditorScroll}
+        // The keyboard and the Android formatting bar appear after a row takes
+        // focus and shrink this view, which can cover the row it just revealed.
+        onLayout={revealFocusedItem}
       >
         {(displayedImages.length > 0 || displayedImageUploads.length > 0) && (
           <NoteImageGallery
