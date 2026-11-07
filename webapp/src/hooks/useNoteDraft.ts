@@ -262,7 +262,14 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
           break;
         }
         case 'delete':
-          await notes.deleteItem(noteId, op.itemId);
+          try {
+            await notes.deleteItem(noteId, op.itemId);
+          } catch (err) {
+            // 404 means the item is already gone (a collaborator deleted it
+            // first); the delete's goal holds, so treat it as done. Rethrowing
+            // would leave it in the baseline and fail every later save.
+            if (httpStatus(err) !== 404) throw err;
+          }
           base.delete(op.itemId);
           break;
         case 'reorder':

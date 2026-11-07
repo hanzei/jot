@@ -462,12 +462,16 @@ func (h *NotesHandler) DeleteNoteItems(w http.ResponseWriter, r *http.Request) (
 		return status, nil, err
 	}
 
-	items, _, err := h.noteStore.DeleteItems(r.Context(), noteID, user.ID, req.ItemIDs)
+	items, deleted, err := h.noteStore.DeleteItems(r.Context(), noteID, user.ID, req.ItemIDs)
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("delete items: %w", err)
 	}
 
-	h.publishItemChangeEvent(r.Context(), noteID, user.ID)
+	// IDs already gone (an offline client's replay) are ignored, so a call
+	// that removed nothing changed nothing and wakes no collaborator.
+	if deleted > 0 {
+		h.publishItemChangeEvent(r.Context(), noteID, user.ID)
+	}
 	return http.StatusOK, items, nil
 }
 

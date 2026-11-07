@@ -331,6 +331,35 @@ describe('useNoteDraft', () => {
       expect(notes.deleteItem).toHaveBeenCalledWith('1', 'b');
     });
 
+    it('treats a 404 on delete as already-deleted rather than failing every later save', async () => {
+      // A collaborator removed 'b' before this editor adopted that change, so
+      // every attempt to delete it answers 404.
+      vi.mocked(notes.deleteItem).mockRejectedValue({ response: { status: 404 } });
+      const note = createMockNote({ id: '1', note_type: 'list', title: 'List' });
+      const { result, showError } = renderDraft({ note });
+      adopt(result.current, note, [listItem('a'), listItem('b')]);
+
+      act(() => result.current.commitItems([listItem('a')]));
+      await act(async () => {
+        await result.current.autoSaveNote();
+      });
+
+      expect(notes.deleteItem).toHaveBeenCalledTimes(1);
+      expect(showError).not.toHaveBeenCalled();
+      // The delete counts as done, so the editor is clean again (and can adopt
+      // the server's copy) and a later edit does not re-send it.
+      expect(result.current.isDirty()).toBe(false);
+
+      act(() => result.current.commitItems([listItem('a', { text: 'edited' })]));
+      await act(async () => {
+        await result.current.autoSaveNote();
+      });
+
+      expect(notes.deleteItem).toHaveBeenCalledTimes(1);
+      expect(notes.updateItem).toHaveBeenCalledWith('1', 'a', { text: 'edited' });
+      expect(showError).not.toHaveBeenCalled();
+    });
+
     it('reorders items when only their order changed', async () => {
       const note = createMockNote({ id: '1', note_type: 'list', title: 'List' });
       const { result } = renderDraft({ note });

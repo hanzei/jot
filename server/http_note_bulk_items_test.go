@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/hanzei/jot/server/client"
+	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/sse"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -145,4 +149,39 @@ func TestBulkNoteItemEndpoints(t *testing.T) {
 		require.Len(t, items, 1, "collaborator cleared the completed group")
 		assert.Equal(t, "Solo", items[0].Text)
 	})
+}
+
+// A bulk delete that removes nothing (every ID already gone, as on an offline
+// client's replay) changes nothing, so it must not wake every collaborator
+// with a note_updated. A delete that removes an item still does.
+func TestDeleteNoteItemsPublishesOnlyWhenSomethingWasDeleted(t *testing.T) {
+	t.Parallel()
+	ts := setupTestServer(t)
+	owner := ts.createTestUser(t, "bulkdelsseowner", "password123", false)
+	collaborator := ts.createTestUser(t, "bulkdelssecollab", "password123", false)
+	noteID, _, _, _, soloID := createGroupNote(t, owner)
+	require.NoError(t, owner.Client.ShareNote(t.Context(), noteID, collaborator.User.ID))
+
+	sseCtx, sseCancel := context.WithCancel(t.Context())
+	t.Cleanup(sseCancel)
+	ch, err := collaborator.Client.SubscribeSSE(sseCtx)
+	require.NoError(t, err)
+
+	isNoteUpdated := func(e client.SSEEvent) bool {
+		return e.Type == string(sse.EventNoteUpdated) && e.NoteData != nil && e.NoteData.NoteID == noteID
+	}
+
+	missingID, err := models.GenerateID()
+	require.NoError(t, err)
+	items, err := owner.Client.DeleteNoteItems(t.Context(), noteID, []string{missingID})
+	require.NoError(t, err)
+	require.Len(t, items, 4, "nothing was deleted")
+	_, found := waitForSSEEvent(ch, isNoteUpdated, 750*time.Millisecond)
+	assert.False(t, found, "a delete that removed nothing should not publish note_updated")
+
+	items, err = owner.Client.DeleteNoteItems(t.Context(), noteID, []string{soloID})
+	require.NoError(t, err)
+	require.Len(t, items, 3)
+	_, found = waitForSSEEvent(ch, isNoteUpdated, 3*time.Second)
+	assert.True(t, found, "a delete that removed an item should publish note_updated")
 }

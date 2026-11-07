@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { deleteFileIfExists } from '../utils/fs';
-import type { Note, NoteItem, NoteUnread, GetNotesParams, Label, NoteShare, NoteImage, ShareHistorySource } from '@jot/shared';
+import { apiPaths, type Note, type NoteItem, type NoteUnread, type GetNotesParams, type Label, type NoteShare, type NoteImage, type ShareHistorySource } from '@jot/shared';
 import { getStrongRandomBytes } from '../utils/random';
 import { withSerializedTransaction } from './transaction';
 import { localCompletedWrites } from './localCompletedWrites';
@@ -123,6 +123,64 @@ async function getItemsForNote(db: SQLiteDatabase, noteId: string): Promise<Note
   return rows.map(itemRowToNoteItem);
 }
 
+/**
+ * Item ids of `noteId` whose queued createItem has not replayed yet. Read from
+ * the sync queue inside the caller's transaction, so it is current for the
+ * prune it guards.
+ */
+async function getQueuedCreatedItemIds(db: SQLiteDatabase, noteId: string): Promise<string[]> {
+  const rows = await db.getAllAsync<{ body: string | null }>(
+    "SELECT body FROM sync_queue WHERE operation = 'createItem' AND endpoint = ?",
+    [apiPaths.noteItems(noteId)],
+  );
+  const ids: string[] = [];
+  for (const row of rows) {
+    try {
+      const id = (JSON.parse(row.body ?? 'null') as { id?: unknown } | null)?.id;
+      if (typeof id === 'string') ids.push(id);
+    } catch {
+      // An unparseable body names no item to keep.
+    }
+  }
+  return ids;
+}
+
+/**
+ * Deletes the note's local item rows that `items` no longer contains. For a
+ * server-authoritative list (`fromServer`) it keeps the items whose queued
+ * createItem has not replayed yet: the server cannot list an item it has not
+ * been told about, so a snapshot that lands first (a replayed create or bulk
+ * delete ahead of the createItem) would otherwise delete it locally, though the
+ * createItem then adds it on the server. A kept item whose parent the prune
+ * removed is re-homed to top level, as the server does for an orphaned child.
+ */
+async function pruneLocalItems(
+  db: SQLiteDatabase,
+  noteId: string,
+  items: readonly { id: string }[],
+  fromServer: boolean,
+): Promise<void> {
+  const queued = fromServer ? await getQueuedCreatedItemIds(db, noteId) : [];
+  const keep = [...new Set([...items.map((item) => item.id), ...queued])];
+  if (keep.length === 0) {
+    await db.runAsync('DELETE FROM note_items WHERE note_id = ?', [noteId]);
+    return;
+  }
+  const placeholders = keep.map(() => '?').join(', ');
+  const { changes } = await db.runAsync(
+    `DELETE FROM note_items WHERE note_id = ? AND id NOT IN (${placeholders})`,
+    [noteId, ...keep],
+  );
+  if (queued.length > 0 && changes > 0) {
+    await db.runAsync(
+      `UPDATE note_items SET parent_id = NULL
+        WHERE note_id = ? AND parent_id IS NOT NULL
+          AND parent_id NOT IN (SELECT id FROM note_items WHERE note_id = ?)`,
+      [noteId, noteId],
+    );
+  }
+}
+
 // Writes a single note (and its items if provided) without wrapping in a transaction.
 // Must only be called from within an existing transaction context.
 //
@@ -228,15 +286,7 @@ async function saveNoteInTx(
         [item.id, note.id, item.text, completed.value, item.position, item.parent_id ?? null, item.assigned_to ?? '', item.created_at ?? '', item.updated_at ?? '', completed.keepLocal],
       );
     }
-    if (items.length > 0) {
-      const placeholders = items.map(() => '?').join(', ');
-      await db.runAsync(
-        `DELETE FROM note_items WHERE note_id = ? AND id NOT IN (${placeholders})`,
-        [note.id, ...items.map((item) => item.id)],
-      );
-    } else {
-      await db.runAsync('DELETE FROM note_items WHERE note_id = ?', [note.id]);
-    }
+    await pruneLocalItems(db, note.id, items, serverSnapshot);
   } else if (note.note_type !== 'list') {
     // A text note owns no items, so any left behind belong to a list→text
     // conversion and have to go. REPLACE used to do this implicitly (via the
@@ -1151,15 +1201,7 @@ export async function reconcileLocalItems(
         [item.id, noteId, item.text, completed.value, item.position, item.parent_id, item.assigned_to, now, now],
       );
     }
-    if (items.length > 0) {
-      const placeholders = items.map(() => '?').join(', ');
-      await db.runAsync(
-        `DELETE FROM note_items WHERE note_id = ? AND id NOT IN (${placeholders})`,
-        [noteId, ...items.map((item) => item.id)],
-      );
-    } else {
-      await db.runAsync('DELETE FROM note_items WHERE note_id = ?', [noteId]);
-    }
+    await pruneLocalItems(db, noteId, items, true);
     await touchLocalNote(db, noteId);
   });
 }
