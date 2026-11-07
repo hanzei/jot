@@ -32,8 +32,8 @@ func TestDuplicateNoteEndpoint(t *testing.T) {
 		require.NoError(t, owner.Client.ShareNote(t.Context(), source.ID, collaborator.User.ID))
 
 		_, err = owner.Client.UpdateTextNote(t.Context(), source.ID, &client.UpdateTextNoteRequest{
-			Archived: client.Ptr(true),
-			Pinned:   client.Ptr(true),
+			Archived: new(true),
+			Pinned:   new(true),
 		})
 		require.NoError(t, err)
 
@@ -79,14 +79,14 @@ func TestDuplicateNoteEndpoint(t *testing.T) {
 
 		sourceItems := getNoteItems(t, owner, source.ID)
 		require.Len(t, sourceItems, 2)
-		_, err = owner.Client.UpdateNoteItem(t.Context(), source.ID, sourceItems[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(collaborator.User.ID)})
+		_, err = owner.Client.UpdateNoteItem(t.Context(), source.ID, sourceItems[0].ID, &client.PatchNoteItemRequest{AssignedTo: new(collaborator.User.ID)})
 		require.NoError(t, err)
-		_, err = owner.Client.UpdateNoteItem(t.Context(), source.ID, sourceItems[1].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(owner.User.ID)})
+		_, err = owner.Client.UpdateNoteItem(t.Context(), source.ID, sourceItems[1].ID, &client.PatchNoteItemRequest{AssignedTo: new(owner.User.ID)})
 		require.NoError(t, err)
 
 		// Collaborator sets their own per-user state on the shared note before duplicating.
 		_, err = collaborator.Client.UpdateListNote(t.Context(), source.ID, &client.UpdateListNoteRequest{
-			Color: client.Ptr("#00bcd4"),
+			Color: new("#00bcd4"),
 		})
 		require.NoError(t, err)
 		_, err = collaborator.Client.AddLabel(t.Context(), source.ID, "collab-label")

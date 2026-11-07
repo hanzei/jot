@@ -166,8 +166,7 @@ func CodeFor(status int, err error) Code {
 		return CodeInternal
 	}
 	if err != nil {
-		var ce *codedError
-		if errors.As(err, &ce) {
+		if ce, ok := errors.AsType[*codedError](err); ok {
 			return ce.code
 		}
 		for _, s := range sentinels {

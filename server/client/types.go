@@ -427,6 +427,3 @@ type SSOConfig struct {
 	ProviderName      string `json:"provider_name"`
 	LocalLoginEnabled bool   `json:"local_login_enabled"`
 }
-
-// Ptr returns a pointer to v; useful for building UpdateUserRequest fields.
-func Ptr[T any](v T) *T { return &v }

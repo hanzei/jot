@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"strings"
 	"testing"
@@ -30,9 +31,7 @@ func rawRequest(t *testing.T, httpClient *http.Client, method, url string, body 
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), method, url, body)
 	require.NoError(t, err)
-	for k, v := range header {
-		req.Header[k] = v
-	}
+	maps.Copy(req.Header, header)
 	resp, err := httpClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()

@@ -4,7 +4,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
-	jsonv1 "encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -175,7 +174,7 @@ func parseKeepNotesFromZip(zr *zip.Reader) []keepNote {
 			continue // read error or entry exceeded per-entry limit
 		}
 		var kn keepNote
-		if err := jsonv1.Unmarshal(jsonData, &kn); err != nil {
+		if err := unmarshalImport(jsonData, &kn); err != nil {
 			continue
 		}
 		if kn.isEmpty() {
@@ -199,7 +198,7 @@ func parseKeepNotesFromData(filename string, data []byte) ([]keepNote, error) {
 	}
 
 	var kn keepNote
-	if err := jsonv1.Unmarshal(data, &kn); err != nil {
+	if err := unmarshalImport(data, &kn); err != nil {
 		return nil, apierr.New(apierr.CodeInvalidImportFile, "invalid JSON file")
 	}
 	if kn.isEmpty() {

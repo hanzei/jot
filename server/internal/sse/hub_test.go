@@ -283,9 +283,7 @@ func TestHub_ConcurrentAccess(t *testing.T) {
 
 		// Multiple goroutines subscribing and unsubscribing.
 		for range 10 {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				ch, unsub := h.Subscribe(t.Context(), "user1")
 				h.Publish(t.Context(), []string{"user1"}, Event{Type: EventNoteUpdated, SourceUserID: "u1", Data: NoteEventData{NoteID: "n1"}})
 				// Drain any delivered event so the channel doesn't block unsubscribe.
@@ -294,16 +292,14 @@ func TestHub_ConcurrentAccess(t *testing.T) {
 				default:
 				}
 				unsub()
-			}()
+			})
 		}
 
 		// Separate goroutines only publishing.
 		for range 5 {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				h.Publish(t.Context(), []string{"user1", "user2"}, Event{Type: EventNoteDeleted, SourceUserID: "u2", Data: NoteEventData{NoteID: "n2"}})
-			}()
+			})
 		}
 
 		wg.Wait()

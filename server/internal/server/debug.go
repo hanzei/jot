@@ -72,14 +72,12 @@ func (s *Server) startDebugServer() error {
 	s.serverMu.Lock()
 	s.debugServer = debugServer
 	s.serverMu.Unlock()
-	s.bgWg.Add(1)
-	go func() {
-		defer s.bgWg.Done()
+	s.bgWg.Go(func() {
 		pprof.SetGoroutineLabels(pprof.WithLabels(s.ctx, pprof.Labels("job", "debug-server")))
 		if err := debugServer.Serve(debugListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			s.log.WithError(err).Error("Debug server stopped unexpectedly")
 		}
-	}()
+	})
 	s.log.Infof("Debug server listening on %s (metrics=%t pprof=%t)", debugAddr, s.cfg.MetricsEnabled, s.cfg.PprofEnabled)
 
 	return nil

@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	jsonv1 "encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -291,7 +290,7 @@ func fetchUsememosMemosForState(ctx context.Context, baseURL, token, state strin
 		}
 
 		var apiResp usememosAPIResponse
-		if err := jsonv1.Unmarshal(body, &apiResp); err != nil {
+		if err := unmarshalImport(body, &apiResp); err != nil {
 			return nil, false, fmt.Errorf("parse response: %w", err)
 		}
 		all = append(all, apiResp.memos()...)

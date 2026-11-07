@@ -4,7 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
-	jsonv1 "encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -191,7 +192,7 @@ func openJotBundle(file multipart.File, size int64) (map[string]*zip.File, *jotI
 	}
 
 	var raw jotImportEnvelope
-	if err := jsonv1.Unmarshal(data, &raw); err != nil {
+	if err := unmarshalImport(data, &raw); err != nil {
 		return nil, nil, http.StatusBadRequest, apierr.WithCode(apierr.CodeInvalidImportFile, fmt.Errorf("invalid Jot export: %s is not valid JSON", jotBundleManifest))
 	}
 	if raw.Format != jotExportFormat {
@@ -204,6 +205,17 @@ func openJotBundle(file multipart.File, size int64) (map[string]*zip.File, *jotI
 		return nil, nil, http.StatusBadRequest, apierr.New(apierr.CodeInvalidImportFile, "notes must be a JSON array")
 	}
 	return entries, &raw, 0, nil
+}
+
+// unmarshalImport decodes import input: a Jot export, a Keep Takeout note, or
+// a usememos API page. Every importer goes through it so they all tolerate
+// the same input. Note text is user content, and a truncated emoji leaves a
+// lone UTF-16 surrogate or invalid UTF-8 that encoding/json/v2 rejects by
+// default; allowing it replaces the bad sequence with U+FFFD, as v1 did.
+// Otherwise one such note would be skipped silently (Keep zip) or fail a
+// whole page (usememos) or file.
+func unmarshalImport(data []byte, v any) error {
+	return json.Unmarshal(data, v, jsontext.AllowInvalidUTF8(true))
 }
 
 // looksLikeJSON reports whether f starts with a JSON object, i.e. is most

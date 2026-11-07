@@ -34,7 +34,7 @@ func TestNoteUnread(t *testing.T) {
 		require.NoError(t, err)
 		assert.Nil(t, note.Unread)
 
-		_, err = owner.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{Content: ptr("edited")})
+		_, err = owner.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{Content: new("edited")})
 		require.NoError(t, err)
 		assert.Empty(t, unreadOf(t, owner.Client, note.ID))
 	})
@@ -72,7 +72,7 @@ func TestNoteUnread(t *testing.T) {
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
 		require.NoError(t, collab.Client.MarkNoteViewed(t.Context(), note.ID))
 
-		_, err = collab.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{Content: ptr("collab edit")})
+		_, err = collab.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{Content: new("collab edit")})
 		require.NoError(t, err)
 		assert.Equal(t, client.NoteUnreadUpdated, unreadOf(t, owner.Client, note.ID))
 		assert.Empty(t, unreadOf(t, collab.Client, note.ID), "own edits never flag the editor")
@@ -80,7 +80,7 @@ func TestNoteUnread(t *testing.T) {
 		require.NoError(t, owner.Client.MarkNoteViewed(t.Context(), note.ID))
 		assert.Empty(t, unreadOf(t, owner.Client, note.ID))
 
-		_, err = owner.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{Content: ptr("owner edit")})
+		_, err = owner.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{Content: new("owner edit")})
 		require.NoError(t, err)
 		assert.Equal(t, client.NoteUnreadUpdated, unreadOf(t, collab.Client, note.ID))
 		assert.Empty(t, unreadOf(t, owner.Client, note.ID))
@@ -92,11 +92,11 @@ func TestNoteUnread(t *testing.T) {
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
 		require.NoError(t, collab.Client.MarkNoteViewed(t.Context(), note.ID))
 
-		_, err = collab.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{Content: ptr("collab edit")})
+		_, err = collab.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{Content: new("collab edit")})
 		require.NoError(t, err)
 		require.Equal(t, client.NoteUnreadUpdated, unreadOf(t, owner.Client, note.ID))
 
-		updated, err := owner.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{Content: ptr("owner reply")})
+		updated, err := owner.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{Content: new("owner reply")})
 		require.NoError(t, err)
 		assert.Nil(t, updated.Unread, "the update response reflects the cleared state")
 	})
@@ -108,7 +108,7 @@ func TestNoteUnread(t *testing.T) {
 		require.NoError(t, owner.Client.MarkNoteViewed(t.Context(), note.ID))
 
 		_, err = collab.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{
-			Pinned: ptr(true), Color: ptr("#fbbc04"), Content: ptr("same"),
+			Pinned: new(true), Color: new("#fbbc04"), Content: new("same"),
 		})
 		require.NoError(t, err)
 		assert.Empty(t, unreadOf(t, owner.Client, note.ID))
@@ -135,7 +135,7 @@ func TestNoteUnread(t *testing.T) {
 
 		require.NoError(t, owner.Client.MarkNoteViewed(t.Context(), note.ID))
 		_, err = collab.Client.ConvertNoteType(t.Context(), note.ID, &client.ConvertNoteTypeRequest{
-			NoteType: client.NoteTypeText, Content: ptr("milk\neggs"),
+			NoteType: client.NoteTypeText, Content: new("milk\neggs"),
 		})
 		require.NoError(t, err)
 		assert.Equal(t, client.NoteUnreadUpdated, unreadOf(t, owner.Client, note.ID))
@@ -185,7 +185,7 @@ func TestNoteUnread(t *testing.T) {
 
 		// collab opens the note offline; the owner edits before the view syncs.
 		openedOffline := time.Now().Add(-time.Second)
-		_, err = owner.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{Content: ptr("owner edit")})
+		_, err = owner.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{Content: new("owner edit")})
 		require.NoError(t, err)
 
 		require.NoError(t, collab.Client.MarkNoteViewedAt(t.Context(), note.ID, openedOffline))
@@ -194,7 +194,7 @@ func TestNoteUnread(t *testing.T) {
 		// A view time in the future is capped at now.
 		require.NoError(t, collab.Client.MarkNoteViewedAt(t.Context(), note.ID, time.Now().Add(time.Hour)))
 		assert.Empty(t, unreadOf(t, collab.Client, note.ID))
-		_, err = owner.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{Content: ptr("later edit")})
+		_, err = owner.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{Content: new("later edit")})
 		require.NoError(t, err)
 		assert.Equal(t, client.NoteUnreadUpdated, unreadOf(t, collab.Client, note.ID))
 	})

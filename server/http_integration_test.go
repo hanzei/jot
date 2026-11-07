@@ -578,9 +578,9 @@ func TestNotesEndpoints(t *testing.T) {
 
 	t.Run("update note", func(t *testing.T) {
 		updated, err := user.Client.UpdateTextNote(t.Context(), created.ID, &client.UpdateTextNoteRequest{
-			Content: client.Ptr("Updated Content"),
-			Pinned:  client.Ptr(true),
-			Color:   client.Ptr("#ff0000"),
+			Content: new("Updated Content"),
+			Pinned:  new(true),
+			Color:   new("#ff0000"),
 		})
 		require.NoError(t, err)
 		assert.Equal(t, "Updated Content", updated.Content)
@@ -672,7 +672,7 @@ func TestAdminDeleteUserNotes(t *testing.T) {
 	require.NoError(t, err)
 	archived, err := otherAdmin.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "archived"})
 	require.NoError(t, err)
-	_, err = otherAdmin.Client.UpdateTextNote(t.Context(), archived.ID, &client.UpdateTextNoteRequest{Archived: client.Ptr(true)})
+	_, err = otherAdmin.Client.UpdateTextNote(t.Context(), archived.ID, &client.UpdateTextNoteRequest{Archived: new(true)})
 	require.NoError(t, err)
 	trashed, err := otherAdmin.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "trashed"})
 	require.NoError(t, err)
@@ -761,14 +761,14 @@ func TestAdminStatsEndpoint(t *testing.T) {
 	require.NoError(t, err)
 	archivedItems := getNoteItems(t, adminUser, archivedListNote.ID)
 	_, err = adminUser.Client.UpdateNoteItem(t.Context(), archivedListNote.ID, archivedItems[0].ID, &client.PatchNoteItemRequest{
-		Completed:  client.Ptr(true),
-		AssignedTo: client.Ptr(member1.User.ID),
+		Completed:  new(true),
+		AssignedTo: new(member1.User.ID),
 	})
 	require.NoError(t, err)
 
 	activeItems := getNoteItems(t, adminUser, activeListNote.ID)
 	_, err = adminUser.Client.UpdateNoteItem(t.Context(), activeListNote.ID, activeItems[0].ID, &client.PatchNoteItemRequest{
-		AssignedTo: client.Ptr(member2.User.ID),
+		AssignedTo: new(member2.User.ID),
 	})
 	require.NoError(t, err)
 
@@ -892,11 +892,11 @@ func TestUpdateUserEndpoint(t *testing.T) {
 	t.Run("successful username update", func(t *testing.T) {
 		t.Cleanup(func() {
 			// t.Context() is already canceled when cleanup runs; use a background context.
-			_, err := user.Client.UpdateUser(context.Background(), &client.UpdateUserRequest{Username: client.Ptr("originaluser")})
+			_, err := user.Client.UpdateUser(context.Background(), &client.UpdateUserRequest{Username: new("originaluser")})
 			require.NoError(t, err)
 		})
 
-		resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Username: client.Ptr("newusername")})
+		resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Username: new("newusername")})
 		require.NoError(t, err)
 		assert.Equal(t, "newusername", resp.User.Username)
 		assert.NotNil(t, resp.Settings)
@@ -908,18 +908,18 @@ func TestUpdateUserEndpoint(t *testing.T) {
 	})
 
 	t.Run("invalid username format returns 400", func(t *testing.T) {
-		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Username: client.Ptr("a")})
+		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Username: new("a")})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("unauthenticated request returns 401", func(t *testing.T) {
 		c := ts.newClient()
-		_, err := c.UpdateUser(t.Context(), &client.UpdateUserRequest{Username: client.Ptr("hacker")})
+		_, err := c.UpdateUser(t.Context(), &client.UpdateUserRequest{Username: new("hacker")})
 		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
 	})
 
 	t.Run("partial update preserves unchanged fields", func(t *testing.T) {
-		resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{FirstName: client.Ptr("Updated")})
+		resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{FirstName: new("Updated")})
 		require.NoError(t, err)
 		assert.Equal(t, "Updated", resp.User.FirstName)
 		assert.Equal(t, "originaluser", resp.User.Username)
@@ -1138,7 +1138,7 @@ func TestUserSettingsEndpoints(t *testing.T) {
 	})
 
 	t.Run("PATCH /users/me updates language via unified endpoint", func(t *testing.T) {
-		resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Language: client.Ptr("de")})
+		resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Language: new("de")})
 		require.NoError(t, err)
 		assert.Equal(t, "de", resp.Settings.Language)
 		assert.Equal(t, "manual", resp.Settings.NoteSort)
@@ -1146,9 +1146,8 @@ func TestUserSettingsEndpoints(t *testing.T) {
 
 	t.Run("PATCH /users/me accepts additional supported languages", func(t *testing.T) {
 		for _, locale := range additionalLocales {
-			locale := locale
 			t.Run(locale, func(t *testing.T) {
-				resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Language: client.Ptr(locale)})
+				resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Language: new(locale)})
 				require.NoError(t, err)
 				assert.Equal(t, locale, resp.Settings.Language)
 			})
@@ -1163,19 +1162,19 @@ func TestUserSettingsEndpoints(t *testing.T) {
 	})
 
 	t.Run("PATCH /users/me with invalid language returns 400", func(t *testing.T) {
-		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Language: client.Ptr("sv")})
+		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Language: new("sv")})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("PATCH /users/me with invalid note_sort returns 400", func(t *testing.T) {
-		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{NoteSort: client.Ptr("title")})
+		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{NoteSort: new("title")})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("invalid settings with valid profile does not commit profile (atomic validation)", func(t *testing.T) {
 		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{
-			FirstName: client.Ptr("ShouldNotPersist"),
-			Language:  client.Ptr("invalid"),
+			FirstName: new("ShouldNotPersist"),
+			Language:  new("invalid"),
 		})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 
@@ -1186,8 +1185,8 @@ func TestUserSettingsEndpoints(t *testing.T) {
 
 	t.Run("invalid note_sort with valid profile does not commit profile (atomic validation)", func(t *testing.T) {
 		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{
-			FirstName: client.Ptr("ShouldNotPersistEither"),
-			NoteSort:  client.Ptr("title"),
+			FirstName: new("ShouldNotPersistEither"),
+			NoteSort:  new("title"),
 		})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 
@@ -1198,9 +1197,9 @@ func TestUserSettingsEndpoints(t *testing.T) {
 
 	t.Run("PATCH /users/me updates both profile and settings", func(t *testing.T) {
 		resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{
-			FirstName: client.Ptr("Jane"),
-			Theme:     client.Ptr("dark"),
-			NoteSort:  client.Ptr("created_at"),
+			FirstName: new("Jane"),
+			Theme:     new("dark"),
+			NoteSort:  new("created_at"),
 		})
 		require.NoError(t, err)
 		assert.Equal(t, "Jane", resp.User.FirstName)
@@ -1268,7 +1267,7 @@ func TestListItemGrouping(t *testing.T) {
 		require.Len(t, items, 3)
 		// Promote the third item to top-level by clearing its parent.
 		_, err := user.Client.UpdateNoteItem(t.Context(), created.ID, items[2].ID, &client.PatchNoteItemRequest{
-			ParentID: client.Ptr(""),
+			ParentID: new(""),
 		})
 		require.NoError(t, err)
 
@@ -1307,7 +1306,7 @@ func TestListItemGrouping(t *testing.T) {
 		items := getNoteItems(t, user, created.ID)
 		require.NotEmpty(t, items)
 		_, err := user.Client.UpdateNoteItem(t.Context(), created.ID, items[0].ID, &client.PatchNoteItemRequest{
-			ParentID: client.Ptr("doesnotexist0000000000"),
+			ParentID: new("doesnotexist0000000000"),
 		})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})

@@ -28,7 +28,7 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 			Labels:  []string{"chores"},
 		})
 		require.NoError(t, err)
-		_, err = user.Client.UpdateTextNote(ctx, source.ID, &client.UpdateTextNoteRequest{Pinned: client.Ptr(true)})
+		_, err = user.Client.UpdateTextNote(ctx, source.ID, &client.UpdateTextNoteRequest{Pinned: new(true)})
 		require.NoError(t, err)
 
 		converted, err := user.Client.ConvertNoteType(ctx, source.ID, &client.ConvertNoteTypeRequest{
@@ -66,7 +66,7 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 
 		converted, err := user.Client.ConvertNoteType(ctx, source.ID, &client.ConvertNoteTypeRequest{
 			NoteType: client.NoteTypeList,
-			Title:    client.Ptr("Groceries"),
+			Title:    new("Groceries"),
 			Items:    []client.CreateNoteItem{{Text: "Milk", Position: 0}},
 		})
 		require.NoError(t, err)
@@ -107,7 +107,7 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 
 		_, err = user.Client.ConvertNoteType(ctx, source.ID, &client.ConvertNoteTypeRequest{
 			NoteType: client.NoteTypeList,
-			Title:    client.Ptr(strings.Repeat("a", 201)),
+			Title:    new(strings.Repeat("a", 201)),
 			Items:    []client.CreateNoteItem{{Text: "hi", Position: 0}},
 		})
 		require.Error(t, err)
@@ -127,8 +127,8 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 
 		_, err = user.Client.ConvertNoteType(ctx, source.ID, &client.ConvertNoteTypeRequest{
 			NoteType: client.NoteTypeText,
-			Content:  client.Ptr("# List\n\n- [ ] Item"),
-			Title:    client.Ptr("List"),
+			Content:  new("# List\n\n- [ ] Item"),
+			Title:    new("List"),
 		})
 		require.Error(t, err)
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
@@ -201,7 +201,7 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 
 		converted, err := user.Client.ConvertNoteType(ctx, source.ID, &client.ConvertNoteTypeRequest{
 			NoteType: client.NoteTypeText,
-			Content:  client.Ptr("# Groceries\n\n- [x] Milk\n- [ ] Eggs"),
+			Content:  new("# Groceries\n\n- [x] Milk\n- [ ] Eggs"),
 		})
 		require.NoError(t, err)
 
@@ -227,13 +227,13 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 		items := getNoteItems(t, owner, source.ID)
 		require.Len(t, items, 1)
 		_, err = owner.Client.UpdateNoteItem(ctx, source.ID, items[0].ID, &client.PatchNoteItemRequest{
-			AssignedTo: client.Ptr(collaborator.User.ID),
+			AssignedTo: new(collaborator.User.ID),
 		})
 		require.NoError(t, err)
 
 		converted, err := owner.Client.ConvertNoteType(ctx, source.ID, &client.ConvertNoteTypeRequest{
 			NoteType: client.NoteTypeText,
-			Content:  client.Ptr("# Tasks\n\n- [ ] Ship it"),
+			Content:  new("# Tasks\n\n- [ ] Ship it"),
 		})
 		require.NoError(t, err)
 		assert.Equal(t, client.NoteTypeText, converted.NoteType)
@@ -254,7 +254,7 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 
 		_, err = user.Client.ConvertNoteType(ctx, source.ID, &client.ConvertNoteTypeRequest{
 			NoteType: client.NoteTypeText,
-			Content:  client.Ptr("hi"),
+			Content:  new("hi"),
 		})
 		require.Error(t, err)
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
@@ -272,7 +272,7 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 		convertReq := &client.ConvertNoteTypeRequest{
 			NoteType:    client.NoteTypeList,
 			Items:       []client.CreateNoteItem{{Text: "original", Position: 0}},
-			BaseVersion: client.Ptr(originalVersion),
+			BaseVersion: new(originalVersion),
 		}
 		first, err := user.Client.ConvertNoteType(ctx, source.ID, convertReq)
 		require.NoError(t, err)
@@ -303,13 +303,13 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 		staleVersion := source.Version
 
 		// Another write bumps the version before the conversion lands.
-		_, err = user.Client.UpdateTextNote(ctx, source.ID, &client.UpdateTextNoteRequest{Content: client.Ptr("changed")})
+		_, err = user.Client.UpdateTextNote(ctx, source.ID, &client.UpdateTextNoteRequest{Content: new("changed")})
 		require.NoError(t, err)
 
 		_, err = user.Client.ConvertNoteType(ctx, source.ID, &client.ConvertNoteTypeRequest{
 			NoteType:    client.NoteTypeList,
 			Items:       []client.CreateNoteItem{{Text: "changed", Position: 0}},
-			BaseVersion: client.Ptr(staleVersion),
+			BaseVersion: new(staleVersion),
 		})
 		require.Error(t, err)
 		assert.Equal(t, http.StatusConflict, client.StatusCode(err))
@@ -347,7 +347,7 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 
 		_, err = user.Client.ConvertNoteType(ctx, source.ID, &client.ConvertNoteTypeRequest{
 			NoteType: client.NoteTypeList,
-			Content:  client.Ptr("hi"),
+			Content:  new("hi"),
 		})
 		require.Error(t, err)
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
@@ -412,7 +412,7 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 
 		_, err = user.Client.ConvertNoteType(ctx, source.ID, &client.ConvertNoteTypeRequest{
 			NoteType: client.NoteTypeText,
-			Content:  client.Ptr(string(oversized)),
+			Content:  new(string(oversized)),
 		})
 		require.Error(t, err)
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))

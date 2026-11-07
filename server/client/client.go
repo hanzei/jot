@@ -59,8 +59,7 @@ func newError(statusCode int, body []byte) *Error {
 // StatusCode extracts the HTTP status code from an [Error].
 // If err is nil or not an *Error it returns 0.
 func StatusCode(err error) int {
-	var apiErr *Error
-	if errors.As(err, &apiErr) {
+	if apiErr, ok := errors.AsType[*Error](err); ok {
 		return apiErr.StatusCode
 	}
 	return 0
@@ -69,8 +68,7 @@ func StatusCode(err error) int {
 // ErrorCode extracts the error envelope's code from an [Error].
 // If err is nil, not an *Error, or carried no envelope it returns "".
 func ErrorCode(err error) string {
-	var apiErr *Error
-	if errors.As(err, &apiErr) {
+	if apiErr, ok := errors.AsType[*Error](err); ok {
 		return apiErr.Code
 	}
 	return ""

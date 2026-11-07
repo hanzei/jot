@@ -171,11 +171,11 @@ func TestSearchUsersEndpoint(t *testing.T) {
 	_ = ts.createTestUser(t, "charlie", "password123", true)
 
 	_, err := user1.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{
-		Username: client.Ptr("alice"), FirstName: client.Ptr("Alice"), LastName: client.Ptr("Smith"),
+		Username: new("alice"), FirstName: new("Alice"), LastName: new("Smith"),
 	})
 	require.NoError(t, err)
 	_, err = bob.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{
-		Username: client.Ptr("bob"), FirstName: client.Ptr("Robert"), LastName: client.Ptr("Jones"),
+		Username: new("bob"), FirstName: new("Robert"), LastName: new("Jones"),
 	})
 	require.NoError(t, err)
 
@@ -252,7 +252,7 @@ func TestPerUserNoteState(t *testing.T) {
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
 
 		_, err = collab.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{
-			Color: client.Ptr("#0000ff"),
+			Color: new("#0000ff"),
 		})
 		require.NoError(t, err)
 
@@ -275,7 +275,7 @@ func TestPerUserNoteState(t *testing.T) {
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
 
 		_, err = collab.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{
-			Archived: client.Ptr(true),
+			Archived: new(true),
 		})
 		require.NoError(t, err)
 
@@ -304,7 +304,7 @@ func TestPerUserNoteState(t *testing.T) {
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
 
 		_, err = collab.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{
-			Pinned: client.Ptr(true),
+			Pinned: new(true),
 		})
 		require.NoError(t, err)
 
@@ -378,7 +378,7 @@ func TestPerUserNoteState(t *testing.T) {
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
 
 		_, err = collab.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{
-			Content: client.Ptr("Updated Content"),
+			Content: new("Updated Content"),
 		})
 		require.NoError(t, err)
 
@@ -399,7 +399,7 @@ func TestPerUserNoteState(t *testing.T) {
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
 
 		_, err = collab.Client.UpdateListNote(t.Context(), note.ID, &client.UpdateListNoteRequest{
-			Title: client.Ptr("Updated Title"),
+			Title: new("Updated Title"),
 		})
 		require.NoError(t, err)
 
@@ -459,7 +459,7 @@ func TestPerUserNoteState(t *testing.T) {
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
 
 		_, err = collab.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{
-			Color: client.Ptr("#ff0000"),
+			Color: new("#ff0000"),
 		})
 		require.NoError(t, err)
 		_, err = collab.Client.AddLabel(t.Context(), note.ID, "collab-label")
@@ -556,7 +556,7 @@ func TestEdgeCases(t *testing.T) {
 		require.NoError(t, err)
 
 		updated, err := user.Client.UpdateTextNote(t.Context(), created.ID, &client.UpdateTextNoteRequest{
-			Content: client.Ptr("Updated"),
+			Content: new("Updated"),
 		})
 		require.NoError(t, err)
 		assert.Equal(t, "#ffffff", updated.Color)

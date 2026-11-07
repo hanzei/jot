@@ -91,6 +91,75 @@ func TestImportZIPWithMultipleFiles(t *testing.T) {
 	assert.Equal(t, 2, result.Imported)
 }
 
+// TestImportInvalidUTF8 pins that note text carrying a truncated emoji (a lone
+// UTF-16 surrogate escape) or raw invalid UTF-8 still imports, through every
+// importer, with the bad sequence replaced by U+FFFD. encoding/json/v2 rejects
+// both by default; see unmarshalImport.
+func TestImportInvalidUTF8(t *testing.T) {
+	t.Parallel()
+	ts := setupTestServer(t)
+
+	surrogate := []byte(`{"title":"Surrogate","textContent":"broken \ud83d emoji"}`)
+	invalid := append(append([]byte(`{"title":"Invalid","textContent":"bad `), 0xff), []byte(`byte"}`)...)
+
+	listContents := func(t *testing.T, user *TestUser) []string {
+		t.Helper()
+		notes, err := user.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		contents := make([]string, 0, len(notes))
+		for _, n := range notes {
+			contents = append(contents, n.Content)
+		}
+		return contents
+	}
+
+	t.Run("keep zip", func(t *testing.T) {
+		user := ts.createTestUser(t, "importutf8zip", "password123", false)
+		zipData := buildZip(t, map[string][]byte{"surrogate.json": surrogate, "invalid.json": invalid})
+
+		result, err := user.Client.ImportNotes(t.Context(), "google_keep", "export.zip", bytes.NewReader(zipData))
+		require.NoError(t, err)
+		assert.Equal(t, 2, result.Imported)
+		assert.ElementsMatch(t, []string{
+			"# Surrogate\n\nbroken \uFFFD emoji",
+			"# Invalid\n\nbad \uFFFDbyte",
+		}, listContents(t, user))
+	})
+
+	t.Run("keep single file", func(t *testing.T) {
+		user := ts.createTestUser(t, "importutf8file", "password123", false)
+
+		result, err := user.Client.ImportNotes(t.Context(), "google_keep", "note.json", bytes.NewReader(surrogate))
+		require.NoError(t, err)
+		assert.Equal(t, 1, result.Imported)
+		assert.Equal(t, []string{"# Surrogate\n\nbroken \uFFFD emoji"}, listContents(t, user))
+	})
+
+	t.Run("usememos page", func(t *testing.T) {
+		user := ts.createTestUser(t, "importutf8memos", "password123", false)
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != usememosTestPath || r.Header.Get("Authorization") != usememosTestAuth {
+				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			if r.URL.Query().Get("state") != stateActive {
+				_, _ = w.Write([]byte(`{"memos":[]}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"memos":[` +
+				`{"name":"memos/1","state":"NORMAL","content":"broken \ud83d emoji"},` +
+				`{"name":"memos/2","state":"NORMAL","content":"intact"}]}`))
+		}))
+		defer srv.Close()
+
+		result, err := user.Client.ImportUsememos(t.Context(), srv.URL, "testtoken")
+		require.NoError(t, err)
+		assert.Equal(t, 2, result.Imported)
+		assert.ElementsMatch(t, []string{"broken \uFFFD emoji", "intact"}, listContents(t, user))
+	})
+}
+
 func TestImportTrashedNoteSkipped(t *testing.T) {
 	t.Parallel()
 	ts := setupTestServer(t)

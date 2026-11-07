@@ -631,8 +631,7 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 		statusCode, body, err := handler(w, r)
 		if err != nil {
 			// Promote body-too-large errors to 413 regardless of what the handler returned.
-			var mbe *http.MaxBytesError
-			if errors.As(err, &mbe) {
+			if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 				apierr.Write(w, r, http.StatusRequestEntityTooLarge, apierr.CodeRequestTooLarge, "request body too large")
 				return
 			}
@@ -1010,9 +1009,7 @@ func (s *Server) StopBackgroundTasks() {
 // so lines logged through logutil.FromContext, such as the slow store
 // operation warning, say which task ran them.
 func (s *Server) startPeriodicTask(ctx context.Context, job string, interval time.Duration, runNow bool, fn func(ctx context.Context) error, logMsg string) {
-	s.bgWg.Add(1)
-	go func() {
-		defer s.bgWg.Done()
+	s.bgWg.Go(func() {
 		// Set for the goroutine's whole life, not just around fn: a stuck task
 		// is found parked on the ticker.
 		pprof.SetGoroutineLabels(pprof.WithLabels(ctx, pprof.Labels("job", job)))
@@ -1042,5 +1039,5 @@ func (s *Server) startPeriodicTask(ctx context.Context, job string, interval tim
 				return
 			}
 		}
-	}()
+	})
 }
