@@ -32,6 +32,13 @@ linters:
     - durationcheck
     - intrange
     - modernize
+    - nilnesserr
+    - fatcontext
+    - reassign
+    - makezero
+    - nosprintfhostport
+    - asasalint
+    - bidichk
     - recvcheck
     - gocognit
     - loggercheck
