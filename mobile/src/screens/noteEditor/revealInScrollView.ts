@@ -18,10 +18,6 @@ interface Measurable {
   measureInWindow: (callback: (x: number, y: number, width: number, height: number) => void) => void;
 }
 
-interface ScrollableMeasurable extends Measurable {
-  scrollTo: (options: { y: number; animated?: boolean }) => void;
-}
-
 export interface RevealGeometry {
   /** The scroll view's current content offset. */
   scrollOffset: number;
@@ -34,14 +30,12 @@ export interface RevealGeometry {
   /** Breathing room kept between the target and the viewport's edges. */
   margin: number;
   /**
-   * Leave a target that does not overlap the viewport where it is. For
-   * re-reveals nobody asked for (the content or the viewport changed size): a
-   * row the user scrolled away from must not pull them back to it. `true`
-   * checks the viewport as it is now; a number checks only its first that many
-   * points — its height before a resize, so a row the shrink just covered still
-   * counts as shown.
+   * When set, leave a target that does not overlap the first `shownHeight`
+   * points of the viewport where it is — for re-reveals nobody asked for, which
+   * must not pull the user back to a row they scrolled away from. Null reveals
+   * the target wherever it is.
    */
-  onlyIfShown?: boolean | number;
+  shownHeight: number | null;
 }
 
 /**
@@ -55,16 +49,15 @@ export function scrollOffsetToReveal({
   targetTop,
   targetHeight,
   margin,
-  onlyIfShown = false,
+  shownHeight,
 }: RevealGeometry): number | null {
   // A view that has not been laid out yet measures as zero; scrolling on that
   // would only jump the list.
   if (viewportHeight <= 0 || targetHeight <= 0) return null;
 
   const targetBottom = targetTop + targetHeight;
-  if (onlyIfShown !== false) {
-    const shownHeight = onlyIfShown === true ? viewportHeight : onlyIfShown;
-    if (targetBottom <= viewportTop || targetTop >= viewportTop + shownHeight) return null;
+  if (shownHeight !== null && (targetBottom <= viewportTop || targetTop >= viewportTop + shownHeight)) {
+    return null;
   }
 
   // Shrink the margin when the viewport is too short to fit it on both sides.
@@ -92,7 +85,7 @@ function isMeasurable(value: unknown): value is Measurable {
   return typeof (value as Partial<Measurable> | null)?.measureInWindow === 'function';
 }
 
-export type RevealOptions = Pick<RevealGeometry, 'margin' | 'onlyIfShown'> & {
+export type RevealOptions = Pick<RevealGeometry, 'margin' | 'shownHeight'> & {
   /** Reads the scroll view's current content offset. */
   scrollOffset: () => number;
 };
@@ -104,14 +97,11 @@ export type RevealOptions = Pick<RevealGeometry, 'margin' | 'onlyIfShown'> & {
 export function revealInScrollView(
   scrollView: ScrollView | null,
   target: TextInput | null,
-  { scrollOffset, margin, onlyIfShown = false }: RevealOptions,
+  { scrollOffset, margin, shownHeight }: RevealOptions,
 ): void {
-  // ScrollView's type omits the host methods its instance carries at runtime,
-  // so check for them rather than trusting the declared type.
-  if (!scrollView || !target || !isMeasurable(scrollView) || !isMeasurable(target)) return;
-  const scrollable = scrollView as unknown as ScrollableMeasurable;
-  if (typeof scrollable.scrollTo !== 'function') return;
-  scrollable.measureInWindow((_vx, viewportTop, _vw, viewportHeight) => {
+  // ScrollView's declared type omits the host methods its instance has.
+  if (!isMeasurable(scrollView) || !isMeasurable(target)) return;
+  scrollView.measureInWindow((_vx, viewportTop, _vw, viewportHeight) => {
     target.measureInWindow((_tx, targetTop, _tw, targetHeight) => {
       const y = scrollOffsetToReveal({
         scrollOffset: scrollOffset(),
@@ -120,9 +110,9 @@ export function revealInScrollView(
         targetTop,
         targetHeight,
         margin,
-        onlyIfShown,
+        shownHeight,
       });
-      if (y !== null) scrollable.scrollTo({ y, animated: true });
+      if (y !== null) scrollView.scrollTo({ y, animated: true });
     });
   });
 }

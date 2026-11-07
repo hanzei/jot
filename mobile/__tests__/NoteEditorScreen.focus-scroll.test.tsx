@@ -9,14 +9,9 @@ import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 
 const NOTE_ID = 'note-focus-scroll';
 
-// Android's ScrollView scrolls a newly focused descendant into view on its own,
-// but it aims at the outermost ScrollView between the input and itself. A list
-// row's input sits inside the reorderable list's FlatList, so Android scrolled
-// the whole list's top edge into view — a jump on every tap, which the old
-// keyboard helper then animated back (the flicker). The jump itself is native
-// and cannot be reproduced here; what this pins is that the editor turns it off
-// for lists, where useListItemEditing reveals the row itself, and keeps it for
-// text notes, where it also keeps the caret in view while typing.
+// The native jump this guards against (Android scrolling the reorderable
+// list's whole FlatList into view on a row's focus) cannot be reproduced here;
+// what this pins is the switch: off for lists, on for text notes.
 describe('NoteEditorScreen native scroll-to-focus', () => {
   beforeEach(() => {
     jest.clearAllMocks();

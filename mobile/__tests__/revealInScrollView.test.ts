@@ -1,6 +1,6 @@
 import { scrollOffsetToReveal } from '../src/screens/noteEditor/revealInScrollView';
 
-const base = { scrollOffset: 300, viewportTop: 100, viewportHeight: 400, targetHeight: 40, margin: 20 };
+const base = { scrollOffset: 300, viewportTop: 100, viewportHeight: 400, targetHeight: 40, margin: 20, shownHeight: null };
 
 describe('scrollOffsetToReveal', () => {
   it('returns null for a target already inside the visible band', () => {
@@ -41,18 +41,18 @@ describe('scrollOffsetToReveal', () => {
   });
 
   it('skips a target entirely off screen only when asked to', () => {
-    expect(scrollOffsetToReveal({ ...base, targetTop: 600, onlyIfShown: true })).toBeNull();
-    expect(scrollOffsetToReveal({ ...base, targetTop: 20, onlyIfShown: true })).toBeNull();
+    expect(scrollOffsetToReveal({ ...base, targetTop: 600, shownHeight: 400 })).toBeNull();
+    expect(scrollOffsetToReveal({ ...base, targetTop: 20, shownHeight: 400 })).toBeNull();
     // Partly on screen still reveals.
-    expect(scrollOffsetToReveal({ ...base, targetTop: 480, onlyIfShown: true })).toBe(340);
+    expect(scrollOffsetToReveal({ ...base, targetTop: 480, shownHeight: 400 })).toBe(340);
     expect(scrollOffsetToReveal({ ...base, targetTop: 600 })).toBe(460);
   });
 
   it('checks only the first given points of the viewport when passed a height', () => {
     // The viewport is 200 tall now and was 250 before it shrank: a target at
     // 400 was off screen then, one at 300 was on it (and is now covered).
-    expect(scrollOffsetToReveal({ ...base, viewportHeight: 200, targetTop: 400, onlyIfShown: 250 })).toBeNull();
-    expect(scrollOffsetToReveal({ ...base, viewportHeight: 200, targetTop: 300, onlyIfShown: 250 })).toBe(300 + (340 - 280));
+    expect(scrollOffsetToReveal({ ...base, viewportHeight: 200, targetTop: 400, shownHeight: 250 })).toBeNull();
+    expect(scrollOffsetToReveal({ ...base, viewportHeight: 200, targetTop: 300, shownHeight: 250 })).toBe(300 + (340 - 280));
   });
 
   it('shrinks the margin when the viewport is too short for it', () => {
