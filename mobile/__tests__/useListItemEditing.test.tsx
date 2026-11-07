@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import type { ScrollView } from 'react-native';
 import { act, renderHook } from '@testing-library/react-native';
 import type { TFunction } from 'i18next';
+import { useSharedValue } from 'react-native-reanimated';
 import { createCompletedWriteTracker } from '@jot/shared';
 import { useEditorDoc } from '../src/screens/noteEditor/useEditorDoc';
 import { useListItemEditing } from '../src/screens/noteEditor/useListItemEditing';
@@ -46,6 +47,7 @@ function useHarness() {
   const savedItemsRef = useRef<Map<string, ItemSnapshot>>(new Map());
   const savedOrderRef = useRef<string[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
+  const scrollOffsetY = useSharedValue(0);
   const [completedWrites] = useState(createCompletedWriteTracker);
   const editing = useListItemEditing({
     doc: doc.handle,
@@ -61,12 +63,13 @@ function useHarness() {
     withItemWriteInFlight: (op) => op(),
     completedWrites,
     scrollViewRef,
+    scrollOffsetY,
     openAssigneePicker,
     confirm: mockConfirm,
     showToast: mockShowToast,
     t,
   });
-  return { doc, editing, savedItemsRef, savedOrderRef, completedWrites };
+  return { doc, editing, savedItemsRef, savedOrderRef, completedWrites, scrollViewRef, scrollOffsetY };
 }
 
 /** Mounts the harness and seeds it with `items` as the last-saved baseline. */
@@ -506,7 +509,7 @@ describe('useListItemEditing — indent buttons', () => {
     const { result } = await mountWith([item('a'), item('b')]);
     // Focus sets both the ref and the state the buttons follow...
     await act(async () => {
-      result.current.editing.listItemHandlers.onFocus('b', { nativeEvent: {} } as never);
+      result.current.editing.listItemHandlers.onFocus('b');
     });
     // ...and a blur nulls the ref at once, while the state holds the id through
     // the settle window.
@@ -516,5 +519,120 @@ describe('useListItemEditing — indent buttons', () => {
     await act(async () => { result.current.editing.handleIndentFocusedItem(1); });
 
     expect(result.current.doc.items.map((it) => [it.id, it.parentId])).toEqual([['a', null], ['b', 'a']]);
+  });
+});
+
+describe('useListItemEditing — keeping the focused row in view', () => {
+  type Harness = Awaited<ReturnType<typeof mountWith>>['result'];
+
+  // The editor's scroll view sits under the header (window y 160) and ends at
+  // the formatting bar above the keyboard; rows are 40 tall.
+  function attachScrollView(result: Harness, frame: { top: number; height: number }) {
+    const scrollTo = jest.fn();
+    const scrollView = {
+      measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) => cb(0, frame.top, 400, frame.height),
+      scrollTo,
+    };
+    (result.current.scrollViewRef as { current: unknown }).current = scrollView;
+    return scrollTo;
+  }
+
+  function placeRow(result: Harness, id: string, top: number, { focused = true, height = 40 } = {}) {
+    (result.current.editing.getItemRef(id) as { current: unknown }).current = {
+      measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) => cb(0, top, 300, height),
+      isFocused: () => focused,
+    };
+  }
+
+  it('leaves the list where it is when the tapped row is already visible', async () => {
+    const { result } = await mountWith([item('a'), item('p')]);
+    const scrollTo = attachScrollView(result, { top: 160, height: 360 });
+    result.current.scrollOffsetY.set(500);
+    placeRow(result, 'p', 440); // bottom at 480, inside the 520 viewport edge
+
+    await act(async () => { result.current.editing.listItemHandlers.onFocus('p'); });
+
+    // RN's keyboard helper scrolled here anyway — and too far, hiding the row
+    // under the formatting bar.
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('scrolls a row hidden below the viewport up just far enough to show it', async () => {
+    const { result } = await mountWith([item('a'), item('p')]);
+    const scrollTo = attachScrollView(result, { top: 160, height: 360 });
+    result.current.scrollOffsetY.set(500);
+    placeRow(result, 'p', 600); // bottom at 640; visible band ends at 520 - 24
+
+    await act(async () => { result.current.editing.listItemHandlers.onFocus('p'); });
+
+    expect(scrollTo).toHaveBeenCalledWith({ y: 500 + (640 - 496), animated: true });
+  });
+
+  it('re-reveals the focused row when the keyboard shrinks the viewport after focus', async () => {
+    const { result } = await mountWith([item('a'), item('p')]);
+    const frame = { top: 160, height: 700 };
+    const scrollTo = attachScrollView(result, frame);
+    placeRow(result, 'p', 600);
+
+    await act(async () => { result.current.editing.listItemHandlers.onFocus('p'); });
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    // The keyboard and formatting bar arrive; the screen's onLayout calls in.
+    frame.height = 360;
+    await act(async () => { result.current.editing.revealFocusedItem(); });
+
+    expect(scrollTo).toHaveBeenCalledWith({ y: 640 - 496, animated: true });
+  });
+
+  it('does nothing on a resize when no row is focused', async () => {
+    const { result } = await mountWith([item('a')]);
+    const scrollTo = attachScrollView(result, { top: 160, height: 100 });
+    placeRow(result, 'a', 600);
+
+    await act(async () => { result.current.editing.revealFocusedItem(); });
+
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('ignores a focused id whose row no longer holds the caret', async () => {
+    const { result } = await mountWith([item('a'), item('p')]);
+    const frame = { top: 160, height: 700 };
+    const scrollTo = attachScrollView(result, frame);
+    placeRow(result, 'p', 600);
+    await act(async () => { result.current.editing.listItemHandlers.onFocus('p'); });
+
+    // The row was checked off while focused: its input unmounted without a
+    // blur, and the copy in the completed section never took the caret.
+    placeRow(result, 'p', 900, { focused: false });
+    frame.height = 360;
+    await act(async () => { result.current.editing.revealFocusedItem(); });
+    await act(async () => { result.current.editing.followFocusedItem(); });
+
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('follows the focused row as it grows under the bar', async () => {
+    const { result } = await mountWith([item('a'), item('p')]);
+    const scrollTo = attachScrollView(result, { top: 160, height: 360 });
+    placeRow(result, 'p', 440);
+    await act(async () => { result.current.editing.listItemHandlers.onFocus('p'); });
+
+    placeRow(result, 'p', 440, { height: 80 }); // bottom at 520, past the 496 band
+    await act(async () => { result.current.editing.followFocusedItem(); });
+
+    expect(scrollTo).toHaveBeenCalledWith({ y: 520 - 496, animated: true });
+  });
+
+  it('does not pull the user back to a focused row they scrolled away from when the content grows', async () => {
+    const { result } = await mountWith([item('a'), item('p')]);
+    const scrollTo = attachScrollView(result, { top: 160, height: 360 });
+    placeRow(result, 'p', 440);
+    await act(async () => { result.current.editing.listItemHandlers.onFocus('p'); });
+
+    // Scrolled down past the row, then expanded the completed section.
+    placeRow(result, 'p', -200);
+    await act(async () => { result.current.editing.followFocusedItem(); });
+
+    expect(scrollTo).not.toHaveBeenCalled();
   });
 });

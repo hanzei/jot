@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Keyboard, type ScrollView, type TextInputProps, type TextInput as TextInputType } from 'react-native';
+import { Keyboard, type ScrollView, type TextInput as TextInputType } from 'react-native';
 import {
   reorderItems,
   type ReorderableListDragEndEvent,
@@ -7,7 +7,7 @@ import {
   type ReorderableListReorderEvent,
 } from 'react-native-reorderable-list';
 import { Gesture } from 'react-native-gesture-handler';
-import { runOnJS, useSharedValue } from 'react-native-reanimated';
+import { runOnJS, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import type { TFunction } from 'i18next';
 import {
@@ -46,8 +46,11 @@ import {
 } from './listItemModel';
 import type { ListItemHandlers } from './CheckedItemsSection';
 import type { EditorDocHandle } from './useEditorDoc';
+import { revealInScrollView } from './revealInScrollView';
 
-const FOCUSED_INPUT_KEYBOARD_MARGIN = 120;
+// Room kept between a focused row and the edges of the visible list, so the
+// row is not flush against the formatting bar.
+const FOCUSED_ITEM_REVEAL_MARGIN = 24;
 // How long the Android bar outlives a row's blur before hiding, so tapping from
 // one row to the next does not flash it away and back.
 const ITEM_BLUR_SETTLE_MS = 150;
@@ -77,6 +80,8 @@ export interface UseListItemEditingParams {
   completedWrites: CompletedWriteTracker;
   /** The editor's scroll container, kept scrolled to the focused row. */
   scrollViewRef: React.RefObject<ScrollView | null>;
+  /** The scroll container's live content offset (written by its scroll handler). */
+  scrollOffsetY: SharedValue<number>;
   /** Opens the assignee picker for a row (the picker's state lives in the screen). */
   openAssigneePicker: (itemId: string) => void;
   confirm: (options: ConfirmOptions) => Promise<boolean>;
@@ -133,6 +138,20 @@ export interface ListItemEditing {
   handleListReorder: (event: ReorderableListReorderEvent) => void;
   /** Indents (1) or outdents (-1) the row holding the caret by one level. */
   handleIndentFocusedItem: (delta: 1 | -1) => void;
+  /**
+   * Scrolls the focused row back into view if it is hidden. The screen calls it
+   * whenever the scroll container is resized — the keyboard and the formatting
+   * bar arrive after the focus event and shrink the visible area under the row.
+   */
+  revealFocusedItem: () => void;
+  /**
+   * Like `revealFocusedItem`, for when the content changes size (a row that
+   * grows as its text wraps can run under the formatting bar), but only while
+   * the focused row is at least partly on screen: content also grows when the
+   * completed section expands or a collaborator edits, and that must not pull a
+   * user who scrolled away back to the row.
+   */
+  followFocusedItem: () => void;
 }
 
 /**
@@ -164,6 +183,7 @@ export function useListItemEditing({
   withItemWriteInFlight,
   completedWrites,
   scrollViewRef,
+  scrollOffsetY,
   openAssigneePicker,
   confirm,
   showToast,
@@ -891,30 +911,41 @@ export function useListItemEditing({
     [dragTranslateX],
   );
 
-  const handleListItemFocus = useCallback<NonNullable<TextInputProps['onFocus']>>((event) => {
-    const nativeTarget = event.nativeEvent.target;
-    if (nativeTarget == null) return;
+  // Scrolls just far enough to show the row, measured against the scroll
+  // view's own frame — see revealInScrollView for why RN's keyboard helper
+  // (which the editor used before) overshoots here.
+  const revealInput = useCallback((input: TextInputType | null, onlyIfOnScreen: boolean) => {
+    revealInScrollView(
+      scrollViewRef.current,
+      input,
+      () => scrollOffsetY.get(),
+      FOCUSED_ITEM_REVEAL_MARGIN,
+      onlyIfOnScreen,
+    );
+  }, [scrollViewRef, scrollOffsetY]);
 
-    // Use ScrollView's native keyboard helper so focused list item inputs stay
-    // visible. scrollViewRef now points at the library's ScrollViewContainer
-    // (a Reanimated ScrollView); if its forwarded ref doesn't expose
-    // getScrollResponder this degrades to a no-op rather than crashing.
-    const responder = scrollViewRef.current?.getScrollResponder?.();
-    if (
-      responder &&
-      typeof responder.scrollResponderScrollNativeHandleToKeyboard === 'function'
-    ) {
-      responder.scrollResponderScrollNativeHandleToKeyboard(
-        nativeTarget,
-        FOCUSED_INPUT_KEYBOARD_MARGIN,
-        true,
-      );
-      return;
-    }
-  }, [scrollViewRef]);
+  // The input of the row holding the caret, or null. `focusedItemIdRef` can
+  // outlive the focus itself: a focused row that unmounts — checked off into
+  // the completed section, deleted — never delivers its blur, so its id lingers
+  // until the next focus. Asking the input keeps a resize from scrolling to a
+  // row that no longer has the caret (or creating a ref for a deleted one).
+  const focusedInput = useCallback((): TextInputType | null => {
+    const itemId = focusedItemIdRef.current;
+    const input = itemId ? itemInputRefsMap.current.get(itemId)?.current ?? null : null;
+    // Not every TextInput host implementation (e.g. test mocks) has isFocused.
+    return input?.isFocused?.() === false ? null : input;
+  }, []);
+
+  const revealFocusedItem = useCallback(() => {
+    revealInput(focusedInput(), false);
+  }, [focusedInput, revealInput]);
+
+  const followFocusedItem = useCallback(() => {
+    revealInput(focusedInput(), true);
+  }, [focusedInput, revealInput]);
 
   const handleFocusListItem = useCallback(
-    (itemId: string, event: Parameters<NonNullable<TextInputProps['onFocus']>>[0]) => {
+    (itemId: string) => {
       focusedItemIdRef.current = itemId;
       if (clearEditingItemRef.current) {
         clearTimeout(clearEditingItemRef.current);
@@ -922,9 +953,9 @@ export function useListItemEditing({
       }
       heldFocusedItemIdRef.current = itemId;
       setFocusedItemId(itemId);
-      handleListItemFocus(event);
+      revealInput(getItemRef(itemId).current, false);
     },
-    [handleListItemFocus],
+    [getItemRef, revealInput],
   );
 
   const handleBlurListItem = useCallback((itemId: string) => {
@@ -984,5 +1015,7 @@ export function useListItemEditing({
     handleListDragEnd,
     handleListReorder,
     handleIndentFocusedItem,
+    revealFocusedItem,
+    followFocusedItem,
   };
 }

@@ -29,7 +29,7 @@ import {
   ScrollViewContainer,
   type ReorderableListRenderItemInfo,
 } from 'react-native-reorderable-list';
-import { LinearTransition } from 'react-native-reanimated';
+import { LinearTransition, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { Archive, ArrowLeft, Check, ChevronRight, CircleAlert, EllipsisVertical, FileText, Image, List, Palette, Pin, Plus } from 'lucide-react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -630,6 +630,12 @@ export default function NoteEditorScreen() {
   // uncontrolled with respect to selection.
   const contentSelectionRef = useRef<TextSelection>({ start: 0, end: 0 });
   const scrollViewRef = useRef<ScrollView>(null);
+  // The editor's content offset, tracked so a focused list row can be scrolled
+  // into view by exactly the distance it is hidden.
+  const scrollOffsetY = useSharedValue(0);
+  const handleEditorScroll = useAnimatedScrollHandler((event) => {
+    scrollOffsetY.set(event.contentOffset.y);
+  });
 
   const openAssigneePicker = useCallback((itemId: string) => {
     if (isReadOnly) return;
@@ -649,6 +655,7 @@ export default function NoteEditorScreen() {
     withItemWriteInFlight: sync.withItemWriteInFlight,
     completedWrites: sync.completedWrites,
     scrollViewRef,
+    scrollOffsetY,
     openAssigneePicker,
     confirm,
     showToast,
@@ -682,6 +689,8 @@ export default function NoteEditorScreen() {
     handleListDragEnd,
     handleListReorder,
     handleIndentFocusedItem,
+    revealFocusedItem,
+    followFocusedItem,
   } = listEditing;
 
   // Pre-filled share content must be flagged dirty so it auto-saves (and is not
@@ -1281,7 +1290,7 @@ export default function NoteEditorScreen() {
             onSubmitEditing: (cursorPos) => listItemHandlers.onEnterAtCursor(originalIndex, cursorPos),
             onBackspaceOnEmpty: () => listItemHandlers.onBackspaceOnEmpty(originalIndex),
             onAssignPress: () => listItemHandlers.onAssignPress(item.id),
-            onFocus: (event) => listItemHandlers.onFocus(item.id, event),
+            onFocus: () => listItemHandlers.onFocus(item.id),
             onBlur: () => listItemHandlers.onBlur(item.id),
             onAcceptSuggestion: (text) => handleAcceptSuggestion(item.id, text),
           }}
@@ -1546,6 +1555,23 @@ export default function NoteEditorScreen() {
         style={styles.scrollContent}
         contentContainerStyle={styles.scrollContentContainer}
         keyboardShouldPersistTaps="handled"
+        onScroll={handleEditorScroll}
+        // The keyboard and the Android formatting bar appear after a row takes
+        // focus and shrink this view, which can cover the row it just revealed.
+        onLayout={revealFocusedItem}
+        // A row that grows as its text wraps can run under the formatting bar.
+        // Only followed while the row is on screen: the content also grows for
+        // reasons that must not pull the user back to it (see followFocusedItem).
+        onContentSizeChange={followFocusedItem}
+        // Android's own scroll-to-focused-child, off for lists. It scrolls to the
+        // outermost ScrollView between the focused input and this one, and a
+        // list row sits inside the reorderable list's FlatList, so it targets
+        // the whole list rather than the row: tapping a visible row jumps the
+        // list's top edge to the top of the viewport. useListItemEditing
+        // reveals rows itself. Text notes keep it — it is also what keeps the
+        // caret of the content input in view while typing.
+        scrollsChildToFocus={noteType !== 'list'}
+        testID="note-editor-scroll"
       >
         {(displayedImages.length > 0 || displayedImageUploads.length > 0) && (
           <NoteImageGallery
