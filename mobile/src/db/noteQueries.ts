@@ -123,6 +123,30 @@ async function getItemsForNote(db: SQLiteDatabase, noteId: string): Promise<Note
   return rows.map(itemRowToNoteItem);
 }
 
+/**
+ * Deletes the note's local item rows that a server-authoritative item list no
+ * longer contains, except `keepItemIds`: items created on this device whose
+ * queued createItem has not replayed yet. The server cannot list an item it
+ * has not been told about, so without the exception a snapshot that lands
+ * first (a queued create or bulk delete replaying ahead of the createItem)
+ * would delete the item locally, though the createItem then adds it on the
+ * server.
+ */
+async function pruneLocalItems(
+  db: SQLiteDatabase,
+  noteId: string,
+  items: readonly { id: string }[],
+  keepItemIds?: ReadonlySet<string>,
+): Promise<void> {
+  const keep = [...items.map((item) => item.id), ...(keepItemIds ?? [])];
+  if (keep.length === 0) {
+    await db.runAsync('DELETE FROM note_items WHERE note_id = ?', [noteId]);
+    return;
+  }
+  const placeholders = keep.map(() => '?').join(', ');
+  await db.runAsync(`DELETE FROM note_items WHERE note_id = ? AND id NOT IN (${placeholders})`, [noteId, ...keep]);
+}
+
 // Writes a single note (and its items if provided) without wrapping in a transaction.
 // Must only be called from within an existing transaction context.
 //
@@ -145,6 +169,7 @@ async function saveNoteInTx(
   note: Note,
   serverSnapshot = false,
   keepLocalCompletedIds?: ReadonlySet<string>,
+  keepItemIds?: ReadonlySet<string>,
 ): Promise<void> {
   const title = note.note_type === 'list' ? note.title : '';
   const content = note.note_type === 'text' ? note.content : '';
@@ -228,15 +253,7 @@ async function saveNoteInTx(
         [item.id, note.id, item.text, completed.value, item.position, item.parent_id ?? null, item.assigned_to ?? '', item.created_at ?? '', item.updated_at ?? '', completed.keepLocal],
       );
     }
-    if (items.length > 0) {
-      const placeholders = items.map(() => '?').join(', ');
-      await db.runAsync(
-        `DELETE FROM note_items WHERE note_id = ? AND id NOT IN (${placeholders})`,
-        [note.id, ...items.map((item) => item.id)],
-      );
-    } else {
-      await db.runAsync('DELETE FROM note_items WHERE note_id = ?', [note.id]);
-    }
+    await pruneLocalItems(db, note.id, items, keepItemIds);
   } else if (note.note_type !== 'list') {
     // A text note owns no items, so any left behind belong to a list→text
     // conversion and have to go. REPLACE used to do this implicitly (via the
@@ -262,6 +279,8 @@ interface SaveNoteOptions {
   serverSnapshot?: boolean;
   /** Items that keep their local completed value whatever the snapshot says. */
   keepLocalCompletedIds?: ReadonlySet<string>;
+  /** Local items the snapshot must not prune though it lacks them (see {@link pruneLocalItems}). */
+  keepItemIds?: ReadonlySet<string>;
 }
 
 /**
@@ -285,7 +304,7 @@ function completedBinding(
 
 export async function saveNote(db: SQLiteDatabase, note: Note, options?: SaveNoteOptions): Promise<void> {
   if (options?.skipNoteIds?.has(note.id)) return;
-  await withSerializedTransaction(db, () => saveNoteInTx(db, note, options?.serverSnapshot, options?.keepLocalCompletedIds));
+  await withSerializedTransaction(db, () => saveNoteInTx(db, note, options?.serverSnapshot, options?.keepLocalCompletedIds, options?.keepItemIds));
 }
 
 /**
@@ -1127,6 +1146,7 @@ export async function reconcileLocalItems(
   items: ServerItemInput[],
   write: number | null = null,
   keepLocalCompletedIds?: ReadonlySet<string>,
+  keepItemIds?: ReadonlySet<string>,
 ): Promise<void> {
   const now = new Date().toISOString();
   // The completed flags go through localCompletedWrites: `write` is the token of
@@ -1151,15 +1171,7 @@ export async function reconcileLocalItems(
         [item.id, noteId, item.text, completed.value, item.position, item.parent_id, item.assigned_to, now, now],
       );
     }
-    if (items.length > 0) {
-      const placeholders = items.map(() => '?').join(', ');
-      await db.runAsync(
-        `DELETE FROM note_items WHERE note_id = ? AND id NOT IN (${placeholders})`,
-        [noteId, ...items.map((item) => item.id)],
-      );
-    } else {
-      await db.runAsync('DELETE FROM note_items WHERE note_id = ?', [noteId]);
-    }
+    await pruneLocalItems(db, noteId, items, keepItemIds);
     await touchLocalNote(db, noteId);
   });
 }

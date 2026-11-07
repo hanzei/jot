@@ -44,6 +44,7 @@ import { localCompletedWrites } from '../db/localCompletedWrites';
 import {
   enqueueOperation,
   getQueuedCompletedItemIds,
+  getQueuedCreatedItemIds,
   isQueueableError,
   reconcileServerItems,
   rethrowIfNotQueueable,
@@ -1493,7 +1494,8 @@ export function useUncheckAllItems() {
         // The server returns the note's full, authoritative item list, so
         // reconcile every field (and prune any local row it no longer contains)
         // rather than just patching `completed`.
-        persist: (write, serverItems, queued) => reconcileLocalItems(db, noteId, serverItems, write, queued),
+        persist: async (write, serverItems, queued) =>
+          reconcileLocalItems(db, noteId, serverItems, write, queued, await getQueuedCreatedItemIds(db, noteId)),
         // Carries the exact ids captured at click time.
         queued: {
           operation: 'setItemsCompleted',

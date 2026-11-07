@@ -811,6 +811,86 @@ describe('drainQueue', () => {
     expect(await remainingQueueIds(db)).toEqual([]);
   });
 
+  it('keeps an item whose queued createItem has not replayed yet when a bulk delete prunes', async () => {
+    // Offline: the user deletes the checked items, then adds a new one. The
+    // delete replays first, and its remaining-items list cannot contain an item
+    // the server has not been told about yet.
+    await saveNote(
+      db,
+      makeListNote({
+        id: 'n1',
+        items: [
+          makeNoteItem({ id: 'i1', note_id: 'n1', text: 'Done', completed: true, position: 0 }),
+          makeNoteItem({ id: 'i2', note_id: 'n1', text: 'Bread', position: 1 }),
+          makeNoteItem({ id: 'i3', note_id: 'n1', text: 'Added offline', position: 2 }),
+        ],
+      }),
+    );
+    await seedQueueEntry(db, {
+      operation: 'deleteCompletedItems',
+      endpoint: '/notes/n1/items/delete',
+      method: 'POST',
+      body: { item_ids: ['i1'] },
+    });
+    await seedQueueEntry(db, {
+      operation: 'createItem',
+      endpoint: '/notes/n1/items',
+      method: 'POST',
+      body: { id: 'i3', text: 'Added offline', position: 2, completed: false },
+    });
+    mockApi.post
+      .mockResolvedValueOnce({
+        data: [{ id: 'i2', text: 'Bread', completed: false, position: 0, parent_id: null, assigned_to: '' }],
+      } as never)
+      .mockResolvedValueOnce({
+        data: { id: 'i3', note_id: 'n1', text: 'Added offline', completed: false, position: 1, parent_id: null, assigned_to: '' },
+      } as never);
+
+    await drainQueue(db);
+
+    expect(
+      await db.getAllAsync('SELECT id FROM note_items WHERE note_id = ? ORDER BY id', ['n1']),
+    ).toEqual([{ id: 'i2' }, { id: 'i3' }]);
+    expect(await remainingQueueIds(db)).toEqual([]);
+  });
+
+  it('keeps an item added offline to a note whose create replays first', async () => {
+    // Offline: the user creates a list note, then adds an item to it. The
+    // create's response is the note as created, without the later item.
+    const firstItem = makeNoteItem({ id: 'i1', note_id: 'n1', text: 'Milk', position: 0 });
+    await saveNote(
+      db,
+      makeListNote({
+        id: 'n1',
+        items: [firstItem, makeNoteItem({ id: 'i2', note_id: 'n1', text: 'Added offline', position: 1 })],
+      }),
+    );
+    await seedQueueEntry(db, {
+      operation: 'create',
+      endpoint: '/notes',
+      method: 'POST',
+      body: { id: 'n1', note_type: 'list', title: '', items: [{ id: 'i1', text: 'Milk', position: 0 }] },
+    });
+    await seedQueueEntry(db, {
+      operation: 'createItem',
+      endpoint: '/notes/n1/items',
+      method: 'POST',
+      body: { id: 'i2', text: 'Added offline', position: 1, completed: false },
+    });
+    mockApi.post
+      .mockResolvedValueOnce({ data: makeListNote({ id: 'n1', items: [firstItem] }) } as never)
+      .mockResolvedValueOnce({
+        data: { id: 'i2', note_id: 'n1', text: 'Added offline', completed: false, position: 1, parent_id: null, assigned_to: '' },
+      } as never);
+
+    await drainQueue(db);
+
+    expect(
+      await db.getAllAsync('SELECT id FROM note_items WHERE note_id = ? ORDER BY id', ['n1']),
+    ).toEqual([{ id: 'i1' }, { id: 'i2' }]);
+    expect(await remainingQueueIds(db)).toEqual([]);
+  });
+
   it('resolves a deleteCompletedItems replay silently on a 404 (note already gone)', async () => {
     await seedQueueEntry(db, {
       operation: 'deleteCompletedItems',
