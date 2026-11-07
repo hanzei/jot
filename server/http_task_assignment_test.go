@@ -90,7 +90,7 @@ func TestTaskAssignment(t *testing.T) {
 		noteID, collabID := createSharedListNote(t, ts, owner, collaborator)
 
 		items := getNoteItems(t, owner, noteID)
-		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(collabID)})
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: new(collabID)})
 		require.NoError(t, err)
 
 		items = getNoteItems(t, owner, noteID)
@@ -107,7 +107,7 @@ func TestTaskAssignment(t *testing.T) {
 		noteID, _ := createSharedListNote(t, ts, owner, collaborator)
 
 		items := getNoteItems(t, owner, noteID)
-		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(owner.User.ID)})
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: new(owner.User.ID)})
 		require.NoError(t, err)
 
 		items = getNoteItems(t, owner, noteID)
@@ -128,7 +128,7 @@ func TestTaskAssignment(t *testing.T) {
 		require.NoError(t, err)
 
 		itemID := getNoteItems(t, owner, note.ID)[0].ID
-		_, err = owner.Client.UpdateNoteItem(t.Context(), note.ID, itemID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(owner.User.ID)})
+		_, err = owner.Client.UpdateNoteItem(t.Context(), note.ID, itemID, &client.PatchNoteItemRequest{AssignedTo: new(owner.User.ID)})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
@@ -142,7 +142,7 @@ func TestTaskAssignment(t *testing.T) {
 		noteID, _ := createSharedListNote(t, ts, owner, collaborator)
 
 		itemID := getNoteItems(t, owner, noteID)[0].ID
-		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, itemID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(outsider.User.ID)})
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, itemID, &client.PatchNoteItemRequest{AssignedTo: new(outsider.User.ID)})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
@@ -155,7 +155,7 @@ func TestTaskAssignment(t *testing.T) {
 		noteID, _ := createSharedListNote(t, ts, owner, collaborator)
 
 		itemID := getNoteItems(t, owner, noteID)[0].ID
-		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, itemID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr("short")})
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, itemID, &client.PatchNoteItemRequest{AssignedTo: new("short")})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
@@ -168,7 +168,7 @@ func TestTaskAssignment(t *testing.T) {
 		noteID, _ := createSharedListNote(t, ts, owner, collaborator)
 
 		items := getNoteItems(t, owner, noteID)
-		_, err := collaborator.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(owner.User.ID)})
+		_, err := collaborator.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: new(owner.User.ID)})
 		require.NoError(t, err)
 
 		items = getNoteItems(t, owner, noteID)
@@ -184,12 +184,12 @@ func TestTaskAssignment(t *testing.T) {
 		noteID, collabID := createSharedListNote(t, ts, owner, collaborator)
 
 		items := getNoteItems(t, owner, noteID)
-		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(collabID)})
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: new(collabID)})
 		require.NoError(t, err)
 		items = getNoteItems(t, owner, noteID)
 		assert.Equal(t, collabID, items[0].AssignedTo)
 
-		_, err = owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr("")})
+		_, err = owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: new("")})
 		require.NoError(t, err)
 		items = getNoteItems(t, owner, noteID)
 		assert.Empty(t, items[0].AssignedTo)
@@ -205,8 +205,8 @@ func TestTaskAssignment(t *testing.T) {
 
 		items := getNoteItems(t, owner, noteID)
 		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{
-			Completed:  client.Ptr(true),
-			AssignedTo: client.Ptr(collabID),
+			Completed:  new(true),
+			AssignedTo: new(collabID),
 		})
 		require.NoError(t, err)
 
@@ -227,7 +227,7 @@ func TestMyTasksFilter(t *testing.T) {
 		noteID, collabID := createSharedListNote(t, ts, owner, collaborator)
 
 		items := getNoteItems(t, owner, noteID)
-		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(collabID)})
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: new(collabID)})
 		require.NoError(t, err)
 
 		notes, err := collaborator.Client.ListNotes(t.Context(), &client.ListNotesOptions{MyTasks: true})
@@ -245,7 +245,7 @@ func TestMyTasksFilter(t *testing.T) {
 		noteID, _ := createSharedListNote(t, ts, owner, collaborator)
 
 		items := getNoteItems(t, owner, noteID)
-		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(owner.User.ID)})
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: new(owner.User.ID)})
 		require.NoError(t, err)
 
 		notes, err := collaborator.Client.ListNotes(t.Context(), &client.ListNotesOptions{MyTasks: true})
@@ -280,7 +280,7 @@ func TestMyTasksFilter(t *testing.T) {
 		noteID, _ := createSharedListNote(t, ts, owner, collaborator)
 
 		items := getNoteItems(t, owner, noteID)
-		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(owner.User.ID)})
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: new(owner.User.ID)})
 		require.NoError(t, err)
 
 		notes, err := owner.Client.ListNotes(t.Context(), &client.ListNotesOptions{MyTasks: true})
@@ -298,7 +298,7 @@ func TestMyTasksFilter(t *testing.T) {
 		noteID, collabID := createSharedListNote(t, ts, owner, collaborator)
 
 		items := getNoteItems(t, owner, noteID)
-		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(collabID)})
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: new(collabID)})
 		require.NoError(t, err)
 
 		require.NoError(t, owner.Client.DeleteNote(t.Context(), noteID))
@@ -331,9 +331,9 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab2.User.ID))
 
 		items := getNoteItems(t, owner, note.ID)
-		_, err = owner.Client.UpdateNoteItem(t.Context(), note.ID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(collab1.User.ID)})
+		_, err = owner.Client.UpdateNoteItem(t.Context(), note.ID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: new(collab1.User.ID)})
 		require.NoError(t, err)
-		_, err = owner.Client.UpdateNoteItem(t.Context(), note.ID, items[1].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(collab2.User.ID)})
+		_, err = owner.Client.UpdateNoteItem(t.Context(), note.ID, items[1].ID, &client.PatchNoteItemRequest{AssignedTo: new(collab2.User.ID)})
 		require.NoError(t, err)
 
 		require.NoError(t, owner.Client.UnshareNote(t.Context(), note.ID, collab1.User.ID))
@@ -352,9 +352,9 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 		noteID, _ := createSharedListNote(t, ts, owner, collab)
 
 		items := getNoteItems(t, owner, noteID)
-		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(owner.User.ID)})
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: new(owner.User.ID)})
 		require.NoError(t, err)
-		_, err = owner.Client.UpdateNoteItem(t.Context(), noteID, items[1].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(collab.User.ID)})
+		_, err = owner.Client.UpdateNoteItem(t.Context(), noteID, items[1].ID, &client.PatchNoteItemRequest{AssignedTo: new(collab.User.ID)})
 		require.NoError(t, err)
 
 		require.NoError(t, owner.Client.UnshareNote(t.Context(), noteID, collab.User.ID))
@@ -388,9 +388,9 @@ func TestTaskAssignmentUserDeletion(t *testing.T) {
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab2.User.ID))
 
 		items := getNoteItems(t, owner, note.ID)
-		_, err = owner.Client.UpdateNoteItem(t.Context(), note.ID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(collab1.User.ID)})
+		_, err = owner.Client.UpdateNoteItem(t.Context(), note.ID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: new(collab1.User.ID)})
 		require.NoError(t, err)
-		_, err = owner.Client.UpdateNoteItem(t.Context(), note.ID, items[1].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(collab2.User.ID)})
+		_, err = owner.Client.UpdateNoteItem(t.Context(), note.ID, items[1].ID, &client.PatchNoteItemRequest{AssignedTo: new(collab2.User.ID)})
 		require.NoError(t, err)
 
 		require.NoError(t, admin.Client.AdminDeleteUser(t.Context(), collab1.User.ID))
@@ -410,9 +410,9 @@ func TestTaskAssignmentUserDeletion(t *testing.T) {
 		noteID, collabID := createSharedListNote(t, ts, owner, collab)
 
 		items := getNoteItems(t, owner, noteID)
-		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(owner.User.ID)})
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: new(owner.User.ID)})
 		require.NoError(t, err)
-		_, err = owner.Client.UpdateNoteItem(t.Context(), noteID, items[1].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(collabID)})
+		_, err = owner.Client.UpdateNoteItem(t.Context(), noteID, items[1].ID, &client.PatchNoteItemRequest{AssignedTo: new(collabID)})
 		require.NoError(t, err)
 
 		require.NoError(t, admin.Client.AdminDeleteUser(t.Context(), collabID))

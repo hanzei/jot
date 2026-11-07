@@ -20,16 +20,14 @@ func TestConcurrentFirstRegistrationYieldsOneAdmin(t *testing.T) {
 	var wg sync.WaitGroup
 	start := make(chan struct{})
 	for i := range n {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			<-start
 			auth, err := ts.newClient().Register(t.Context(), fmt.Sprintf("racer%d", i), "password123")
 			errs[i] = err
 			if err == nil {
 				roles[i] = string(auth.User.Role)
 			}
-		}()
+		})
 	}
 	close(start)
 	wg.Wait()

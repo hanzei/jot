@@ -9,9 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// ptr is a small helper for building pointer-valued patch requests.
-func ptr[T any](v T) *T { return &v }
-
 func createListNote(t *testing.T, user *TestUser, title string, items ...client.CreateNoteItem) *client.Note {
 	t.Helper()
 	note, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
@@ -133,7 +130,7 @@ func TestUpdateNoteItem(t *testing.T) {
 		itemID := getNoteItems(t, user, note.ID)[0].ID
 
 		updated, err := user.Client.UpdateNoteItem(t.Context(), note.ID, itemID, &client.PatchNoteItemRequest{
-			Completed: ptr(true),
+			Completed: new(true),
 		})
 		require.NoError(t, err)
 		assert.True(t, updated.Completed)
@@ -145,7 +142,7 @@ func TestUpdateNoteItem(t *testing.T) {
 		user := ts.createTestUser(t, "user1", "password123", false)
 		note := createListNote(t, user, "List")
 
-		_, err := user.Client.UpdateNoteItem(t.Context(), note.ID, "abcdefghijklmnopqrstuv", &client.PatchNoteItemRequest{Text: ptr("x")})
+		_, err := user.Client.UpdateNoteItem(t.Context(), note.ID, "abcdefghijklmnopqrstuv", &client.PatchNoteItemRequest{Text: new("x")})
 		require.Error(t, err)
 		assert.Equal(t, 404, client.StatusCode(err))
 	})
@@ -229,9 +226,9 @@ func TestConcurrentListItemEdits(t *testing.T) {
 		require.Len(t, items, 2)
 
 		// Owner renames item 1; collaborator completes item 2 — concurrently.
-		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{Text: ptr("Renamed 1")})
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{Text: new("Renamed 1")})
 		require.NoError(t, err)
-		_, err = collaborator.Client.UpdateNoteItem(t.Context(), noteID, items[1].ID, &client.PatchNoteItemRequest{Completed: ptr(true)})
+		_, err = collaborator.Client.UpdateNoteItem(t.Context(), noteID, items[1].ID, &client.PatchNoteItemRequest{Completed: new(true)})
 		require.NoError(t, err)
 
 		final := getNoteItems(t, owner, noteID)
@@ -250,9 +247,9 @@ func TestConcurrentListItemEdits(t *testing.T) {
 		items := getNoteItems(t, owner, noteID)
 
 		// Owner edits text; collaborator toggles completed on the *same* item.
-		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{Text: ptr("Updated text")})
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{Text: new("Updated text")})
 		require.NoError(t, err)
-		_, err = collaborator.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{Completed: ptr(true)})
+		_, err = collaborator.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{Completed: new(true)})
 		require.NoError(t, err)
 
 		final := getNoteItems(t, owner, noteID)

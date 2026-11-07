@@ -3,6 +3,7 @@ package models
 import (
 	"io"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/hanzei/jot/server/internal/logutil"
@@ -28,33 +29,36 @@ func TestStartSpanSlowOperationLog(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			// The fake clock makes the sleep instant and the measured
+			// duration exact.
+			synctest.Test(t, func(t *testing.T) {
+				logger := logrus.New()
+				logger.SetOutput(io.Discard)
+				hook := logtest.NewLocal(logger)
+				ctx := logutil.NewContext(t.Context(), logutil.NewRequestLogger(logger.WithField("request_id", "req-1")))
 
-			logger := logrus.New()
-			logger.SetOutput(io.Discard)
-			hook := logtest.NewLocal(logger)
-			ctx := logutil.NewContext(t.Context(), logutil.NewRequestLogger(logger.WithField("request_id", "req-1")))
+				_, end := startSpan(ctx, newInstrumentation(tc.threshold), "FakeStore.Op", nil,
+					attribute.String("note.content", "secret"),
+				)
+				time.Sleep(tc.sleep)
+				end()
 
-			_, end := startSpan(ctx, newInstrumentation(tc.threshold), "FakeStore.Op", nil,
-				attribute.String("note.content", "secret"),
-			)
-			time.Sleep(tc.sleep)
-			end()
-
-			if !tc.wantLog {
-				assert.Empty(t, hook.AllEntries())
-				return
-			}
-			require.Len(t, hook.AllEntries(), 1)
-			entry := hook.LastEntry()
-			assert.Equal(t, logrus.WarnLevel, entry.Level)
-			assert.Equal(t, "Slow store operation", entry.Message)
-			duration, err := time.ParseDuration(entry.Data["duration"].(string))
-			require.NoError(t, err)
-			assert.GreaterOrEqual(t, duration, tc.sleep)
-			delete(entry.Data, "duration")
-			// Exactly these fields: span attributes can carry note content and
-			// must never reach the log.
-			assert.Equal(t, logrus.Fields{"request_id": "req-1", "op": "FakeStore.Op"}, entry.Data)
+				if !tc.wantLog {
+					assert.Empty(t, hook.AllEntries())
+					return
+				}
+				require.Len(t, hook.AllEntries(), 1)
+				entry := hook.LastEntry()
+				assert.Equal(t, logrus.WarnLevel, entry.Level)
+				assert.Equal(t, "Slow store operation", entry.Message)
+				duration, err := time.ParseDuration(entry.Data["duration"].(string))
+				require.NoError(t, err)
+				assert.GreaterOrEqual(t, duration, tc.sleep)
+				delete(entry.Data, "duration")
+				// Exactly these fields: span attributes can carry note content and
+				// must never reach the log.
+				assert.Equal(t, logrus.Fields{"request_id": "req-1", "op": "FakeStore.Op"}, entry.Data)
+			})
 		})
 	}
 }

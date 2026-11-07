@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/go-chi/httprate"
@@ -52,15 +53,18 @@ func TestRateLimiterLimitWithWindow(t *testing.T) {
 	})
 
 	t.Run("recovers once the window elapses", func(t *testing.T) {
-		rl := newTestRateLimiter(t)
-		window := 150 * time.Millisecond
-		mw := rl.limitWithWindow("test", 1, window, httprate.Key("k"))
+		// The bubble's fake clock lets this wait out the real one-minute
+		// window instantly, with no wall-clock timing to flake under load.
+		synctest.Test(t, func(t *testing.T) {
+			rl := newTestRateLimiter(t)
+			mw := rl.limit("test", 1, httprate.Key("k"))
 
-		doRequest(t.Context(), mw)
-		assert.Equal(t, http.StatusTooManyRequests, doRequest(t.Context(), mw).Code)
+			doRequest(t.Context(), mw)
+			assert.Equal(t, http.StatusTooManyRequests, doRequest(t.Context(), mw).Code)
 
-		time.Sleep(2 * window)
-		assert.Equal(t, http.StatusOK, doRequest(t.Context(), mw).Code)
+			time.Sleep(2 * time.Minute)
+			assert.Equal(t, http.StatusOK, doRequest(t.Context(), mw).Code)
+		})
 	})
 
 	t.Run("keys are independent", func(t *testing.T) {

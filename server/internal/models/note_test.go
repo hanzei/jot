@@ -8,11 +8,9 @@ import (
 )
 
 func TestOrderItemsParentsFirst(t *testing.T) {
-	ptr := func(s string) *string { return &s }
-
 	t.Run("orders parent before child even when child has a lower position", func(t *testing.T) {
 		parent := NoteItem{ID: "parent", Position: 5}
-		child := NoteItem{ID: "child", Position: 1, ParentID: ptr("parent")}
+		child := NoteItem{ID: "child", Position: 1, ParentID: new("parent")}
 
 		ordered := orderItemsParentsFirst([]NoteItem{child, parent})
 
@@ -34,7 +32,7 @@ func TestOrderItemsParentsFirst(t *testing.T) {
 
 	t.Run("treats an item whose parent is outside the set as a root", func(t *testing.T) {
 		ordered := orderItemsParentsFirst([]NoteItem{
-			{ID: "orphan", Position: 0, ParentID: ptr("missing")},
+			{ID: "orphan", Position: 0, ParentID: new("missing")},
 		})
 
 		require.Len(t, ordered, 1)
@@ -43,8 +41,8 @@ func TestOrderItemsParentsFirst(t *testing.T) {
 
 	t.Run("does not loop on a parent cycle", func(t *testing.T) {
 		ordered := orderItemsParentsFirst([]NoteItem{
-			{ID: "x", ParentID: ptr("y")},
-			{ID: "y", ParentID: ptr("x")},
+			{ID: "x", ParentID: new("y")},
+			{ID: "y", ParentID: new("x")},
 		})
 
 		assert.Len(t, ordered, 2)

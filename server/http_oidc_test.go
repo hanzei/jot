@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"math/big"
 	"net/http"
 	"net/http/cookiejar"
@@ -136,9 +137,7 @@ func (m *mockOIDC) registerCode(code, nonce string, claims map[string]any) {
 		"iat":   time.Now().Unix(),
 		"nonce": nonce,
 	}
-	for k, v := range claims {
-		full[k] = v
-	}
+	maps.Copy(full, claims)
 	m.mu.Lock()
 	m.codes[code] = full
 	m.mu.Unlock()

@@ -271,11 +271,11 @@ func (a *App) runSeed(ctx context.Context, adminClient *client.Client) (int, int
 		}
 
 		if _, err := uc.UpdateUser(ctx, &client.UpdateUserRequest{
-			FirstName: client.Ptr(u.firstName),
-			LastName:  client.Ptr(u.lastName),
-			Theme:     client.Ptr(u.theme),
-			NoteSort:  client.Ptr(u.noteSort),
-			Language:  client.Ptr(u.language),
+			FirstName: new(u.firstName),
+			LastName:  new(u.lastName),
+			Theme:     new(u.theme),
+			NoteSort:  new(u.noteSort),
+			Language:  new(u.language),
 		}); err != nil {
 			return 0, 0, 0, 0, fmt.Errorf("update settings for %s: %w", u.username, err)
 		}
@@ -368,10 +368,10 @@ func createNote(ctx context.Context, uc *client.Client, n seedNote) (string, err
 		if n.pinned || n.archived {
 			upd := &client.UpdateTextNoteRequest{}
 			if n.pinned {
-				upd.Pinned = client.Ptr(true)
+				upd.Pinned = new(true)
 			}
 			if n.archived {
-				upd.Archived = client.Ptr(true)
+				upd.Archived = new(true)
 			}
 			if _, err := uc.UpdateTextNote(ctx, created.ID, upd); err != nil {
 				return "", fmt.Errorf("update text note: %w", err)
@@ -401,10 +401,10 @@ func createNote(ctx context.Context, uc *client.Client, n seedNote) (string, err
 		if n.checkedItemsCollapsed || n.archived {
 			upd := &client.UpdateListNoteRequest{}
 			if n.checkedItemsCollapsed {
-				upd.CheckedItemsCollapsed = client.Ptr(true)
+				upd.CheckedItemsCollapsed = new(true)
 			}
 			if n.archived {
-				upd.Archived = client.Ptr(true)
+				upd.Archived = new(true)
 			}
 			if _, err := uc.UpdateListNote(ctx, created.ID, upd); err != nil {
 				return "", fmt.Errorf("update list note: %w", err)

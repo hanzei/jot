@@ -6,6 +6,7 @@ package mcphandler
 import (
 	"encoding/json/v2"
 	"fmt"
+	"maps"
 	"net/http"
 
 	"github.com/hanzei/jot/server/internal/auth"
@@ -95,9 +96,7 @@ func toolNoteResult(note *models.Note) (*mcp.CallToolResult, any, error) {
 // signature matches [mcp.ToolHandlerFor] so callers can return it directly.
 func toolDeletedResult(id string, extra map[string]any) (*mcp.CallToolResult, any, error) {
 	payload := make(map[string]any, len(extra)+2)
-	for k, v := range extra {
-		payload[k] = v
-	}
+	maps.Copy(payload, extra)
 	payload["id"] = id
 	payload["deleted"] = true
 

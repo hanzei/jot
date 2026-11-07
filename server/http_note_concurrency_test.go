@@ -31,7 +31,7 @@ func TestNoteUpdateOptimisticConcurrency(t *testing.T) {
 		require.Equal(t, 1, note.Version)
 
 		updated, err := user.Client.UpdateTextNote(ctx, note.ID, &client.UpdateTextNoteRequest{
-			Content: ptr("changed"),
+			Content: new("changed"),
 		})
 		require.NoError(t, err)
 		assert.Equal(t, 2, updated.Version)
@@ -43,8 +43,8 @@ func TestNoteUpdateOptimisticConcurrency(t *testing.T) {
 		require.NoError(t, err)
 
 		updated, err := user.Client.UpdateTextNote(ctx, note.ID, &client.UpdateTextNoteRequest{
-			Content:     ptr("on top of base"),
-			BaseVersion: ptr(note.Version),
+			Content:     new("on top of base"),
+			BaseVersion: new(note.Version),
 		})
 		require.NoError(t, err)
 		assert.Equal(t, note.Version+1, updated.Version)
@@ -58,15 +58,15 @@ func TestNoteUpdateOptimisticConcurrency(t *testing.T) {
 
 		// Another device commits a newer change first, bumping the version.
 		winner, err := user.Client.UpdateTextNote(ctx, note.ID, &client.UpdateTextNoteRequest{
-			Content: ptr("winner wrote this"),
+			Content: new("winner wrote this"),
 		})
 		require.NoError(t, err)
 		require.Equal(t, staleVersion+1, winner.Version)
 
 		// The stale offline edit replays against the original base version.
 		_, err = user.Client.UpdateTextNote(ctx, note.ID, &client.UpdateTextNoteRequest{
-			Content:     ptr("stale clobber"),
-			BaseVersion: ptr(staleVersion),
+			Content:     new("stale clobber"),
+			BaseVersion: new(staleVersion),
 		})
 		require.Error(t, err)
 		assert.Equal(t, http.StatusConflict, client.StatusCode(err))
@@ -83,11 +83,11 @@ func TestNoteUpdateOptimisticConcurrency(t *testing.T) {
 		require.NoError(t, err)
 
 		// First content write bumps to v2.
-		_, err = user.Client.UpdateTextNote(ctx, note.ID, &client.UpdateTextNoteRequest{Content: ptr("v2")})
+		_, err = user.Client.UpdateTextNote(ctx, note.ID, &client.UpdateTextNoteRequest{Content: new("v2")})
 		require.NoError(t, err)
 
 		// A versionless write lands as last-write-wins regardless of staleness.
-		updated, err := user.Client.UpdateTextNote(ctx, note.ID, &client.UpdateTextNoteRequest{Content: ptr("v3")})
+		updated, err := user.Client.UpdateTextNote(ctx, note.ID, &client.UpdateTextNoteRequest{Content: new("v3")})
 		require.NoError(t, err)
 		assert.Equal(t, "v3", updated.Content)
 		assert.Equal(t, 3, updated.Version)
@@ -101,8 +101,8 @@ func TestNoteUpdateOptimisticConcurrency(t *testing.T) {
 		// An autosave/retry that resends the unchanged content must not bump the
 		// version, or it would invalidate other devices' base_version for no reason.
 		updated, err := user.Client.UpdateTextNote(ctx, note.ID, &client.UpdateTextNoteRequest{
-			Content:     ptr("same"),
-			BaseVersion: ptr(note.Version),
+			Content:     new("same"),
+			BaseVersion: new(note.Version),
 		})
 		require.NoError(t, err)
 		assert.Equal(t, 1, updated.Version)
@@ -116,7 +116,7 @@ func TestNoteUpdateOptimisticConcurrency(t *testing.T) {
 		// Pinning is a per-user field (note_user_state), so it must not bump the
 		// shared content version that other collaborators' edits are gated on.
 		updated, err := user.Client.UpdateTextNote(ctx, note.ID, &client.UpdateTextNoteRequest{
-			Pinned: ptr(true),
+			Pinned: new(true),
 		})
 		require.NoError(t, err)
 		assert.Equal(t, 1, updated.Version)

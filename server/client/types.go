@@ -429,4 +429,6 @@ type SSOConfig struct {
 }
 
 // Ptr returns a pointer to v; useful for building UpdateUserRequest fields.
-func Ptr[T any](v T) *T { return &v }
+//
+//go:fix inline
+func Ptr[T any](v T) *T { return new(v) }
