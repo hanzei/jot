@@ -66,13 +66,6 @@ func newRateLimiter(cfg *config.Config) (*rateLimiter, error) {
 // bucket names the logical limit for logs/metrics, independent of which
 // route(s) it protects; use one of the bucket* constants.
 func (rl *rateLimiter) limit(bucket string, requestsPerMinute int, keyFn httprate.KeyFunc) func(http.Handler) http.Handler {
-	return rl.limitWithWindow(bucket, requestsPerMinute, time.Minute, keyFn)
-}
-
-// limitWithWindow is limit with an explicit window, split out so tests can
-// exercise burst/recovery behavior with a short window instead of waiting out
-// a real minute.
-func (rl *rateLimiter) limitWithWindow(bucket string, requestLimit int, window time.Duration, keyFn httprate.KeyFunc) func(http.Handler) http.Handler {
 	if !rl.cfg.RateLimitEnabled {
 		return func(next http.Handler) http.Handler { return next }
 	}
@@ -83,7 +76,7 @@ func (rl *rateLimiter) limitWithWindow(bucket string, requestLimit int, window t
 		return mw
 	}
 
-	mw := httprate.LimitBy(requestLimit, window, keyFn,
+	mw := httprate.LimitBy(requestsPerMinute, time.Minute, keyFn,
 		httprate.WithLimitHandler(rl.onLimitExceeded(bucket)),
 		httprate.WithErrorHandler(rl.onKeyError(bucket)),
 	)

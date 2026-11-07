@@ -31,10 +31,10 @@ func doRequest(ctx context.Context, mw func(http.Handler) http.Handler) *httptes
 	return rec
 }
 
-func TestRateLimiterLimitWithWindow(t *testing.T) {
+func TestRateLimiterLimit(t *testing.T) {
 	t.Run("allows requests under the limit", func(t *testing.T) {
 		rl := newTestRateLimiter(t)
-		mw := rl.limitWithWindow("test", 2, time.Minute, httprate.Key("k"))
+		mw := rl.limit("test", 2, httprate.Key("k"))
 
 		assert.Equal(t, http.StatusOK, doRequest(t.Context(), mw).Code)
 		assert.Equal(t, http.StatusOK, doRequest(t.Context(), mw).Code)
@@ -42,7 +42,7 @@ func TestRateLimiterLimitWithWindow(t *testing.T) {
 
 	t.Run("rejects requests over the limit with 429 and Retry-After", func(t *testing.T) {
 		rl := newTestRateLimiter(t)
-		mw := rl.limitWithWindow("test", 2, time.Minute, httprate.Key("k"))
+		mw := rl.limit("test", 2, httprate.Key("k"))
 
 		doRequest(t.Context(), mw)
 		doRequest(t.Context(), mw)
@@ -70,7 +70,7 @@ func TestRateLimiterLimitWithWindow(t *testing.T) {
 	t.Run("keys are independent", func(t *testing.T) {
 		rl := newTestRateLimiter(t)
 		calls := 0
-		mw := rl.limitWithWindow("test", 1, time.Minute, func(r *http.Request) (string, error) {
+		mw := rl.limit("test", 1, func(r *http.Request) (string, error) {
 			calls++
 			// Alternate keys so neither ever exceeds its own bucket.
 			if calls%2 == 1 {
@@ -86,7 +86,7 @@ func TestRateLimiterLimitWithWindow(t *testing.T) {
 	t.Run("disabled rate limiting is a passthrough regardless of the limit", func(t *testing.T) {
 		rl, err := newRateLimiter(&config.Config{RateLimitEnabled: false})
 		require.NoError(t, err)
-		mw := rl.limitWithWindow("test", 1, time.Minute, httprate.Key("k"))
+		mw := rl.limit("test", 1, httprate.Key("k"))
 
 		doRequest(t.Context(), mw)
 		assert.Equal(t, http.StatusOK, doRequest(t.Context(), mw).Code)
