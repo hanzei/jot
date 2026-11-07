@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { ScrollView } from 'react-native';
+import type { LayoutChangeEvent, ScrollView } from 'react-native';
 import { act, renderHook } from '@testing-library/react-native';
 import type { TFunction } from 'i18next';
 import { useSharedValue } from 'react-native-reanimated';
@@ -537,6 +537,13 @@ describe('useListItemEditing — keeping the focused row in view', () => {
     return scrollTo;
   }
 
+  /** The scroll view's onLayout, as the screen wires it. */
+  async function layOut(result: Harness, height: number) {
+    await act(async () => {
+      result.current.editing.handleScrollViewLayout({ nativeEvent: { layout: { x: 0, y: 0, width: 400, height } } } as LayoutChangeEvent);
+    });
+  }
+
   function placeRow(result: Harness, id: string, top: number, { focused = true, height = 40 } = {}) {
     (result.current.editing.getItemRef(id) as { current: unknown }).current = {
       measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) => cb(0, top, 300, height),
@@ -572,24 +579,71 @@ describe('useListItemEditing — keeping the focused row in view', () => {
     const { result } = await mountWith([item('a'), item('p')]);
     const frame = { top: 160, height: 700 };
     const scrollTo = attachScrollView(result, frame);
+    await layOut(result, frame.height);
     placeRow(result, 'p', 600);
 
     await act(async () => { result.current.editing.listItemHandlers.onFocus('p'); });
     expect(scrollTo).not.toHaveBeenCalled();
 
-    // The keyboard and formatting bar arrive; the screen's onLayout calls in.
+    // The keyboard and formatting bar arrive and cover the row.
     frame.height = 360;
-    await act(async () => { result.current.editing.revealFocusedItem(); });
+    await layOut(result, frame.height);
 
     expect(scrollTo).toHaveBeenCalledWith({ y: 640 - 496, animated: true });
   });
 
+  it('keeps the offset a test set across the re-render a focus causes', async () => {
+    const { result } = await mountWith([item('a'), item('p')]);
+    const frame = { top: 160, height: 700 };
+    const scrollTo = attachScrollView(result, frame);
+    await layOut(result, frame.height);
+    result.current.scrollOffsetY.set(300);
+    placeRow(result, 'p', 600);
+    await act(async () => { result.current.editing.listItemHandlers.onFocus('p'); });
+
+    frame.height = 360;
+    await layOut(result, frame.height);
+
+    expect(scrollTo).toHaveBeenCalledWith({ y: 300 + (640 - 496), animated: true });
+  });
+
+  it('leaves a focused row the user scrolled far away from when a banner resizes the view', async () => {
+    const { result } = await mountWith([item('a'), item('p')]);
+    const frame = { top: 160, height: 360 };
+    const scrollTo = attachScrollView(result, frame);
+    await layOut(result, frame.height);
+    placeRow(result, 'p', 440);
+    await act(async () => { result.current.editing.listItemHandlers.onFocus('p'); });
+
+    // Scrolled far up, the row now well below the viewport; a toast appears.
+    placeRow(result, 'p', 1400);
+    frame.height = 320;
+    await layOut(result, frame.height);
+
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('does not treat the first layout as a resize', async () => {
+    const { result } = await mountWith([item('a'), item('p')]);
+    const scrollTo = attachScrollView(result, { top: 160, height: 360 });
+    placeRow(result, 'p', 500);
+    await act(async () => { result.current.editing.listItemHandlers.onFocus('p'); });
+    scrollTo.mockClear();
+
+    await layOut(result, 360);
+
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
   it('does nothing on a resize when no row is focused', async () => {
     const { result } = await mountWith([item('a')]);
-    const scrollTo = attachScrollView(result, { top: 160, height: 100 });
+    const frame = { top: 160, height: 700 };
+    const scrollTo = attachScrollView(result, frame);
+    await layOut(result, frame.height);
     placeRow(result, 'a', 600);
 
-    await act(async () => { result.current.editing.revealFocusedItem(); });
+    frame.height = 100;
+    await layOut(result, frame.height);
 
     expect(scrollTo).not.toHaveBeenCalled();
   });
@@ -604,8 +658,9 @@ describe('useListItemEditing — keeping the focused row in view', () => {
     // The row was checked off while focused: its input unmounted without a
     // blur, and the copy in the completed section never took the caret.
     placeRow(result, 'p', 900, { focused: false });
+    await layOut(result, frame.height);
     frame.height = 360;
-    await act(async () => { result.current.editing.revealFocusedItem(); });
+    await layOut(result, frame.height);
     await act(async () => { result.current.editing.followFocusedItem(); });
 
     expect(scrollTo).not.toHaveBeenCalled();

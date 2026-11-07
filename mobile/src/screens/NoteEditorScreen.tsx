@@ -689,7 +689,7 @@ export default function NoteEditorScreen() {
     handleListDragEnd,
     handleListReorder,
     handleIndentFocusedItem,
-    revealFocusedItem,
+    handleScrollViewLayout,
     followFocusedItem,
   } = listEditing;
 
@@ -1558,7 +1558,7 @@ export default function NoteEditorScreen() {
         onScroll={handleEditorScroll}
         // The keyboard and the Android formatting bar appear after a row takes
         // focus and shrink this view, which can cover the row it just revealed.
-        onLayout={revealFocusedItem}
+        onLayout={handleScrollViewLayout}
         // A row that grows as its text wraps can run under the formatting bar.
         // Only followed while the row is on screen: the content also grows for
         // reasons that must not pull the user back to it (see followFocusedItem).
