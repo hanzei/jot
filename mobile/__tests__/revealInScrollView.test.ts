@@ -24,8 +24,28 @@ describe('scrollOffsetToReveal', () => {
     expect(scrollOffsetToReveal({ ...base, scrollOffset: 10, targetTop: 0 })).toBe(0);
   });
 
-  it('aligns the top of a target taller than the viewport', () => {
+  it('aligns the top of a target taller than the viewport that starts below its top', () => {
     expect(scrollOffsetToReveal({ ...base, targetTop: 300, targetHeight: 600 })).toBe(300 + (300 - 100));
+  });
+
+  it('leaves a target taller than the viewport alone once it fills it', () => {
+    // Top above the viewport, bottom below it: the caret could be anywhere in
+    // it, so realigning its top on every wrap would scroll the caret away.
+    expect(scrollOffsetToReveal({ ...base, targetTop: 50, targetHeight: 600 })).toBeNull();
+  });
+
+  it('aligns the bottom of a target taller than the viewport whose bottom is showing', () => {
+    // Bottom at 400, inside the viewport (which ends at 500): the visible end of
+    // the text — where it was tapped — stays on screen.
+    expect(scrollOffsetToReveal({ ...base, targetTop: -200, targetHeight: 600 })).toBe(300 - 100);
+  });
+
+  it('skips a target entirely off screen only when asked to', () => {
+    expect(scrollOffsetToReveal({ ...base, targetTop: 600, onlyIfOnScreen: true })).toBeNull();
+    expect(scrollOffsetToReveal({ ...base, targetTop: 20, onlyIfOnScreen: true })).toBeNull();
+    // Partly on screen still reveals.
+    expect(scrollOffsetToReveal({ ...base, targetTop: 480, onlyIfOnScreen: true })).toBe(340);
+    expect(scrollOffsetToReveal({ ...base, targetTop: 600 })).toBe(460);
   });
 
   it('shrinks the margin when the viewport is too short for it', () => {

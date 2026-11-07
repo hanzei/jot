@@ -690,6 +690,7 @@ export default function NoteEditorScreen() {
     handleListReorder,
     handleIndentFocusedItem,
     revealFocusedItem,
+    followFocusedItem,
   } = listEditing;
 
   // Pre-filled share content must be flagged dirty so it auto-saves (and is not
@@ -1289,7 +1290,7 @@ export default function NoteEditorScreen() {
             onSubmitEditing: (cursorPos) => listItemHandlers.onEnterAtCursor(originalIndex, cursorPos),
             onBackspaceOnEmpty: () => listItemHandlers.onBackspaceOnEmpty(originalIndex),
             onAssignPress: () => listItemHandlers.onAssignPress(item.id),
-            onFocus: (event) => listItemHandlers.onFocus(item.id, event),
+            onFocus: () => listItemHandlers.onFocus(item.id),
             onBlur: () => listItemHandlers.onBlur(item.id),
             onAcceptSuggestion: (text) => handleAcceptSuggestion(item.id, text),
           }}
@@ -1559,7 +1560,9 @@ export default function NoteEditorScreen() {
         // focus and shrink this view, which can cover the row it just revealed.
         onLayout={revealFocusedItem}
         // A row that grows as its text wraps can run under the formatting bar.
-        onContentSizeChange={revealFocusedItem}
+        // Only followed while the row is on screen: the content also grows for
+        // reasons that must not pull the user back to it (see followFocusedItem).
+        onContentSizeChange={followFocusedItem}
         // Android's own scroll-to-focused-child, off for lists. It scrolls to the
         // outermost ScrollView between the focused input and this one, and a
         // list row sits inside the reorderable list's FlatList, so it targets

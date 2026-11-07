@@ -31,6 +31,12 @@ export interface RevealGeometry {
   targetHeight: number;
   /** Breathing room kept between the target and the viewport's edges. */
   margin: number;
+  /**
+   * Leave a target that is entirely out of view where it is. For re-reveals
+   * nobody asked for (the content changed size): a row the user scrolled away
+   * from must not pull them back to it.
+   */
+  onlyIfOnScreen?: boolean;
 }
 
 /**
@@ -44,21 +50,30 @@ export function scrollOffsetToReveal({
   targetTop,
   targetHeight,
   margin,
+  onlyIfOnScreen = false,
 }: RevealGeometry): number | null {
   // A view that has not been laid out yet measures as zero; scrolling on that
   // would only jump the list.
   if (viewportHeight <= 0 || targetHeight <= 0) return null;
 
+  const targetBottom = targetTop + targetHeight;
+  if (onlyIfOnScreen && (targetBottom <= viewportTop || targetTop >= viewportTop + viewportHeight)) {
+    return null;
+  }
+
   // Shrink the margin when the viewport is too short to fit it on both sides.
   const inset = Math.min(margin, Math.max(0, (viewportHeight - targetHeight) / 2));
   const visibleTop = viewportTop + inset;
   const visibleBottom = viewportTop + viewportHeight - inset;
-  const targetBottom = targetTop + targetHeight;
 
   let delta = 0;
-  if (targetTop < visibleTop || targetHeight > visibleBottom - visibleTop) {
-    // Above the viewport — or taller than it, where its top (the start of the
-    // text) is what matters.
+  if (targetHeight > visibleBottom - visibleTop) {
+    // Taller than the viewport: fill it with the least movement, and leave it
+    // be once it does. The caret can be anywhere in it — realigning its top on
+    // every wrap would scroll away the line being typed at its end.
+    if (targetTop > visibleTop) delta = targetTop - visibleTop;
+    else if (targetBottom < visibleBottom) delta = targetBottom - visibleBottom;
+  } else if (targetTop < visibleTop) {
     delta = targetTop - visibleTop;
   } else if (targetBottom > visibleBottom) {
     delta = targetBottom - visibleBottom;
@@ -80,6 +95,7 @@ export function revealInScrollView(
   target: unknown,
   scrollOffset: () => number,
   margin: number,
+  onlyIfOnScreen = false,
 ): void {
   if (!isMeasurable(scrollView) || !isMeasurable(target)) return;
   if (typeof (scrollView as Partial<ScrollableMeasurable>).scrollTo !== 'function') return;
@@ -93,6 +109,7 @@ export function revealInScrollView(
         targetTop,
         targetHeight,
         margin,
+        onlyIfOnScreen,
       });
       if (y !== null) scrollable.scrollTo({ y, animated: true });
     });

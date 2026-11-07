@@ -144,6 +144,14 @@ export interface ListItemEditing {
    * bar arrive after the focus event and shrink the visible area under the row.
    */
   revealFocusedItem: () => void;
+  /**
+   * Like `revealFocusedItem`, for when the content changes size (a row that
+   * grows as its text wraps can run under the formatting bar), but only while
+   * the focused row is at least partly on screen: content also grows when the
+   * completed section expands or a collaborator edits, and that must not pull a
+   * user who scrolled away back to the row.
+   */
+  followFocusedItem: () => void;
 }
 
 /**
@@ -906,19 +914,35 @@ export function useListItemEditing({
   // Scrolls just far enough to show the row, measured against the scroll
   // view's own frame — see revealInScrollView for why RN's keyboard helper
   // (which the editor used before) overshoots here.
-  const revealItem = useCallback((itemId: string) => {
+  const revealInput = useCallback((input: TextInputType | null, onlyIfOnScreen: boolean) => {
     revealInScrollView(
       scrollViewRef.current,
-      getItemRef(itemId).current,
+      input,
       () => scrollOffsetY.get(),
       FOCUSED_ITEM_REVEAL_MARGIN,
+      onlyIfOnScreen,
     );
-  }, [scrollViewRef, scrollOffsetY, getItemRef]);
+  }, [scrollViewRef, scrollOffsetY]);
+
+  // The input of the row holding the caret, or null. `focusedItemIdRef` can
+  // outlive the focus itself: a focused row that unmounts — checked off into
+  // the completed section, deleted — never delivers its blur, so its id lingers
+  // until the next focus. Asking the input keeps a resize from scrolling to a
+  // row that no longer has the caret (or creating a ref for a deleted one).
+  const focusedInput = useCallback((): TextInputType | null => {
+    const itemId = focusedItemIdRef.current;
+    const input = itemId ? itemInputRefsMap.current.get(itemId)?.current ?? null : null;
+    // Not every TextInput host implementation (e.g. test mocks) has isFocused.
+    return input?.isFocused?.() === false ? null : input;
+  }, []);
 
   const revealFocusedItem = useCallback(() => {
-    const itemId = focusedItemIdRef.current;
-    if (itemId) revealItem(itemId);
-  }, [revealItem]);
+    revealInput(focusedInput(), false);
+  }, [focusedInput, revealInput]);
+
+  const followFocusedItem = useCallback(() => {
+    revealInput(focusedInput(), true);
+  }, [focusedInput, revealInput]);
 
   const handleFocusListItem = useCallback(
     (itemId: string) => {
@@ -929,9 +953,9 @@ export function useListItemEditing({
       }
       heldFocusedItemIdRef.current = itemId;
       setFocusedItemId(itemId);
-      revealItem(itemId);
+      revealInput(getItemRef(itemId).current, false);
     },
-    [revealItem],
+    [getItemRef, revealInput],
   );
 
   const handleBlurListItem = useCallback((itemId: string) => {
@@ -992,5 +1016,6 @@ export function useListItemEditing({
     handleListReorder,
     handleIndentFocusedItem,
     revealFocusedItem,
+    followFocusedItem,
   };
 }

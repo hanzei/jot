@@ -509,7 +509,7 @@ describe('useListItemEditing — indent buttons', () => {
     const { result } = await mountWith([item('a'), item('b')]);
     // Focus sets both the ref and the state the buttons follow...
     await act(async () => {
-      result.current.editing.listItemHandlers.onFocus('b', { nativeEvent: {} } as never);
+      result.current.editing.listItemHandlers.onFocus('b');
     });
     // ...and a blur nulls the ref at once, while the state holds the id through
     // the settle window.
@@ -537,9 +537,10 @@ describe('useListItemEditing — keeping the focused row in view', () => {
     return scrollTo;
   }
 
-  function placeRow(result: Harness, id: string, top: number) {
+  function placeRow(result: Harness, id: string, top: number, { focused = true, height = 40 } = {}) {
     (result.current.editing.getItemRef(id) as { current: unknown }).current = {
-      measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) => cb(0, top, 300, 40),
+      measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) => cb(0, top, 300, height),
+      isFocused: () => focused,
     };
   }
 
@@ -549,7 +550,7 @@ describe('useListItemEditing — keeping the focused row in view', () => {
     result.current.scrollOffsetY.set(500);
     placeRow(result, 'p', 440); // bottom at 480, inside the 520 viewport edge
 
-    await act(async () => { result.current.editing.listItemHandlers.onFocus('p', { nativeEvent: {} } as never); });
+    await act(async () => { result.current.editing.listItemHandlers.onFocus('p'); });
 
     // RN's keyboard helper scrolled here anyway — and too far, hiding the row
     // under the formatting bar.
@@ -562,7 +563,7 @@ describe('useListItemEditing — keeping the focused row in view', () => {
     result.current.scrollOffsetY.set(500);
     placeRow(result, 'p', 600); // bottom at 640; visible band ends at 520 - 24
 
-    await act(async () => { result.current.editing.listItemHandlers.onFocus('p', { nativeEvent: {} } as never); });
+    await act(async () => { result.current.editing.listItemHandlers.onFocus('p'); });
 
     expect(scrollTo).toHaveBeenCalledWith({ y: 500 + (640 - 496), animated: true });
   });
@@ -573,7 +574,7 @@ describe('useListItemEditing — keeping the focused row in view', () => {
     const scrollTo = attachScrollView(result, frame);
     placeRow(result, 'p', 600);
 
-    await act(async () => { result.current.editing.listItemHandlers.onFocus('p', { nativeEvent: {} } as never); });
+    await act(async () => { result.current.editing.listItemHandlers.onFocus('p'); });
     expect(scrollTo).not.toHaveBeenCalled();
 
     // The keyboard and formatting bar arrive; the screen's onLayout calls in.
@@ -589,6 +590,48 @@ describe('useListItemEditing — keeping the focused row in view', () => {
     placeRow(result, 'a', 600);
 
     await act(async () => { result.current.editing.revealFocusedItem(); });
+
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('ignores a focused id whose row no longer holds the caret', async () => {
+    const { result } = await mountWith([item('a'), item('p')]);
+    const frame = { top: 160, height: 700 };
+    const scrollTo = attachScrollView(result, frame);
+    placeRow(result, 'p', 600);
+    await act(async () => { result.current.editing.listItemHandlers.onFocus('p'); });
+
+    // The row was checked off while focused: its input unmounted without a
+    // blur, and the copy in the completed section never took the caret.
+    placeRow(result, 'p', 900, { focused: false });
+    frame.height = 360;
+    await act(async () => { result.current.editing.revealFocusedItem(); });
+    await act(async () => { result.current.editing.followFocusedItem(); });
+
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('follows the focused row as it grows under the bar', async () => {
+    const { result } = await mountWith([item('a'), item('p')]);
+    const scrollTo = attachScrollView(result, { top: 160, height: 360 });
+    placeRow(result, 'p', 440);
+    await act(async () => { result.current.editing.listItemHandlers.onFocus('p'); });
+
+    placeRow(result, 'p', 440, { height: 80 }); // bottom at 520, past the 496 band
+    await act(async () => { result.current.editing.followFocusedItem(); });
+
+    expect(scrollTo).toHaveBeenCalledWith({ y: 520 - 496, animated: true });
+  });
+
+  it('does not pull the user back to a focused row they scrolled away from when the content grows', async () => {
+    const { result } = await mountWith([item('a'), item('p')]);
+    const scrollTo = attachScrollView(result, { top: 160, height: 360 });
+    placeRow(result, 'p', 440);
+    await act(async () => { result.current.editing.listItemHandlers.onFocus('p'); });
+
+    // Scrolled down past the row, then expanded the completed section.
+    placeRow(result, 'p', -200);
+    await act(async () => { result.current.editing.followFocusedItem(); });
 
     expect(scrollTo).not.toHaveBeenCalled();
   });

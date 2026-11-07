@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, type TextInputProps, type TextInput as TextInputType } from 'react-native';
+import { View, Text, TouchableOpacity, type TextInput as TextInputType } from 'react-native';
 import { ChevronDown, ChevronRight } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import type { Collaborator } from '@jot/shared';
@@ -21,7 +21,7 @@ export interface ListItemHandlers {
   onEnterAtCursor: (index: number, cursorPosition: number) => void;
   onBackspaceOnEmpty: (index: number) => void;
   onAssignPress: (itemId: string) => void;
-  onFocus: (itemId: string, event: Parameters<NonNullable<TextInputProps['onFocus']>>[0]) => void;
+  onFocus: (itemId: string) => void;
   onBlur: (itemId: string) => void;
 }
 
@@ -133,7 +133,7 @@ export default function CheckedItemsSection({
           onSubmitEditing={(cursorPos) => handlers.onEnterAtCursor(originalIndex, cursorPos)}
           onBackspaceOnEmpty={() => handlers.onBackspaceOnEmpty(originalIndex)}
           onAssignPress={() => handlers.onAssignPress(item.id)}
-          onFocus={(event) => handlers.onFocus(item.id, event)}
+          onFocus={() => handlers.onFocus(item.id)}
           onBlur={() => handlers.onBlur(item.id)}
         />,
       );
