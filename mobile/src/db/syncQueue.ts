@@ -2,7 +2,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import axios from 'axios';
 import api from '../api/client';
 import { jot } from '../api/jot';
-import { apiPaths, completedCascadeScope, type GetNotesParams, type Note, type NoteItem } from '@jot/shared';
+import { completedCascadeScope, type GetNotesParams, type Note, type NoteItem } from '@jot/shared';
 import {
   getLocalNote,
   saveNote,
@@ -471,27 +471,6 @@ export async function getQueuedCompletedItemIds(
       ids.add(itemId);
       for (const id of completedCascadeScope(scopeItems, itemId, body?.completed === true)) ids.add(id);
     }
-  }
-  return ids;
-}
-
-/**
- * Items of `noteId` created on this device whose queued `createItem` has not
- * replayed yet. A server snapshot of the note cannot list them, so the writers
- * that prune local rows against one (saveServerResponseNote,
- * reconcileServerItems) keep them rather than deleting an item the createItem
- * is about to add on the server. Read from the queue itself, like
- * {@link getQueuedCompletedItemIds}.
- */
-export async function getQueuedCreatedItemIds(db: SQLiteDatabase, noteId: string): Promise<Set<string>> {
-  const entries = await db.getAllAsync<Pick<QueueEntry, 'body'>>(
-    "SELECT body FROM sync_queue WHERE operation = 'createItem' AND endpoint = ?",
-    [apiPaths.noteItems(noteId)],
-  );
-  const ids = new Set<string>();
-  for (const entry of entries) {
-    const itemId = parseQueueBody(entry.body)?.id;
-    if (typeof itemId === 'string') ids.add(itemId);
   }
   return ids;
 }
@@ -1075,25 +1054,21 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
  * saveServerNote it skips no note with a pending op: the writer owns the note
  * here (#487), so the skip would refuse the server's authoritative response for
  * the very note just written. Its completed flags still go through
- * localCompletedWrites like any server snapshot, and it keeps the items a
- * queued createItem has yet to add (see {@link getQueuedCreatedItemIds}).
+ * localCompletedWrites like any server snapshot.
  */
 export async function saveServerResponseNote(db: SQLiteDatabase, note: Note): Promise<void> {
-  const [keepLocalCompletedIds, keepItemIds] = await Promise.all([
-    getQueuedCompletedItemIds(db, note.id),
-    getQueuedCreatedItemIds(db, note.id),
-  ]);
-  await saveNote(db, note, { serverSnapshot: true, keepLocalCompletedIds, keepItemIds });
+  await saveNote(db, note, {
+    serverSnapshot: true,
+    keepLocalCompletedIds: await getQueuedCompletedItemIds(db, note.id),
+  });
 }
 
 /**
  * Reconciles a note's local rows against a server-authoritative full item list
  * (see reconcileLocalItems), keeping the completed value of every item a queued
- * completed op still has to replay (see {@link getQueuedCompletedItemIds}) and
- * every item a queued createItem has yet to add (see
- * {@link getQueuedCreatedItemIds}). `write` is the localCompletedWrites token
- * the list answers, if any; `exceptEntryId` is the queue entry it answers
- * during a drain.
+ * completed op still has to replay (see {@link getQueuedCompletedItemIds}).
+ * `write` is the localCompletedWrites token the list answers, if any;
+ * `exceptEntryId` is the queue entry it answers during a drain.
  */
 export async function reconcileServerItems(
   db: SQLiteDatabase,
@@ -1101,11 +1076,8 @@ export async function reconcileServerItems(
   items: ServerItemInput[],
   options: { write?: number; exceptEntryId?: number } = {},
 ): Promise<void> {
-  const [queued, created] = await Promise.all([
-    getQueuedCompletedItemIds(db, noteId, options.exceptEntryId),
-    getQueuedCreatedItemIds(db, noteId),
-  ]);
-  await reconcileLocalItems(db, noteId, items, options.write ?? null, queued, created);
+  const queued = await getQueuedCompletedItemIds(db, noteId, options.exceptEntryId);
+  await reconcileLocalItems(db, noteId, items, options.write ?? null, queued);
 }
 
 /** {@link saveServerResponseNote} for a raw drain response, if it looks like a note. */
