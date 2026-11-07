@@ -91,6 +91,36 @@ func TestImportZIPWithMultipleFiles(t *testing.T) {
 	assert.Equal(t, 2, result.Imported)
 }
 
+// TestImportKeepInvalidUTF8 pins that a Keep note whose text carries a
+// truncated emoji (a lone UTF-16 surrogate escape) or raw invalid UTF-8 still
+// imports, with the bad sequence replaced by U+FFFD. encoding/json/v2 rejects
+// both by default, and the zip path skips undecodable notes silently.
+func TestImportKeepInvalidUTF8(t *testing.T) {
+	t.Parallel()
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "importinvalidutf8", "password123", false)
+
+	zipData := buildZip(t, map[string][]byte{
+		"surrogate.json": []byte(`{"title":"Surrogate","textContent":"broken \ud83d emoji"}`),
+		"invalid.json":   append(append([]byte(`{"title":"Invalid","textContent":"bad `), 0xff), []byte(`byte"}`)...),
+	})
+
+	result, err := user.Client.ImportNotes(t.Context(), "google_keep", "export.zip", bytes.NewReader(zipData))
+	require.NoError(t, err)
+	assert.Equal(t, 2, result.Imported)
+
+	notes, err := user.Client.ListNotes(t.Context(), nil)
+	require.NoError(t, err)
+	contents := make([]string, 0, len(notes))
+	for _, n := range notes {
+		contents = append(contents, n.Content)
+	}
+	assert.ElementsMatch(t, []string{
+		"# Surrogate\n\nbroken \uFFFD emoji",
+		"# Invalid\n\nbad \uFFFDbyte",
+	}, contents)
+}
+
 func TestImportTrashedNoteSkipped(t *testing.T) {
 	t.Parallel()
 	ts := setupTestServer(t)

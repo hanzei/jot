@@ -39,12 +39,21 @@ linters:
     - nosprintfhostport
     - asasalint
     - bidichk
+    - depguard
     - recvcheck
     - gocognit
     - loggercheck
     - prealloc
     - gocritic
   settings:
+    depguard:
+      rules:
+        json-v2:
+          files:
+            - "!$test"
+          deny:
+            - pkg: "encoding/json$"
+              desc: "use encoding/json/v2, with jsontext options where third-party input needs leniency (see import_keep.go)"
     gocritic:
       disable-all: true
       enabled-checks:

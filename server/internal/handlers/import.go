@@ -4,7 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
-	jsonv1 "encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -191,7 +191,7 @@ func openJotBundle(file multipart.File, size int64) (map[string]*zip.File, *jotI
 	}
 
 	var raw jotImportEnvelope
-	if err := jsonv1.Unmarshal(data, &raw); err != nil {
+	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, nil, http.StatusBadRequest, apierr.WithCode(apierr.CodeInvalidImportFile, fmt.Errorf("invalid Jot export: %s is not valid JSON", jotBundleManifest))
 	}
 	if raw.Format != jotExportFormat {
