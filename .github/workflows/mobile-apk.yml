@@ -19,7 +19,7 @@ on:
   push:
     branches: [master]
   pull_request:
-    paths: ["mobile/**", "shared/**", ".github/workflows/**"]
+    paths: ["mobile/**", "shared/**", ".github/workflows/**", ".github/actions/apk-pr-comment/**"]
   workflow_call:
     secrets:
       GOOGLE_SERVICES_JSON:
@@ -38,17 +38,70 @@ on:
         value: ${{ jobs.build-apk.outputs.apk-name }}
 
 jobs:
+  # Marks the PR's APK comment as building as soon as a run starts, so the
+  # previous build's link is never left looking current while it is being
+  # replaced. Separate from build-apk so the write token stays out of the job
+  # that runs npm install scripts and gradle.
+  #
+  # Also decides whether the PR gets a comment at all. This workflow runs on
+  # workflow-only PRs too (so CI edits are exercised), but an APK is only worth
+  # advertising when the PR changes the app: mobile/ or the shared/ package it
+  # compiles. The whole PR's file list is checked, not just the latest push.
+  apk-comment-pending:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      pull-requests: write
+    outputs:
+      app-changed: ${{ steps.changes.outputs.app }}
+    steps:
+      - name: Check whether the PR changes the app
+        id: changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        # Fetched into a variable first so a failed API call fails the step,
+        # rather than reading as an empty file list and silently skipping the
+        # comment.
+        run: |
+          files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename')
+          if grep -qE '^(mobile|shared)/' <<< "$files"; then
+            echo "app=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "app=false" >> "$GITHUB_OUTPUT"
+            echo "No mobile/ or shared/ changes; not commenting on the PR."
+          fi
+
+      - if: steps.changes.outputs.app == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+
+      - if: steps.changes.outputs.app == 'true'
+        uses: ./.github/actions/apk-pr-comment
+        with:
+          status: pending
+
   build-apk:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-26.04
     outputs:
       apk-name: ${{ steps.apk.outputs.name }}
+      apk-url: ${{ steps.upload.outputs.artifact-url }}
+      apk-expires: ${{ steps.expiry.outputs.value }}
     # On a v* tag build, expose the tag as APP_VERSION so app.config.js stamps
     # it as the app's version (native versionName + the About screen). Empty on
     # branch/PR builds, where app.json's static version is used instead. Set at
     # job level so both `expo prebuild` and the gradle build see it.
+    #
+    # RETENTION_DAYS is how long the APK artifact is kept; the PR comment quotes
+    # the resulting expiry, so it is set once here rather than in two places.
     env:
       APP_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+      RETENTION_DAYS: 7
     steps:
       # On a pull_request event GitHub checks out the ephemeral merge commit
       # (refs/pull/N/merge) by default, so `git rev-parse HEAD` and github.sha
@@ -210,8 +263,43 @@ jobs:
         working-directory: ./mobile
 
       - name: Upload APK artifact
+        id: upload
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ${{ steps.apk.outputs.name }}
           path: mobile/android/app/build/outputs/apk/release/${{ steps.apk.outputs.name }}.apk
-          retention-days: 7
+          retention-days: ${{ env.RETENTION_DAYS }}
+
+      - name: Compute artifact expiry
+        id: expiry
+        run: echo "value=$(date -u -d "+${RETENTION_DAYS} days" '+%Y-%m-%d %H:%M UTC')" >> "$GITHUB_OUTPUT"
+
+  # Replaces the pending comment with a direct download link, so reviewers do not
+  # have to dig through the Checks tab -> workflow run -> Artifacts. Runs on
+  # failure too, so a broken build does not leave the comment saying "Building"
+  # forever. A cancelled run is left alone: cancellation here means a newer push
+  # superseded it, and that run's pending job has already taken the comment over.
+  # Skipped when the PR does not change the app (see apk-comment-pending).
+  apk-comment-result:
+    needs: [apk-comment-pending, build-apk]
+    if: >-
+      !cancelled()
+      && github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && needs.apk-comment-pending.outputs.app-changed == 'true'
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+
+      - uses: ./.github/actions/apk-pr-comment
+        with:
+          status: ${{ needs.build-apk.result }}
+          apk-name: ${{ needs.build-apk.outputs.apk-name }}
+          apk-url: ${{ needs.build-apk.outputs.apk-url }}
+          apk-expires: ${{ needs.build-apk.outputs.apk-expires }}

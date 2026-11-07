@@ -1,0 +1,86 @@
+name: APK PR comment
+description: >-
+  Create or update the single comment on the current pull request that tells
+  reviewers where its Android APK is. mobile-apk.yml calls this once when a
+  build starts and again when it finishes, so a PR carries one comment that
+  always describes its latest build rather than one comment per push. The
+  comment's wording lives here, so both calls render it the same way. The
+  calling job needs `pull-requests: write`.
+
+inputs:
+  status:
+    description: >-
+      What to report: `pending` (build started), or the build job's result
+      (`success`, `failure`, ...). Anything but `pending` and `success` is
+      reported as a failed build.
+    required: true
+  apk-name:
+    description: "Artifact name of the APK. Used with `status: success`."
+    default: ""
+  apk-url:
+    description: "Artifact download URL. Used with `status: success`."
+    default: ""
+  apk-expires:
+    description: "Human-readable artifact expiry. Used with `status: success`."
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Upsert the APK comment
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPO: ${{ github.repository }}
+        PR: ${{ github.event.pull_request.number }}
+        SHA: ${{ github.event.pull_request.head.sha }}
+        COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.event.pull_request.head.sha }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        STATUS: ${{ inputs.status }}
+        APK_NAME: ${{ inputs.apk-name }}
+        APK_URL: ${{ inputs.apk-url }}
+        APK_EXPIRES: ${{ inputs.apk-expires }}
+      run: |
+        marker='<!-- jot-apk-build -->'
+        commit="[\`${SHA::7}\`]($COMMIT_URL)"
+        run="[workflow run]($RUN_URL)"
+
+        body="$marker
+        ### 📱 Android APK
+
+        "
+        case "$STATUS" in
+          pending)
+            body+="⏳ Building for $commit… ($run)"
+            ;;
+          success)
+            if [ -n "$APK_URL" ]; then
+              body+="**[⬇️ Download \`${APK_NAME}\`]($APK_URL)** — built from $commit.
+
+        - Downloads as a zip containing the APK; GitHub requires you to be signed in.
+        - arm64-v8a only: it will not install on an x86_64 emulator or other ABIs.
+        - Expires ${APK_EXPIRES}. Push again or re-run the $run for a fresh build."
+            else
+              # The build passed but the upload reported no URL; say so rather
+              # than call a green run a failure.
+              body+="⚠️ The build for $commit succeeded, but no download link was returned — find the APK under Artifacts on the $run."
+            fi
+            ;;
+          *)
+            body+="❌ The build for $commit failed — see the $run."
+            ;;
+        esac
+
+        # Match on the author as well as the marker so a human quoting the
+        # comment cannot become the one that gets overwritten. Collect every
+        # match and take the first in the shell: piping into `head` would let
+        # it close the pipe early, and under pipefail the resulting SIGPIPE in
+        # `gh` fails the step whenever duplicate comments exist.
+        ids=$(gh api --paginate "repos/$REPO/issues/$PR/comments" \
+          --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id")
+        id=${ids%%$'\n'*}
+        if [ -n "$id" ]; then
+          gh api --method PATCH "repos/$REPO/issues/comments/$id" -f body="$body" > /dev/null
+        else
+          gh api --method POST "repos/$REPO/issues/$PR/comments" -f body="$body" > /dev/null
+        fi

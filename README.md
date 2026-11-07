@@ -318,7 +318,11 @@ npm run android   # Android device or emulator
 npm run ios       # iOS simulator, macOS only
 ```
 
-The Android APK workflow lives in `.github/workflows/mobile-apk.yml`. Android
+The Android APK workflow lives in `.github/workflows/mobile-apk.yml`. On a pull
+request that changes `mobile/**` or `shared/**`, it keeps one comment on the PR up
+to date with a download link for the latest build (an arm64-v8a release APK,
+kept for `RETENTION_DAYS` in that workflow; downloading needs a GitHub login). PRs from forks are not built,
+since the signing secrets are not available to them. Android
 share-to-note is supported through the mobile share sheet: share selected text
 to Jot, choose the target server if needed, and save it as a new note.
 
@@ -992,7 +996,8 @@ The `Release` workflow takes it from there. It first checks the tag has no
 published release yet (see below), then runs two halves that only meet at that
 precondition: the Android APK is built first, and once it's ready GoReleaser
 builds the `jot` and `jotctl` archives for `linux/amd64` and `linux/arm64`,
-creates the GitHub release as a draft, uploads the archives plus the APK and
+creates the GitHub release as a draft, uploads the archives plus the APK (bare
+and zipped — Android browsers often refuse a direct `.apk` download) and
 `checksums.txt`, fills in the release notes using GitHub's own generator, and
 publishes it; meanwhile the Docker jobs build and push `hanzei/jot` for both
 architectures from source, independently of the APK/GoReleaser half. Because

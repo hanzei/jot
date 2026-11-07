@@ -156,10 +156,11 @@ so plainly to the user.
 get_release_by_tag(owner: hanzei, repo: jot, tag: vX.Y.Z)
 ```
 
-Expect **6 assets** — note the file names carry the version **without** the `v`:
+Expect **7 assets** — note the file names carry the version **without** the `v`:
 `jot_X.Y.Z_linux_amd64.tar.gz`, `jot_X.Y.Z_linux_arm64.tar.gz`,
 `jotctl_X.Y.Z_linux_amd64.tar.gz`, `jotctl_X.Y.Z_linux_arm64.tar.gz`,
-`jot-X.Y.Z-arm64-v8a.apk`, and `checksums.txt` (which also covers the APK) — plus
+`jot-X.Y.Z-arm64-v8a.apk`, `jot-X.Y.Z-arm64-v8a.zip` (the same APK, zipped), and
+`checksums.txt` (which also covers both) — plus
 `"draft": false` and `"immutable": true`. Also confirm the `docker-merge` job succeeded — that's what pushes the
 multi-arch `hanzei/jot:X.Y.Z` / `:X.Y` / `:X` / `:latest` / `:stable` manifest, not the two
 per-platform `docker` jobs.
