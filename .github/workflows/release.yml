@@ -103,6 +103,17 @@ jobs:
           name: ${{ needs.apk.outputs.apk-name }}
           path: mobile-apk
 
+      # Ship the APK zipped as well as bare. Android browsers tend to refuse or
+      # mangle a direct .apk download, while a zip downloads cleanly and is
+      # opened from the Files app; PR builds (Actions artifacts) are zips for
+      # the same reason. Written next to the APK so .goreleaser.yml's
+      # extra_files globs attach and checksum it in the same draft-then-undraft
+      # sequence.
+      - name: Zip the APK
+        env:
+          APK_NAME: ${{ needs.apk.outputs.apk-name }}
+        run: zip -j "mobile-apk/${APK_NAME}.zip" "mobile-apk/${APK_NAME}.apk"
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7
         with:

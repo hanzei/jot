@@ -996,7 +996,8 @@ The `Release` workflow takes it from there. It first checks the tag has no
 published release yet (see below), then runs two halves that only meet at that
 precondition: the Android APK is built first, and once it's ready GoReleaser
 builds the `jot` and `jotctl` archives for `linux/amd64` and `linux/arm64`,
-creates the GitHub release as a draft, uploads the archives plus the APK and
+creates the GitHub release as a draft, uploads the archives plus the APK (bare
+and zipped — Android browsers often refuse a direct `.apk` download) and
 `checksums.txt`, fills in the release notes using GitHub's own generator, and
 publishes it; meanwhile the Docker jobs build and push `hanzei/jot` for both
 architectures from source, independently of the APK/GoReleaser half. Because

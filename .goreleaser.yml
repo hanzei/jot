@@ -68,13 +68,17 @@ release:
   # invoking GoReleaser, so the APK rides along in the same draft-then-undraft
   # sequence as the jot/jotctl archives instead of needing a separate upload
   # after the release is already published (which immutable releases reject).
+  # The .zip is the same APK zipped by release.yml, for Android browsers that
+  # will not download a bare .apk.
   extra_files:
     - glob: ./mobile-apk/*.apk
+    - glob: ./mobile-apk/*.zip
 
 checksum:
   name_template: checksums.txt
   extra_files:
     - glob: ./mobile-apk/*.apk
+    - glob: ./mobile-apk/*.zip
 
 changelog:
   # Keep the notes identical to GitHub's own "Generate release notes" output,
