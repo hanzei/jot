@@ -1558,6 +1558,17 @@ export default function NoteEditorScreen() {
         // The keyboard and the Android formatting bar appear after a row takes
         // focus and shrink this view, which can cover the row it just revealed.
         onLayout={revealFocusedItem}
+        // A row that grows as its text wraps can run under the formatting bar.
+        onContentSizeChange={revealFocusedItem}
+        // Android's own scroll-to-focused-child, off for lists. It scrolls to the
+        // outermost ScrollView between the focused input and this one, and a
+        // list row sits inside the reorderable list's FlatList, so it targets
+        // the whole list rather than the row: tapping a visible row jumps the
+        // list's top edge to the top of the viewport. useListItemEditing
+        // reveals rows itself. Text notes keep it — it is also what keeps the
+        // caret of the content input in view while typing.
+        scrollsChildToFocus={noteType !== 'list'}
+        testID="note-editor-scroll"
       >
         {(displayedImages.length > 0 || displayedImageUploads.length > 0) && (
           <NoteImageGallery
