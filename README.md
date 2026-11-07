@@ -321,7 +321,7 @@ npm run ios       # iOS simulator, macOS only
 The Android APK workflow lives in `.github/workflows/mobile-apk.yml`. On a pull
 request that changes `mobile/**` or `shared/**`, it keeps one comment on the PR up
 to date with a download link for the latest build (an arm64-v8a release APK,
-kept for 7 days; downloading needs a GitHub login). PRs from forks are not built,
+kept for `RETENTION_DAYS` in that workflow; downloading needs a GitHub login). PRs from forks are not built,
 since the signing secrets are not available to them. Android
 share-to-note is supported through the mobile share sheet: share selected text
 to Jot, choose the target server if needed, and save it as a new note.

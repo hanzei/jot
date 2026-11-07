@@ -19,7 +19,7 @@ on:
   push:
     branches: [master]
   pull_request:
-    paths: ["mobile/**", "shared/**", ".github/workflows/**"]
+    paths: ["mobile/**", "shared/**", ".github/workflows/**", ".github/actions/apk-pr-comment/**"]
   workflow_call:
     secrets:
       GOOGLE_SERVICES_JSON:
@@ -62,9 +62,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
+        # Fetched into a variable first so a failed API call fails the step,
+        # rather than reading as an empty file list and silently skipping the
+        # comment.
         run: |
-          if gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename' \
-              | grep -qE '^(mobile|shared)/'; then
+          files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename')
+          if grep -qE '^(mobile|shared)/' <<< "$files"; then
             echo "app=true" >> "$GITHUB_OUTPUT"
           else
             echo "app=false" >> "$GITHUB_OUTPUT"
@@ -77,26 +80,10 @@ jobs:
           sparse-checkout: .github/actions
           persist-credentials: false
 
-      - name: Compose comment
-        if: steps.changes.outputs.app == 'true'
-        id: body
-        env:
-          SHA: ${{ github.event.pull_request.head.sha }}
-          COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.event.pull_request.head.sha }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          {
-            echo 'body<<EOF'
-            echo '### 📱 Android APK'
-            echo
-            echo "⏳ Building for [\`${SHA::7}\`]($COMMIT_URL)… ([workflow run]($RUN_URL))"
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
-
       - if: steps.changes.outputs.app == 'true'
         uses: ./.github/actions/apk-pr-comment
         with:
-          body: ${{ steps.body.outputs.body }}
+          status: pending
 
   build-apk:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
@@ -310,34 +297,9 @@ jobs:
           sparse-checkout: .github/actions
           persist-credentials: false
 
-      - name: Compose comment
-        id: body
-        env:
-          RESULT: ${{ needs.build-apk.result }}
-          APK_NAME: ${{ needs.build-apk.outputs.apk-name }}
-          APK_URL: ${{ needs.build-apk.outputs.apk-url }}
-          APK_EXPIRES: ${{ needs.build-apk.outputs.apk-expires }}
-          SHA: ${{ github.event.pull_request.head.sha }}
-          COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.event.pull_request.head.sha }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          commit="[\`${SHA::7}\`]($COMMIT_URL)"
-          {
-            echo 'body<<EOF'
-            echo '### 📱 Android APK'
-            echo
-            if [ "$RESULT" = "success" ] && [ -n "$APK_URL" ]; then
-              echo "**[⬇️ Download \`${APK_NAME}\`]($APK_URL)** — built from $commit."
-              echo
-              echo '- Downloads as a zip containing the APK; GitHub requires you to be signed in.'
-              echo '- arm64-v8a only: it will not install on an x86_64 emulator or other ABIs.'
-              echo "- Expires ${APK_EXPIRES}. Push again or re-run the [workflow]($RUN_URL) for a fresh build."
-            else
-              echo "❌ The build for $commit failed — see the [workflow run]($RUN_URL)."
-            fi
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
-
       - uses: ./.github/actions/apk-pr-comment
         with:
-          body: ${{ steps.body.outputs.body }}
+          status: ${{ needs.build-apk.result }}
+          apk-name: ${{ needs.build-apk.outputs.apk-name }}
+          apk-url: ${{ needs.build-apk.outputs.apk-url }}
+          apk-expires: ${{ needs.build-apk.outputs.apk-expires }}
