@@ -4,6 +4,7 @@
 package mcphandler
 
 import (
+	"context"
 	"encoding/json/v2"
 	"fmt"
 	"net/http"
@@ -67,10 +68,20 @@ func (h *Handler) buildServer(req *http.Request) *mcp.Server {
 	}
 
 	srv := mcp.NewServer(&mcp.Implementation{Name: "jot"}, nil)
+	srv.AddReceivingMiddleware(tagWriteClient)
 	h.registerNoteTools(srv, user.ID)
 	h.registerNoteItemTools(srv, user.ID)
 	h.registerLabelTools(srv, user.ID)
 	return srv
+}
+
+// tagWriteClient marks every request as coming from MCP, so an assistant's
+// rewrite of a note never coalesces into the same revision as the user's own
+// edits (see models.WithWriteClient) and stays undoable from the note's history.
+func tagWriteClient(next mcp.MethodHandler) mcp.MethodHandler {
+	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+		return next(models.WithWriteClient(ctx, models.MCPWriteClient), method, req)
+	}
 }
 
 // toolTextResult wraps a JSON-marshaled value as a single text MCP result.

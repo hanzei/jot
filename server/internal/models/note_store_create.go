@@ -176,7 +176,7 @@ func insertNewNoteItemTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, no
 	if _, err := tx.ExecContext(ctx,
 		d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, parent_id, assigned_to, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
-		itemID, noteID, item.Text, item.Position, item.Completed, nullableParentID(item.ParentID), nullableAssignedTo(""), now, now,
+		itemID, noteID, item.Text, item.Position, item.Completed, nullableParentID(item.ParentID), nullableAssignedTo(item.AssignedTo), now, now,
 	); err != nil {
 		// Concurrent replays with the same client-supplied ID can both pass the
 		// existence check above; map the constraint violation to ErrNoteItemExists.

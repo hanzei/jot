@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/sse"
 )
 
@@ -20,12 +21,14 @@ func clientIDFromContext(ctx context.Context) string {
 
 // ClientIDMiddleware reads the X-Client-Id request header and stores it in the
 // request context so that SSE publish helpers can stamp it onto outgoing events
-// without each handler needing to read the header individually.
+// without each handler needing to read the header individually, and so that
+// note revisions coalesce per client (models.WithWriteClient).
 // Values longer than maxClientIDLen are silently ignored.
 func ClientIDMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if id := r.Header.Get("X-Client-Id"); id != "" && len(id) <= maxClientIDLen {
-			r = r.WithContext(sse.WithClientID(r.Context(), id))
+			ctx := sse.WithClientID(r.Context(), id)
+			r = r.WithContext(models.WithWriteClient(ctx, id))
 		}
 		next.ServeHTTP(w, r)
 	})
