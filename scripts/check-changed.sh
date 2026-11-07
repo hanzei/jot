@@ -19,8 +19,12 @@
 # Not covered: e2e specs broken by a server or page-object change (CI), and
 # `task test-server-postgres` after a schema or query change.
 #
+# The comparison point is the merge base with origin/master, fetched first so a
+# stale local ref does not pull unrelated master commits into the diff. If the
+# fetch fails it warns and uses the local ref.
+#
 # Usage: ./scripts/check-changed.sh [--dry-run]
-#        JOT_CHECK_BASE=<ref> overrides the comparison point.
+#        JOT_CHECK_BASE=<ref> overrides the comparison point (and skips the fetch).
 
 set -uo pipefail
 
@@ -48,6 +52,12 @@ full_gate() {
 
 base="${JOT_CHECK_BASE:-}"
 if [ -z "$base" ]; then
+  # A stale origin/master counts every master commit since it as the branch's own
+  # and widens the gate (#1201). Best-effort: offline, the local ref still works.
+  if ! GIT_TERMINAL_PROMPT=0 git fetch --quiet origin +refs/heads/master:refs/remotes/origin/master 2>/dev/null; then
+    age="$(git log -1 --format=%cr origin/master 2>/dev/null)"
+    echo "check-changed: could not fetch origin/master — using the local ref${age:+ (last commit $age)}" >&2
+  fi
   for ref in origin/master master; do
     if git rev-parse --verify -q "$ref^{commit}" >/dev/null; then
       base="$(git merge-base HEAD "$ref")"
@@ -57,6 +67,9 @@ if [ -z "$base" ]; then
 fi
 # No origin/master, or no merge base (e.g. a shallow clone that cannot reach the fork point).
 [ -n "$base" ] || full_gate "cannot find a merge base with master"
+
+ahead="$(git rev-list --count "$base..HEAD")"
+[ "$ahead" -gt 20 ] && echo "check-changed: HEAD is $ahead commits past ${base:0:12} — if that is more than the branch has, the base is stale and the gate wider than needed" >&2
 
 files="$({ git diff --name-only --no-renames "$base"; git ls-files --others --exclude-standard; } | sort -u)"
 
