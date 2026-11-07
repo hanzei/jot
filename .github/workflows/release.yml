@@ -60,10 +60,16 @@ jobs:
   # Secrets are passed explicitly, one at a time, rather than `secrets:
   # inherit` — this job has no business handing the APK build DOCKER_HUB_* or
   # anything else this workflow can see beyond what it declares needing.
+  #
+  # `pull-requests: write` is never used on a tag build: it is for
+  # mobile-apk.yml's PR-comment jobs, which are skipped here. GitHub still checks
+  # every job in a called workflow against the caller's grant before starting,
+  # whether or not the job would run, so without it the release fails to start.
   apk:
     needs: [check-tag]
     permissions:
       contents: read
+      pull-requests: write
     uses: ./.github/workflows/mobile-apk.yml
     secrets:
       GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}

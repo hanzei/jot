@@ -1,0 +1,38 @@
+name: APK PR comment
+description: >-
+  Create or update the single comment on the current pull request that tells
+  reviewers where its Android APK is. mobile-apk.yml calls this once when a
+  build starts and again when it finishes, so a PR carries one comment that
+  always describes its latest build rather than one comment per push. The
+  calling job needs `pull-requests: write`.
+
+inputs:
+  body:
+    description: >-
+      Markdown for the comment. A hidden marker is prepended to it; that marker,
+      not the text, is how the next run finds the comment to edit.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Upsert the APK comment
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPO: ${{ github.repository }}
+        PR: ${{ github.event.pull_request.number }}
+        BODY: ${{ inputs.body }}
+      run: |
+        marker='<!-- jot-apk-build -->'
+        # Match on the author as well as the marker so a human quoting the
+        # comment cannot become the one that gets overwritten.
+        id=$(gh api --paginate "repos/$REPO/issues/$PR/comments" \
+          --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" \
+          | head -n 1)
+        body=$(printf '%s\n%s' "$marker" "$BODY")
+        if [ -n "$id" ]; then
+          gh api --method PATCH "repos/$REPO/issues/comments/$id" -f body="$body" > /dev/null
+        else
+          gh api --method POST "repos/$REPO/issues/$PR/comments" -f body="$body" > /dev/null
+        fi
