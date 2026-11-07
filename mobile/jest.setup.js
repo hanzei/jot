@@ -275,9 +275,13 @@ jest.mock('react-native-reanimated', () => {
     },
     useAnimatedStyle: () => ({}),
     useAnimatedReaction: jest.fn(),
-    useSharedValue: (init) => makeSharedValue(init),
+    // One value per hook call site for the component's lifetime, as the real
+    // hook gives — a fresh one per render would drop whatever a test set.
+    useSharedValue: (init) => require('react').useState(() => makeSharedValue(init))[0],
     useAnimatedRef: () => ({ current: null }),
     useScrollViewOffset: () => makeSharedValue(0),
+    // Runs the worklet on the JS thread with the event's payload.
+    useAnimatedScrollHandler: (handler) => (event) => handler(event.nativeEvent),
     useFrameCallback: () => ({ setActive: jest.fn(), isActive: false }),
     useDerivedValue: (fn) => makeSharedValue(typeof fn === 'function' ? undefined : fn),
     withTiming: (val) => val,

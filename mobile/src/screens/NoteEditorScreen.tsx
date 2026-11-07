@@ -682,6 +682,7 @@ export default function NoteEditorScreen() {
     handleListDragEnd,
     handleListReorder,
     handleIndentFocusedItem,
+    editorScrollProps,
   } = listEditing;
 
   // Pre-filled share content must be flagged dirty so it auto-saves (and is not
@@ -1281,7 +1282,7 @@ export default function NoteEditorScreen() {
             onSubmitEditing: (cursorPos) => listItemHandlers.onEnterAtCursor(originalIndex, cursorPos),
             onBackspaceOnEmpty: () => listItemHandlers.onBackspaceOnEmpty(originalIndex),
             onAssignPress: () => listItemHandlers.onAssignPress(item.id),
-            onFocus: (event) => listItemHandlers.onFocus(item.id, event),
+            onFocus: () => listItemHandlers.onFocus(item.id),
             onBlur: () => listItemHandlers.onBlur(item.id),
             onAcceptSuggestion: (text) => handleAcceptSuggestion(item.id, text),
           }}
@@ -1546,6 +1547,14 @@ export default function NoteEditorScreen() {
         style={styles.scrollContent}
         contentContainerStyle={styles.scrollContentContainer}
         keyboardShouldPersistTaps="handled"
+        {...editorScrollProps}
+        // Android's own scroll-to-focused-child targets the outermost ScrollView
+        // between the input and this one — for a list row, the reorderable
+        // list's FlatList — so a tap jumped the whole list's top into view.
+        // Rows are revealed by useRevealFocusedInput instead; text notes keep it
+        // for caret-following.
+        scrollsChildToFocus={noteType !== 'list'}
+        testID="note-editor-scroll"
       >
         {(displayedImages.length > 0 || displayedImageUploads.length > 0) && (
           <NoteImageGallery

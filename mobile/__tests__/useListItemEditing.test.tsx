@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { ScrollView } from 'react-native';
+import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, ScrollView } from 'react-native';
 import { act, renderHook } from '@testing-library/react-native';
 import type { TFunction } from 'i18next';
 import { createCompletedWriteTracker } from '@jot/shared';
@@ -66,7 +66,7 @@ function useHarness() {
     showToast: mockShowToast,
     t,
   });
-  return { doc, editing, savedItemsRef, savedOrderRef, completedWrites };
+  return { doc, editing, savedItemsRef, savedOrderRef, completedWrites, scrollViewRef };
 }
 
 /** Mounts the harness and seeds it with `items` as the last-saved baseline. */
@@ -506,7 +506,7 @@ describe('useListItemEditing — indent buttons', () => {
     const { result } = await mountWith([item('a'), item('b')]);
     // Focus sets both the ref and the state the buttons follow...
     await act(async () => {
-      result.current.editing.listItemHandlers.onFocus('b', { nativeEvent: {} } as never);
+      result.current.editing.listItemHandlers.onFocus('b');
     });
     // ...and a blur nulls the ref at once, while the state holds the id through
     // the settle window.
@@ -516,5 +516,155 @@ describe('useListItemEditing — indent buttons', () => {
     await act(async () => { result.current.editing.handleIndentFocusedItem(1); });
 
     expect(result.current.doc.items.map((it) => [it.id, it.parentId])).toEqual([['a', null], ['b', 'a']]);
+  });
+});
+
+describe('useListItemEditing — keeping the focused row in view', () => {
+  type MeasureCallback = (x: number, y: number, width: number, height: number) => void;
+
+  /**
+   * Mounts rows `a` and `p` under a scroll view whose window frame starts at
+   * y 160 (under the header) and is `height` tall; rows are 40 tall. `resize`
+   * changes the height and fires the scroll view's onLayout, as the keyboard,
+   * the formatting bar or a banner would.
+   */
+  async function setup(height: number, { laidOut = true } = {}) {
+    const view = await mountWith([item('a'), item('p')]);
+    const { result } = view;
+    const frame = { top: 160, height };
+    const scrollTo = jest.fn();
+    (result.current.scrollViewRef as { current: unknown }).current = {
+      measureInWindow: (cb: MeasureCallback) => cb(0, frame.top, 400, frame.height),
+      scrollTo,
+    };
+    const props = () => result.current.editing.editorScrollProps;
+    const layOut = async () => {
+      await act(async () => {
+        props().onLayout({ nativeEvent: { layout: { x: 0, y: 0, width: 400, height: frame.height } } } as LayoutChangeEvent);
+      });
+    };
+    if (laidOut) await layOut();
+    return {
+      result,
+      scrollTo,
+      resize: async (next: number) => { frame.height = next; await layOut(); },
+      scrollToOffset: async (y: number) => {
+        await act(async () => {
+          (props().onScroll as unknown as (e: NativeSyntheticEvent<NativeScrollEvent>) => void)(
+            { nativeEvent: { contentOffset: { x: 0, y } } } as NativeSyntheticEvent<NativeScrollEvent>,
+          );
+        });
+      },
+      contentChanged: async () => { await act(async () => { props().onContentSizeChange(); }); },
+      focus: async (id: string) => { await act(async () => { result.current.editing.listItemHandlers.onFocus(id); }); },
+      placeRow: (id: string, top: number, { focused = true, rowHeight = 40 } = {}) => {
+        (result.current.editing.getItemRef(id) as { current: unknown }).current = {
+          measureInWindow: (cb: MeasureCallback) => cb(0, top, 300, rowHeight),
+          isFocused: () => focused,
+        };
+      },
+    };
+  }
+
+  it('leaves the list where it is when the tapped row is already visible', async () => {
+    const { scrollTo, scrollToOffset, placeRow, focus } = await setup(360);
+    await scrollToOffset(500);
+    placeRow('p', 440); // bottom at 480, inside the 520 viewport edge
+
+    await focus('p');
+
+    // RN's keyboard helper scrolled here anyway — and too far, hiding the row
+    // under the formatting bar.
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('scrolls a row hidden below the viewport up just far enough to show it', async () => {
+    const { scrollTo, scrollToOffset, placeRow, focus } = await setup(360);
+    await scrollToOffset(500);
+    placeRow('p', 600); // bottom at 640; visible band ends at 520 - 24
+
+    await focus('p');
+
+    expect(scrollTo).toHaveBeenCalledWith({ y: 500 + (640 - 496), animated: true });
+  });
+
+  it('re-reveals the focused row when the keyboard covers it after focus', async () => {
+    const { scrollTo, scrollToOffset, placeRow, focus, resize } = await setup(700);
+    // Set before the focus, so it must survive the re-render the focus causes.
+    await scrollToOffset(300);
+    placeRow('p', 600);
+    await focus('p');
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    await resize(360);
+
+    expect(scrollTo).toHaveBeenCalledWith({ y: 300 + (640 - 496), animated: true });
+  });
+
+  it('leaves a focused row the user scrolled far away from when a banner resizes the view', async () => {
+    const { scrollTo, placeRow, focus, resize } = await setup(360);
+    placeRow('p', 440);
+    await focus('p');
+
+    placeRow('p', 1400); // scrolled far up; the row is well below the viewport
+    await resize(320);
+
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('does not treat the first layout as a resize', async () => {
+    const { scrollTo, placeRow, focus, resize } = await setup(360, { laidOut: false });
+    placeRow('p', 500); // covered by the bar
+    await focus('p');
+    scrollTo.mockClear();
+
+    await resize(360);
+
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('does nothing on a resize when no row is focused', async () => {
+    const { scrollTo, placeRow, resize } = await setup(700);
+    placeRow('a', 600);
+
+    await resize(100);
+
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('ignores a focused id whose row no longer holds the caret', async () => {
+    const { scrollTo, placeRow, focus, resize, contentChanged } = await setup(700);
+    placeRow('p', 600);
+    await focus('p');
+
+    // The row was checked off while focused: its input unmounted without a
+    // blur, and the copy in the completed section never took the caret.
+    placeRow('p', 600, { focused: false });
+    await resize(360);
+    await contentChanged();
+
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('follows the focused row as it grows under the bar', async () => {
+    const { scrollTo, placeRow, focus, contentChanged } = await setup(360);
+    placeRow('p', 440);
+    await focus('p');
+
+    placeRow('p', 440, { rowHeight: 80 }); // bottom at 520, past the 496 band
+    await contentChanged();
+
+    expect(scrollTo).toHaveBeenCalledWith({ y: 520 - 496, animated: true });
+  });
+
+  it('does not pull the user back to a focused row they scrolled away from when the content grows', async () => {
+    const { scrollTo, placeRow, focus, contentChanged } = await setup(360);
+    placeRow('p', 440);
+    await focus('p');
+
+    placeRow('p', -200); // scrolled down past the row, then expanded the completed section
+    await contentChanged();
+
+    expect(scrollTo).not.toHaveBeenCalled();
   });
 });
