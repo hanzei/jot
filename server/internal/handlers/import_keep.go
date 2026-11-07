@@ -4,8 +4,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
-	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"fmt"
 	"io"
 	"strings"
@@ -176,7 +174,7 @@ func parseKeepNotesFromZip(zr *zip.Reader) []keepNote {
 			continue // read error or entry exceeded per-entry limit
 		}
 		var kn keepNote
-		if err := unmarshalKeepNote(jsonData, &kn); err != nil {
+		if err := unmarshalImport(jsonData, &kn); err != nil {
 			continue
 		}
 		if kn.isEmpty() {
@@ -185,15 +183,6 @@ func parseKeepNotesFromZip(zr *zip.Reader) []keepNote {
 		notes = append(notes, kn)
 	}
 	return notes
-}
-
-// unmarshalKeepNote decodes one Takeout note. Note text is user content, and
-// a truncated emoji leaves a lone UTF-16 surrogate or invalid UTF-8 that
-// encoding/json/v2 rejects by default; allowing it replaces the bad sequence
-// with U+FFFD, as v1 did, so the note still imports. Without it a zip import
-// would silently skip the note.
-func unmarshalKeepNote(data []byte, kn *keepNote) error {
-	return json.Unmarshal(data, kn, jsontext.AllowInvalidUTF8(true))
 }
 
 func parseKeepNotesFromData(filename string, data []byte) ([]keepNote, error) {
@@ -209,7 +198,7 @@ func parseKeepNotesFromData(filename string, data []byte) ([]keepNote, error) {
 	}
 
 	var kn keepNote
-	if err := unmarshalKeepNote(data, &kn); err != nil {
+	if err := unmarshalImport(data, &kn); err != nil {
 		return nil, apierr.New(apierr.CodeInvalidImportFile, "invalid JSON file")
 	}
 	if kn.isEmpty() {

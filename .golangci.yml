@@ -53,7 +53,7 @@ linters:
             - "!$test"
           deny:
             - pkg: "encoding/json$"
-              desc: "use encoding/json/v2, with jsontext options where third-party input needs leniency (see import_keep.go)"
+              desc: "use encoding/json/v2, with jsontext options where third-party input needs leniency (see unmarshalImport in internal/handlers/import.go)"
     gocritic:
       disable-all: true
       enabled-checks:
