@@ -2,7 +2,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import axios from 'axios';
 import api from '../api/client';
 import { jot } from '../api/jot';
-import { completedCascadeScope, type GetNotesParams, type Note, type NoteItem } from '@jot/shared';
+import { apiPaths, completedCascadeScope, type GetNotesParams, type Note, type NoteItem } from '@jot/shared';
 import {
   getLocalNote,
   saveNote,
@@ -484,13 +484,12 @@ export async function getQueuedCompletedItemIds(
  * {@link getQueuedCompletedItemIds}.
  */
 export async function getQueuedCreatedItemIds(db: SQLiteDatabase, noteId: string): Promise<Set<string>> {
-  const entries = await db.getAllAsync<Pick<QueueEntry, 'endpoint' | 'body'>>(
-    "SELECT endpoint, body FROM sync_queue WHERE operation = 'createItem'",
+  const entries = await db.getAllAsync<Pick<QueueEntry, 'body'>>(
+    "SELECT body FROM sync_queue WHERE operation = 'createItem' AND endpoint = ?",
+    [apiPaths.noteItems(noteId)],
   );
   const ids = new Set<string>();
   for (const entry of entries) {
-    // /notes/{noteId}/items
-    if (entry.endpoint.split('/')[2] !== noteId) continue;
     const itemId = parseQueueBody(entry.body)?.id;
     if (typeof itemId === 'string') ids.add(itemId);
   }
@@ -1080,11 +1079,11 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
  * queued createItem has yet to add (see {@link getQueuedCreatedItemIds}).
  */
 export async function saveServerResponseNote(db: SQLiteDatabase, note: Note): Promise<void> {
-  await saveNote(db, note, {
-    serverSnapshot: true,
-    keepLocalCompletedIds: await getQueuedCompletedItemIds(db, note.id),
-    keepItemIds: await getQueuedCreatedItemIds(db, note.id),
-  });
+  const [keepLocalCompletedIds, keepItemIds] = await Promise.all([
+    getQueuedCompletedItemIds(db, note.id),
+    getQueuedCreatedItemIds(db, note.id),
+  ]);
+  await saveNote(db, note, { serverSnapshot: true, keepLocalCompletedIds, keepItemIds });
 }
 
 /**
@@ -1102,8 +1101,11 @@ export async function reconcileServerItems(
   items: ServerItemInput[],
   options: { write?: number; exceptEntryId?: number } = {},
 ): Promise<void> {
-  const queued = await getQueuedCompletedItemIds(db, noteId, options.exceptEntryId);
-  await reconcileLocalItems(db, noteId, items, options.write ?? null, queued, await getQueuedCreatedItemIds(db, noteId));
+  const [queued, created] = await Promise.all([
+    getQueuedCompletedItemIds(db, noteId, options.exceptEntryId),
+    getQueuedCreatedItemIds(db, noteId),
+  ]);
+  await reconcileLocalItems(db, noteId, items, options.write ?? null, queued, created);
 }
 
 /** {@link saveServerResponseNote} for a raw drain response, if it looks like a note. */

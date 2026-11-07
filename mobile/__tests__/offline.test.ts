@@ -854,6 +854,45 @@ describe('drainQueue', () => {
     expect(await remainingQueueIds(db)).toEqual([]);
   });
 
+  it('re-homes a kept item whose parent the snapshot pruned', async () => {
+    // Offline: the user adds a child under 'p', which a collaborator has since
+    // deleted on the server.
+    await saveNote(
+      db,
+      makeListNote({
+        id: 'n1',
+        items: [
+          makeNoteItem({ id: 'p', note_id: 'n1', text: 'Parent', position: 0 }),
+          makeNoteItem({ id: 'i1', note_id: 'n1', text: 'Done', completed: true, position: 1 }),
+          makeNoteItem({ id: 'c', note_id: 'n1', text: 'Child', position: 2, parent_id: 'p' }),
+        ],
+      }),
+    );
+    await seedQueueEntry(db, {
+      operation: 'deleteCompletedItems',
+      endpoint: '/notes/n1/items/delete',
+      method: 'POST',
+      body: { item_ids: ['i1'] },
+    });
+    await seedQueueEntry(db, {
+      operation: 'createItem',
+      endpoint: '/notes/n1/items',
+      method: 'POST',
+      body: { id: 'c', text: 'Child', position: 2, completed: false, parent_id: 'p' },
+    });
+    mockApi.post
+      .mockResolvedValueOnce({ data: [] } as never)
+      .mockResolvedValueOnce({
+        data: { id: 'c', note_id: 'n1', text: 'Child', completed: false, position: 0, parent_id: null, assigned_to: '' },
+      } as never);
+
+    await drainQueue(db);
+
+    expect(
+      await db.getAllAsync('SELECT id, parent_id FROM note_items WHERE note_id = ?', ['n1']),
+    ).toEqual([{ id: 'c', parent_id: null }]);
+  });
+
   it('keeps an item added offline to a note whose create replays first', async () => {
     // Offline: the user creates a list note, then adds an item to it. The
     // create's response is the note as created, without the later item.

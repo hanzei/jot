@@ -145,6 +145,17 @@ async function pruneLocalItems(
   }
   const placeholders = keep.map(() => '?').join(', ');
   await db.runAsync(`DELETE FROM note_items WHERE note_id = ? AND id NOT IN (${placeholders})`, [noteId, ...keep]);
+  if (keepItemIds && keepItemIds.size > 0) {
+    // A kept item's parent may be one the snapshot just pruned (deleted on the
+    // server meanwhile); re-home it to top level, as the server does for a child
+    // orphaned by a delete, rather than leave a dangling parent_id.
+    await db.runAsync(
+      `UPDATE note_items SET parent_id = NULL
+        WHERE note_id = ? AND parent_id IS NOT NULL
+          AND parent_id NOT IN (SELECT id FROM note_items WHERE note_id = ?)`,
+      [noteId, noteId],
+    );
+  }
 }
 
 // Writes a single note (and its items if provided) without wrapping in a transaction.
