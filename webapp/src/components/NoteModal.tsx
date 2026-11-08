@@ -6,6 +6,7 @@ import type { TFunction } from 'i18next';
 import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, distinctCompletedTexts, findSuggestedItem, generateId, reviveSuggestedItem, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, toggleTaskMarkerAt, completedCascadeScope, completedPriorById, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
 import { renderMarkdown, renderInteractiveMarkdown, inlineMarkdownToText, type InteractiveMarkdownRender } from '@/utils/markdown';
+import LabelChip from '@/components/LabelChip';
 import LabelPicker from '@/components/LabelPicker';
 import NoteImageGallery from '@/components/NoteImageGallery';
 import LetterAvatar from '@/components/LetterAvatar';
@@ -52,15 +53,6 @@ import {
 // Re-exported so the row-reveal styling has a single import site for callers
 // that reach for it through the modal rather than the row component.
 export { ROW_REVEAL_CLASSES } from '@/components/SortableItem';
-
-// A single label pill shown in the note modal's avatars/labels row.
-function LabelChip({ name }: { name: string }) {
-  return (
-    <span className="inline-flex items-center bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5 text-xs">
-      {name}
-    </span>
-  );
-}
 
 // Keyboard-shortcut hint chip shown at the trailing edge of overflow menu items.
 function MenuKbd({ children }: { children: ReactNode }) {

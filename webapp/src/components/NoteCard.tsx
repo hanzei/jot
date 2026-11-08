@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { VALIDATION, groupNoteItems, type Note, type User } from '@jot/shared';
 import { notes, images as imagesApi } from '@/utils/api';
 import LetterAvatar from '@/components/LetterAvatar';
+import LabelChip from '@/components/LabelChip';
 import InlineMarkdown from '@/components/InlineMarkdown';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
@@ -518,23 +519,11 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       {note.labels && note.labels.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-2">
           {note.labels.slice(0, 3).map(label => (
-            onLabelClick ? (
-              <button
-                key={label.id}
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onLabelClick(label.id); }}
-                className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5 hover:bg-blue-200 dark:hover:bg-blue-800/40 transition-colors cursor-pointer"
-              >
-                {label.name}
-              </button>
-            ) : (
-              <span
-                key={label.id}
-                className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5"
-              >
-                {label.name}
-              </span>
-            )
+            <LabelChip
+              key={label.id}
+              name={label.name}
+              onClick={onLabelClick ? (e) => { e.stopPropagation(); onLabelClick(label.id); } : undefined}
+            />
           ))}
           {note.labels.length > 3 && (
             <span className="text-xs text-gray-500 dark:text-gray-400">+{note.labels.length - 3}</span>
