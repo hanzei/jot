@@ -6,6 +6,9 @@ import BottomSheet from './BottomSheet';
 import { hasCustomNoteColor } from '../utils/colorContrast';
 import { DEFAULT_NOTE_COLOR, NOTE_COLORS, LIGHT_NOTE_COLORS, NOTE_COLOR_NAME_KEYS } from '@jot/shared';
 
+const CHECK_SIZE = 22;
+const CHECK_STROKE = 3;
+
 interface ColorPickerProps {
   visible: boolean;
   currentColor: string;
@@ -16,6 +19,10 @@ interface ColorPickerProps {
 export default function ColorPicker({ visible, currentColor, onSelect, onClose }: ColorPickerProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
+  // Selection must read at a glance on every swatch, including the pale ones:
+  // a primary-coloured ring (as the webapp's ring-2 ring-blue-500) plus a bold
+  // check, rather than a thin grey check alone.
+  const selectedRing = { borderWidth: 3, borderColor: colors.primary };
   const isDefaultSelected = !hasCustomNoteColor(currentColor);
 
   return (
@@ -40,14 +47,19 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
             return (
               <TouchableOpacity
                 key={color}
-                style={[styles.colorCircle, styles.defaultCircle, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                style={[
+                  styles.colorCircle,
+                  styles.defaultCircle,
+                  { backgroundColor: colors.surface, borderColor: colors.border },
+                  isDefaultSelected && selectedRing,
+                ]}
                 onPress={select}
                 testID={testID}
                 accessibilityLabel={accessibilityLabel}
                 accessibilityState={{ selected: isDefaultSelected }}
               >
                 {isDefaultSelected
-                  ? <Check size={18} color={colors.icon} />
+                  ? <Check size={CHECK_SIZE} strokeWidth={CHECK_STROKE} color={colors.text} />
                   : <DropletOff size={18} color={colors.icon} />}
               </TouchableOpacity>
             );
@@ -61,6 +73,7 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
                 styles.colorCircle,
                 { backgroundColor: color },
                 LIGHT_NOTE_COLORS.has(color) && { borderWidth: 1, borderColor: colors.border },
+                selected && selectedRing,
               ]}
               onPress={select}
               testID={testID}
@@ -68,10 +81,7 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
               accessibilityState={{ selected }}
             >
               {selected && (
-                <Check
-                  size={18}
-                  color={LIGHT_NOTE_COLORS.has(color) ? '#666' : '#333'}
-                />
+                <Check size={CHECK_SIZE} strokeWidth={CHECK_STROKE} color="#1a1a1a" />
               )}
             </TouchableOpacity>
           );
