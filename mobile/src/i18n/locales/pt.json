@@ -312,7 +312,7 @@
     "listItemLabel": "Item da lista",
     "itemCheckbox": "Caixa de seleção {{item}}",
     "dragToReorderIndent": "Arrastar para reordenar ou recuar",
-    "colorWhite": "Branco",
+    "colorDefault": "Padrão",
     "colorCoral": "Coral",
     "colorYellow": "Amarelo",
     "colorLime": "Lima",

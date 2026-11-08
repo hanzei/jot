@@ -1,5 +1,5 @@
 import { useState, useEffect, useEffectEvent, useMemo, useRef, useCallback, useId, type ReactElement, type ReactNode } from 'react';
-import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Users, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, Pin, EllipsisVertical, Square, Undo2 } from 'lucide-react';
+import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Users, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, Pin, EllipsisVertical, Square, Undo2, DropletOff } from 'lucide-react';
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -2508,13 +2508,19 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                         autoSaveNote();
                       }
                     }}
-                    className={`w-8 h-8 rounded-full border-2 ${colorOption.class} ${
+                    className={`w-8 h-8 rounded-full border-2 flex items-center justify-center ${colorOption.class} ${
                       color === colorOption.value ? 'ring-2 ring-blue-500' : ''
                     }`}
                     title={colorOption.name}
                     aria-label={colorOption.name}
                     aria-pressed={color === colorOption.value}
-                  />
+                  >
+                    {/* "No colour": the swatch already follows the theme (see
+                        colorClasses); the glyph says it is not a solid white. */}
+                    {colorOption.value === DEFAULT_NOTE_COLOR && (
+                      <DropletOff className="w-4 h-4 text-gray-400 dark:text-slate-400" aria-hidden="true" />
+                    )}
+                  </button>
                 ))}
               </div>
             )}

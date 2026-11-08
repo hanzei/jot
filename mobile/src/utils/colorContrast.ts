@@ -49,3 +49,16 @@ export function isWhiteHexColor(color: string): boolean {
   const normalized = normalizeHexColor(color);
   return normalized === 'ffffff';
 }
+
+/**
+ * WCAG contrast ratio (1–21) between two opaque hex colours, or null when
+ * either is not a hex colour.
+ */
+export function getContrastRatio(a: string, b: string): number | null {
+  const rgbA = hexToRgb(a);
+  const rgbB = hexToRgb(b);
+  if (!rgbA || !rgbB) return null;
+  const lumA = getRelativeLuminance(rgbA);
+  const lumB = getRelativeLuminance(rgbB);
+  return (Math.max(lumA, lumB) + 0.05) / (Math.min(lumA, lumB) + 0.05);
+}

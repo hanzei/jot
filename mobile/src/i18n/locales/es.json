@@ -312,7 +312,7 @@
     "listItemLabel": "Elemento de lista",
     "itemCheckbox": "Casilla {{item}}",
     "dragToReorderIndent": "Arrastra para reordenar o sangrar",
-    "colorWhite": "Blanco",
+    "colorDefault": "Predeterminado",
     "colorCoral": "Coral",
     "colorYellow": "Amarillo",
     "colorLime": "Lima",

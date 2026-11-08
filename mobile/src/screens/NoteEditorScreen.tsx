@@ -42,6 +42,7 @@ import { useConfirm } from '../hooks/useConfirm';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Markdown from '../components/Markdown';
 import ColorPicker from '../components/ColorPicker';
+import LabelChip from '../components/LabelChip';
 import LabelPicker from '../components/LabelPicker';
 import AssigneePicker from '../components/AssigneePicker';
 import AddImageActionSheet from '../components/AddImageActionSheet';
@@ -1750,24 +1751,14 @@ export default function NoteEditorScreen() {
         {(displayCollaborators.length > 0 || labels.length > 0) && (
           <View style={styles.metaRow} testID="note-meta-row">
             {labels.map((label) => (
-              !isReadOnly ? (
-                <TouchableOpacity
-                  key={label.id}
-                  style={[styles.metaLabelChip, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.borderLight }]}
-                  onPress={openLabelPicker}
-                  testID={`note-meta-label-${label.id}`}
-                  accessibilityLabel={`${t('labels.title')}: ${label.name}`}
-                >
-                  <Text style={[styles.metaLabelText, { color: hasNoteColor ? '#666' : colors.textSecondary }]}>{label.name}</Text>
-                </TouchableOpacity>
-              ) : (
-                <View
-                  key={label.id}
-                  style={[styles.metaLabelChip, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.borderLight }]}
-                >
-                  <Text style={[styles.metaLabelText, { color: hasNoteColor ? '#666' : colors.textSecondary }]}>{label.name}</Text>
-                </View>
-              )
+              <LabelChip
+                key={label.id}
+                name={label.name}
+                hasNoteColor={hasNoteColor}
+                onPress={isReadOnly ? undefined : openLabelPicker}
+                testID={isReadOnly ? undefined : `note-meta-label-${label.id}`}
+                accessibilityLabel={`${t('labels.title')}: ${label.name}`}
+              />
             ))}
 
             {displayCollaborators.length > 0 && (() => {

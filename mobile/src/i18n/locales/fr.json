@@ -289,7 +289,7 @@
     "listItemLabel": "Élément de liste",
     "itemCheckbox": "Case à cocher {{item}}",
     "dragToReorderIndent": "Glisser pour réorganiser ou indenter",
-    "colorWhite": "Blanc",
+    "colorDefault": "Par défaut",
     "colorCoral": "Corail",
     "colorYellow": "Jaune",
     "colorLime": "Citron vert",

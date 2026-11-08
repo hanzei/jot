@@ -46,9 +46,13 @@ export const NOTE_COLORS = [
   '#e8eaed',
 ] as const;
 
-/** Maps each NOTE_COLORS hex value to its i18n key (webapp/mobile locale `note.*` keys). */
+/**
+ * Maps each NOTE_COLORS hex value to its i18n key (webapp/mobile locale `note.*` keys).
+ * `#ffffff` (DEFAULT_NOTE_COLOR) is "no colour": the note follows the app
+ * theme, so it is named Default rather than White.
+ */
 export const NOTE_COLOR_NAME_KEYS: Record<(typeof NOTE_COLORS)[number], string> = {
-  '#ffffff': 'note.colorWhite',
+  '#ffffff': 'note.colorDefault',
   '#f28b82': 'note.colorCoral',
   '#fbbc04': 'note.colorYellow',
   '#ccff90': 'note.colorLime',
