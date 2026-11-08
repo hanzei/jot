@@ -92,10 +92,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // Extra gap after the default swatch sets "no colour" apart from the real
-  // colours that follow it.
   defaultCircle: {
     borderWidth: 1,
-    marginRight: 8,
   },
 });
