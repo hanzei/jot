@@ -3,7 +3,7 @@ import { Check, DropletOff } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import BottomSheet from './BottomSheet';
-import { isWhiteHexColor } from '../utils/colorContrast';
+import { hasCustomNoteColor } from '../utils/colorContrast';
 import { DEFAULT_NOTE_COLOR, NOTE_COLORS, LIGHT_NOTE_COLORS, NOTE_COLOR_NAME_KEYS } from '@jot/shared';
 
 interface ColorPickerProps {
@@ -16,7 +16,7 @@ interface ColorPickerProps {
 export default function ColorPicker({ visible, currentColor, onSelect, onClose }: ColorPickerProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const isDefaultSelected = !currentColor || isWhiteHexColor(currentColor);
+  const isDefaultSelected = !hasCustomNoteColor(currentColor);
 
   return (
     <BottomSheet visible={visible} onClose={onClose} title={t('note.changeColor')} testID="color-picker">
@@ -48,7 +48,7 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
               >
                 {isDefaultSelected
                   ? <Check size={18} color={colors.icon} />
-                  : <DropletOff size={18} color={colors.iconMuted} />}
+                  : <DropletOff size={18} color={colors.icon} />}
               </TouchableOpacity>
             );
           }

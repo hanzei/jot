@@ -2510,7 +2510,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                     {/* "No colour": the swatch already follows the theme (see
                         colorClasses); the glyph says it is not a solid white. */}
                     {colorOption.value === DEFAULT_NOTE_COLOR && (
-                      <DropletOff className="w-4 h-4 text-gray-400 dark:text-slate-400" aria-hidden="true" />
+                      <DropletOff className="w-4 h-4 text-gray-500 dark:text-slate-400" aria-hidden="true" />
                     )}
                   </button>
                 ))}

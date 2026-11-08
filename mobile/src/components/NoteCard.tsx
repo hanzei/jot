@@ -13,7 +13,7 @@ import { noteImageThumbnailUrl } from '../api/images';
 import UserAvatar from './UserAvatar';
 import LabelChip from './LabelChip';
 import CachedNoteImage from './CachedNoteImage';
-import { isWhiteHexColor } from '../utils/colorContrast';
+import { hasCustomNoteColor } from '../utils/colorContrast';
 import MarkdownPreview from './MarkdownPreview';
 import InlineMarkdown from './InlineMarkdown';
 import type { LayoutRect } from '../navigation/RootNavigator';
@@ -164,7 +164,7 @@ function NoteCard({ note, onPress, onLongPress, onLabelPress }: NoteCardProps) {
   const { t } = useTranslation();
   const failedNoteIds = useFailedNoteIds();
   const didNotSync = failedNoteIds.has(note.id);
-  const hasColor = !!(note.color && !isWhiteHexColor(note.color));
+  const hasColor = hasCustomNoteColor(note.color);
   const unreadColors = UNREAD_BADGE_COLORS[isDark && !hasColor ? 'dark' : 'light'];
   const baseUrl = useActiveServerBaseUrl();
   // Images queued offline (or mid-retry) never reach note.images until the
@@ -332,6 +332,7 @@ function NoteCard({ note, onPress, onLongPress, onLabelPress }: NoteCardProps) {
                 hasNoteColor={hasColor}
                 size="small"
                 onPress={onLabelPress ? () => onLabelPress(label.id, label.name) : undefined}
+                testID={`note-card-label-${label.id}`}
                 accessibilityLabel={t('note.filterByLabel', { label: label.name })}
               />
             ))}

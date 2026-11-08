@@ -55,7 +55,7 @@ import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
 import { useTheme } from '../theme/ThemeContext';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
-import { getCompletedSectionDividerColor, isWhiteHexColor } from '../utils/colorContrast';
+import { getCompletedSectionDividerColor, hasCustomNoteColor } from '../utils/colorContrast';
 import { formatEditorStateForShare } from '../utils/noteTextFormatter';
 import { getActiveServer, listServers, type ServerAccountEntry } from '../store/serverAccounts';
 import { setPendingShare, usePendingShare } from '../store/shareIntent';
@@ -1194,7 +1194,7 @@ export default function NoteEditorScreen() {
   // Disable inputs while waiting for existing note to hydrate
   const isHydrating = initialNoteId !== null && !existingNote;
 
-  const hasNoteColor = !!color && !isWhiteHexColor(color);
+  const hasNoteColor = hasCustomNoteColor(color);
 
   // A brand-new note with nothing in it yet (isBlankDraft), which flushSave
   // declines to create. Archive is disabled here: there is nothing to archive,
@@ -1756,7 +1756,7 @@ export default function NoteEditorScreen() {
                 name={label.name}
                 hasNoteColor={hasNoteColor}
                 onPress={isReadOnly ? undefined : openLabelPicker}
-                testID={isReadOnly ? undefined : `note-meta-label-${label.id}`}
+                testID={`note-meta-label-${label.id}`}
                 accessibilityLabel={`${t('labels.title')}: ${label.name}`}
               />
             ))}

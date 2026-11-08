@@ -51,6 +51,14 @@ export function isWhiteHexColor(color: string): boolean {
 }
 
 /**
+ * Whether a note has a real colour, as opposed to the default "no colour"
+ * (empty or white), which follows the app theme.
+ */
+export function hasCustomNoteColor(color: string): boolean {
+  return !!color && !isWhiteHexColor(color);
+}
+
+/**
  * WCAG contrast ratio (1–21) between two opaque hex colours, or null when
  * either is not a hex colour.
  */
