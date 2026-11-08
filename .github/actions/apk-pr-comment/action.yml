@@ -57,9 +57,7 @@ runs:
             if [ -n "$APK_URL" ]; then
               body+="**[⬇️ Download \`${APK_NAME}\`]($APK_URL)** — built from $commit.
 
-        - Downloads as a zip containing the APK; GitHub requires you to be signed in.
-        - arm64-v8a only: it will not install on an x86_64 emulator or other ABIs.
-        - Expires ${APK_EXPIRES}. Push again or re-run the $run for a fresh build."
+        Expires ${APK_EXPIRES}. Push again or re-run the $run for a fresh build."
             else
               # The build passed but the upload reported no URL; say so rather
               # than call a green run a failure.
