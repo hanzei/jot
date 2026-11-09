@@ -163,6 +163,20 @@ function isClientTimeout(err: unknown): boolean {
   return err.code === 'ECONNABORTED' && err.message !== 'Request aborted';
 }
 
+/**
+ * Timeout for a write replayed from the queue. An online write uses the short
+ * WRITE_REQUEST_TIMEOUT_MS (api/client.ts) so it falls back to the queue
+ * quickly; a replay has no such fallback — it simply stays queued — and a
+ * replay that times out while the server answers the probe is charged toward
+ * dead-lettering (#1211). So a replay gets a longer budget, letting a large
+ * write on a slow but working link complete rather than be dead-lettered.
+ * Passed explicitly, so the client's write-timeout interceptor leaves it alone.
+ */
+export const QUEUED_WRITE_TIMEOUT_MS = 30000;
+
+/** Request config for every replayed queue write. */
+const REPLAY_REQUEST_CONFIG = { timeout: QUEUED_WRITE_TIMEOUT_MS } as const;
+
 /** Timeout for the probe in {@link isGlobalDrainFailureProbed}. */
 const SERVER_PROBE_TIMEOUT_MS = 5000;
 
@@ -827,7 +841,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           const version = noteId ? await getLocalNoteVersion(db, noteId) : null;
           if (version !== null) body.base_version = version;
         }
-        const response = await api.post(endpoint, body);
+        const response = await api.post(endpoint, body, REPLAY_REQUEST_CONFIG);
         requestLanded = true;
 
         if (entry.operation === 'create' || entry.operation === 'duplicate') {
@@ -895,7 +909,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           const version = await getLocalNoteVersion(db, updateNoteID);
           if (version !== null) body.base_version = version;
         }
-        const response = await api.patch(endpoint, body);
+        const response = await api.patch(endpoint, body, REPLAY_REQUEST_CONFIG);
         requestLanded = true;
         if (entry.operation === 'updateSettings') {
           syncedSettings = true;
@@ -908,7 +922,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           }
         }
       } else if (entry.method === 'DELETE') {
-        const response = await api.delete(endpoint);
+        const response = await api.delete(endpoint, REPLAY_REQUEST_CONFIG);
         requestLanded = true;
         if (entry.operation === 'removeLabelFromNote') {
           // The server returns the updated note; persist it so the local

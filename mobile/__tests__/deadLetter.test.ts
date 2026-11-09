@@ -12,6 +12,7 @@ import {
   getProtectedNoteIds,
   getDeadLetteredOperations,
   saveServerNote,
+  QUEUED_WRITE_TIMEOUT_MS,
 } from '../src/db/syncQueue';
 import { getFailedNoteIds, saveNote } from '../src/db/noteQueries';
 import api from '../src/api/client';
@@ -25,6 +26,8 @@ jest.mock('../src/api/client', () => ({
 }));
 
 const mockApi = api as jest.Mocked<typeof api>;
+// Every replayed queue write carries the longer queued-write timeout (#1211).
+const REPLAY_CONFIG = { timeout: QUEUED_WRITE_TIMEOUT_MS };
 
 function makeAxiosError(status: number) {
   return Object.assign(new Error(`Request failed with status code ${status}`), {
@@ -315,8 +318,8 @@ describe('drainQueue dead-letter persistence', () => {
     await drainQueue(db);
 
     // First replays against the base version 3; second against the advanced 4.
-    expect(mockApi.patch).toHaveBeenNthCalledWith(1, '/notes/n1', { content: 'first', base_version: 3 });
-    expect(mockApi.patch).toHaveBeenNthCalledWith(2, '/notes/n1', { content: 'second', base_version: 4 });
+    expect(mockApi.patch).toHaveBeenNthCalledWith(1, '/notes/n1', { content: 'first', base_version: 3 }, REPLAY_CONFIG);
+    expect(mockApi.patch).toHaveBeenNthCalledWith(2, '/notes/n1', { content: 'second', base_version: 4 }, REPLAY_CONFIG);
     // Both drained cleanly — nothing dead-lettered or flagged failed.
     expect(await deadLetters()).toEqual([]);
     expect(await failedNoteIds()).toEqual([]);
@@ -362,7 +365,7 @@ describe('drainQueue dead-letter persistence', () => {
 
     expect(mockApi.post).toHaveBeenCalledWith('/notes/n1/convert', {
       note_type: 'text', content: 'hi', base_version: 5,
-    });
+    }, REPLAY_CONFIG);
     expect(await deadLetters()).toEqual([]);
   });
 
