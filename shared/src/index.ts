@@ -24,4 +24,5 @@ export * from './itemDiff';
 export * from './labelSearch';
 export * from './noteShareNotice';
 export * from './completedWrites';
+export * from './publicLink';
 export * from './api';

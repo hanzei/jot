@@ -306,12 +306,22 @@ func (h *NotesHandler) GetNoteImage(w http.ResponseWriter, r *http.Request) (int
 		return storeError(err, "load note image")
 	}
 
+	return h.serveNoteImage(w, r, img, cacheControlImmutable, errors.New("image blob not found"))
+}
+
+// cacheControlImmutable is how the authenticated image endpoints let the
+// browser cache an image: its bytes never change for an ID.
+const cacheControlImmutable = "private, max-age=31536000, immutable"
+
+// serveNoteImage writes img's original bytes with cacheControl. A blob missing
+// on disk is logged and answered 404 with errMissing.
+func (h *NotesHandler) serveNoteImage(w http.ResponseWriter, r *http.Request, img *models.NoteImage, cacheControl string, errMissing error) (int, any, error) {
 	blob, err := h.imageStore.Open(r.Context(), img.SHA256)
 	if err != nil {
 		if errors.Is(err, blobstore.ErrNotFound) {
 			logutil.FromContext(r.Context()).WithField("image_id", img.ID).WithField("sha256", img.SHA256).
 				Error("Note image blob missing on disk")
-			return http.StatusNotFound, nil, errors.New("image blob not found")
+			return http.StatusNotFound, nil, errMissing
 		}
 		return http.StatusInternalServerError, nil, fmt.Errorf("open image blob: %w", err)
 	}
@@ -323,7 +333,7 @@ func (h *NotesHandler) GetNoteImage(w http.ResponseWriter, r *http.Request) (int
 	// second-guessing it.
 	w.Header().Set("Content-Type", img.ContentType)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+	w.Header().Set("Cache-Control", cacheControl)
 	w.Header().Set("ETag", `"`+img.SHA256+`"`)
 
 	http.ServeContent(w, r, img.Filename, img.CreatedAt, blob)
@@ -359,6 +369,13 @@ func (h *NotesHandler) GetNoteImageThumbnail(w http.ResponseWriter, r *http.Requ
 		return storeError(err, "load note image")
 	}
 
+	return h.serveNoteImageThumbnail(w, r, img, cacheControlImmutable, errors.New("image blob not found"))
+}
+
+// serveNoteImageThumbnail writes img's thumbnail with cacheControl,
+// regenerating it when missing. An original blob missing on disk is logged
+// and answered 404 with errMissing.
+func (h *NotesHandler) serveNoteImageThumbnail(w http.ResponseWriter, r *http.Request, img *models.NoteImage, cacheControl string, errMissing error) (int, any, error) {
 	thumb, err := h.imageStore.OpenThumbnail(r.Context(), img.SHA256)
 	if err != nil {
 		if !errors.Is(err, blobstore.ErrNotFound) {
@@ -373,7 +390,7 @@ func (h *NotesHandler) GetNoteImageThumbnail(w http.ResponseWriter, r *http.Requ
 			if errors.Is(err, blobstore.ErrNotFound) {
 				logutil.FromContext(r.Context()).WithField("image_id", img.ID).WithField("sha256", img.SHA256).
 					Error("Note image blob missing on disk during thumbnail regeneration")
-				return http.StatusNotFound, nil, errors.New("image blob not found")
+				return http.StatusNotFound, nil, errMissing
 			}
 			return http.StatusInternalServerError, nil, err
 		}
@@ -382,7 +399,7 @@ func (h *NotesHandler) GetNoteImageThumbnail(w http.ResponseWriter, r *http.Requ
 
 	w.Header().Set("Content-Type", mimeTypeJPEG)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+	w.Header().Set("Cache-Control", cacheControl)
 	w.Header().Set("ETag", `"`+img.SHA256+`-thumb"`)
 
 	http.ServeContent(w, r, img.Filename+".thumb.jpg", img.CreatedAt, thumb)

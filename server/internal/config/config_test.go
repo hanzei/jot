@@ -411,6 +411,7 @@ func TestLoadRateLimitValues(t *testing.T) {
 		t.Setenv("JOT_RATE_LIMIT_PER_MINUTE", "")
 		t.Setenv("JOT_RATE_LIMIT_AUTH_PER_MINUTE", "")
 		t.Setenv("JOT_RATE_LIMIT_EXPENSIVE_PER_MINUTE", "")
+		t.Setenv("JOT_RATE_LIMIT_PUBLIC_PER_MINUTE", "")
 
 		cfg, err := Load()
 		require.NoError(t, err)
@@ -419,6 +420,7 @@ func TestLoadRateLimitValues(t *testing.T) {
 		assert.Equal(t, 300, cfg.RateLimitPerMinute)
 		assert.Equal(t, 20, cfg.RateLimitAuthPerMinute)
 		assert.Equal(t, 20, cfg.RateLimitExpensivePerMinute)
+		assert.Equal(t, 120, cfg.RateLimitPublicPerMinute)
 	})
 
 	t.Run("custom", func(t *testing.T) {
@@ -426,6 +428,7 @@ func TestLoadRateLimitValues(t *testing.T) {
 		t.Setenv("JOT_RATE_LIMIT_PER_MINUTE", "600")
 		t.Setenv("JOT_RATE_LIMIT_AUTH_PER_MINUTE", "5")
 		t.Setenv("JOT_RATE_LIMIT_EXPENSIVE_PER_MINUTE", "10")
+		t.Setenv("JOT_RATE_LIMIT_PUBLIC_PER_MINUTE", "30")
 
 		cfg, err := Load()
 		require.NoError(t, err)
@@ -434,6 +437,7 @@ func TestLoadRateLimitValues(t *testing.T) {
 		assert.Equal(t, 600, cfg.RateLimitPerMinute)
 		assert.Equal(t, 5, cfg.RateLimitAuthPerMinute)
 		assert.Equal(t, 10, cfg.RateLimitExpensivePerMinute)
+		assert.Equal(t, 30, cfg.RateLimitPublicPerMinute)
 	})
 }
 
@@ -651,4 +655,77 @@ func TestLoadLocalLoginDisabledRequiresOIDC(t *testing.T) {
 		assert.True(t, cfg.OIDCEnabled)
 		assert.False(t, cfg.LocalLoginEnabled)
 	})
+}
+
+func TestLoadPublicLinksEnabled(t *testing.T) {
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
+
+	for _, tt := range []struct {
+		name, value string
+		want        bool
+	}{
+		{"defaults on", "", true},
+		{"explicit true", "true", true},
+		{"turned off", "false", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("JOT_PUBLIC_LINKS_ENABLED", tt.value)
+			cfg, err := Load()
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, cfg.PublicLinksEnabled)
+		})
+	}
+
+	t.Run("invalid value", func(t *testing.T) {
+		t.Setenv("JOT_PUBLIC_LINKS_ENABLED", "yes")
+		_, err := Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "JOT_PUBLIC_LINKS_ENABLED")
+	})
+}
+
+func TestLoadPublicURL(t *testing.T) {
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
+
+	t.Run("unset", func(t *testing.T) {
+		t.Setenv("JOT_PUBLIC_URL", "")
+		cfg, err := Load()
+		require.NoError(t, err)
+		assert.Empty(t, cfg.PublicURL)
+	})
+
+	for _, tt := range []struct{ name, value, want string }{
+		{"https origin", "https://jot.example.com", "https://jot.example.com"},
+		{"http origin with port", "http://192.168.1.10:8080", "http://192.168.1.10:8080"},
+		{"trailing slash is stripped", "https://jot.example.com/", "https://jot.example.com"},
+		{"IPv6 host", "http://[::1]:8080", "http://[::1]:8080"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("JOT_PUBLIC_URL", tt.value)
+			cfg, err := Load()
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, cfg.PublicURL)
+		})
+	}
+
+	for _, tt := range []struct{ name, value string }{
+		{"relative URL", "/jot"},
+		{"host without scheme", "jot.example.com"},
+		{"path", "https://jot.example.com/jot"},
+		{"path with trailing slash", "https://jot.example.com/jot/"},
+		{"double trailing slash", "https://jot.example.com//"},
+		{"query", "https://jot.example.com?x=1"},
+		{"empty query", "https://jot.example.com/?"},
+		{"fragment", "https://jot.example.com#top"},
+		{"user info", "https://user:pass@jot.example.com"},
+		{"non-http scheme", "ftp://jot.example.com"},
+		{"javascript scheme", "javascript://jot.example.com"},
+	} {
+		t.Run("rejects "+tt.name, func(t *testing.T) {
+			t.Setenv("JOT_PUBLIC_URL", tt.value)
+			_, err := Load()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "JOT_PUBLIC_URL")
+		})
+	}
 }

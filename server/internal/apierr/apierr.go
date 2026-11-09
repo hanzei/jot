@@ -69,6 +69,7 @@ const (
 	CodeInvalidImportFile    Code = "invalid_import_file"    // 400 — the import file is not a readable export of the chosen import type.
 	CodeSSOLinkUnavailable   Code = "sso_link_unavailable"   // 403 — password login is turned off, so there is no local account to link SSO to.
 	CodeSSOUnlinkUnavailable Code = "sso_unlink_unavailable" // 403 — password login is turned off, so SSO is the only way to sign in and cannot be disconnected.
+	CodePublicLinksDisabled  Code = "public_links_disabled"  // 403 — the operator turned public note links off (JOT_PUBLIC_LINKS_ENABLED=false).
 )
 
 // ErrorResponse is the body of every API error response.
@@ -129,6 +130,7 @@ var sentinels = []struct {
 	{models.ErrNoteShareNotFound, http.StatusNotFound, ""},
 	{models.ErrNoteItemNotFound, http.StatusNotFound, ""},
 	{models.ErrNoteImageNotFound, http.StatusNotFound, ""},
+	{models.ErrPublicLinkNotFound, http.StatusNotFound, ""},
 	{models.ErrUserNotFound, http.StatusNotFound, ""},
 	{models.ErrNoteExists, http.StatusConflict, ""},
 	{models.ErrNoteItemExists, http.StatusConflict, ""},

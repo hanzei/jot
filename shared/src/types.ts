@@ -20,6 +20,19 @@ export interface ServerConfig {
    * unconfigured).
    */
   sso?: SSOConfig;
+  /**
+   * Whether the operator allows public note links (`JOT_PUBLIC_LINKS_ENABLED`).
+   * Clients hide the public link UI when it is false. Optional so configs
+   * cached from older servers stay valid; treat a missing value as disabled.
+   */
+  public_links_enabled?: boolean;
+  /**
+   * `JOT_PUBLIC_URL`: the origin people outside reach the instance at
+   * (`https://jot.example.com`, no trailing slash), or `null` when unset. Build
+   * public links from it with `publicNoteUrl`, falling back to the client's own
+   * address. Optional for the same reason as `public_links_enabled`.
+   */
+  public_url?: string | null;
 }
 
 export interface AboutInfo {
@@ -161,6 +174,62 @@ export interface NoteImage {
 
 export type NoteUnread = 'new' | 'updated';
 
+/**
+ * A note's public read-only link. One per note, shared by the owner and every
+ * collaborator. The URL is `publicNoteUrl(base, token)`.
+ */
+export interface PublicLink {
+  token: string;
+  /** The user who created the link; `null` once that user has been deleted. */
+  created_by: string | null;
+  created_at: string;
+  /** `null` for a link that never expires. */
+  expires_at: string | null;
+}
+
+/** PUT /notes/{id}/public-link */
+export interface SetPublicLinkRequest {
+  /** RFC 3339, in the future; `null` for a link that never expires. */
+  expires_at: string | null;
+}
+
+/** A list item as served through a public link. `id` only anchors `parent_id`. */
+export interface PublicNoteItem {
+  id: string;
+  text: string;
+  completed: boolean;
+  parent_id: string | null;
+  position: number;
+}
+
+interface BasePublicNote {
+  note_type: NoteType;
+  updated_at: string;
+  /** Fetch each through `apiPaths.publicNoteImage` / `publicNoteImageThumbnail`. */
+  image_ids: string[];
+}
+
+export interface PublicTextNote extends BasePublicNote {
+  note_type: 'text';
+  /** Always empty: a text note has no title. */
+  title: string;
+  content: string;
+}
+
+export interface PublicListNote extends BasePublicNote {
+  note_type: 'list';
+  title: string;
+  items: PublicNoteItem[];
+  /** The owner's collapsed state of the completed-items section. */
+  checked_items_collapsed: boolean;
+}
+
+/**
+ * GET /public/notes/{token}: the reduced, unauthenticated view of a note. It
+ * carries nothing about who owns or shares the note.
+ */
+export type PublicNote = PublicTextNote | PublicListNote;
+
 interface BaseNote {
   id: string;
   user_id: string;
@@ -187,6 +256,11 @@ interface BaseNote {
   unread: NoteUnread | null;
   labels: Label[];
   images?: NoteImage[];
+  /**
+   * The note's active public link, or `null` when it has none (an expired link
+   * is `null` too). Optional because notes cached by older clients lack it.
+   */
+  public_link?: PublicLink | null;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
@@ -607,7 +681,8 @@ export type ApiErrorCode =
   | 'invalid_image'
   | 'invalid_import_file'
   | 'sso_link_unavailable'
-  | 'sso_unlink_unavailable';
+  | 'sso_unlink_unavailable'
+  | 'public_links_disabled';
 
 export interface ApiErrorDetail {
   code: ApiErrorCode;

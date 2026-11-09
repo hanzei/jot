@@ -2535,6 +2535,132 @@
                 ]
             }
         },
+        "/notes/{id}/public-link": {
+            "put": {
+                "description": "Sets the state of the note's public read-only link. With no link, or only an expired one, a link with a new token is created (an expired link is never revived). With an active link only expires_at changes: the token, created_by and created_at stay, so the URL keeps working. Repeating the request has no further effect, so it is safe to retry. To get a new URL, DELETE the link and PUT again. Open to the owner and collaborators. Sends note_updated to everyone with access; the note's version and updated_at do not change.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sharing"
+                ],
+                "summary": "Create a note's public link, or change its expiry",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Note ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Link expiry",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.SetPublicLinkRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.PublicLink"
+                        }
+                    },
+                    "400": {
+                        "description": "bad request, or expires_at not in the future",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "public links are disabled (public_links_disabled)",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
+            },
+            "delete": {
+                "description": "Deletes the note's public link, so its URL stops working for everyone who has it. Succeeds when the note has no link, and while public links are switched off, so links can still be cleaned up. Open to the owner and collaborators; the owner can also revoke the link of a trashed note. Sends note_updated to everyone with access when a link was revoked.",
+                "tags": [
+                    "sharing"
+                ],
+                "summary": "Revoke a note's public link",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Note ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "no content"
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
+            }
+        },
         "/notes/{id}/restore": {
             "post": {
                 "produces": [
@@ -2970,6 +3096,163 @@
                         "CookieAuth": []
                     }
                 ]
+            }
+        },
+        "/public/notes/{token}": {
+            "get": {
+                "description": "Unauthenticated. Returns a reduced, read-only view of the note: no collaborators, labels, color or owner. Unknown, malformed, revoked and expired tokens, a trashed note, and public links being switched off all return the same 404. Rate-limited per client IP (JOT_RATE_LIMIT_PUBLIC_PER_MINUTE, shared with the image endpoints).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "public"
+                ],
+                "summary": "Get a note through its public link",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Public link token",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.PublicNote"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "rate limited",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/public/notes/{token}/images/{id}": {
+            "get": {
+                "description": "Unauthenticated. Serves only images that belong to the note the token publishes; any other image ID returns the same 404 as a dead link. Not cached.",
+                "produces": [
+                    "image/*",
+                    "application/json"
+                ],
+                "tags": [
+                    "public"
+                ],
+                "summary": "Download an image of a note through its public link",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Public link token",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Image ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Image bytes",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "rate limited",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/public/notes/{token}/images/{id}/thumbnail": {
+            "get": {
+                "description": "Unauthenticated. Serves only thumbnails of images that belong to the note the token publishes; any other image ID returns the same 404 as a dead link. Not cached.",
+                "produces": [
+                    "image/jpeg",
+                    "application/json"
+                ],
+                "tags": [
+                    "public"
+                ],
+                "summary": "Download an image thumbnail of a note through its public link",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Public link token",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Image ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Thumbnail JPEG bytes",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "rate limited",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    }
+                }
             }
         },
         "/register": {
@@ -3491,7 +3774,8 @@
                 "invalid_image",
                 "invalid_import_file",
                 "sso_link_unavailable",
-                "sso_unlink_unavailable"
+                "sso_unlink_unavailable",
+                "public_links_disabled"
             ],
             "x-enum-comments": {
                 "CodeAlreadyShared": "409 — the note is already shared with that user.",
@@ -3515,6 +3799,7 @@
                 "CodeMethodNotAllowed": "405 — the route exists but not for this method.",
                 "CodeNotFound": "404 — the resource or route does not exist (or is not visible to the caller).",
                 "CodePATLimitReached": "422 — the user already holds the maximum number of personal access tokens.",
+                "CodePublicLinksDisabled": "403 — the operator turned public note links off (JOT_PUBLIC_LINKS_ENABLED=false).",
                 "CodeRateLimited": "429 — too many requests; honor Retry-After.",
                 "CodeRegistrationDisabled": "403 — self-registration is turned off.",
                 "CodeRequestTooLarge": "413 — the request body exceeds the endpoint's limit.",
@@ -3561,7 +3846,8 @@
                 "400 — the uploaded file claims an accepted type but does not decode as an image.",
                 "400 — the import file is not a readable export of the chosen import type.",
                 "403 — password login is turned off, so there is no local account to link SSO to.",
-                "403 — password login is turned off, so SSO is the only way to sign in and cannot be disconnected."
+                "403 — password login is turned off, so SSO is the only way to sign in and cannot be disconnected.",
+                "403 — the operator turned public note links off (JOT_PUBLIC_LINKS_ENABLED=false)."
             ],
             "x-enum-varnames": [
                 "CodeValidationFailed",
@@ -3596,7 +3882,8 @@
                 "CodeInvalidImage",
                 "CodeInvalidImportFile",
                 "CodeSSOLinkUnavailable",
-                "CodeSSOUnlinkUnavailable"
+                "CodeSSOUnlinkUnavailable",
+                "CodePublicLinksDisabled"
             ]
         },
         "apierr.ErrorDetail": {
@@ -4037,6 +4324,16 @@
                 }
             }
         },
+        "handlers.SetPublicLinkRequest": {
+            "type": "object",
+            "properties": {
+                "expires_at": {
+                    "description": "ExpiresAt is when the link stops working (RFC 3339, in the future), or\nnull for a link that never expires.",
+                    "type": "string",
+                    "x-nullable": true
+                }
+            }
+        },
         "handlers.SetUserPasswordRequest": {
             "type": "object",
             "required": [
@@ -4465,6 +4762,15 @@
                 "position": {
                     "type": "integer"
                 },
+                "public_link": {
+                    "description": "PublicLink is the note's active public link, or null when it has none\n(an expired link is null too). Owner and collaborators alike see it.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.PublicLink"
+                        }
+                    ],
+                    "x-nullable": true
+                },
                 "shared_with": {
                     "type": "array",
                     "items": {
@@ -4612,6 +4918,93 @@
                 "NoteUnreadUpdated"
             ]
         },
+        "models.PublicLink": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "description": "CreatedBy is the user who created the link, or null once that user has\nbeen deleted.",
+                    "type": "string",
+                    "x-nullable": true
+                },
+                "expires_at": {
+                    "description": "ExpiresAt is null for a link that never expires.",
+                    "type": "string",
+                    "x-nullable": true
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.PublicNote": {
+            "type": "object",
+            "properties": {
+                "checked_items_collapsed": {
+                    "description": "CheckedItemsCollapsed is present for list notes only: whether the owner\nkeeps the completed-items section collapsed.",
+                    "type": "boolean"
+                },
+                "content": {
+                    "description": "Content is present for text notes only.",
+                    "type": "string"
+                },
+                "image_ids": {
+                    "description": "ImageIDs lists the note's images in upload order; fetch each through\n/public/notes/{token}/images/{id} (or .../thumbnail).",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "items": {
+                    "description": "Items is present for list notes only.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.PublicNoteItem"
+                    }
+                },
+                "note_type": {
+                    "enum": [
+                        "text",
+                        "list"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.NoteType"
+                        }
+                    ]
+                },
+                "title": {
+                    "description": "Title is always empty for a text note.",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.PublicNoteItem": {
+            "type": "object",
+            "properties": {
+                "completed": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "parent_id": {
+                    "type": "string",
+                    "x-nullable": true
+                },
+                "position": {
+                    "type": "integer"
+                },
+                "text": {
+                    "type": "string"
+                }
+            }
+        },
         "models.User": {
             "type": "object",
             "properties": {
@@ -4694,6 +5087,15 @@
             "properties": {
                 "password_min_length": {
                     "type": "integer"
+                },
+                "public_links_enabled": {
+                    "description": "PublicLinksEnabled is JOT_PUBLIC_LINKS_ENABLED; clients hide the public\nlink UI when it is false.",
+                    "type": "boolean"
+                },
+                "public_url": {
+                    "description": "PublicURL is JOT_PUBLIC_URL as a normalized origin\n(\"https://jot.example.com\"), or null when unset. Clients build public\nlinks from it, falling back to their own address.",
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "registration_enabled": {
                     "type": "boolean"

@@ -79,9 +79,43 @@ type Note struct {
 	Unread                *NoteUnread `json:"unread"`
 	Labels                []Label     `json:"labels"`
 	Images                []NoteImage `json:"images,omitempty"`
+	PublicLink            *PublicLink `json:"public_link"`
 	DeletedAt             *time.Time  `json:"deleted_at"`
 	CreatedAt             time.Time   `json:"created_at"`
 	UpdatedAt             time.Time   `json:"updated_at"`
+}
+
+// PublicLink is a note's public read-only link. Its URL is
+// "{base}/share/{token}", where base is ServerConfig.PublicURL when set.
+type PublicLink struct {
+	Token string `json:"token"`
+	// CreatedBy is nil once the user who created the link has been deleted.
+	CreatedBy *string   `json:"created_by"`
+	CreatedAt time.Time `json:"created_at"`
+	// ExpiresAt is nil for a link that never expires.
+	ExpiresAt *time.Time `json:"expires_at"`
+}
+
+// PublicNote is the reduced view of a note served through its public link.
+// Content is set for text notes only; Items and CheckedItemsCollapsed for
+// list notes only.
+type PublicNote struct {
+	NoteType              NoteType         `json:"note_type"`
+	Title                 string           `json:"title"`
+	UpdatedAt             time.Time        `json:"updated_at"`
+	ImageIDs              []string         `json:"image_ids"`
+	Content               *string          `json:"content,omitempty"`
+	Items                 []PublicNoteItem `json:"items,omitempty"`
+	CheckedItemsCollapsed *bool            `json:"checked_items_collapsed,omitempty"`
+}
+
+// PublicNoteItem is a list item as served through a public link.
+type PublicNoteItem struct {
+	ID        string  `json:"id"`
+	Text      string  `json:"text"`
+	Completed bool    `json:"completed"`
+	ParentID  *string `json:"parent_id"`
+	Position  int     `json:"position"`
 }
 
 // NoteImage is a single image attached to a note. It intentionally mirrors
@@ -418,6 +452,10 @@ type ServerConfig struct {
 	PasswordMinLength   int       `json:"password_min_length"`
 	UploadMaxBytes      int       `json:"upload_max_bytes"`
 	SSO                 SSOConfig `json:"sso"`
+	PublicLinksEnabled  bool      `json:"public_links_enabled"`
+	// PublicURL is the origin public links are built from, or nil when the
+	// operator has not set one.
+	PublicURL *string `json:"public_url"`
 }
 
 // SSOConfig is the public SSO slice of the server config: only what the login

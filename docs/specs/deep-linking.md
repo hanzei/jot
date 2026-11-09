@@ -74,6 +74,12 @@ running webapp never yanks the visitor out to the app. And it is scoped to notes
 even though the app also has a `/settings` screen: a note URL is the one people
 send each other, while settings is somewhere you navigate yourself.
 
+Public note links (`/share/{token}`, #1135) are deliberately **not** handed off
+and stay outside the `jot://` URL shape: they are meant for people without an
+account on the instance, so the read-only viewer in the browser is the
+destination, not a step on the way to the app. `deepLink.ts` has no mapping for
+them and `MobileAppHandoff` only matches `/notes/:id`; keep it that way.
+
 ### Learning whether the app is installed
 
 Navigating to an unhandled custom scheme raises a browser error on iOS Safari,

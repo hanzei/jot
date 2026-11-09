@@ -187,7 +187,7 @@ func (s *noteStore) populateNoteItemsAndDefaults(ctx context.Context, scannedNot
 	return notes, nil
 }
 
-// batchLoadNoteAssociations batch-loads shares, labels, and images for a
+// batchLoadNoteAssociations batch-loads shares, labels, images, and public links for a
 // slice of notes, updating each note in place.
 func (s *noteStore) batchLoadNoteAssociations(ctx context.Context, notes []*Note, userID string) error {
 	if len(notes) == 0 {
@@ -228,6 +228,14 @@ func (s *noteStore) batchLoadNoteAssociations(ctx context.Context, notes []*Note
 		if imgs, ok := imagesMap[n.ID]; ok {
 			n.Images = imgs
 		}
+	}
+
+	linksMap, err := s.getPublicLinksByNoteIDs(ctx, noteIDs)
+	if err != nil {
+		return fmt.Errorf("failed to batch-load public links: %w", err)
+	}
+	for _, n := range notes {
+		n.PublicLink = linksMap[n.ID]
 	}
 
 	return nil
@@ -320,6 +328,12 @@ func (s *noteStore) populateNoteDetails(ctx context.Context, note *Note, userID 
 		return fmt.Errorf("failed to get note images: %w", err)
 	}
 	note.Images = images
+
+	links, err := s.getPublicLinksByNoteIDs(ctx, []string{note.ID})
+	if err != nil {
+		return fmt.Errorf("failed to get public link: %w", err)
+	}
+	note.PublicLink = links[note.ID]
 
 	return nil
 }

@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"net/http"
+	"strings"
 	"testing"
 
+	"github.com/hanzei/jot/server/client"
 	"github.com/hanzei/jot/server/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -148,5 +151,38 @@ func TestRateLimiting(t *testing.T) {
 		// expensive one.
 		plainStatus, _ := doGet(t, u.Client.HTTPClient(), ts.HTTPServer.URL+"/api/v1/notes")
 		assert.Equal(t, http.StatusOK, plainStatus)
+	})
+
+	t.Run("public bucket covers a public note and its images, per IP", func(t *testing.T) {
+		ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
+			cfg.RateLimitEnabled = true
+			cfg.RateLimitPerMinute = 100
+			cfg.RateLimitAuthPerMinute = 100
+			cfg.RateLimitExpensivePerMinute = 100
+			cfg.RateLimitPublicPerMinute = 3
+		})
+		u := ts.createTestUser(t, "publicrateuser", "password123", false)
+		note, err := u.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "x"})
+		require.NoError(t, err)
+		img, err := u.Client.UploadNoteImage(t.Context(), note.ID, "a.png", bytes.NewReader(testPNG(t, 2, 2)))
+		require.NoError(t, err)
+		link, err := u.Client.SetPublicLink(t.Context(), note.ID, nil)
+		require.NoError(t, err)
+
+		base := ts.HTTPServer.URL + "/api/v1/public/notes/" + link.Token
+		for _, path := range []string{"", "/images/" + img.ID, "/images/" + img.ID + "/thumbnail"} {
+			status, _ := doGet(t, ts.httpClient, base+path)
+			assert.Equal(t, http.StatusOK, status, path)
+		}
+
+		// Dead links draw from the same bucket, so guessing tokens is throttled too.
+		status, header, body := rawRequest(t, ts.httpClient, http.MethodGet, ts.HTTPServer.URL+"/api/v1/public/notes/"+strings.Repeat("A", 43), nil, nil)
+		requireEnvelope(t, http.StatusTooManyRequests, "rate_limited", status, header, body)
+		assert.NotEmpty(t, header.Get("Retry-After"))
+		assert.Equal(t, "no-referrer", header.Get("Referrer-Policy"))
+
+		// The authenticated API has its own buckets.
+		meStatus, _ := doGet(t, u.Client.HTTPClient(), ts.HTTPServer.URL+"/api/v1/users/me")
+		assert.Equal(t, http.StatusOK, meStatus)
 	})
 }
