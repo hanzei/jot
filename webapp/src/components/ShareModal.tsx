@@ -9,10 +9,13 @@ import {
   recentShareTargets,
   type Note,
   type NoteShare,
+  type PublicLink,
   type User,
 } from '@jot/shared';
 import { notes, users as usersApi } from '@/utils/api';
 import { useSizeTransition } from '@/hooks/useSizeTransition';
+import PublicLinkSection from '@/components/PublicLinkSection';
+import { PUBLIC_LINKS_DISABLED, type PublicLinksConfig } from '@/utils/publicLink';
 
 interface ShareModalProps {
   note: Note | null;
@@ -26,9 +29,13 @@ interface ShareModalProps {
    */
   notesList?: Note[];
   currentUserId?: string | undefined;
+  /** Whether to offer public links, and the base URL to build them on. */
+  publicLinks?: PublicLinksConfig | undefined;
+  /** Called after this dialog created, changed or revoked the note's public link. */
+  onPublicLinkChange?: (noteId: string, link: PublicLink | null) => void;
 }
 
-export default function ShareModal({ note, isOpen, onClose, notesList, currentUserId }: ShareModalProps) {
+export default function ShareModal({ note, isOpen, onClose, notesList, currentUserId, publicLinks = PUBLIC_LINKS_DISABLED, onPublicLinkChange }: ShareModalProps) {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [shares, setShares] = useState<NoteShare[]>([]);
@@ -104,7 +111,7 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
   // Softly animate the modal's height when its contents change (a collaborator
   // added/removed, suggestions toggled, or a status message shown/hidden).
   const sizeTransitionKey =
-    `${shares.length}:${showSuggestions}:${orderedSuggestions.length}:${!!error}:${!!success}:${confirmingLeave}`;
+    `${shares.length}:${showSuggestions}:${orderedSuggestions.length}:${!!error}:${!!success}:${confirmingLeave}:${note?.public_link?.token ?? ''}:${note?.public_link?.expires_at ?? ''}`;
   const panelRef = useSizeTransition<HTMLDivElement>(sizeTransitionKey);
 
   // Written as a promise chain rather than an `async` function so state is only
@@ -115,22 +122,26 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
   // note we just left could otherwise land after the new note's and show the
   // wrong collaborators. The request id discards superseded responses wherever
   // this is called from, including the handleShare/handleUnshare refreshes.
+  //
+  // Keyed on the note's id, not the object: the caller hands in a new copy of
+  // the same note whenever its public link changes, which must not refetch.
+  const noteId = note?.id;
   const loadShares = useCallback(() => {
-    if (!note) return Promise.resolve();
+    if (!noteId) return Promise.resolve();
 
     const requestId = ++sharesRequestIdRef.current;
     const isCurrent = () => requestId === sharesRequestIdRef.current;
 
-    return notes.getShares(note.id)
+    return notes.getShares(noteId)
       .then(sharesList => { if (isCurrent()) setShares(sharesList || []); })
       .catch(error => {
         console.error('Failed to load shares:', error);
         if (isCurrent()) setShares([]);
       });
-  }, [note]);
+  }, [noteId]);
 
   useEffect(() => {
-    if (!note || !isOpen) return;
+    if (!noteId || !isOpen) return;
 
     // The user list is only ever fetched here, so an effect-scoped flag is
     // enough to drop a response whose run has been superseded.
@@ -155,7 +166,7 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
       });
 
     return () => { cancelled = true; };
-  }, [note, isOpen, loadShares]);
+  }, [noteId, isOpen, loadShares]);
 
   // Handle click outside to close suggestions
   useEffect(() => {
@@ -507,6 +518,14 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
                 {t('share.notSharedYet')}
               </p>
             )}
+
+            <PublicLinkSection
+              note={note}
+              config={publicLinks}
+              currentUserId={currentUserId}
+              users={users}
+              onChange={onPublicLinkChange}
+            />
 
             {/* Only offer leaving once identity is resolved: handleLeave needs a
                 currentUserId to target, so never render a control we couldn't

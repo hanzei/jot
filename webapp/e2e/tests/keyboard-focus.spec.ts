@@ -194,6 +194,32 @@ test.describe('Modal focus management', () => {
     expect(await focusIsInside(noteDialog)).toBe(true);
   });
 
+  test('public link section stays inside the share modal, and the revoke confirmation traps and restores focus', async ({ authenticatedUser, page, dashboardPage, publicLinkSection }) => {
+    void authenticatedUser;
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Public Link Focus Note');
+    await dashboardPage.openNote('Public Link Focus Note');
+    await dashboardPage.openShareModalFromModal();
+    await publicLinkSection.create();
+
+    const shareDialog = page.getByRole('dialog', { name: 'Collaborators' });
+    await expectFocusTrapped(page, shareDialog);
+
+    const revoke = publicLinkSection.section().getByRole('button', { name: 'Revoke link' });
+    await revoke.focus();
+    await page.keyboard.press('Enter');
+    const confirm = page.getByRole('dialog', { name: 'Revoke public link?' });
+    await expect(confirm.getByRole('button', { name: 'Revoke' })).toBeVisible();
+    await expectFocusTrapped(page, confirm, 6);
+
+    // Cancelling returns focus to the button that opened the confirmation,
+    // and Escape there closes only the confirmation, not the share modal.
+    await page.keyboard.press('Escape');
+    await expect(confirm).toBeHidden();
+    await expect(revoke).toBeFocused();
+    await expect(publicLinkSection.urlField()).toBeVisible();
+  });
+
   test('image lightbox traps focus and closes on Escape', async ({ authenticatedUser, page, dashboardPage }) => {
     void authenticatedUser;
     await dashboardPage.goto();

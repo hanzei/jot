@@ -42,6 +42,11 @@ else in the preview does. An
 different reason, and it reaches its targets through a button of its own
 instead — §1.2.
 
+The webapp's public note viewer (`/share/{token}`, #1135) renders like a
+read-only open note: text content through `renderMarkdown` with live links and
+highlighting but no task checkboxes, and item text through the inline subset
+with live links. It has no renderer of its own.
+
 Both clients render the same feature set from the same source string, so a note
 written on a phone reads identically in a browser and the other way round.
 

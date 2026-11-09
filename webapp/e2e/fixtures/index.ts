@@ -10,6 +10,8 @@ import { MobileAppHandoffPage } from '../pages/MobileAppHandoffPage';
 import { MockIdpPage } from '../pages/MockIdpPage';
 import { NoteConflictBanner } from '../pages/NoteConflictBanner';
 import { ErrorFallbackPage } from '../pages/ErrorFallbackPage';
+import { PublicNotePage } from '../pages/PublicNotePage';
+import { PublicLinkSection } from '../pages/PublicLinkSection';
 
 export { expect };
 
@@ -42,6 +44,8 @@ type Fixtures = {
   mockIdpPage: MockIdpPage;
   noteConflictBanner: NoteConflictBanner;
   errorFallbackPage: ErrorFallbackPage;
+  publicNotePage: PublicNotePage;
+  publicLinkSection: PublicLinkSection;
   /** Register a fresh user and log them in; resolves to { username, password } */
   authenticatedUser: { username: string; password: string };
 };
@@ -76,6 +80,12 @@ export const test = base.extend<Fixtures>({
   },
   errorFallbackPage: async ({ page }, use) => {
     await use(new ErrorFallbackPage(page));
+  },
+  publicNotePage: async ({ page }, use) => {
+    await use(new PublicNotePage(page));
+  },
+  publicLinkSection: async ({ page }, use) => {
+    await use(new PublicLinkSection(page));
   },
   authenticatedUser: async ({ page }, use) => {
     const username = uniqueUsername();

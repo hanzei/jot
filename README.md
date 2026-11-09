@@ -29,6 +29,10 @@ compiled web app, while SQLite keeps the default deployment small and portable.
 
 - **Sharing**: Share notes with other users while preserving owner/share access
   boundaries.
+- **Public links**: Publish a read-only copy of a note at a `/share/…` link that
+  works without an account, with an optional expiry; the owner and
+  collaborators can copy, re-time or revoke it from the share dialog. Operators
+  can switch the feature off with `JOT_PUBLIC_LINKS_ENABLED`.
 - **Unread badges**: Note cards mark a note shared with you as "New" until you
   open it, and as "Updated" when a collaborator changed it since you last
   looked.

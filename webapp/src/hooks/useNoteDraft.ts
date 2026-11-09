@@ -17,6 +17,7 @@ import {
   type NoteType,
 } from '@jot/shared';
 import { notes } from '@/utils/api';
+import { httpStatus } from '@/utils/apiError';
 import type { ListItem } from '@/utils/noteItems';
 import type { CompletedItemsBaseline } from '@/hooks/useCompletedItems';
 
@@ -35,9 +36,6 @@ export class NoteConflictError extends Error {
     this.name = 'NoteConflictError';
   }
 }
-
-const httpStatus = (err: unknown): number | undefined =>
-  (err as { response?: { status?: number } })?.response?.status;
 
 const emptyDraft = (): AutoSaveDraft => ({
   title: '',

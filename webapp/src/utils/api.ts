@@ -121,4 +121,19 @@ export const images = {
   delete: jot.images.delete,
 };
 
+// The public note viewer's calls go through their own instance, without the
+// interceptor above: a visitor without an account must never be sent to
+// /login, and a dead link is the viewer's own 404 state rather than a failed
+// request worth recording in a signed-in user's diagnostics.
+const publicApi = axios.create({ baseURL: API_BASE_PATH, timeout: 10_000 });
+
+export const { publicNotes } = createJotApi(publicApi);
+
+// A public note's images, loaded by <img> straight from these URLs. The token
+// scopes them: the server serves only images that belong to that note.
+export const publicNoteImages = (token: string) => ({
+  url: (id: string): string => apiUrl(apiPaths.publicNoteImage(token, id)),
+  thumbnailUrl: (id: string): string => apiUrl(apiPaths.publicNoteImageThumbnail(token, id)),
+});
+
 export default api;

@@ -1,12 +1,15 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { PUBLIC_NOTE_PATH_PREFIX } from '@jot/shared';
 import App from './App.tsx';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import ErrorFallback from '@/components/ErrorFallback';
 import './index.css';
 
-// Register service worker for PWA functionality
-if ('serviceWorker' in navigator) {
+// Register service worker for PWA functionality. Not from a public note page
+// (/share/{token}): its visitor usually has no account, and installing the
+// worker would download and keep the whole app for a single read-only note.
+if ('serviceWorker' in navigator && !window.location.pathname.startsWith(PUBLIC_NOTE_PATH_PREFIX)) {
   window.addEventListener('load', async () => {
     try {
       const { Workbox } = await import('workbox-window');

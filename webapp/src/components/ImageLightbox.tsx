@@ -4,9 +4,11 @@ import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { NoteImage } from '@jot/shared';
 import { images as imagesApi } from '@/utils/api';
+import type { ImageUrls } from '@/components/NoteImageGallery';
 
 interface ImageLightboxProps {
-  images: NoteImage[];
+  images: Pick<NoteImage, 'id' | 'filename'>[];
+  urls?: Pick<ImageUrls, 'url'>;
   /** null means closed. Kept mounted regardless (see below) so the close transition can play. */
   index: number | null;
   onIndexChange: (index: number) => void;
@@ -21,7 +23,7 @@ interface ImageLightboxProps {
 // than being conditionally rendered by the caller, so headlessui's own
 // mount/unmount timing gets a chance to play the close transition instead of
 // the panel vanishing instantly.
-export default function ImageLightbox({ images, index, onIndexChange, onClose }: ImageLightboxProps) {
+export default function ImageLightbox({ images, urls = imagesApi, index, onIndexChange, onClose }: ImageLightboxProps) {
   const { t } = useTranslation();
   const isOpen = index !== null;
   // Clamp against a live SSE removal shrinking `images` while open, rather
@@ -93,7 +95,7 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose }:
           )}
           {image && (
             <img
-              src={imagesApi.url(image.id)}
+              src={urls.url(image.id)}
               alt={image.filename}
               // min-w/min-h keep the panel from shrinking to a tiny image's
               // intrinsic size, which would otherwise crowd the prev/next/close

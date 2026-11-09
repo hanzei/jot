@@ -2,6 +2,7 @@ import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } fr
 import { Plus, FileText, Archive, Trash2, ClipboardCheck, ArrowUpDown, Search, X, Pin } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { notes, users as usersApi } from '@/utils/api';
+import { httpStatus } from '@/utils/apiError';
 import { getUser, getSettings, setSettings } from '@/utils/auth';
 import {
   UPLOAD_MAX_BYTES,
@@ -13,6 +14,7 @@ import {
   type Note,
   type NoteImage,
   type NoteType,
+  type PublicLink,
   type User,
   type SSEEvent,
   type NoteSort,
@@ -24,6 +26,7 @@ import SearchBar from '@/components/SearchBar';
 import AnimatedNoteGrid from '@/components/AnimatedNoteGrid';
 import NoteModal from '@/components/NoteModal';
 import ShareModal from '@/components/ShareModal';
+import type { PublicLinksConfig } from '@/utils/publicLink';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { useAuthenticatedLayout } from '@/components/AuthenticatedLayout';
@@ -57,9 +60,11 @@ interface DashboardProps {
   // Server-configured upload cap (falls back to the shared default if the
   // parent hasn't fetched /config yet, or the route is used without it).
   uploadMaxBytes?: number;
+  /** `/config`'s public link fields, for the share dialog. */
+  publicLinks?: PublicLinksConfig;
 }
 
-export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: DashboardProps) {
+export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLinks }: DashboardProps) {
   const { t } = useTranslation();
   const { showToast, showErrorToast } = useToast();
   const { noteId: noteIdParam } = useParams<{ noteId?: string }>();
@@ -579,6 +584,14 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
       }
     }
 
+    // An open share dialog shows the note's public link, which another user
+    // can create, re-time or revoke. Those changes arrive as note_updated with
+    // the note's updated_at and version unchanged.
+    if (event.type === 'note_updated' && event.data.note?.id === note_id) {
+      const updatedNote = event.data.note;
+      setSharingNote(prev => prev?.id === note_id ? updatedNote : prev);
+    }
+
     if (editingNote && note_id === editingNote.id) {
       if ((event.type === 'note_updated' || event.type === 'note_shared') && event.data.note?.id === note_id) {
         setEditingNote(event.data.note);
@@ -982,6 +995,14 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     setIsShareModalOpen(true);
   };
 
+  // Keeps the cached copies of a note in step with the public link the share
+  // dialog just set or revoked; the dialog reads it back from `sharingNote`.
+  // The open editor's copy is refreshed when the dialog closes, below.
+  const handlePublicLinkChange = useCallback((noteId: string, link: PublicLink | null) => {
+    setSharingNote(prev => prev?.id === noteId ? { ...prev, public_link: link } : prev);
+    updateNotesList(prev => prev.map(n => n.id === noteId ? { ...n, public_link: link } : n));
+  }, [updateNotesList]);
+
   const handleShareModalClose = async () => {
     const noteId = sharingNote?.id;
     setIsShareModalOpen(false);
@@ -992,7 +1013,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
         const refreshed = await notes.getById(noteId);
         setEditingNote(refreshed);
       } catch (err: unknown) {
-        const status = (err as { response?: { status?: number } })?.response?.status;
+        const status = httpStatus(err);
         if (status === 403 || status === 404) {
           setIsModalOpen(false);
           setEditingNote(null);
@@ -1556,6 +1577,8 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
             onClose={handleShareModalClose}
             notesList={notesList}
             currentUserId={user?.id}
+            publicLinks={publicLinks}
+            onPublicLinkChange={handlePublicLinkChange}
           />
         )}
       </PageContent>
