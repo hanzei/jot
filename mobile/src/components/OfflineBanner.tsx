@@ -6,7 +6,7 @@ import Banner from './Banner';
 
 /**
  * Shown while the device is offline. Visibility and safe-area ownership are
- * decided centrally by {@link useVisibleTopBanners}; this component only
+ * decided centrally by {@link useTopBanner}; this component only
  * supplies the presentation.
  */
 export default function OfflineBanner({ visible, applyTopInset }: TopBannerProps) {

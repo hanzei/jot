@@ -37,6 +37,7 @@ import { useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote
 import { useOfflineNote } from '../hooks/useOfflineNotes';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { useFailedNoteIds } from '../store/OfflineContext';
+import { useReportNoteFailureBar } from '../store/noteFailureBar';
 import { useToast } from '../hooks/useToast';
 import { useConfirm } from '../hooks/useConfirm';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -132,6 +133,9 @@ export default function NoteEditorScreen() {
   // editing and persistence hooks below act through.
   const editor = useEditorDoc({ initialNoteId, initialNoteType, sharedText, originColor });
   const { noteId, title, content, noteType, items, checkedItemsCollapsed, pinned, archived, color, labels, hasCreated } = editor;
+  // While this note shows its own failed-change bar, the global banner would
+  // repeat the same message above it.
+  useReportNoteFailureBar(!!noteId && failedNoteIds.has(noteId));
   const {
     noteIdRef,
     noteTypeRef,

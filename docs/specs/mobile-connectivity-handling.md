@@ -163,6 +163,13 @@ Rules of thumb:
   terminal error.
 - Blocking dialogs are reserved for decisions only the user can make, not for
   waiting on the network.
+- **One top banner at a time** (`useTopBanner`). States overlap — an outage
+  is usually also a stalled sync — so the banners are ranked, highest first:
+  offline → server unreachable (`sseReconnect`) → sync keeps failing
+  (`syncError`) → changes that couldn't be saved (`syncFailures`, needs
+  review) → session not verified (`revalidation`). The failed-changes banner
+  waits until the connection states clear, and hides while the focused note
+  shows its own failed-change bar.
 
 ---
 

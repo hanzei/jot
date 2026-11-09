@@ -8,7 +8,7 @@ import Banner from './Banner';
  * Shown when the device is online but the sync queue has failed to drain too
  * many times in a row (see OfflineContext's MAX_CONSECUTIVE_DRAIN_FAILURES).
  * Visibility and safe-area ownership are decided centrally by
- * {@link useVisibleTopBanners}.
+ * {@link useTopBanner}.
  */
 export default function SyncErrorBanner({ visible, applyTopInset }: TopBannerProps) {
   const { colors } = useTheme();

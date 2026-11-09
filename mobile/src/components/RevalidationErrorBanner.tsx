@@ -8,7 +8,7 @@ import Banner from './Banner';
  * Shown when revalidateSession receives a permanent non-401 HTTP error
  * (e.g. 403, 422) from the server while the device is online. Network errors
  * and 5xx/timeout are transient and do not trigger this banner. Visibility and
- * safe-area ownership are decided centrally by {@link useVisibleTopBanners}.
+ * safe-area ownership are decided centrally by {@link useTopBanner}.
  */
 export default function RevalidationErrorBanner({ visible, applyTopInset }: TopBannerProps) {
   const { colors } = useTheme();

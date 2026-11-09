@@ -118,6 +118,27 @@ describe('Banner', () => {
     expect(style.flexShrink).toBeUndefined();
   });
 
+  it('shows a chevron only when the banner is tappable', async () => {
+    const plain = await renderBanner({ visible: true, applyTopInset: true });
+    expect(plain.queryByTestId('banner-chevron')).toBeNull();
+    await plain.unmount();
+
+    const tappable = await render(
+      <Banner
+        visible
+        icon={CloudOff}
+        text="2 changes couldn't be saved — Review"
+        backgroundColor="#111827"
+        borderColor="#374151"
+        textColor="#ffffff"
+        onPress={jest.fn()}
+        accessibilityLabel="Review"
+        testID="banner"
+      />,
+    );
+    expect(tappable.getByTestId('banner-chevron')).toBeTruthy();
+  });
+
   it('does not intercept touches while animating closed', async () => {
     const onPress = jest.fn();
     const ui = (visible: boolean) => (

@@ -2,7 +2,8 @@ import { renderHook } from '@testing-library/react-native';
 import { useOfflineContext } from '../src/store/OfflineContext';
 import { useSSEContext } from '../src/store/SSEContext';
 import { useAuth } from '../src/store/AuthContext';
-import { useVisibleTopBanners } from '../src/hooks/useTopBanners';
+import { useTopBanner } from '../src/hooks/useTopBanners';
+import { useNoteFailureBarShown } from '../src/store/noteFailureBar';
 import { useBannerShown } from '../src/hooks/useBannerShown';
 
 jest.mock('../src/store/OfflineContext', () => ({
@@ -14,10 +15,14 @@ jest.mock('../src/store/SSEContext', () => ({
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: jest.fn(),
 }));
+jest.mock('../src/store/noteFailureBar', () => ({
+  useNoteFailureBarShown: jest.fn(() => false),
+}));
 
 const mockOffline = useOfflineContext as jest.MockedFunction<typeof useOfflineContext>;
 const mockSSE = useSSEContext as jest.MockedFunction<typeof useSSEContext>;
 const mockAuth = useAuth as jest.MockedFunction<typeof useAuth>;
+const mockNoteFailureBarShown = useNoteFailureBarShown as jest.MockedFunction<typeof useNoteFailureBarShown>;
 
 const baseOffline = {
   isConnected: true,
@@ -39,6 +44,8 @@ function setup(opts: {
   revalidationFailed?: boolean;
   syncFailureCount?: number;
   syncFailuresBannerDismissed?: boolean;
+  isLocalMode?: boolean;
+  noteFailureBarShown?: boolean;
 } = {}) {
   mockOffline.mockReturnValue({
     ...baseOffline,
@@ -53,61 +60,58 @@ function setup(opts: {
   });
   mockAuth.mockReturnValue({
     revalidationFailed: opts.revalidationFailed ?? false,
+    isLocalMode: opts.isLocalMode ?? false,
   } as unknown as ReturnType<typeof useAuth>);
+  mockNoteFailureBarShown.mockReturnValue(opts.noteFailureBarShown ?? false);
 }
 
-describe('useVisibleTopBanners', () => {
+describe('useTopBanner', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     setup();
   });
 
-  it('returns no banners when everything is healthy', async () => {
-    const { result } = await renderHook(() => useVisibleTopBanners());
-    expect(result.current).toEqual([]);
+  const shown = async () => (await renderHook(() => useTopBanner())).result.current;
+
+  it('shows no banner when everything is healthy', async () => {
+    expect(await shown()).toBeNull();
   });
 
-  it('shows only the offline banner while offline', async () => {
-    // syncError/reconnect are gated on isConnected, so offline wins alone.
-    setup({ isConnected: false, syncError: true, sseReconnecting: true });
-    const { result } = await renderHook(() => useVisibleTopBanners());
-    expect(result.current).toEqual(['offline']);
+  it('shows only the offline banner while offline, whatever else is true', async () => {
+    setup({ isConnected: false, syncError: true, sseReconnecting: true, revalidationFailed: true, syncFailureCount: 2 });
+    expect(await shown()).toBe('offline');
   });
 
-  it('stacks the sync-failures banner below the offline banner when both apply', async () => {
-    // Dead-lettered changes stay failed regardless of connectivity, so the
-    // sync-failures banner is intentionally not gated on isConnected.
-    setup({ isConnected: false, syncFailureCount: 2 });
-    const { result } = await renderHook(() => useVisibleTopBanners());
-    expect(result.current).toEqual(['offline', 'syncFailures']);
+  // The device screenshot behind this: "Connecting to server…", the sync-error
+  // strip, and "5 changes couldn't be saved" stacked, all from one outage.
+  it('shows only the reconnect banner while the server is unreachable', async () => {
+    setup({ sseReconnecting: true, syncError: true, revalidationFailed: true, syncFailureCount: 5 });
+    expect(await shown()).toBe('sseReconnect');
   });
 
-  it('shows the SSE reconnect banner when online but the stream is down', async () => {
-    setup({ sseReconnecting: true });
-    const { result } = await renderHook(() => useVisibleTopBanners());
-    expect(result.current).toEqual(['sseReconnect']);
+  it('shows no reconnect banner in local mode', async () => {
+    setup({ sseReconnecting: true, isLocalMode: true });
+    expect(await shown()).toBeNull();
   });
 
-  it('stacks banners in a fixed top-to-bottom order', async () => {
-    setup({
-      sseReconnecting: true,
-      syncError: true,
-      revalidationFailed: true,
-      syncFailureCount: 2,
-    });
-    const { result } = await renderHook(() => useVisibleTopBanners());
-    expect(result.current).toEqual([
-      'sseReconnect',
-      'syncError',
-      'revalidation',
-      'syncFailures',
-    ]);
+  it('prefers the sync-error banner over failed changes and revalidation', async () => {
+    setup({ syncError: true, revalidationFailed: true, syncFailureCount: 2 });
+    expect(await shown()).toBe('syncError');
   });
 
-  it('hides the sync-failures banner once dismissed', async () => {
-    setup({ syncFailureCount: 3, syncFailuresBannerDismissed: true });
-    const { result } = await renderHook(() => useVisibleTopBanners());
-    expect(result.current).toEqual([]);
+  it('shows failed changes once the connection states are clear', async () => {
+    setup({ revalidationFailed: true, syncFailureCount: 2 });
+    expect(await shown()).toBe('syncFailures');
+  });
+
+  it('falls through to the next banner once failed changes are dismissed', async () => {
+    setup({ syncFailureCount: 3, syncFailuresBannerDismissed: true, revalidationFailed: true });
+    expect(await shown()).toBe('revalidation');
+  });
+
+  it('hides failed changes while a focused note shows its own failed-change bar', async () => {
+    setup({ syncFailureCount: 3, noteFailureBarShown: true });
+    expect(await shown()).toBeNull();
   });
 });
 

@@ -1,6 +1,6 @@
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, useAnimatedValue, View, type LayoutChangeEvent } from 'react-native';
-import { X, type LucideIcon } from 'lucide-react-native';
+import { ChevronRight, X, type LucideIcon } from 'lucide-react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 /** Duration of the show/hide animation. */
@@ -130,6 +130,9 @@ export default function Banner({
     <View style={styles.content}>
       <Icon size={16} color={textColor} />
       <Text style={[styles.text, { color: textColor }]} testID={testID ? `${testID}-text` : undefined}>{text}</Text>
+      {/* A tappable banner leads somewhere; the chevron says so, matching the
+          note editor's failed-change bar. */}
+      {onPress && <ChevronRight size={16} color={textColor} {...(testID ? { testID: `${testID}-chevron` } : {})} />}
     </View>
   );
 

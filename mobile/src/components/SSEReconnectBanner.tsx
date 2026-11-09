@@ -8,7 +8,7 @@ import Banner from './Banner';
  * Shown when the device is online but the SSE connection to the server has
  * been down for more than 2 seconds. Covers both initial cold-start (server
  * unreachable from the beginning) and mid-session disconnections. Visibility
- * and safe-area ownership are decided centrally by {@link useVisibleTopBanners}.
+ * and safe-area ownership are decided centrally by {@link useTopBanner}.
  */
 export default function SSEReconnectBanner({ visible, applyTopInset }: TopBannerProps) {
   const { colors } = useTheme();
