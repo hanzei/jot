@@ -111,11 +111,8 @@ export default function NoteImageGallery<T extends GalleryImage>({ images, urls 
   // click and keyboard handling.
   const renderTile = (tile: Tile<T>, index: number) => {
     const isOverlayTile = overlayCount > 0 && index === visibleCount - 1;
-    // An image without a known size (a public note's, whose response carries
-    // only IDs) gets the same 4:3 frame as an upload.
-    const aspectRatio = tile.kind === 'image' && tile.image.width > 0 && tile.image.height > 0
-      ? `${tile.image.width} / ${tile.image.height}`
-      : '4 / 3';
+    // An upload's size isn't known yet, so it gets a 4:3 frame.
+    const aspectRatio = tile.kind === 'image' ? `${tile.image.width} / ${tile.image.height}` : '4 / 3';
     const frameStyle = isGrid ? undefined : { aspectRatio };
     const frameClassName = `${TILE_FRAME_CLASSNAME} ${isGrid ? 'aspect-square' : 'block w-full max-h-80'} ${
       spanLastTile && index === 2 ? 'col-span-2' : ''

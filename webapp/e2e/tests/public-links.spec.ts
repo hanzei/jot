@@ -100,6 +100,8 @@ test.describe('Public note viewer', () => {
     const image = page.getByRole('img', { name: 'Image 1' });
     await expect(image).toHaveAttribute('src', new RegExp(`/api/v1/public/notes/${token}/images/[^/]+/thumbnail$`));
     await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+    // The single-image frame takes the image's real (1x1) aspect ratio, not a 4:3 crop.
+    await expect(image.locator('xpath=../..')).toHaveCSS('aspect-ratio', '1 / 1');
   });
 
   test('starts the completed section in the note\'s collapsed state and toggles it locally', async ({ page, request, publicNotePage }) => {

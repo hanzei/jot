@@ -193,6 +193,9 @@ export interface SetPublicLinkRequest {
   expires_at: string | null;
 }
 
+/** An image as served through a public link: only what the viewer lays out with. */
+export type PublicNoteImage = Pick<NoteImage, 'id' | 'width' | 'height'>;
+
 /** A list item as served through a public link. `id` only anchors `parent_id`. */
 export interface PublicNoteItem {
   id: string;
@@ -206,7 +209,7 @@ interface BasePublicNote {
   note_type: NoteType;
   updated_at: string;
   /** Fetch each through `apiPaths.publicNoteImage` / `publicNoteImageThumbnail`. */
-  image_ids: string[];
+  images: PublicNoteImage[];
 }
 
 export interface PublicTextNote extends BasePublicNote {

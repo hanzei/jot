@@ -33,9 +33,9 @@ type PublicNote struct {
 	// Title is always empty for a text note.
 	Title     string    `json:"title"`
 	UpdatedAt time.Time `json:"updated_at"`
-	// ImageIDs lists the note's images in upload order; fetch each through
+	// Images lists the note's images in upload order; fetch each through
 	// /public/notes/{token}/images/{id} (or .../thumbnail).
-	ImageIDs []string `json:"image_ids"`
+	Images []PublicNoteImage `json:"images"`
 	// Content is present for text notes only.
 	Content *string `json:"content,omitzero"`
 	// Items is present for list notes only.
@@ -43,6 +43,15 @@ type PublicNote struct {
 	// CheckedItemsCollapsed is present for list notes only: whether the owner
 	// keeps the completed-items section collapsed.
 	CheckedItemsCollapsed *bool `json:"checked_items_collapsed,omitzero"`
+}
+
+// PublicNoteImage is an image as served through a public link: only what the
+// viewer needs to lay it out before it loads, none of NoteImage's filename,
+// content type, or upload time.
+type PublicNoteImage struct {
+	ID     string `json:"id"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
 }
 
 // PublicNoteItem is a list item as served through a public link. ID is only
@@ -272,9 +281,9 @@ func (s *noteStore) GetPublicNote(ctx context.Context, token string) (*PublicNot
 	if err != nil {
 		return nil, fmt.Errorf("get public note images: %w", err)
 	}
-	note.ImageIDs = make([]string, 0, len(images))
+	note.Images = make([]PublicNoteImage, 0, len(images))
 	for _, img := range images {
-		note.ImageIDs = append(note.ImageIDs, img.ID)
+		note.Images = append(note.Images, PublicNoteImage{ID: img.ID, Width: img.Width, Height: img.Height})
 	}
 
 	return &note, nil

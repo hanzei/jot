@@ -4957,11 +4957,11 @@ const docTemplate = `{
                     "description": "Content is present for text notes only.",
                     "type": "string"
                 },
-                "image_ids": {
-                    "description": "ImageIDs lists the note's images in upload order; fetch each through\n/public/notes/{token}/images/{id} (or .../thumbnail).",
+                "images": {
+                    "description": "Images lists the note's images in upload order; fetch each through\n/public/notes/{token}/images/{id} (or .../thumbnail).",
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/models.PublicNoteImage"
                     }
                 },
                 "items": {
@@ -4988,6 +4988,20 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
+                }
+            }
+        },
+        "models.PublicNoteImage": {
+            "type": "object",
+            "properties": {
+                "height": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "width": {
+                    "type": "integer"
                 }
             }
         },
