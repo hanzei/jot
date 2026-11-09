@@ -153,11 +153,14 @@ function isGatewayStatus(status: number | undefined): boolean {
  * Whether a request failed because the client gave up waiting for a response
  * (axios reports its own `timeout` as ECONNABORTED, or ETIMEDOUT with
  * `transitional.clarifyTimeoutError`), as opposed to a plain network error.
+ * Axios also raises ECONNABORTED as "Request aborted" when the platform aborts
+ * the request (no response, no timeout); that is not a timeout, so it stays a
+ * plain network error.
  */
 function isClientTimeout(err: unknown): boolean {
-  return axios.isAxiosError(err)
-    && err.response === undefined
-    && (err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT');
+  if (!axios.isAxiosError(err) || err.response !== undefined) return false;
+  if (err.code === 'ETIMEDOUT') return true;
+  return err.code === 'ECONNABORTED' && err.message !== 'Request aborted';
 }
 
 /** Timeout for the probe in {@link isGlobalDrainFailureProbed}. */
@@ -178,10 +181,10 @@ const SERVER_PROBE_TIMEOUT_MS = 5000;
  * most once per drain pass.
  */
 export async function isGlobalDrainFailureProbed(err: unknown): Promise<boolean> {
-  if (isClientTimeout(err)) return !(await serverAnswers());
-  if (isGlobalDrainFailure(err)) return true;
-  if (!axios.isAxiosError(err) || !isGatewayStatus(err.response?.status)) return false;
-  return !(await serverAnswers());
+  const ambiguous = isClientTimeout(err)
+    || (axios.isAxiosError(err) && isGatewayStatus(err.response?.status));
+  if (ambiguous) return !(await serverAnswers());
+  return isGlobalDrainFailure(err);
 }
 
 /**
@@ -733,7 +736,8 @@ async function recordDeadLetter(
  * edit isn't lost (#492).
  *
  * Transient failures split two ways (issue #714):
- *   - *Global* connectivity failures — no server response (network error/timeout)
+ *   - *Global* connectivity failures — no server response (a network error, or a
+ *     client timeout / gateway status while the server does not answer a probe)
  *     or a whole-queue-blocking status (401 re-auth, 408, 429 rate-limit) — stop
  *     the drain without charging the head entry, since every entry would fail the
  *     same way; the remainder retries on the next reconnect.
@@ -1066,9 +1070,8 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
       } else {
         // Entry-specific transient failure: a 5xx tied to this op's payload (a
         // gateway status or a client timeout only when the server answered the
-        // probe), or a
-        // non-HTTP error thrown while processing this entry (corrupted body, a
-        // local DB error). Charge the entry's attempt counter; once it has failed
+        // probe), or a non-HTTP error thrown while processing this entry
+        // (corrupted body, a local DB error). Charge the entry's attempt counter; once it has failed
         // MAX_ENTRY_DRAIN_ATTEMPTS times, dead-letter it and continue *past* it so
         // it can't wedge the FIFO head forever (issue #714). Below the cap, stop
         // and retry the whole queue on the next drain (preserving FIFO/backoff).

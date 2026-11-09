@@ -515,6 +515,18 @@ describe('drainQueue', () => {
       expect(mockApi.get).not.toHaveBeenCalled();
       expect(await attemptsFor(first)).toBe(MAX_ENTRY_DRAIN_ATTEMPTS - 1);
     });
+
+    it('does not probe on an aborted request (ECONNABORTED without a timeout)', async () => {
+      const { first } = await seedAtCap();
+      mockApi.patch.mockRejectedValueOnce(
+        Object.assign(new Error('Request aborted'), { isAxiosError: true, code: 'ECONNABORTED', response: undefined }),
+      );
+
+      await drainQueue(db);
+
+      expect(mockApi.get).not.toHaveBeenCalled();
+      expect(await attemptsFor(first)).toBe(MAX_ENTRY_DRAIN_ATTEMPTS - 1);
+    });
   });
 
   describe('a gateway status (502/503/504) from a reverse proxy', () => {

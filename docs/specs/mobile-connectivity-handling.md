@@ -208,8 +208,8 @@ Rules of thumb:
   upload that outlasts `NOTE_IMAGE_UPLOAD_TIMEOUT_MS`) while the server answers
   is charged, so it dead-letters at the cap instead of wedging the queue
   (#1211). A plain network error (no response, not a timeout) is global
-  without a probe. The probe only classifies the drain failure; it never
-  touches the server-reachability flag.
+  without a probe. The probe (`GET /about`) goes through the shared API client,
+  so its outcome also updates the server-reachability flag like any request.
   Once an entry has failed `MAX_ENTRY_DRAIN_ATTEMPTS` times it is **dead-lettered
   and the drain continues past it** (`#492`'s dead-letter table gains the op, the
   note is flagged `sync_state = 'failed'`), so unrelated later writes drain. A
