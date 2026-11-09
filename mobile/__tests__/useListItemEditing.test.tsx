@@ -467,6 +467,185 @@ describe('useListItemEditing — derived lists', () => {
   });
 });
 
+describe('useListItemEditing — dragging a parent', () => {
+  // A parent and its children move as one group: pressing a parent's handle
+  // draws its children inside its row (groupedParentId), and the drop moves the
+  // parent with normalizeItemOrder re-seating the children right under it.
+  const groups = () => [
+    item('a'),
+    item('a1', { parentId: 'a' }),
+    item('a2', { parentId: 'a' }),
+    item('b'),
+    item('c'),
+  ];
+  type View = Awaited<ReturnType<typeof mountWith>>;
+  const editing = (view: View) => view.result.current.editing;
+
+  // Ungrouping resumes the reflow animation on the next frame; keep that frame
+  // from firing outside act() after a test ends.
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  async function grab(view: View, id: string, index: number) {
+    await act(async () => {
+      editing(view).holdGroupForDrag(id);
+      editing(view).markGroupDragStarted(id);
+      editing(view).handleListDragStart({ index });
+    });
+  }
+
+  it('groups a parent with its children from the moment its handle is pressed', async () => {
+    const view = await mountWith(groups());
+    await act(async () => {
+      editing(view).holdGroupForDrag('a');
+    });
+    expect(editing(view).groupedParentId).toBe('a');
+    // The list's data and indices are untouched.
+    expect(ids(editing(view).uncheckedItems)).toEqual(['a', 'a1', 'a2', 'b', 'c']);
+  });
+
+  it('ungroups when the press ends without a drag', async () => {
+    const view = await mountWith(groups());
+    await act(async () => {
+      editing(view).holdGroupForDrag('a');
+    });
+    await act(async () => {
+      editing(view).releaseGroupHold('a');
+    });
+    expect(editing(view).groupedParentId).toBeNull();
+  });
+
+  it('keeps the group while dragging even if the press ends', async () => {
+    const view = await mountWith(groups());
+    await grab(view, 'a', 0);
+    await act(async () => {
+      editing(view).releaseGroupHold('a');
+    });
+    expect(editing(view).groupedParentId).toBe('a');
+  });
+
+  it('does not group a row without children', async () => {
+    const view = await mountWith(groups());
+    await act(async () => {
+      editing(view).holdGroupForDrag('b');
+    });
+    expect(editing(view).groupedParentId).toBeNull();
+  });
+
+  it('moves the children with the parent when it is dropped lower', async () => {
+    const view = await mountWith(groups());
+    await grab(view, 'a', 0);
+    // Drop a after b: from 0 to 3, the slot b occupies.
+    await act(async () => {
+      editing(view).handleListReorder({ from: 0, to: 3 });
+    });
+    expect(ids(view.result.current.doc.items)).toEqual(['b', 'a', 'a1', 'a2', 'c']);
+    expect(editing(view).groupedParentId).toBeNull();
+    expect(markDirty).toHaveBeenCalled();
+  });
+
+  it('moves the children with the parent when it is dropped higher', async () => {
+    const view = await mountWith([item('b'), item('a'), item('a1', { parentId: 'a' }), item('c')]);
+    await grab(view, 'a', 1);
+    await act(async () => {
+      editing(view).handleListReorder({ from: 1, to: 0 });
+    });
+    expect(ids(view.result.current.doc.items)).toEqual(['a', 'a1', 'b', 'c']);
+  });
+
+  it('leaves the list as it was when the group is dropped onto its own children', async () => {
+    const view = await mountWith(groups());
+    markDirty.mockClear();
+    await grab(view, 'a', 0);
+    // The children's cells are 1px placeholders while grouped, so slot 2 is
+    // still in place.
+    await act(async () => {
+      editing(view).handleListReorder({ from: 0, to: 2 });
+    });
+    expect(ids(view.result.current.doc.items)).toEqual(['a', 'a1', 'a2', 'b', 'c']);
+    expect(markDirty).not.toHaveBeenCalled();
+  });
+
+  it("keeps a new hold when the previous group's drop lands after it", async () => {
+    const view = await mountWith([...groups(), item('c1', { parentId: 'c' })]);
+    await grab(view, 'a', 0);
+    // The finger lifts and presses c's handle before a's drop animation ends.
+    await act(async () => {
+      editing(view).holdGroupForDrag('c');
+    });
+    await act(async () => {
+      editing(view).handleListReorder({ from: 0, to: 3 });
+    });
+    expect(editing(view).groupedParentId).toBe('c');
+  });
+
+  it('ungroups when the parent is released in place or the drop is discarded', async () => {
+    const view = await mountWith(groups());
+    markDirty.mockClear();
+    await grab(view, 'a', 0);
+    await act(async () => {
+      editing(view).handleListDragEnd({ from: 0, to: 0 });
+    });
+    expect(editing(view).groupedParentId).toBeNull();
+
+    await grab(view, 'a', 0);
+    await act(async () => {
+      editing(view).handleListReorder({ from: 0, to: 9 });
+    });
+    expect(editing(view).groupedParentId).toBeNull();
+    expect(markDirty).not.toHaveBeenCalled();
+  });
+
+  it('releases the hold when the long-press never turns into a drag', async () => {
+    const view = await mountWith(groups());
+    await act(async () => {
+      editing(view).holdGroupForDrag('a');
+      editing(view).markGroupDragStarted('a');
+    });
+    // The finger lifting no longer releases it — a drag is assumed to be on.
+    await act(async () => {
+      editing(view).releaseGroupHold('a');
+    });
+    expect(editing(view).groupedParentId).toBe('a');
+    // No onDragStart arrives (the library ignored drag()): the watchdog fires.
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+    });
+    expect(editing(view).groupedParentId).toBeNull();
+    await act(async () => {
+      jest.advanceTimersByTime(50);
+    });
+    expect(editing(view).groupReflowPaused).toBe(false);
+  });
+
+  it('keeps the hold once the drag start is confirmed', async () => {
+    const view = await mountWith(groups());
+    await grab(view, 'a', 0);
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    expect(editing(view).groupedParentId).toBe('a');
+  });
+
+  it('re-arms focus on a focused child as it moves into and out of the group', async () => {
+    const view = await mountWith(groups());
+    editing(view).focusedItemIdRef.current = 'a1';
+    await act(async () => {
+      editing(view).holdGroupForDrag('a');
+    });
+    expect(editing(view).autoFocusItemIdRef.current).toBe('a1');
+    editing(view).autoFocusItemIdRef.current = null;
+    await act(async () => {
+      editing(view).releaseGroupHold('a');
+    });
+    expect(editing(view).autoFocusItemIdRef.current).toBe('a1');
+  });
+});
+
 describe('useListItemEditing — indent buttons', () => {
   const focus = (result: { current: ReturnType<typeof useHarness> }, id: string) => {
     result.current.editing.focusedItemIdRef.current = id;

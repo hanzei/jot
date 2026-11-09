@@ -52,6 +52,11 @@ import { useRevealFocusedInput } from './useRevealFocusedInput';
 // one row to the next does not flash it away and back.
 const ITEM_BLUR_SETTLE_MS = 150;
 
+// How long a parent's long-press may wait for the list to report the drag it
+// started before its group hold is released (see markGroupDragStarted). The
+// start arrives within a frame or two when it happens at all.
+const GROUP_DRAG_START_TIMEOUT_MS = 300;
+
 export interface UseListItemEditingParams {
   doc: EditorDocHandle;
   /** Current items as render state; the hook derives its lists from these. */
@@ -87,6 +92,26 @@ export interface UseListItemEditingParams {
 export interface ListItemEditing {
   /** Active (unchecked) rows, in order. */
   uncheckedItems: LocalItem[];
+  /**
+   * The parent held for a group drag (see holdGroupForDrag), or null. While set,
+   * every parent draws its children inside its own row — the held one so it
+   * lifts as one, the others so it can only pass whole groups — and the
+   * children's own rows render as placeholders.
+   */
+  groupedParentId: string | null;
+  /**
+   * True while a group is held and through the render that releases it. The
+   * list's reflow animation must stay off then: the cells a drop re-seats are
+   * already where the lifted group was drawn, and animating them would slide
+   * the children in a second time.
+   */
+  groupReflowPaused: boolean;
+  /** The drag handle of `itemId` was pressed: group its children into its row. */
+  holdGroupForDrag: (itemId: string) => void;
+  /** The press on `itemId`'s handle ended; ungroup unless it became a drag. */
+  releaseGroupHold: (itemId: string) => void;
+  /** The long-press on `itemId`'s handle is starting a drag. */
+  markGroupDragStarted: (itemId: string) => void;
   /** Completed rows, for the collapsed section below the list. */
   checkedItems: LocalItem[];
   /** id → index into the full `items` array, so rows don't need an indexOf. */
@@ -741,6 +766,83 @@ export function useListItemEditing({
   // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   uncheckedItemsRef.current = uncheckedItems;
 
+  // A parent and its children move as one group. The reorderable list can only
+  // lift a single cell, so from the moment a parent's drag handle is pressed —
+  // before the long-press starts the drag — the parent's row draws its children
+  // inside its own cell and the children's own cells shrink to 1px placeholders
+  // (see GROUP_PLACEHOLDER_PX in NoteEditorScreen). Nothing moves
+  // on screen, the list's data and indices stay as they are, and when the drag
+  // starts the library measures (and lifts) the whole group. commitDrag only
+  // moves the parent; normalizeItemOrder re-seats the children right under it.
+  const [groupedParentId, setGroupedParentId] = useState<string | null>(null);
+  const [groupReflowPaused, setGroupReflowPaused] = useState(false);
+  // Pending frame that resumes the reflow animation after an ungroup.
+  const resumeReflowFrameRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (resumeReflowFrameRef.current !== null) cancelAnimationFrame(resumeReflowFrameRef.current);
+  }, []);
+  // Ref twin, so commitDrag and the press handlers act without a render.
+  const groupedParentIdRef = useRef<string | null>(null);
+  // Whether the held group's press turned into a drag. Until it does, lifting
+  // the finger ungroups; once it has, the drop does (see commitDrag).
+  const groupDragStartedRef = useRef(false);
+  // Watchdog for a long-press whose drag never starts. drag() is a no-op while
+  // the list is still settling a previous drop (or with dragging disabled), and
+  // then no onDragStart or drop ever arrives to release the hold — every group
+  // would stay a block and the reflow animation stay paused. If onDragStart has
+  // not confirmed the drag in time, release the hold.
+  const groupDragWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearGroupDragWatchdog = useCallback(() => {
+    if (groupDragWatchdogRef.current !== null) clearTimeout(groupDragWatchdogRef.current);
+    groupDragWatchdogRef.current = null;
+  }, []);
+  useEffect(() => clearGroupDragWatchdog, [clearGroupDragWatchdog]);
+
+  const setGroupedParent = useCallback((parentId: string | null) => {
+    if (groupedParentIdRef.current === parentId) return;
+    // Every child moves between its own cell and its parent's, so a child
+    // holding the caret remounts its input — re-open the keyboard on it.
+    const focusedId = focusedItemIdRef.current;
+    if (focusedId !== null && uncheckedItemsRef.current.some((item) => item.id === focusedId && item.parentId !== null)) {
+      armAutoFocus(focusedId);
+    }
+    groupedParentIdRef.current = parentId;
+    groupDragStartedRef.current = false;
+    clearGroupDragWatchdog();
+    setGroupedParentId(parentId);
+    if (resumeReflowFrameRef.current !== null) cancelAnimationFrame(resumeReflowFrameRef.current);
+    resumeReflowFrameRef.current = null;
+    if (parentId !== null) {
+      setGroupReflowPaused(true);
+    } else {
+      // Resume a frame later, so the ungrouping render lays out unanimated.
+      resumeReflowFrameRef.current = requestAnimationFrame(() => {
+        resumeReflowFrameRef.current = null;
+        setGroupReflowPaused(false);
+      });
+    }
+  }, [armAutoFocus, clearGroupDragWatchdog]);
+
+  const holdGroupForDrag = useCallback((itemId: string) => {
+    // A previous hold whose drag never reported back is superseded here.
+    if (uncheckedItemsRef.current.some((item) => item.parentId === itemId)) setGroupedParent(itemId);
+    else setGroupedParent(null);
+  }, [setGroupedParent]);
+
+  const releaseGroupHold = useCallback((itemId: string) => {
+    if (groupedParentIdRef.current === itemId && !groupDragStartedRef.current) setGroupedParent(null);
+  }, [setGroupedParent]);
+
+  const markGroupDragStarted = useCallback((itemId: string) => {
+    if (groupedParentIdRef.current !== itemId) return;
+    groupDragStartedRef.current = true;
+    clearGroupDragWatchdog();
+    groupDragWatchdogRef.current = setTimeout(() => {
+      groupDragWatchdogRef.current = null;
+      if (groupedParentIdRef.current === itemId) setGroupedParent(null);
+    }, GROUP_DRAG_START_TIMEOUT_MS);
+  }, [clearGroupDragWatchdog, setGroupedParent]);
+
   // Id of the row a drag picked up, recorded at onDragStart. commitDrag uses it
   // to tell a drop that still describes the list it was measured against from
   // one whose indices have gone stale — see the guard there. null means "no
@@ -748,8 +850,11 @@ export function useListItemEditing({
   const dragOriginIdRef = useRef<string | null>(null);
 
   const rememberDragOrigin = useCallback((index: number) => {
-    dragOriginIdRef.current = uncheckedItemsRef.current[index]?.id ?? null;
-  }, []);
+    const originId = uncheckedItemsRef.current[index]?.id ?? null;
+    dragOriginIdRef.current = originId;
+    // The held group's drag really started; its drop will release the hold.
+    if (originId !== null && originId === groupedParentIdRef.current) clearGroupDragWatchdog();
+  }, [clearGroupDragWatchdog]);
 
   const handleListDragStart = useCallback(
     ({ index }: ReorderableListDragStartEvent) => {
@@ -768,6 +873,11 @@ export function useListItemEditing({
       const current = uncheckedItemsRef.current;
       const originId = dragOriginIdRef.current;
       dragOriginIdRef.current = null;
+      // The drop ends a group drag however it goes — moved, no-op or discarded.
+      // Only a hold whose press became a drag, though: this drop can land
+      // ~200ms after the finger lifts, by which time another parent's handle
+      // may already be held for the next drag.
+      if (groupDragStartedRef.current) setGroupedParent(null);
       // `from`/`to` were measured when the drag began, and the library hands
       // them back only once its drop animation finishes — ~200ms after the
       // finger lifts. A background note refresh (SSE refetch, catch-up resync
@@ -815,6 +925,19 @@ export function useListItemEditing({
       // re-render lands; zeroing the shared value mid-drop could clobber that hold
       // and reintroduce the snap-back flash. The drag start resets it instead.
       if (!changed) return;
+      // Merge with existing checked items and normalize so each parent's
+      // children stay contiguous — a moved parent's children follow it.
+      const next = normalizeItemOrder([...reorderedUnchecked, ...checkedItemsRef.current]);
+      // A held group passes the 1px cells of its own or a neighbour group's
+      // children with a few px of travel, and normalizing re-seats it right
+      // back. Such a drop changed nothing, so skip the save and the haptic —
+      // but the list still remounted the cells it passed, so keep focus.
+      const nextActive = next.filter((item) => !item.completed);
+      if (nextActive.length === current.length
+        && nextActive.every((item, i) => item.id === current[i]?.id && item.parentId === current[i]?.parentId)) {
+        if (focusedItemIdRef.current) armAutoFocus(focusedItemIdRef.current);
+        return;
+      }
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       // A row whose slot changed gets force-remounted by the reorderable list
       // (new key, to fix a layout glitch), which drops a focused TextInput.
@@ -822,12 +945,10 @@ export function useListItemEditing({
       // remounted row re-opens the keyboard on itself instead of leaving focus
       // to fall back elsewhere (observed: the title input).
       if (focusedItemIdRef.current) armAutoFocus(focusedItemIdRef.current);
-      // Merge with existing checked items and normalize so each parent's
-      // children stay contiguous.
-      setItems(normalizeItemOrder([...reorderedUnchecked, ...checkedItemsRef.current]));
+      setItems(next);
       markDirtyAndScheduleUpdate();
     },
-    [armAutoFocus, markDirtyAndScheduleUpdate, dragTranslateX, itemsRef, setItems],
+    [armAutoFocus, markDirtyAndScheduleUpdate, dragTranslateX, itemsRef, setItems, setGroupedParent],
   );
 
   // The formatting bar's indent / outdent buttons: moves the row holding the
@@ -954,6 +1075,11 @@ export function useListItemEditing({
 
   return {
     uncheckedItems,
+    groupedParentId,
+    groupReflowPaused,
+    holdGroupForDrag,
+    releaseGroupHold,
+    markGroupDragStarted,
     checkedItems,
     itemIndexMap,
     itemIndexMapRef,

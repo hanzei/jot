@@ -1,4 +1,4 @@
-import React, { type ComponentProps, useCallback, useEffect } from 'react';
+import React, { type ComponentProps, type ReactNode, useCallback, useEffect } from 'react';
 import { useReorderableDrag, useIsActive, useReorderableDragStart } from 'react-native-reorderable-list';
 import Reanimated, {
   useAnimatedReaction,
@@ -18,8 +18,24 @@ const INDENT_PX = VALIDATION.INDENT_PX_PER_LEVEL;
 type ListItemProps = ComponentProps<typeof ListItem>;
 
 interface ActiveListRowProps {
+  itemId: string;
   /** Everything ListItem needs except the drag wiring, which this row supplies. */
-  listItemProps: Omit<ListItemProps, 'onDrag' | 'isActive'>;
+  listItemProps: Omit<ListItemProps, 'onDrag' | 'isActive' | 'onDragHandlePressIn' | 'onDragHandlePressOut'>;
+  /**
+   * A parent's children, drawn inside this row's cell while its group is held
+   * for a drag, so the reorderable list lifts parent and children together.
+   */
+  children?: ReactNode;
+  /**
+   * Group-drag wiring, for a parent row: its handle being pressed / released
+   * holds or releases the group, and onDragStarting runs right before the
+   * long-press starts the drag.
+   */
+  group?: {
+    onHandlePressIn: (itemId: string) => void;
+    onHandlePressOut: (itemId: string) => void;
+    onDragStarting: (itemId: string) => void;
+  } | undefined;
   /** Live horizontal drag distance, written by the list pan's onChange. */
   dragTranslateX: SharedValue<number>;
   /** Indent level of this item when a drag begins (0 top-level, 1 nested). */
@@ -54,7 +70,10 @@ interface ActiveListRowProps {
  * animation, so this row adds no shadow/box of its own.
  */
 function ActiveListRow({
+  itemId,
   listItemProps,
+  children,
+  group,
   dragTranslateX,
   indentBaseLevel,
   canIndent,
@@ -96,16 +115,26 @@ function ActiveListRow({
 
   const handleDrag = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    group?.onDragStarting(itemId);
     drag();
-  }, [drag]);
+  }, [drag, group, itemId]);
+  const handlePressIn = useCallback(() => group?.onHandlePressIn(itemId), [group, itemId]);
+  const handlePressOut = useCallback(() => group?.onHandlePressOut(itemId), [group, itemId]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: (displayLevel.get() - indentBaseLevel) * INDENT_PX }],
   }));
 
   return (
-    <Reanimated.View style={animatedStyle}>
-      <ListItem {...listItemProps} onDrag={handleDrag} isActive={isActive} />
+    <Reanimated.View style={animatedStyle} testID={children ? 'list-item-group' : undefined}>
+      <ListItem
+        {...listItemProps}
+        onDrag={handleDrag}
+        onDragHandlePressIn={group ? handlePressIn : undefined}
+        onDragHandlePressOut={group ? handlePressOut : undefined}
+        isActive={isActive}
+      />
+      {children}
     </Reanimated.View>
   );
 }

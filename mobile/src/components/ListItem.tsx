@@ -78,6 +78,13 @@ interface ListItemProps {
    */
   popOnMount?: boolean;
   onDrag?: () => void;
+  /**
+   * The finger landed on / left the drag handle, ahead of the long-press that
+   * starts a drag. Lets a parent row take its children into its own cell before
+   * the drag measures it, so the whole group lifts.
+   */
+  onDragHandlePressIn?: (() => void) | undefined;
+  onDragHandlePressOut?: (() => void) | undefined;
   onToggle?: () => void;
   onChangeText?: (text: string) => void;
   onDelete?: () => void;
@@ -177,6 +184,8 @@ function ListItem({
   hasChildren = false,
   popOnMount = false,
   onDrag,
+  onDragHandlePressIn,
+  onDragHandlePressOut,
   onToggle,
   onChangeText,
   onDelete,
@@ -427,6 +436,8 @@ function ListItem({
       {showDragHandle && onDrag ? (
         <TouchableOpacity
           onLongPress={onDrag}
+          {...(onDragHandlePressIn && { onPressIn: onDragHandlePressIn })}
+          {...(onDragHandlePressOut && { onPressOut: onDragHandlePressOut })}
           // Shorten the press-and-hold before a drag starts; the default (~500ms)
           // feels sluggish for a dedicated drag handle.
           delayLongPress={DRAG_HANDLE_LONG_PRESS_MS}
