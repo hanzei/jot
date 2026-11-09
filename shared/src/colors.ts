@@ -1,3 +1,5 @@
+import { DEFAULT_NOTE_COLOR } from './constants';
+
 export function hashUsername(username: string): number {
   let hash = 0;
   for (let i = 0; i < username.length; i++) {
@@ -80,4 +82,12 @@ export function normalizeNoteColor(color: string): string {
   return hex.length === 3
     ? `#${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`
     : `#${hex}`;
+}
+
+/**
+ * Whether a note has a real colour, as opposed to the default "no colour"
+ * (empty or DEFAULT_NOTE_COLOR in any spelling), which follows the app theme.
+ */
+export function hasCustomNoteColor(color: string): boolean {
+  return !!color && normalizeNoteColor(color) !== DEFAULT_NOTE_COLOR;
 }

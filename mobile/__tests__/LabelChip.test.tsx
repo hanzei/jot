@@ -1,7 +1,7 @@
 import { render, fireEvent } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import LabelChip from '../src/components/LabelChip';
-import { lightColors } from '../src/theme/colors';
+import { getEffectiveColors, lightColors } from '../src/theme/colors';
 
 describe('LabelChip', () => {
   it('uses the theme chip colours on an uncoloured note', async () => {
@@ -14,8 +14,9 @@ describe('LabelChip', () => {
   it('uses the fixed overlay colours on a coloured note', async () => {
     const { getByTestId, getByText } = await render(<LabelChip name="personal" hasNoteColor testID="chip" />);
 
-    expect(StyleSheet.flatten(getByTestId('chip').props.style).backgroundColor).toBe('rgba(0,0,0,0.08)');
-    expect(StyleSheet.flatten(getByText('personal').props.style).color).toBe('#444');
+    const { chipBackground, chipText } = getEffectiveColors(true, lightColors);
+    expect(StyleSheet.flatten(getByTestId('chip').props.style).backgroundColor).toBe(chipBackground);
+    expect(StyleSheet.flatten(getByText('personal').props.style).color).toBe(chipText);
   });
 
   it('is a button only when it has an onPress', async () => {

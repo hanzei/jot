@@ -409,7 +409,10 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     name: NOTE_COLOR_NAME_KEYS[value] ? t(NOTE_COLOR_NAME_KEYS[value]) : value,
     class: colorClasses[value] ?? '',
   }));
-  const hasPaletteColor = colors.some(c => c.value === color);
+  // Roving tab stop of the colour picker: the selected swatch, or the first
+  // one when the note's colour matches none (e.g. an old Keep import), so the
+  // group stays reachable by Tab.
+  const swatchTabStop = colors.some(c => c.value === color) ? color : colors[0]?.value;
 
   // Only offered on touch devices, where the mobile app can actually be
   // installed. Read once on mount: a pointer type doesn't change under a live
@@ -2491,13 +2494,10 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                   colorPickerRef.current?.querySelectorAll<HTMLButtonElement>('button')[nextIndex]?.focus();
                 }}
               >
-                {colors.map((colorOption, index) => (
+                {colors.map((colorOption) => (
                   <button
                     key={colorOption.value}
-                    // Roving tab stop on the selected swatch; an off-palette
-                    // colour (e.g. a Keep import) selects none, so the first
-                    // swatch keeps the group reachable by Tab.
-                    tabIndex={(hasPaletteColor ? colorOption.value === color : index === 0) ? 0 : -1}
+                    tabIndex={colorOption.value === swatchTabStop ? 0 : -1}
                     onClick={() => {
                       const newColor = colorOption.value;
                       setColor(newColor);

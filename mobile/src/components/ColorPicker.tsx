@@ -3,8 +3,7 @@ import { Check, DropletOff } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import BottomSheet from './BottomSheet';
-import { hasCustomNoteColor } from '../utils/colorContrast';
-import { DEFAULT_NOTE_COLOR, NOTE_COLORS, LIGHT_NOTE_COLORS, NOTE_COLOR_NAME_KEYS, normalizeNoteColor } from '@jot/shared';
+import { DEFAULT_NOTE_COLOR, NOTE_COLORS, LIGHT_NOTE_COLORS, NOTE_COLOR_NAME_KEYS, hasCustomNoteColor, normalizeNoteColor } from '@jot/shared';
 
 interface ColorPickerProps {
   visible: boolean;
@@ -16,7 +15,8 @@ interface ColorPickerProps {
 export default function ColorPicker({ visible, currentColor, onSelect, onClose }: ColorPickerProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const isDefaultSelected = !hasCustomNoteColor(currentColor);
+  // The swatch the note currently shows: its palette colour, or Default.
+  const current = hasCustomNoteColor(currentColor) ? normalizeNoteColor(currentColor) : DEFAULT_NOTE_COLOR;
 
   return (
     <BottomSheet visible={visible} onClose={onClose} title={t('note.changeColor')} testID="color-picker">
@@ -37,16 +37,14 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
           // so its swatch shows the theme's own surface plus a "no colour"
           // glyph instead of a solid white that dark mode never renders.
           const isDefault = color === DEFAULT_NOTE_COLOR;
-          const selected = isDefault ? isDefaultSelected : normalizeNoteColor(currentColor) === color;
+          const selected = current === color;
           return (
             <TouchableOpacity
               key={color}
               style={[
                 styles.colorCircle,
-                isDefault
-                  ? { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }
-                  : { backgroundColor: color },
-                !isDefault && LIGHT_NOTE_COLORS.has(color) && { borderWidth: 1, borderColor: colors.border },
+                { backgroundColor: isDefault ? colors.surface : color },
+                LIGHT_NOTE_COLORS.has(color) && { borderWidth: 1, borderColor: colors.border },
               ]}
               onPress={select}
               testID={testID}

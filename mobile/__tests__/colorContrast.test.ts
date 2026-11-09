@@ -1,4 +1,4 @@
-import { getCompletedSectionDividerColor, hasCustomNoteColor, isWhiteHexColor } from '../src/utils/colorContrast';
+import { getCompletedSectionDividerColor } from '../src/utils/colorContrast';
 
 describe('getCompletedSectionDividerColor', () => {
   it('returns darker divider for light backgrounds', () => {
@@ -22,26 +22,3 @@ describe('getCompletedSectionDividerColor', () => {
   });
 });
 
-describe('isWhiteHexColor', () => {
-  it('accepts 3 and 6 digit white hex values with mixed case', () => {
-    expect(isWhiteHexColor('#fff')).toBe(true);
-    expect(isWhiteHexColor('#FFFFFF')).toBe(true);
-    expect(isWhiteHexColor('ffffff')).toBe(true);
-  });
-
-  it('returns false for non-white or invalid values', () => {
-    expect(isWhiteHexColor('#fefefe')).toBe(false);
-    expect(isWhiteHexColor('rgb(255,255,255)')).toBe(false);
-    expect(isWhiteHexColor('invalid')).toBe(false);
-  });
-});
-
-describe('hasCustomNoteColor', () => {
-  it.each(['', '#ffffff', '#FFFFFF', '#fff'])('is false for the default colour %j', (color) => {
-    expect(hasCustomNoteColor(color)).toBe(false);
-  });
-
-  it.each(['#f28b82', '#F28B82', '#34a853'])('is true for %j', (color) => {
-    expect(hasCustomNoteColor(color)).toBe(true);
-  });
-});

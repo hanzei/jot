@@ -5,6 +5,7 @@ import {
   AVATAR_COLORS,
   NOTE_COLORS,
   normalizeNoteColor,
+  hasCustomNoteColor,
 } from '../colors';
 
 describe('hashUsername', () => {
@@ -94,5 +95,15 @@ describe('normalizeNoteColor', () => {
     for (const color of NOTE_COLORS) {
       expect(normalizeNoteColor(color)).toBe(color);
     }
+  });
+});
+
+describe('hasCustomNoteColor', () => {
+  it.each(['', '#ffffff', '#FFFFFF', '#fff'])('is false for the default colour %j', (color) => {
+    expect(hasCustomNoteColor(color)).toBe(false);
+  });
+
+  it.each(['#f28b82', '#F28B82', '#34a853'])('is true for %j', (color) => {
+    expect(hasCustomNoteColor(color)).toBe(true);
   });
 });
