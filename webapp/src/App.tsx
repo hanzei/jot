@@ -11,15 +11,48 @@ import { OfflineNotification } from '@/components/OfflineNotification';
 import { ToastProvider } from '@/components/Toast';
 import { isAdmin, setUser, setSettings, removeUser } from '@/utils/auth';
 import { auth, serverConfig } from '@/utils/api';
-import { applyTheme, getThemePreference } from '@/utils/theme';
+import { applyTheme, followThemePreference } from '@/utils/theme';
 import { LoginRedirect, PostAuthRedirect } from '@/components/AuthRedirect';
-import { VALIDATION, UPLOAD_MAX_BYTES, type SSOConfig } from '@jot/shared';
+import PublicNote from '@/pages/PublicNote';
+import { VALIDATION, UPLOAD_MAX_BYTES, PUBLIC_NOTE_PATH_PREFIX, type SSOConfig } from '@jot/shared';
+import type { PublicLinksConfig } from '@/components/PublicLinkSection';
 
 // Default when the server omits `sso` (a pre-SSO server) or the config fetch
 // fails: SSO off, local login on — i.e. exactly today's behavior.
 const SSO_DISABLED: SSOConfig = { enabled: false, provider_name: '', local_login_enabled: true };
 
+// Default when the config fetch fails or the server predates public links:
+// the public link UI stays hidden.
+const PUBLIC_LINKS_DISABLED: PublicLinksConfig = { enabled: false, publicUrl: null };
+
+/**
+ * A public note link renders on its own, ahead of everything below: no session
+ * check, no config fetch, no SSE, so an anonymous visitor makes no
+ * authenticated call (whose 401 would send them to /login) and a signed-in one
+ * sees exactly what an anonymous one does. Decided from the entry URL, since
+ * nothing inside the viewer navigates to or from it.
+ */
 function App() {
+  if (window.location.pathname.startsWith(PUBLIC_NOTE_PATH_PREFIX)) {
+    return <PublicNoteApp />;
+  }
+  return <SignedInApp />;
+}
+
+function PublicNoteApp() {
+  useEffect(() => followThemePreference(), []);
+
+  return (
+    <Router>
+      <Routes>
+        <Route path={`${PUBLIC_NOTE_PATH_PREFIX}:token`} element={<PublicNote />} />
+        <Route path="*" element={<PublicNote />} />
+      </Routes>
+    </Router>
+  );
+}
+
+function SignedInApp() {
   const [isAuth, setIsAuth] = useState(false);
   // Signing out deliberately lands on a clean login page rather than one that
   // remembers the page being left — on a shared device the next person to sign
@@ -32,13 +65,10 @@ function App() {
   const [passwordMinLength, setPasswordMinLength] = useState<number>(VALIDATION.PASSWORD_MIN_LENGTH);
   const [uploadMaxBytes, setUploadMaxBytes] = useState<number>(UPLOAD_MAX_BYTES);
   const [sso, setSso] = useState<SSOConfig>(SSO_DISABLED);
+  const [publicLinks, setPublicLinks] = useState<PublicLinksConfig>(PUBLIC_LINKS_DISABLED);
 
   useEffect(() => {
-    applyTheme(getThemePreference());
-
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleSystemThemeChange = () => applyTheme(getThemePreference());
-    mediaQuery.addEventListener('change', handleSystemThemeChange);
+    const stopFollowingTheme = followThemePreference();
 
     const configPromise = serverConfig.get()
       .then((cfg) => {
@@ -46,6 +76,7 @@ function App() {
         setPasswordMinLength(cfg.password_min_length);
         setUploadMaxBytes(cfg.upload_max_bytes);
         setSso(cfg.sso ?? SSO_DISABLED);
+        setPublicLinks({ enabled: cfg.public_links_enabled ?? false, publicUrl: cfg.public_url ?? null });
       })
       .catch(() => { /* keep defaults if config fetch fails */ });
 
@@ -68,7 +99,7 @@ function App() {
       setLoading(false);
     });
 
-    return () => mediaQuery.removeEventListener('change', handleSystemThemeChange);
+    return stopFollowingTheme;
   }, []);
 
   return (
@@ -106,7 +137,7 @@ function App() {
                 : (signedOut ? <Navigate to="/login" replace /> : <LoginRedirect />)
             }
           >
-            <Route element={<Dashboard uploadMaxBytes={uploadMaxBytes} />}>
+            <Route element={<Dashboard uploadMaxBytes={uploadMaxBytes} publicLinks={publicLinks} />}>
               <Route index element={null} />
               <Route path="notes/:noteId" element={null} />
               <Route path="new" element={null} />

@@ -28,6 +28,18 @@ const LEGACY_CACHES = ['navigations', 'static-assets'];
 // (NS_BINDING_ABORTED), breaking EventSource. Let it go straight to the network.
 const SSE_PATH = '/api/v1/events';
 
+// The unauthenticated public note API (a note and its images through a public
+// link). Never cached: a revoked or expired link must stop showing the note at
+// once, which a NetworkFirst copy would undo whenever the network is slow, and
+// a visitor's device should not keep the note after they leave. The server
+// sends `Cache-Control: no-store`, but Workbox's runtime caches ignore it.
+const PUBLIC_API_PREFIX = '/api/v1/public/';
+
+// Public link management (create, change expiry, revoke) is online-only: a
+// queued PUT or DELETE replayed later would publish or revoke a note long after
+// the user saw the request fail.
+const PUBLIC_LINK_PATH = /^\/api\/v1\/notes\/[^/]+\/public-link$/;
+
 // Note images are immutable for a given ID — the ID is minted per upload and
 // the bytes behind it never change — so cache-first is safe here in a way it is
 // not for build assets. Registered ahead of the API route below, which would
@@ -41,7 +53,8 @@ registerRoute(
 
 // API caching strategy - Network First with offline fallback
 registerRoute(
-  ({ url }) => url.pathname.startsWith('/api/v1/') && url.pathname !== SSE_PATH,
+  ({ url }) =>
+    url.pathname.startsWith('/api/v1/') && url.pathname !== SSE_PATH && !url.pathname.startsWith(PUBLIC_API_PREFIX),
   new NetworkFirst({
     cacheName: 'api-cache',
     networkTimeoutSeconds: 3,
@@ -103,9 +116,13 @@ const bgSyncQueue = new Queue('api-queue', {
 //
 // Anything under /api/ is denied: /api/docs/index.html (Swagger UI) is a
 // navigation the server owns, and handing it the SPA shell would replace it.
+// Public note pages (/share/{token}) are denied too: the server answers them
+// with `Referrer-Policy: no-referrer` and `X-Robots-Tag: noindex`, which a
+// shell served from the precache would not carry. The page needs the network
+// for the note anyway, so going to it costs nothing offline.
 registerRoute(
   new NavigationRoute(createHandlerBoundToURL('/index.html'), {
-    denylist: [/^\/api\//],
+    denylist: [/^\/api\//, /^\/share\//],
   })
 );
 
@@ -147,6 +164,7 @@ self.addEventListener('fetch', (event: FetchEvent) => {
 
   const url = new URL(request.url);
   if (!url.pathname.startsWith('/api/v1/')) return;
+  if (PUBLIC_LINK_PATH.test(url.pathname)) return;
 
   // Only retry POSTs that are explicitly allowlisted as idempotent.
   // All other POSTs (note creation, import, register, etc.) fall through

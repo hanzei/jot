@@ -17,20 +17,33 @@ export interface PendingImageUpload {
   errorMessage?: string;
 }
 
-interface NoteImageGalleryProps {
-  images: NoteImage[];
+/** What the gallery and the lightbox need of an image. */
+export type GalleryImage = Pick<NoteImage, 'id' | 'filename' | 'width' | 'height'>;
+
+/**
+ * Where an image's bytes come from: the signed-in image endpoints by default,
+ * or a public note's token-scoped ones (`publicNoteImages`).
+ */
+export interface ImageUrls {
+  url: (id: string) => string;
+  thumbnailUrl: (id: string) => string;
+}
+
+interface NoteImageGalleryProps<T extends GalleryImage> {
+  images: T[];
+  urls?: ImageUrls;
   // Adding editable=true turns on hover remove buttons for persisted images
   // and renders `uploads` as in-progress/error tiles. Read-only callers (none
   // currently) can omit it and get the original display-only gallery.
   editable?: boolean;
   uploads?: PendingImageUpload[];
-  onRemove?: (image: NoteImage) => void;
+  onRemove?: (image: T) => void;
   onRetryUpload?: (uploadId: string) => void;
   onDismissUpload?: (uploadId: string) => void;
 }
 
-type Tile =
-  | { key: string; kind: 'image'; image: NoteImage }
+type Tile<T extends GalleryImage> =
+  | { key: string; kind: 'image'; image: T }
   | { key: string; kind: 'upload'; upload: PendingImageUpload };
 
 // Grid tiles shown at once; beyond this the last tile carries a "+N" overlay
@@ -48,7 +61,7 @@ const TILE_FRAME_CLASSNAME = 'group relative overflow-hidden rounded-md bg-gray-
 // image tile opens the full-screen lightbox. In editable mode, persisted
 // tiles get a hover remove button and `uploads` render as
 // queued/uploading/error placeholders (add/remove UI lives in NoteModal).
-export default function NoteImageGallery({ images, editable = false, uploads = [], onRemove, onRetryUpload, onDismissUpload }: NoteImageGalleryProps) {
+export default function NoteImageGallery<T extends GalleryImage>({ images, urls = imagesApi, editable = false, uploads = [], onRemove, onRetryUpload, onDismissUpload }: NoteImageGalleryProps<T>) {
   const { t } = useTranslation();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
@@ -58,9 +71,9 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
   // error/retry feedback at all — in favor of an image the user isn't
   // actively acting on right now. Overflow from that then folds the oldest
   // persisted images into the "+N" tile first, never an in-flight upload.
-  let tiles: Tile[] = [
-    ...uploads.map((upload): Tile => ({ key: upload.id, kind: 'upload', upload })),
-    ...images.map((image): Tile => ({ key: image.id, kind: 'image', image })),
+  let tiles: Tile<T>[] = [
+    ...uploads.map((upload): Tile<T> => ({ key: upload.id, kind: 'upload', upload })),
+    ...images.map((image): Tile<T> => ({ key: image.id, kind: 'image', image })),
   ];
 
   if (tiles.length === 0) return null;
@@ -96,9 +109,14 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
   // siblings of the (optional) clickable image button, never nested inside
   // it — a <button> inside another <button> is invalid HTML and would break
   // click and keyboard handling.
-  const renderTile = (tile: Tile, index: number) => {
+  const renderTile = (tile: Tile<T>, index: number) => {
     const isOverlayTile = overlayCount > 0 && index === visibleCount - 1;
-    const frameStyle = isGrid ? undefined : { aspectRatio: tile.kind === 'image' ? `${tile.image.width} / ${tile.image.height}` : '4 / 3' };
+    // An image without a known size (a public note's, whose response carries
+    // only IDs) gets the same 4:3 frame as an upload.
+    const aspectRatio = tile.kind === 'image' && tile.image.width > 0 && tile.image.height > 0
+      ? `${tile.image.width} / ${tile.image.height}`
+      : '4 / 3';
+    const frameStyle = isGrid ? undefined : { aspectRatio };
     const frameClassName = `${TILE_FRAME_CLASSNAME} ${isGrid ? 'aspect-square' : 'block w-full max-h-80'} ${
       spanLastTile && index === 2 ? 'col-span-2' : ''
     }`;
@@ -119,7 +137,7 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
             className="absolute inset-0 w-full h-full"
             onClick={() => setLightboxIndex(imageIndex)}
           >
-            <img src={imagesApi.thumbnailUrl(tile.image.id)} alt={tile.image.filename} className="w-full h-full object-cover" />
+            <img src={urls.thumbnailUrl(tile.image.id)} alt={tile.image.filename} className="w-full h-full object-cover" />
             {isOverlayTile && (
               <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-white text-lg font-medium">
                 +{overlayCount}
@@ -203,6 +221,7 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
       )}
       <ImageLightbox
         images={images}
+        urls={urls}
         index={lightboxIndex}
         onIndexChange={setLightboxIndex}
         onClose={() => setLightboxIndex(null)}

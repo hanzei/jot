@@ -120,6 +120,10 @@ describe('service worker', () => {
       // replace the page with Jot.
       expect(navigationRoute().match(context('/api/docs/index.html', { mode: 'navigate' }))).toBeFalsy();
     });
+
+    it('leaves public note pages to the server, which sends their privacy headers', () => {
+      expect(navigationRoute().match(context('/share/q3XvT0b9Lr2Kp8WmZcE1yN4hUa7sDfGj6oBtYiR5lMw', { mode: 'navigate' }))).toBeFalsy();
+    });
   });
 
   describe('API routes', () => {
@@ -137,10 +141,40 @@ describe('service worker', () => {
       expect(callbackRoutes()[0]!(context('/api/v1/notes/abc123/images'))).toBeFalsy();
     });
 
+    it.each([
+      '/api/v1/public/notes/tok',
+      '/api/v1/public/notes/tok/images/img',
+      '/api/v1/public/notes/tok/images/img/thumbnail',
+    ])('never caches the public note API (%s)', (path) => {
+      const matched = callbackRoutes().filter((matcher) => matcher(context(path)));
+
+      expect(matched).toHaveLength(0);
+    });
+
     it('never handles the SSE stream', () => {
       const matched = callbackRoutes().filter((matcher) => matcher(context('/api/v1/events')));
 
       expect(matched).toHaveLength(0);
+    });
+  });
+
+  describe('background sync', () => {
+    const dispatchFetch = (method: string, path: string) => {
+      const respondWith = vi.fn();
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null)));
+      listeners.get('fetch')!({
+        request: new Request(new URL(path, 'https://jot.example'), { method }),
+        respondWith,
+      } as unknown as Event);
+      return respondWith;
+    };
+
+    it('queues idempotent writes for retry', () => {
+      expect(dispatchFetch('PATCH', '/api/v1/notes/abc123')).toHaveBeenCalled();
+    });
+
+    it.each(['PUT', 'DELETE'])('leaves public link %s to the network, so it is never replayed later', (method) => {
+      expect(dispatchFetch(method, '/api/v1/notes/abc123/public-link')).not.toHaveBeenCalled();
     });
   });
 

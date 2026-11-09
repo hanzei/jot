@@ -1,7 +1,13 @@
 import { test, expect, uniqueUsername, E2E_ADMIN_CREDENTIALS } from '../fixtures';
 import { expectNoViolations } from '../fixtures/axe';
 import { openNoteInConflict } from '../fixtures/noteConflict';
+import { createListNote, createTextNote, setPublicLink, signUp } from '../fixtures/publicLinks';
 import type { Page } from '@playwright/test';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const noteImageBuffer = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../fixtures/test-icon.png'));
 
 /**
  * Automated WCAG A/AA scans over the app's main surfaces, in both themes.
@@ -335,6 +341,55 @@ for (const theme of THEMES) {
       await expectTheme(page, theme);
 
       await expectNoViolations(page);
+    });
+
+    test('public note viewer has no WCAG A/AA violations', async ({ page, request, publicNotePage }) => {
+      // Scanned as an anonymous visitor: the note's owner works through
+      // `request`, and `page` never signs in. A list note with a nested item,
+      // the completed section expanded and an image covers most of the
+      // markup; the text note covers the rendered Markdown.
+      await signUp(request, 'a11ypublic');
+      const listId = await createListNote(request, 'A11y Public List', [
+        { text: 'Parent item' },
+        { text: 'Child item', indent: 1 },
+        { text: 'Done child', indent: 1, completed: true },
+        { text: 'Done item', completed: true },
+      ]);
+      const upload = await request.post(`/api/v1/notes/${listId}/images`, {
+        multipart: { file: { name: 'test-icon.png', mimeType: 'image/png', buffer: noteImageBuffer } },
+      });
+      expect(upload.ok()).toBeTruthy();
+      const listToken = await setPublicLink(request, listId);
+      const textToken = await setPublicLink(request, await createTextNote(request, '# Heading\n\nSome **bold** text, a [link](https://example.com) and `code`.\n\n- [x] a task'));
+
+      await publicNotePage.goto(listToken);
+      await expect(publicNotePage.completedToggle()).toHaveAttribute('aria-expanded', 'true');
+      await expect(page.getByRole('img', { name: 'Image 1' })).toBeVisible();
+      await expectTheme(page, theme);
+      await expectNoViolations(page);
+
+      await publicNotePage.goto(textToken);
+      await expect(publicNotePage.content().locator('strong')).toHaveText('bold');
+      await expectNoViolations(page);
+
+      await publicNotePage.goto('A'.repeat(43));
+      await expect(publicNotePage.notFound()).toBeVisible();
+      await expectNoViolations(page);
+    });
+
+    test('share dialog with a public link has no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage, publicLinkSection }) => {
+      void authenticatedUser;
+      await dashboardPage.goto();
+      await dashboardPage.createNote('A11y Public Link Note');
+      await dashboardPage.openNote('A11y Public Link Note');
+      await dashboardPage.openShareModalFromModal();
+      await expect(publicLinkSection.createButton()).toBeVisible();
+      await expectTheme(page, theme);
+      await expectNoViolations(page, { include: ['[data-testid="public-link-section"]'] });
+
+      await publicLinkSection.create('In 30 days');
+      await expect(publicLinkSection.details()).toContainText('Created by you');
+      await expectNoViolations(page, { include: ['[data-testid="public-link-section"]'] });
     });
 
     test('admin page has no WCAG A/AA violations', async ({ page }) => {
