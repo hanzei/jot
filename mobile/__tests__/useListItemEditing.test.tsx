@@ -561,7 +561,8 @@ describe('useListItemEditing — dragging a parent', () => {
     const view = await mountWith(groups());
     markDirty.mockClear();
     await grab(view, 'a', 0);
-    // The children's cells are empty while grouped, so slot 2 is still in place.
+    // The children's cells are 1px placeholders while grouped, so slot 2 is
+    // still in place.
     await act(async () => {
       editing(view).handleListReorder({ from: 0, to: 2 });
     });

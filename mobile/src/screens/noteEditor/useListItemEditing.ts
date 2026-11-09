@@ -769,7 +769,8 @@ export function useListItemEditing({
   // A parent and its children move as one group. The reorderable list can only
   // lift a single cell, so from the moment a parent's drag handle is pressed —
   // before the long-press starts the drag — the parent's row draws its children
-  // inside its own cell and the children's own cells render empty. Nothing moves
+  // inside its own cell and the children's own cells shrink to 1px placeholders
+  // (see GROUP_PLACEHOLDER_PX in NoteEditorScreen). Nothing moves
   // on screen, the list's data and indices stay as they are, and when the drag
   // starts the library measures (and lifts) the whole group. commitDrag only
   // moves the parent; normalizeItemOrder re-seats the children right under it.

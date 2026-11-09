@@ -1309,6 +1309,12 @@ export default function NoteEditorScreen() {
     return byParent;
   }, [groupedParentId, uncheckedItems]);
 
+  // One stable object for every parent row, so ActiveListRow's memo holds.
+  const groupDragHandlers = useMemo(
+    () => ({ onHandlePressIn: holdGroupForDrag, onHandlePressOut: releaseGroupHold, onDragStarting: markGroupDragStarted }),
+    [holdGroupForDrag, releaseGroupHold, markGroupDragStarted],
+  );
+
   const renderActiveRow = useCallback(
     ({ item, index }: ReorderableListRenderItemInfo<LocalItem>) => {
       const originalIndex = itemIndexMapRef.current.get(item.id);
@@ -1349,16 +1355,14 @@ export default function NoteEditorScreen() {
           // drop would reject.
           canIndent={!hasChildren && index > 0}
           canOutdent={baseLevel === 1}
-          onHandlePressIn={hasChildren ? holdGroupForDrag : undefined}
-          onHandlePressOut={hasChildren ? releaseGroupHold : undefined}
-          onDragStarting={hasChildren ? markGroupDragStarted : undefined}
+          group={hasChildren ? groupDragHandlers : undefined}
           listItemProps={activeRowProps(item, originalIndex, hasChildren)}
         >
           {groupRows}
         </ActiveListRow>
       );
     },
-    [itemIndexMapRef, itemsRef, dragTranslateX, groupChildrenByParent, holdGroupForDrag, releaseGroupHold, markGroupDragStarted, activeRowProps],
+    [itemIndexMapRef, itemsRef, dragTranslateX, groupChildrenByParent, groupDragHandlers, activeRowProps],
   );
 
   /**
@@ -1733,6 +1737,9 @@ export default function NoteEditorScreen() {
             <NestedReorderableList<LocalItem>
               data={uncheckedItems}
               // Cells re-render when a parent starts or stops drawing its group.
+              // groupReflowPaused is in here although no row reads it: each cell
+              // passes the list's itemLayoutAnimation to its own view, so cells
+              // must re-render to pick the resumed animation back up.
               extraData={`${groupedParentId ?? ''}:${groupReflowPaused}`}
               // `item` is typed non-optional, but the library reads
               // `data[i]` at drag-start indices while finishing a drop, and

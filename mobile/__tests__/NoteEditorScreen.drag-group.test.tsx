@@ -11,13 +11,25 @@ import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 
 // Dragging a parent lifts its children with it. The reorderable list can only
 // lift one cell, so pressing a parent's drag handle draws its children inside
-// the parent's own row (and empties theirs) before the long-press starts the
+// the parent's own row (shrinking theirs to 1px placeholders) before the long-press starts the
 // drag. jest.setup.js's list mock renders every cell, so the grouping shows up
 // as the children's rows moving inside the parent's `list-item-group`.
 interface ListProps {
   itemLayoutAnimation?: unknown;
   onDragStart: (e: { index: number }) => void;
   onReorder: (e: { from: number; to: number }) => void;
+}
+
+// Presses a parent's handle, long-presses it into a drag, and drops it at `to`.
+async function dragParentTo(handle: Parameters<typeof fireEvent>[0], index: number, to: number) {
+  await fireEvent(handle, 'onPressIn');
+  await fireEvent(handle, 'onLongPress');
+  await act(() => {
+    latestListProps().onDragStart({ index });
+  });
+  await act(() => {
+    latestListProps().onReorder({ from: index, to });
+  });
 }
 
 function latestListProps(): ListProps {
@@ -57,11 +69,8 @@ describe('NoteEditorScreen dragging a parent item', () => {
     mockUpdateMutateAsync.mockResolvedValue({});
     mockReorderItemsMutateAsync.mockResolvedValue([]);
     mockUseOfflineNote.mockReturnValue({ data: groupedNote() });
-  });
-
-  // Ungrouping resumes the reflow animation on the next frame; the tests
-  // advance it explicitly, and a frame left pending is dropped here.
-  beforeEach(() => {
+    // Ungrouping resumes the reflow animation on the next frame; the tests
+    // advance it explicitly, and a frame left pending is dropped after each.
     jest.useFakeTimers();
   });
   afterEach(() => {
@@ -102,13 +111,7 @@ describe('NoteEditorScreen dragging a parent item', () => {
     await fireEvent(parentHandle, 'onPressIn');
     expect(latestListProps().itemLayoutAnimation).toBeUndefined();
 
-    await fireEvent(parentHandle, 'onLongPress');
-    await act(() => {
-      latestListProps().onDragStart({ index: 0 });
-    });
-    await act(() => {
-      latestListProps().onReorder({ from: 0, to: 3 });
-    });
+    await dragParentTo(parentHandle, 0, 3);
     // Still paused for the drop's own render; resumes a frame later.
     expect(latestListProps().itemLayoutAnimation).toBeUndefined();
     await act(() => {
@@ -141,15 +144,7 @@ describe('NoteEditorScreen dragging a parent item', () => {
 
   it('drops the whole group in its new place', async () => {
     const { getAllByTestId, queryByTestId } = await render(<NoteEditorScreen />);
-    const parentHandle = getAllByTestId('list-item-drag-handle')[0]!;
-    await fireEvent(parentHandle, 'onPressIn');
-    await fireEvent(parentHandle, 'onLongPress');
-    await act(() => {
-      latestListProps().onDragStart({ index: 0 });
-    });
-    await act(() => {
-      latestListProps().onReorder({ from: 0, to: 3 });
-    });
+    await dragParentTo(getAllByTestId('list-item-drag-handle')[0]!, 0, 3);
 
     expect(queryByTestId('list-item-group')).toBeNull();
     expect(texts(getAllByTestId('list-item-text'))).toEqual(['Other', 'Parent', 'Child 1', 'Child 2']);

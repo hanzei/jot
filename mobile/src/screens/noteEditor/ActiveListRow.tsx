@@ -26,11 +26,16 @@ interface ActiveListRowProps {
    * for a drag, so the reorderable list lifts parent and children together.
    */
   children?: ReactNode;
-  /** The handle was pressed / released (parent rows: holds or releases the group). */
-  onHandlePressIn?: ((itemId: string) => void) | undefined;
-  onHandlePressOut?: ((itemId: string) => void) | undefined;
-  /** Called right before the long-press starts the drag. */
-  onDragStarting?: ((itemId: string) => void) | undefined;
+  /**
+   * Group-drag wiring, for a parent row: its handle being pressed / released
+   * holds or releases the group, and onDragStarting runs right before the
+   * long-press starts the drag.
+   */
+  group?: {
+    onHandlePressIn: (itemId: string) => void;
+    onHandlePressOut: (itemId: string) => void;
+    onDragStarting: (itemId: string) => void;
+  } | undefined;
   /** Live horizontal drag distance, written by the list pan's onChange. */
   dragTranslateX: SharedValue<number>;
   /** Indent level of this item when a drag begins (0 top-level, 1 nested). */
@@ -68,9 +73,7 @@ function ActiveListRow({
   itemId,
   listItemProps,
   children,
-  onHandlePressIn,
-  onHandlePressOut,
-  onDragStarting,
+  group,
   dragTranslateX,
   indentBaseLevel,
   canIndent,
@@ -112,23 +115,23 @@ function ActiveListRow({
 
   const handleDrag = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    onDragStarting?.(itemId);
+    group?.onDragStarting(itemId);
     drag();
-  }, [drag, onDragStarting, itemId]);
-  const handlePressIn = useCallback(() => onHandlePressIn?.(itemId), [onHandlePressIn, itemId]);
-  const handlePressOut = useCallback(() => onHandlePressOut?.(itemId), [onHandlePressOut, itemId]);
+  }, [drag, group, itemId]);
+  const handlePressIn = useCallback(() => group?.onHandlePressIn(itemId), [group, itemId]);
+  const handlePressOut = useCallback(() => group?.onHandlePressOut(itemId), [group, itemId]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: (displayLevel.get() - indentBaseLevel) * INDENT_PX }],
   }));
 
   return (
-    <Reanimated.View style={animatedStyle} {...(children ? { testID: 'list-item-group' } : {})}>
+    <Reanimated.View style={animatedStyle} testID={children ? 'list-item-group' : undefined}>
       <ListItem
         {...listItemProps}
         onDrag={handleDrag}
-        onDragHandlePressIn={onHandlePressIn ? handlePressIn : undefined}
-        onDragHandlePressOut={onHandlePressOut ? handlePressOut : undefined}
+        onDragHandlePressIn={group ? handlePressIn : undefined}
+        onDragHandlePressOut={group ? handlePressOut : undefined}
         isActive={isActive}
       />
       {children}
