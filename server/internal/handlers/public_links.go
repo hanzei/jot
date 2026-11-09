@@ -71,7 +71,7 @@ func (h *NotesHandler) SetPublicLink(w http.ResponseWriter, r *http.Request) (in
 
 	// A trashed note's link is paused, so it cannot be created or changed
 	// until the note is restored.
-	if status, err := h.requirePublicLinkAccess(r.Context(), id, user.ID, false); err != nil {
+	if _, status, err := h.requirePublicLinkAccess(r.Context(), id, user.ID, false); err != nil {
 		return status, nil, err
 	}
 
@@ -108,7 +108,8 @@ func (h *NotesHandler) DeletePublicLink(w http.ResponseWriter, r *http.Request) 
 		return http.StatusBadRequest, nil, idErr
 	}
 
-	if status, err := h.requirePublicLinkAccess(r.Context(), id, user.ID, true); err != nil {
+	trashed, status, err := h.requirePublicLinkAccess(r.Context(), id, user.ID, true)
+	if err != nil {
 		return status, nil, err
 	}
 
@@ -117,7 +118,13 @@ func (h *NotesHandler) DeletePublicLink(w http.ResponseWriter, r *http.Request) 
 		return storeError(err, "delete public link")
 	}
 
-	if deleted {
+	switch {
+	case !deleted:
+	case trashed:
+		// Only the owner sees a trashed note, and the audience fan-out reads
+		// active notes only.
+		h.events.OwnNoteUpdated(r.Context(), id, user.ID)
+	default:
 		h.events.NoteUpdated(r.Context(), id, nil, user.ID, true)
 	}
 	return http.StatusNoContent, nil, nil
@@ -126,22 +133,26 @@ func (h *NotesHandler) DeletePublicLink(w http.ResponseWriter, r *http.Request) 
 // requirePublicLinkAccess checks that userID may manage noteID's public link:
 // the owner or a collaborator of an active note, or — when allowTrashed is set
 // — the owner of a trashed one. Anyone else gets a 404, as for every other
-// note endpoint.
-func (h *NotesHandler) requirePublicLinkAccess(ctx context.Context, noteID, userID string, allowTrashed bool) (int, error) {
+// note endpoint. trashed reports that access came through the trashed-note
+// path, where only the owner can see the note.
+func (h *NotesHandler) requirePublicLinkAccess(ctx context.Context, noteID, userID string, allowTrashed bool) (trashed bool, status int, err error) {
 	hasAccess, err := h.noteStore.HasAccess(ctx, noteID, userID)
 	if err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("check note access: %w", err)
+		return false, http.StatusInternalServerError, fmt.Errorf("check note access: %w", err)
 	}
-	if !hasAccess && allowTrashed {
-		hasAccess, err = h.noteStore.IsOwner(ctx, noteID, userID)
+	if hasAccess {
+		return false, http.StatusOK, nil
+	}
+	if allowTrashed {
+		isOwner, err := h.noteStore.IsOwner(ctx, noteID, userID)
 		if err != nil {
-			return http.StatusInternalServerError, fmt.Errorf("check note ownership: %w", err)
+			return false, http.StatusInternalServerError, fmt.Errorf("check note ownership: %w", err)
+		}
+		if isOwner {
+			return true, http.StatusOK, nil
 		}
 	}
-	if !hasAccess {
-		return http.StatusNotFound, models.ErrNoteNotFound
-	}
-	return http.StatusOK, nil
+	return false, http.StatusNotFound, models.ErrNoteNotFound
 }
 
 // publicToken returns the {token} path parameter, or ErrPublicLinkNotFound

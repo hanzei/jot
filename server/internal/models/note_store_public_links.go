@@ -134,9 +134,12 @@ func (s *noteStore) SetPublicLink(ctx context.Context, noteID, userID string, ex
 
 	// The unique index on note_id turns a second insert for the same note,
 	// including a concurrent one, into a no-op; the update below then applies
-	// this call's expiry to whichever link won.
+	// this call's expiry to whichever link won. The conflict target is named so
+	// that only that index is absorbed: a clash on any other (the token) still
+	// fails loudly. Both backends accept this upsert syntax.
 	result, err := tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(s.d.InsertIgnore("note_public_links", "id, note_id, token, created_by, created_at, expires_at", "?, ?, ?, ?, ?, ?")),
+		s.d.RewritePlaceholders(`INSERT INTO note_public_links (id, note_id, token, created_by, created_at, expires_at)
+		 VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (note_id) DO NOTHING`),
 		id, noteID, token, userID, now, expires,
 	)
 	if err != nil {
@@ -226,49 +229,28 @@ func (s *noteStore) getPublicLinksByNoteIDs(ctx context.Context, noteIDs []strin
 	return result, nil
 }
 
-// publicNoteIDByToken resolves token to the ID of the note it publishes. Only
-// an active link on an active (not trashed) note resolves; everything else is
+// GetPublicNote returns the reduced view of the note token publishes. Only an
+// active link on an active (not trashed) note resolves; everything else —
+// including a malformed token, rejected before any query — is
 // ErrPublicLinkNotFound. Archived notes stay visible.
-func (s *noteStore) publicNoteIDByToken(ctx context.Context, token string) (string, error) {
-	if !IsValidPublicLinkToken(token) {
-		return "", ErrPublicLinkNotFound
-	}
-	var noteID string
-	err := s.db.QueryRowContext(ctx,
-		s.d.RewritePlaceholders(`SELECT n.id FROM note_public_links l
-		 INNER JOIN active_notes n ON n.id = l.note_id
-		 WHERE l.token = ? AND `+activePublicLinkCond),
-		token, Timestamp(Now()),
-	).Scan(&noteID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", ErrPublicLinkNotFound
-		}
-		return "", fmt.Errorf("failed to resolve public link: %w", err)
-	}
-	return noteID, nil
-}
-
-// GetPublicNote returns the reduced view of the note token publishes, or
-// ErrPublicLinkNotFound.
 func (s *noteStore) GetPublicNote(ctx context.Context, token string) (*PublicNote, error) {
-	noteID, err := s.publicNoteIDByToken(ctx, token)
-	if err != nil {
-		return nil, err
+	if !IsValidPublicLinkToken(token) {
+		return nil, ErrPublicLinkNotFound
 	}
 
 	// checked_items_collapsed is per-user state; the owner's is the one the
 	// public view mirrors.
-	var note PublicNote
-	var content string
+	var noteID, content string
 	var collapsed bool
-	err = s.db.QueryRowContext(ctx,
-		s.d.RewritePlaceholders(`SELECT n.note_type, n.title, n.content, n.updated_at, nus.checked_items_collapsed
-		 FROM active_notes n
+	var note PublicNote
+	err := s.db.QueryRowContext(ctx,
+		s.d.RewritePlaceholders(`SELECT n.id, n.note_type, n.title, n.content, n.updated_at, nus.checked_items_collapsed
+		 FROM note_public_links l
+		 INNER JOIN active_notes n ON n.id = l.note_id
 		 INNER JOIN note_user_state nus ON nus.note_id = n.id AND nus.user_id = n.user_id
-		 WHERE n.id = ?`),
-		noteID,
-	).Scan(&note.NoteType, &note.Title, &content, &note.UpdatedAt, &collapsed)
+		 WHERE l.token = ? AND `+activePublicLinkCond),
+		token, Timestamp(Now()),
+	).Scan(&noteID, &note.NoteType, &note.Title, &content, &note.UpdatedAt, &collapsed)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrPublicLinkNotFound
@@ -307,25 +289,31 @@ func (s *noteStore) GetPublicNote(ctx context.Context, token string) (*PublicNot
 }
 
 // GetPublicNoteImage returns imageID when it belongs to the note token
-// publishes. An image of any other note is ErrPublicLinkNotFound, the same as
-// a dead link, so the public path never reaches beyond its one note.
+// publishes, under the same rules as GetPublicNote. An image of any other note
+// is ErrPublicLinkNotFound, the same as a dead link, so the public path never
+// reaches beyond its one note.
 func (s *noteStore) GetPublicNoteImage(ctx context.Context, token, imageID string) (*NoteImage, error) {
-	noteID, err := s.publicNoteIDByToken(ctx, token)
-	if err != nil {
-		return nil, err
-	}
-	if !IsValidID(imageID) {
+	if !IsValidPublicLinkToken(token) || !IsValidID(imageID) {
 		return nil, ErrPublicLinkNotFound
 	}
-	img, err := s.GetNoteImageByID(ctx, imageID)
+
+	var img NoteImage
+	err := s.db.QueryRowContext(ctx,
+		s.d.RewritePlaceholders(`SELECT i.id, i.note_id, i.uploader_id, i.filename, i.content_type, i.size_bytes, i.sha256, i.width, i.height, i.created_at
+		 FROM note_public_links l
+		 INNER JOIN active_notes n ON n.id = l.note_id
+		 INNER JOIN note_images i ON i.note_id = n.id
+		 WHERE l.token = ? AND i.id = ? AND `+activePublicLinkCond),
+		token, imageID, Timestamp(Now()),
+	).Scan(
+		&img.ID, &img.NoteID, &img.UploaderID, &img.Filename, &img.ContentType,
+		&img.SizeBytes, &img.SHA256, &img.Width, &img.Height, &img.CreatedAt,
+	)
 	if err != nil {
-		if errors.Is(err, ErrNoteImageNotFound) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrPublicLinkNotFound
 		}
-		return nil, fmt.Errorf("get public note image: %w", err)
+		return nil, fmt.Errorf("failed to get public note image: %w", err)
 	}
-	if img.NoteID != noteID {
-		return nil, ErrPublicLinkNotFound
-	}
-	return img, nil
+	return &img, nil
 }

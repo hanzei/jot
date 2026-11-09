@@ -665,6 +665,17 @@ func TestPublicLinkSSE(t *testing.T) {
 	event, found = waitForSSEEvent(collabCh, isUpdate, 3*time.Second)
 	require.True(t, found, "collaborator should receive note_updated when the link is revoked")
 	assert.Nil(t, event.NoteData.Note.PublicLink)
+
+	// Revoking a trashed note's link reaches the owner, the only one who sees it.
+	_, err = owner.Client.SetPublicLink(t.Context(), note.ID, nil)
+	require.NoError(t, err)
+	require.NoError(t, owner.Client.DeleteNote(t.Context(), note.ID))
+	require.NoError(t, owner.Client.DeletePublicLink(t.Context(), note.ID))
+	event, found = waitForSSEEvent(ownerCh, func(e client.SSEEvent) bool {
+		return isUpdate(e) && e.NoteData.Note.DeletedAt != nil
+	}, 3*time.Second)
+	require.True(t, found, "owner should receive note_updated when a trashed note's link is revoked")
+	assert.Nil(t, event.NoteData.Note.PublicLink)
 }
 
 func TestPublicLinkConfig(t *testing.T) {

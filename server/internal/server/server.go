@@ -431,12 +431,6 @@ func (s *Server) setupRoutes() error {
 			}
 		})
 
-		// Baseline per-user rate limit, keyed on the authenticated user so it
-		// applies uniformly across every authenticated route group below (and so
-		// two users can't starve each other). Guards against runaway client sync
-		// loops / SSE reconnect storms without penalizing normal use (CLAUDE.md
-		// threat model: unintentional internal overload). limit() memoizes by
-		// bucket name, so both groups below share the same underlying limiter.
 		// Public note links are the one other unauthenticated surface. They get
 		// their own per-IP bucket, shared by the note and its images and
 		// thumbnails, so a viewer loading a note with many images is not
@@ -449,6 +443,12 @@ func (s *Server) setupRoutes() error {
 			r.Get("/public/notes/{token}/images/{id}/thumbnail", s.wrapHandler(s.notesHandler.GetPublicNoteImageThumbnail))
 		})
 
+		// Baseline per-user rate limit, keyed on the authenticated user so it
+		// applies uniformly across every authenticated route group below (and so
+		// two users can't starve each other). Guards against runaway client sync
+		// loops / SSE reconnect storms without penalizing normal use (CLAUDE.md
+		// threat model: unintentional internal overload). limit() memoizes by
+		// bucket name, so both groups below share the same underlying limiter.
 		baselineLimit := s.rateLimiter.limit(bucketBaseline, s.cfg.RateLimitPerMinute, keyByUserID)
 
 		r.Group(func(r chi.Router) {

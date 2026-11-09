@@ -132,10 +132,20 @@ func (p *Publisher) LabelNoteUpdates(ctx context.Context, noteIDs []string, user
 		return
 	}
 	for _, noteID := range noteIDs {
-		note, err := p.noteStore.GetByIDAnyState(ctx, noteID, userID)
-		if err != nil {
-			continue
-		}
-		p.publish(ctx, []string{userID}, sse.EventNoteUpdated, userID, sse.NoteEventData{NoteID: noteID, Note: models.SanitizeNote(*note)})
+		p.OwnNoteUpdated(ctx, noteID, userID)
 	}
+}
+
+// OwnNoteUpdated sends note_updated for noteID to userID alone, with their
+// view of the note in any state, trashed included. Used where only the acting
+// user can see the note, such as the owner changing a trashed note.
+func (p *Publisher) OwnNoteUpdated(ctx context.Context, noteID, userID string) {
+	if p.hub == nil {
+		return
+	}
+	note, err := p.noteStore.GetByIDAnyState(ctx, noteID, userID)
+	if err != nil {
+		return
+	}
+	p.publish(ctx, []string{userID}, sse.EventNoteUpdated, userID, sse.NoteEventData{NoteID: noteID, Note: models.SanitizeNote(*note)})
 }

@@ -29,9 +29,6 @@ compiled web app, while SQLite keeps the default deployment small and portable.
 
 - **Sharing**: Share notes with other users while preserving owner/share access
   boundaries.
-- **Public links**: Publish a read-only link to a note (`/share/{token}`) for
-  people without an account, optionally with an expiry. The owner and
-  collaborators can create, copy, re-time and revoke it.
 - **Unread badges**: Note cards mark a note shared with you as "New" until you
   open it, and as "Updated" when a collaborator changed it since you last
   looked.
