@@ -1294,16 +1294,20 @@ export default function NoteEditorScreen() {
     ({ item, index }: ReorderableListRenderItemInfo<LocalItem>) => {
       const originalIndex = itemIndexMapRef.current.get(item.id);
       if (originalIndex === undefined) return null;
-      // A held group's children are drawn inside the parent's cell (below), so
-      // their own cells hold only a placeholder until the group is released.
-      // The group's drawing gives back the placeholders' height (negative margin)
-      // so nothing on screen moves when it is grouped.
-      if (groupedParentId !== null && item.parentId === groupedParentId) {
+      // While a group is held, *every* group is drawn as one block: its children
+      // render inside the parent's cell (below), and their own cells hold only a
+      // placeholder until the group is released. Grouping the others too means
+      // the lifted group can only pass whole groups, so it never shows between
+      // another parent and its children — matching the drop, which can't nest a
+      // parent and lands it before or after that group. The drawing gives back
+      // the placeholders' height (negative margin), so nothing on screen moves.
+      const grouping = groupedParentId !== null;
+      if (grouping && item.parentId !== null) {
         return <View style={GROUP_PLACEHOLDER_STYLE} testID="list-item-group-placeholder" />;
       }
       const baseLevel = item.parentId ? 1 : 0;
       const hasChildren = itemHasChildren(itemsRef.current, item.id);
-      const groupChildren = item.id === groupedParentId
+      const groupChildren = grouping && hasChildren
         ? itemsRef.current.filter((child) => child.parentId === item.id && !child.completed)
         : [];
       // The handle keeps its glyph but does nothing: the group is already

@@ -88,9 +88,10 @@ export interface ListItemEditing {
   /** Active (unchecked) rows, in order. */
   uncheckedItems: LocalItem[];
   /**
-   * The parent whose children are currently drawn inside its own row so the
-   * group lifts as one (see holdGroupForDrag), or null. Those children's own
-   * rows render empty meanwhile.
+   * The parent held for a group drag (see holdGroupForDrag), or null. While set,
+   * every parent draws its children inside its own row — the held one so it
+   * lifts as one, the others so it can only pass whole groups — and the
+   * children's own rows render as placeholders.
    */
   groupedParentId: string | null;
   /**
@@ -782,11 +783,10 @@ export function useListItemEditing({
 
   const setGroupedParent = useCallback((parentId: string | null) => {
     if (groupedParentIdRef.current === parentId) return;
-    // A child holding the caret moves between its own cell and the parent's, so
-    // its input remounts — re-open the keyboard on it either way.
+    // Every child moves between its own cell and its parent's, so a child
+    // holding the caret remounts its input — re-open the keyboard on it.
     const focusedId = focusedItemIdRef.current;
-    const regroupedId = parentId ?? groupedParentIdRef.current;
-    if (focusedId !== null && uncheckedItemsRef.current.some((item) => item.id === focusedId && item.parentId === regroupedId)) {
+    if (focusedId !== null && uncheckedItemsRef.current.some((item) => item.id === focusedId && item.parentId !== null)) {
       armAutoFocus(focusedId);
     }
     groupedParentIdRef.current = parentId;

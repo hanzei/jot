@@ -117,6 +117,22 @@ describe('NoteEditorScreen dragging a parent item', () => {
     expect(latestListProps().itemLayoutAnimation).toBeDefined();
   });
 
+  it('draws every other group as a block too, so the held one can only pass whole groups', async () => {
+    const OTHER_CHILD_ID = 'ocococococococococococ';
+    const note = groupedNote();
+    note.items!.push(makeNoteItem({ id: OTHER_CHILD_ID, note_id: NOTE_ID, text: 'Other child', position: 4, parent_id: OTHER_ID }));
+    mockUseOfflineNote.mockReturnValue({ data: note });
+    const { getAllByTestId, queryAllByTestId } = await render(<NoteEditorScreen />);
+
+    await fireEvent(getAllByTestId('list-item-drag-handle')[0]!, 'onPressIn');
+
+    const groups = getAllByTestId('list-item-group');
+    expect(groups).toHaveLength(2);
+    expect(texts(within(groups[1]!).getAllByTestId('list-item-text'))).toEqual(['Other', 'Other child']);
+    expect(queryAllByTestId('list-item-group-placeholder')).toHaveLength(3);
+    expect(texts(getAllByTestId('list-item-text'))).toEqual(['Parent', 'Child 1', 'Child 2', 'Other', 'Other child']);
+  });
+
   it('does not group a row without children', async () => {
     const { getAllByTestId, queryByTestId } = await render(<NoteEditorScreen />);
     await fireEvent(getAllByTestId('list-item-drag-handle')[3]!, 'onPressIn');
