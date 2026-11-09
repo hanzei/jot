@@ -458,8 +458,8 @@ describe('useListItemEditing — derived lists', () => {
       item('d', { text: '   ', completed: true }),
     ]);
 
-    const { activeListRows, checkedItems, completedItemTexts, itemIndexMap } = result.current.editing;
-    expect(ids(activeListRows)).toEqual(['b']);
+    const { uncheckedItems, checkedItems, completedItemTexts, itemIndexMap } = result.current.editing;
+    expect(ids(uncheckedItems)).toEqual(['b']);
     expect(ids(checkedItems)).toEqual(['a', 'c', 'd']);
     // Case-insensitively deduplicated, and blank rows are not suggestions.
     expect(completedItemTexts).toEqual(['Milk']);
@@ -468,8 +468,9 @@ describe('useListItemEditing — derived lists', () => {
 });
 
 describe('useListItemEditing — dragging a parent', () => {
-  // A parent and its children move as one group: the children are folded out of
-  // the list's data while the parent is lifted, and re-seated under it on drop.
+  // A parent and its children move as one group: pressing a parent's handle
+  // draws its children inside its row (groupedParentId), and the drop moves the
+  // parent with normalizeItemOrder re-seating the children right under it.
   const groups = () => [
     item('a'),
     item('a1', { parentId: 'a' }),
@@ -477,91 +478,116 @@ describe('useListItemEditing — dragging a parent', () => {
     item('b'),
     item('c'),
   ];
+  type View = Awaited<ReturnType<typeof mountWith>>;
+  const editing = (view: View) => view.result.current.editing;
 
-  async function startDrag(view: Awaited<ReturnType<typeof mountWith>>, index: number) {
+  async function grab(view: View, id: string, index: number) {
     await act(async () => {
-      view.result.current.editing.handleListDragStart({ index });
+      editing(view).holdGroupForDrag(id);
+      editing(view).markGroupDragStarted(id);
+      editing(view).handleListDragStart({ index });
     });
   }
 
-  it('folds the children into the parent for the drag', async () => {
+  it('groups a parent with its children from the moment its handle is pressed', async () => {
     const view = await mountWith(groups());
-    await startDrag(view, 0);
-    expect(ids(view.result.current.editing.activeListRows)).toEqual(['a', 'b', 'c']);
+    await act(async () => {
+      editing(view).holdGroupForDrag('a');
+    });
+    expect(editing(view).groupedParentId).toBe('a');
+    // The list's data and indices are untouched.
+    expect(ids(editing(view).uncheckedItems)).toEqual(['a', 'a1', 'a2', 'b', 'c']);
   });
 
-  it('carries the children along when the parent is dropped lower', async () => {
+  it('ungroups when the press ends without a drag', async () => {
     const view = await mountWith(groups());
-    await startDrag(view, 0);
-    // In the folded list [a, b, c], drop a after b.
     await act(async () => {
-      view.result.current.editing.handleListReorder({ from: 0, to: 1 });
+      editing(view).holdGroupForDrag('a');
+    });
+    await act(async () => {
+      editing(view).releaseGroupHold('a');
+    });
+    expect(editing(view).groupedParentId).toBeNull();
+  });
+
+  it('keeps the group while dragging even if the press ends', async () => {
+    const view = await mountWith(groups());
+    await grab(view, 'a', 0);
+    await act(async () => {
+      editing(view).releaseGroupHold('a');
+    });
+    expect(editing(view).groupedParentId).toBe('a');
+  });
+
+  it('does not group a row without children', async () => {
+    const view = await mountWith(groups());
+    await act(async () => {
+      editing(view).holdGroupForDrag('b');
+    });
+    expect(editing(view).groupedParentId).toBeNull();
+  });
+
+  it('moves the children with the parent when it is dropped lower', async () => {
+    const view = await mountWith(groups());
+    await grab(view, 'a', 0);
+    // Drop a after b: from 0 to 3, the slot b occupies.
+    await act(async () => {
+      editing(view).handleListReorder({ from: 0, to: 3 });
     });
     expect(ids(view.result.current.doc.items)).toEqual(['b', 'a', 'a1', 'a2', 'c']);
-    expect(ids(view.result.current.editing.activeListRows)).toEqual(['b', 'a', 'a1', 'a2', 'c']);
+    expect(editing(view).groupedParentId).toBeNull();
     expect(markDirty).toHaveBeenCalled();
   });
 
-  it('carries the children along when the parent is dropped higher', async () => {
+  it('moves the children with the parent when it is dropped higher', async () => {
     const view = await mountWith([item('b'), item('a'), item('a1', { parentId: 'a' }), item('c')]);
-    await startDrag(view, 1);
+    await grab(view, 'a', 1);
     await act(async () => {
-      view.result.current.editing.handleListReorder({ from: 1, to: 0 });
+      editing(view).handleListReorder({ from: 1, to: 0 });
     });
     expect(ids(view.result.current.doc.items)).toEqual(['a', 'a1', 'b', 'c']);
   });
 
-  it('unfolds the children when the parent is released in place', async () => {
+  it('leaves the list as it was when the group is dropped onto its own children', async () => {
     const view = await mountWith(groups());
     markDirty.mockClear();
-    await startDrag(view, 0);
+    await grab(view, 'a', 0);
+    // The children's cells are empty while grouped, so slot 2 is still in place.
     await act(async () => {
-      view.result.current.editing.handleListDragEnd({ from: 0, to: 0 });
+      editing(view).handleListReorder({ from: 0, to: 2 });
     });
-    expect(ids(view.result.current.editing.activeListRows)).toEqual(['a', 'a1', 'a2', 'b', 'c']);
+    expect(ids(view.result.current.doc.items)).toEqual(['a', 'a1', 'a2', 'b', 'c']);
+  });
+
+  it('ungroups when the parent is released in place or the drop is discarded', async () => {
+    const view = await mountWith(groups());
+    markDirty.mockClear();
+    await grab(view, 'a', 0);
+    await act(async () => {
+      editing(view).handleListDragEnd({ from: 0, to: 0 });
+    });
+    expect(editing(view).groupedParentId).toBeNull();
+
+    await grab(view, 'a', 0);
+    await act(async () => {
+      editing(view).handleListReorder({ from: 0, to: 9 });
+    });
+    expect(editing(view).groupedParentId).toBeNull();
     expect(markDirty).not.toHaveBeenCalled();
   });
 
-  it('does not duplicate the children when the drop lands before the folded render', async () => {
+  it('re-arms focus on a focused child as it moves into and out of the group', async () => {
     const view = await mountWith(groups());
-    // Start and drop in one act(), so the drop is committed against the list
-    // as last rendered — children still in it.
+    editing(view).focusedItemIdRef.current = 'a1';
     await act(async () => {
-      view.result.current.editing.handleListDragStart({ index: 0 });
-      view.result.current.editing.handleListReorder({ from: 0, to: 3 });
+      editing(view).holdGroupForDrag('a');
     });
-    expect(ids(view.result.current.doc.items)).toEqual(['b', 'a', 'a1', 'a2', 'c']);
-  });
-
-  it('unfolds the children when a stale drop is discarded', async () => {
-    const view = await mountWith(groups());
-    markDirty.mockClear();
-    await startDrag(view, 0);
+    expect(editing(view).autoFocusItemIdRef.current).toBe('a1');
+    editing(view).autoFocusItemIdRef.current = null;
     await act(async () => {
-      view.result.current.editing.handleListReorder({ from: 0, to: 9 });
+      editing(view).releaseGroupHold('a');
     });
-    expect(ids(view.result.current.editing.activeListRows)).toEqual(['a', 'a1', 'a2', 'b', 'c']);
-    expect(markDirty).not.toHaveBeenCalled();
-  });
-
-  it('re-arms focus on a focused child when the parent is released in place', async () => {
-    const view = await mountWith(groups());
-    view.result.current.editing.focusedItemIdRef.current = 'a1';
-    await startDrag(view, 0);
-    await act(async () => {
-      view.result.current.editing.handleListDragEnd({ from: 0, to: 0 });
-    });
-    expect(view.result.current.editing.autoFocusItemIdRef.current).toBe('a1');
-  });
-
-  it('leaves the list alone when a childless row is dragged', async () => {
-    const view = await mountWith(groups());
-    await startDrag(view, 3);
-    expect(ids(view.result.current.editing.activeListRows)).toEqual(['a', 'a1', 'a2', 'b', 'c']);
-    await act(async () => {
-      view.result.current.editing.handleListReorder({ from: 3, to: 4 });
-    });
-    expect(ids(view.result.current.doc.items)).toEqual(['a', 'a1', 'a2', 'c', 'b']);
+    expect(editing(view).autoFocusItemIdRef.current).toBe('a1');
   });
 });
 

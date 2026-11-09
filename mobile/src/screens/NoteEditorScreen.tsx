@@ -83,6 +83,7 @@ import UserAvatar from '../components/UserAvatar';
 import { styles } from './noteEditor/styles';
 import { animateListReflow, isReduceMotionEnabledSync } from '../utils/layoutAnimation';
 import ActiveListRow from './noteEditor/ActiveListRow';
+import ListItem from '../components/ListItem';
 import { useEditorDoc } from './noteEditor/useEditorDoc';
 import { useCardRectRegistry } from './notesList/cardRectRegistry';
 import { useNoteEditorSync, type FlushOptions } from './noteEditor/useNoteEditorSync';
@@ -106,6 +107,7 @@ const ZOOM_MS = 280;
 // after a drop and leave the row greyed out or enlarged. Module-scoped so the
 // reference stays stable across renders.
 const DRAG_CELL_ANIMATIONS = { opacity: 1, transform: [] };
+const noop = () => {};
 
 export default function NoteEditorScreen() {
   const navigation = useNavigation<EditorNavProp>();
@@ -655,7 +657,11 @@ export default function NoteEditorScreen() {
     t,
   });
   const {
-    activeListRows,
+    uncheckedItems,
+    groupedParentId,
+    holdGroupForDrag,
+    releaseGroupHold,
+    markGroupDragStarted,
     checkedItems,
     itemIndexMap,
     itemIndexMapRef,
@@ -1244,14 +1250,60 @@ export default function NoteEditorScreen() {
   const barIconColor = hasNoteColor ? '#444' : colors.icon;
   const disabledBarIconColor = hasNoteColor ? '#999' : colors.iconMuted;
 
+  // The ListItem props for one active row, whether it renders in its own cell
+  // or inside its parent's while the group is held for a drag.
+  const activeRowProps = useCallback(
+    (item: LocalItem, originalIndex: number, hasChildren: boolean) => ({
+      inputRef: getItemRef(item.id),
+      selectionHandleRef: getItemSelectionRef(item.id),
+      inputAccessoryViewID: Platform.OS === 'ios' ? ITEM_MARKDOWN_TOOLBAR_ID : undefined,
+      autoFocus: item.id === autoFocusItemIdRef.current,
+      text: item.text,
+      completed: item.completed,
+      indentLevel: item.parentId ? 1 : 0,
+      editable: !isReadOnly,
+      showDragHandle: !isReadOnly,
+      assignedTo: item.assigned_to,
+      isShared: !!isNoteShared,
+      collaborators,
+      hasNoteColor,
+      completedItemTexts,
+      hasChildren,
+      onToggle: () => listItemHandlers.onToggle(item.id, !item.completed),
+      onChangeText: (text: string) => listItemHandlers.onChangeText(originalIndex, text),
+      onDelete: () => listItemHandlers.onDelete(originalIndex),
+      onSubmitEditing: (cursorPos: number) => listItemHandlers.onEnterAtCursor(originalIndex, cursorPos),
+      onBackspaceOnEmpty: () => listItemHandlers.onBackspaceOnEmpty(originalIndex),
+      onAssignPress: () => listItemHandlers.onAssignPress(item.id),
+      onFocus: () => listItemHandlers.onFocus(item.id),
+      onBlur: () => listItemHandlers.onBlur(item.id),
+      onAcceptSuggestion: (text: string) => handleAcceptSuggestion(item.id, text),
+    }),
+    [autoFocusItemIdRef, getItemRef, getItemSelectionRef, listItemHandlers, isNoteShared, collaborators, hasNoteColor, completedItemTexts, handleAcceptSuggestion, isReadOnly],
+  );
+
   const renderActiveRow = useCallback(
     ({ item, index }: ReorderableListRenderItemInfo<LocalItem>) => {
       const originalIndex = itemIndexMapRef.current.get(item.id);
       if (originalIndex === undefined) return null;
+      // A held group's children are drawn inside the parent's cell (below), so
+      // their own cells stay empty — zero height — until the group is released.
+      if (groupedParentId !== null && item.parentId === groupedParentId) return null;
       const baseLevel = item.parentId ? 1 : 0;
       const hasChildren = itemHasChildren(itemsRef.current, item.id);
+      const groupChildren = item.id === groupedParentId
+        ? itemsRef.current.filter((child) => child.parentId === item.id && !child.completed)
+        : [];
+      // The handle keeps its glyph but does nothing: the group is already
+      // being dragged by its parent.
+      const groupRows = groupChildren.length === 0 ? null : groupChildren.map((child) => {
+        const childIndex = itemIndexMapRef.current.get(child.id);
+        if (childIndex === undefined) return null;
+        return <ListItem key={child.id} {...activeRowProps(child, childIndex, false)} onDrag={noop} />;
+      });
       return (
         <ActiveListRow
+          itemId={item.id}
           dragTranslateX={dragTranslateX}
           indentBaseLevel={baseLevel}
           // Mirror commitDrag: an item can only nest if it has no children and
@@ -1260,36 +1312,16 @@ export default function NoteEditorScreen() {
           // drop would reject.
           canIndent={!hasChildren && index > 0}
           canOutdent={baseLevel === 1}
-          listItemProps={{
-            inputRef: getItemRef(item.id),
-            selectionHandleRef: getItemSelectionRef(item.id),
-            inputAccessoryViewID: Platform.OS === 'ios' ? ITEM_MARKDOWN_TOOLBAR_ID : undefined,
-            autoFocus: item.id === autoFocusItemIdRef.current,
-            text: item.text,
-            completed: item.completed,
-            indentLevel: item.parentId ? 1 : 0,
-            editable: !isReadOnly,
-            showDragHandle: !isReadOnly,
-            assignedTo: item.assigned_to,
-            isShared: !!isNoteShared,
-            collaborators,
-            hasNoteColor,
-            completedItemTexts,
-            hasChildren,
-            onToggle: () => listItemHandlers.onToggle(item.id, !item.completed),
-            onChangeText: (text) => listItemHandlers.onChangeText(originalIndex, text),
-            onDelete: () => listItemHandlers.onDelete(originalIndex),
-            onSubmitEditing: (cursorPos) => listItemHandlers.onEnterAtCursor(originalIndex, cursorPos),
-            onBackspaceOnEmpty: () => listItemHandlers.onBackspaceOnEmpty(originalIndex),
-            onAssignPress: () => listItemHandlers.onAssignPress(item.id),
-            onFocus: () => listItemHandlers.onFocus(item.id),
-            onBlur: () => listItemHandlers.onBlur(item.id),
-            onAcceptSuggestion: (text) => handleAcceptSuggestion(item.id, text),
-          }}
-        />
+          onHandlePressIn={hasChildren ? holdGroupForDrag : undefined}
+          onHandlePressOut={hasChildren ? releaseGroupHold : undefined}
+          onDragStarting={hasChildren ? markGroupDragStarted : undefined}
+          listItemProps={activeRowProps(item, originalIndex, hasChildren)}
+        >
+          {groupRows}
+        </ActiveListRow>
       );
     },
-    [autoFocusItemIdRef, getItemRef, getItemSelectionRef, itemIndexMapRef, itemsRef, listItemHandlers, isNoteShared, collaborators, hasNoteColor, completedItemTexts, handleAcceptSuggestion, dragTranslateX, isReadOnly],
+    [itemIndexMapRef, itemsRef, dragTranslateX, groupedParentId, holdGroupForDrag, releaseGroupHold, markGroupDragStarted, activeRowProps],
   );
 
   /**
@@ -1662,7 +1694,9 @@ export default function NoteEditorScreen() {
         ) : (
           <View style={styles.listContainer}>
             <NestedReorderableList<LocalItem>
-              data={activeListRows}
+              data={uncheckedItems}
+              // Cells re-render when a parent starts or stops drawing its group.
+              extraData={groupedParentId}
               // `item` is typed non-optional, but the library reads
               // `data[i]` at drag-start indices while finishing a drop, and
               // those can outlive the row they pointed at (see commitDrag).

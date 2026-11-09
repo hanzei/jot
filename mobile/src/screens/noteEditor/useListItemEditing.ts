@@ -85,12 +85,20 @@ export interface UseListItemEditingParams {
 }
 
 export interface ListItemEditing {
+  /** Active (unchecked) rows, in order. */
+  uncheckedItems: LocalItem[];
   /**
-   * The rows the reorderable list renders: the active (unchecked) items in
-   * order, minus the children of a parent that is being dragged — those are
-   * folded into it for the drag and re-seated under it on drop.
+   * The parent whose children are currently drawn inside its own row so the
+   * group lifts as one (see holdGroupForDrag), or null. Those children's own
+   * rows render empty meanwhile.
    */
-  activeListRows: LocalItem[];
+  groupedParentId: string | null;
+  /** The drag handle of `itemId` was pressed: group its children into its row. */
+  holdGroupForDrag: (itemId: string) => void;
+  /** The press on `itemId`'s handle ended; ungroup unless it became a drag. */
+  releaseGroupHold: (itemId: string) => void;
+  /** The long-press on `itemId`'s handle is starting a drag. */
+  markGroupDragStarted: (itemId: string) => void;
   /** Completed rows, for the collapsed section below the list. */
   checkedItems: LocalItem[];
   /** id → index into the full `items` array, so rows don't need an indexOf. */
@@ -745,24 +753,47 @@ export function useListItemEditing({
   // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   uncheckedItemsRef.current = uncheckedItems;
 
-  // Id of a parent row being dragged. While set, its active children are left
-  // out of the list's data so they travel with it: the library can only move one
-  // cell, and leaving them in place would let the parent be dropped between (or
-  // after) its own children — normalizeItemOrder then re-seats it before them, so
-  // the drop silently did nothing or landed somewhere other than where it was
-  // shown. commitDrag puts the children back right under the parent.
-  const [draggedParentId, setDraggedParentId] = useState<string | null>(null);
-  const activeListRows = useMemo(
-    () => (draggedParentId === null ? uncheckedItems : uncheckedItems.filter((item) => item.parentId !== draggedParentId)),
-    [uncheckedItems, draggedParentId],
-  );
-  // The list the library's drag indices refer to.
-  const activeListRowsRef = useRef(activeListRows);
-  // eslint-disable-next-line react-hooks/refs -- same render-time sync as above, tracked in #777
-  activeListRowsRef.current = activeListRows;
-  // The ref twin of draggedParentId: commitDrag reads it (and clears it) without
-  // waiting for a render, and without draggedParentId in its dependencies.
-  const draggedParentIdRef = useRef<string | null>(null);
+  // A parent and its children move as one group. The reorderable list can only
+  // lift a single cell, so from the moment a parent's drag handle is pressed —
+  // before the long-press starts the drag — the parent's row draws its children
+  // inside its own cell and the children's own cells render empty. Nothing moves
+  // on screen, the list's data and indices stay as they are, and when the drag
+  // starts the library measures (and lifts) the whole group. commitDrag only
+  // moves the parent; normalizeItemOrder re-seats the children right under it.
+  const [groupedParentId, setGroupedParentId] = useState<string | null>(null);
+  // Ref twin, so commitDrag and the press handlers act without a render.
+  const groupedParentIdRef = useRef<string | null>(null);
+  // Whether the held group's press turned into a drag. Until it does, lifting
+  // the finger ungroups; once it has, the drop does (see commitDrag).
+  const groupDragStartedRef = useRef(false);
+
+  const setGroupedParent = useCallback((parentId: string | null) => {
+    if (groupedParentIdRef.current === parentId) return;
+    // A child holding the caret moves between its own cell and the parent's, so
+    // its input remounts — re-open the keyboard on it either way.
+    const focusedId = focusedItemIdRef.current;
+    const regroupedId = parentId ?? groupedParentIdRef.current;
+    if (focusedId !== null && uncheckedItemsRef.current.some((item) => item.id === focusedId && item.parentId === regroupedId)) {
+      armAutoFocus(focusedId);
+    }
+    groupedParentIdRef.current = parentId;
+    groupDragStartedRef.current = false;
+    setGroupedParentId(parentId);
+  }, [armAutoFocus]);
+
+  const holdGroupForDrag = useCallback((itemId: string) => {
+    // A previous hold whose drag never reported back is superseded here.
+    if (uncheckedItemsRef.current.some((item) => item.parentId === itemId)) setGroupedParent(itemId);
+    else setGroupedParent(null);
+  }, [setGroupedParent]);
+
+  const releaseGroupHold = useCallback((itemId: string) => {
+    if (groupedParentIdRef.current === itemId && !groupDragStartedRef.current) setGroupedParent(null);
+  }, [setGroupedParent]);
+
+  const markGroupDragStarted = useCallback((itemId: string) => {
+    if (groupedParentIdRef.current === itemId) groupDragStartedRef.current = true;
+  }, []);
 
   // Id of the row a drag picked up, recorded at onDragStart. commitDrag uses it
   // to tell a drop that still describes the list it was measured against from
@@ -771,15 +802,7 @@ export function useListItemEditing({
   const dragOriginIdRef = useRef<string | null>(null);
 
   const rememberDragOrigin = useCallback((index: number) => {
-    const originId = activeListRowsRef.current[index]?.id ?? null;
-    dragOriginIdRef.current = originId;
-    // Fold a parent's children into it for the drag. The parent keeps its index
-    // (its children sit below it), so the drag the library just started stays
-    // valid; the rows below re-measure as they slide up.
-    if (originId !== null && uncheckedItemsRef.current.some((item) => item.parentId === originId)) {
-      draggedParentIdRef.current = originId;
-      setDraggedParentId(originId);
-    }
+    dragOriginIdRef.current = uncheckedItemsRef.current[index]?.id ?? null;
   }, []);
 
   const handleListDragStart = useCallback(
@@ -796,27 +819,11 @@ export function useListItemEditing({
   // every drop, which is how a purely sideways indent gets committed at all).
   const commitDrag = useCallback(
     (from: number, to: number) => {
-      const current = activeListRowsRef.current;
+      const current = uncheckedItemsRef.current;
       const originId = dragOriginIdRef.current;
       dragOriginIdRef.current = null;
-      // The children folded into a dragged parent, re-seated under it below.
-      // Unfold on every exit, including a discarded or no-op drop.
-      const collapsedParentId = draggedParentIdRef.current;
-      draggedParentIdRef.current = null;
-      setDraggedParentId(null);
-      // `current` is the list as last rendered — the one the library's indices
-      // describe. A drop committed before the collapsed render landed still
-      // holds the children there, so only re-seat the ones it is missing, or
-      // they would be duplicated.
-      const inCurrent = new Set(current.map((item) => item.id));
-      const foldedChildren = collapsedParentId === null
-        ? []
-        : uncheckedItemsRef.current.filter((item) => item.parentId === collapsedParentId && !inCurrent.has(item.id));
-      // Folding unmounted the children, so a child that held the caret lost it.
-      // Unfolding remounts it on every exit — moved, no-op or discarded drop —
-      // so re-arm its autoFocus before any of those returns.
-      const focusedId = focusedItemIdRef.current;
-      if (focusedId !== null && foldedChildren.some((item) => item.id === focusedId)) armAutoFocus(focusedId);
+      // The drop ends a group drag however it goes — moved, no-op or discarded.
+      setGroupedParent(null);
       // `from`/`to` were measured when the drag began, and the library hands
       // them back only once its drop animation finishes — ~200ms after the
       // finger lifts. A background note refresh (SSE refetch, catch-up resync
@@ -871,13 +878,12 @@ export function useListItemEditing({
       // remounted row re-opens the keyboard on itself instead of leaving focus
       // to fall back elsewhere (observed: the title input).
       if (focusedItemIdRef.current) armAutoFocus(focusedItemIdRef.current);
-      // Merge with the folded children and existing checked items and normalize
-      // so each parent's children stay contiguous — which seats the folded
-      // children right under their parent, in their original order.
-      setItems(normalizeItemOrder([...reorderedUnchecked, ...foldedChildren, ...checkedItemsRef.current]));
+      // Merge with existing checked items and normalize so each parent's
+      // children stay contiguous — a moved parent's children follow it.
+      setItems(normalizeItemOrder([...reorderedUnchecked, ...checkedItemsRef.current]));
       markDirtyAndScheduleUpdate();
     },
-    [armAutoFocus, markDirtyAndScheduleUpdate, dragTranslateX, itemsRef, setItems],
+    [armAutoFocus, markDirtyAndScheduleUpdate, dragTranslateX, itemsRef, setItems, setGroupedParent],
   );
 
   // The formatting bar's indent / outdent buttons: moves the row holding the
@@ -1002,7 +1008,11 @@ export function useListItemEditing({
   );
 
   return {
-    activeListRows,
+    uncheckedItems,
+    groupedParentId,
+    holdGroupForDrag,
+    releaseGroupHold,
+    markGroupDragStarted,
     checkedItems,
     itemIndexMap,
     itemIndexMapRef,

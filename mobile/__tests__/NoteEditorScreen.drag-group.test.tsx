@@ -1,0 +1,98 @@
+import { act, fireEvent, render, within } from '@testing-library/react-native';
+import { makeListNote, makeNoteItem } from './helpers/fixtures';
+import {
+  mockNavigationAddListener,
+  mockReorderItemsMutateAsync,
+  mockUpdateMutateAsync,
+  mockUseOfflineNote,
+  mockUseRoute,
+} from './helpers/noteEditorScreenTestSetup';
+import NoteEditorScreen from '../src/screens/NoteEditorScreen';
+
+// Dragging a parent lifts its children with it. The reorderable list can only
+// lift one cell, so pressing a parent's drag handle draws its children inside
+// the parent's own row (and empties theirs) before the long-press starts the
+// drag. jest.setup.js's list mock renders every cell, so the grouping shows up
+// as the children's rows moving inside the parent's `list-item-group`.
+interface ListProps {
+  onDragStart: (e: { index: number }) => void;
+  onReorder: (e: { from: number; to: number }) => void;
+}
+
+function latestListProps(): ListProps {
+  const mocked = jest.requireMock('react-native-reorderable-list') as {
+    __getLatestProps: () => ListProps | null;
+  };
+  const props = mocked.__getLatestProps();
+  if (!props) throw new Error('NestedReorderableList has not rendered yet');
+  return props;
+}
+
+const NOTE_ID = 'note-drag-group';
+const PARENT_ID = 'pppppppppppppppppppppp';
+const CHILD_1_ID = 'c1c1c1c1c1c1c1c1c1c1c1';
+const CHILD_2_ID = 'c2c2c2c2c2c2c2c2c2c2c2';
+const OTHER_ID = 'oooooooooooooooooooooo';
+
+const groupedNote = () => makeListNote({
+  id: NOTE_ID,
+  title: 'Trip',
+  items: [
+    makeNoteItem({ id: PARENT_ID, note_id: NOTE_ID, text: 'Parent', position: 0 }),
+    makeNoteItem({ id: CHILD_1_ID, note_id: NOTE_ID, text: 'Child 1', position: 1, parent_id: PARENT_ID }),
+    makeNoteItem({ id: CHILD_2_ID, note_id: NOTE_ID, text: 'Child 2', position: 2, parent_id: PARENT_ID }),
+    makeNoteItem({ id: OTHER_ID, note_id: NOTE_ID, text: 'Other', position: 3 }),
+  ],
+});
+
+type Query = { props: { value?: string } }[];
+const texts = (nodes: Query) => nodes.map((node) => node.props.value ?? '');
+
+describe('NoteEditorScreen dragging a parent item', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockNavigationAddListener.mockReturnValue(jest.fn());
+    mockUseRoute.mockReturnValue({ params: { noteId: NOTE_ID } });
+    mockUpdateMutateAsync.mockResolvedValue({});
+    mockReorderItemsMutateAsync.mockResolvedValue([]);
+    mockUseOfflineNote.mockReturnValue({ data: groupedNote() });
+  });
+
+  it('draws the children inside the parent row while its handle is held', async () => {
+    const { getAllByTestId, getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
+    expect(queryByTestId('list-item-group')).toBeNull();
+
+    const parentHandle = getAllByTestId('list-item-drag-handle')[0]!;
+    await fireEvent(parentHandle, 'onPressIn');
+
+    const group = getByTestId('list-item-group');
+    expect(texts(within(group).getAllByTestId('list-item-text'))).toEqual(['Parent', 'Child 1', 'Child 2']);
+    // Same rows, same order on screen.
+    expect(texts(getAllByTestId('list-item-text'))).toEqual(['Parent', 'Child 1', 'Child 2', 'Other']);
+
+    await fireEvent(parentHandle, 'onPressOut');
+    expect(queryByTestId('list-item-group')).toBeNull();
+  });
+
+  it('does not group a row without children', async () => {
+    const { getAllByTestId, queryByTestId } = await render(<NoteEditorScreen />);
+    await fireEvent(getAllByTestId('list-item-drag-handle')[3]!, 'onPressIn');
+    expect(queryByTestId('list-item-group')).toBeNull();
+  });
+
+  it('drops the whole group in its new place', async () => {
+    const { getAllByTestId, queryByTestId } = await render(<NoteEditorScreen />);
+    const parentHandle = getAllByTestId('list-item-drag-handle')[0]!;
+    await fireEvent(parentHandle, 'onPressIn');
+    await fireEvent(parentHandle, 'onLongPress');
+    await act(() => {
+      latestListProps().onDragStart({ index: 0 });
+    });
+    await act(() => {
+      latestListProps().onReorder({ from: 0, to: 3 });
+    });
+
+    expect(queryByTestId('list-item-group')).toBeNull();
+    expect(texts(getAllByTestId('list-item-text'))).toEqual(['Other', 'Parent', 'Child 1', 'Child 2']);
+  });
+});
