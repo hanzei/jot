@@ -143,6 +143,14 @@ Already documented, already understood — no need to report these:
   documents this under "Rate limiting", including the variable to raise.
 - **`GET /config` is intentionally unauthenticated and not rate-limited.** It is
   fetched on every page load and returns no user data.
+- **Public note links expose a note to anyone holding the link, and their
+  tokens are stored in plaintext.** That is the feature: the owner or a
+  collaborator chose to publish the note. Unlike session tokens, link tokens
+  are not hashed, so everyone with access can copy the link again; a leaked
+  database or backup therefore yields working links until they are revoked.
+  `JOT_PUBLIC_LINKS_ENABLED=false` switches the public endpoints off. Reaching a
+  note *without* its link, or another note's images through a link, is in
+  scope.
 - **The first registered user automatically becomes admin.** Set
   `JOT_REGISTRATION_ENABLED=false` once your users have accounts.
 

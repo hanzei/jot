@@ -29,6 +29,9 @@ compiled web app, while SQLite keeps the default deployment small and portable.
 
 - **Sharing**: Share notes with other users while preserving owner/share access
   boundaries.
+- **Public links**: Publish a read-only link to a note (`/share/{token}`) for
+  people without an account, optionally with an expiry. The owner and
+  collaborators can create, copy, re-time and revoke it.
 - **Unread badges**: Note cards mark a note shared with you as "New" until you
   open it, and as "Updated" when a collaborator changed it since you last
   looked.
@@ -362,6 +365,8 @@ another client, expect timestamp columns to hold UTC wall-clock values.
 | `JOT_COOKIE_SECURE` | `true` | Sets the session cookie `Secure` flag. Use `false` only for local HTTP development. |
 | `JOT_REGISTRATION_ENABLED` | `true` | Set to `false` to disable public registration; admins can still create users. |
 | `JOT_PASSWORD_MIN_LENGTH` | `10` | Minimum password length, from 1 to 72 characters. |
+| `JOT_PUBLIC_LINKS_ENABLED` | `true` | Set to `false` to switch public note links off: the unauthenticated `/api/v1/public/notes/…` endpoints return 404 (so `/share/{token}` pages show "not found") and no link can be created (`PUT /notes/{id}/public-link` returns 403). Revoking still works, and existing links are kept: turning the switch back on brings them back. Exposed as `public_links_enabled` in `GET /api/v1/config`. |
+| `JOT_PUBLIC_URL` | empty | The address people outside use to reach this instance, such as `https://jot.example.com`: an `http`/`https` origin (scheme, host, optional port) with no path, query or fragment; a single trailing `/` is stripped. Clients build public links from it. Set it when users reach Jot on an address outsiders cannot use — a LAN IP, an internal host name, a VPN or Tailscale name — or their copied links will not work for the recipient. Unset, each client uses its own address. Exposed as `public_url` in `GET /api/v1/config`. |
 
 ### Single sign-on (OIDC / SSO)
 
@@ -413,8 +418,8 @@ Notes for operators:
 
 ### Rate limiting
 
-Every authenticated `/api/v1` route, plus `/register`, `/login`, and `/logout`,
-is rate-limited to guard against unintentional internal overload — a
+Every authenticated `/api/v1` route, plus `/register`, `/login`, `/logout`, and
+the public link endpoints, is rate-limited to guard against unintentional internal overload — a
 client-side bug or flaky network turning an offline sync queue or SSE
 reconnect loop into a tight request loop against the server — rather than
 against malicious users (see the threat model in `CLAUDE.md`). A request over
@@ -432,6 +437,7 @@ reverse-proxy caveat below.)
 | `JOT_RATE_LIMIT_ENABLED` | `true` | Set to `false` to disable rate limiting entirely. |
 | `JOT_RATE_LIMIT_PER_MINUTE` | `300` | Baseline requests/min per authenticated user, across all `/api/v1` routes. |
 | `JOT_RATE_LIMIT_AUTH_PER_MINUTE` | `20` | Requests/min per client IP, shared by `/register`, `/login`, and `/logout` (none of which have an authenticated user to key on yet). |
+| `JOT_RATE_LIMIT_PUBLIC_PER_MINUTE` | `120` | Requests/min per client IP, shared by the unauthenticated public link endpoints: a public note and its images and thumbnails (`/api/v1/public/notes/…`). Dead links count too, so guessing tokens is throttled. Subject to the reverse-proxy caveat below. |
 | `JOT_RATE_LIMIT_EXPENSIVE_PER_MINUTE` | `20` | Requests/min per user, shared by note search (a full-text index query), import, export (streams every image), and image upload (decode/resize/thumbnail) — the costliest operations per request. These also count against the baseline limit above; the expensive limit is an additional, stricter cap on top of it. Plain note listing (no `search` query) is unaffected by this limit and only counts against the baseline. |
 
 **Reverse-proxy caveat:** `JOT_RATE_LIMIT_AUTH_PER_MINUTE` is keyed by the direct
@@ -441,7 +447,9 @@ setup, since `JOT_COOKIE_SECURE` defaults to requiring HTTPS — every client be
 that proxy shares one IP and therefore one bucket: one user's failed logins
 can throttle everyone else's login/register/logout attempts for up to a
 minute. If you run Jot behind such a proxy, raise `JOT_RATE_LIMIT_AUTH_PER_MINUTE`
-accordingly.
+accordingly. The same applies to `JOT_RATE_LIMIT_PUBLIC_PER_MINUTE`: behind such
+a proxy all anonymous viewers of public links share one bucket, so raise it if
+widely shared links start returning 429.
 
 ### Metrics and observability
 
