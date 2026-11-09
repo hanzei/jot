@@ -1,4 +1,4 @@
-import { TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { TouchableOpacity, ScrollView, StyleSheet, View } from 'react-native';
 import { Check, DropletOff } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
@@ -46,9 +46,18 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
                 accessibilityLabel={accessibilityLabel}
                 accessibilityState={{ selected: isDefaultSelected }}
               >
-                {isDefaultSelected
-                  ? <Check size={18} color={colors.icon} />
-                  : <DropletOff size={18} color={colors.icon} />}
+                {/* The droplet always stays: it is what says "no colour". So
+                    selection is a check badge on the corner instead of a check
+                    that replaces the glyph, as on the real colours. */}
+                <DropletOff size={18} color={colors.icon} />
+                {isDefaultSelected && (
+                  <View
+                    style={[styles.checkBadge, { backgroundColor: colors.primary, borderColor: colors.sheetBackground }]}
+                    testID="color-swatch-default-selected"
+                  >
+                    <Check size={12} strokeWidth={3} color="#fff" />
+                  </View>
+                )}
               </TouchableOpacity>
             );
           }
@@ -94,5 +103,16 @@ const styles = StyleSheet.create({
   },
   defaultCircle: {
     borderWidth: 1,
+  },
+  checkBadge: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
