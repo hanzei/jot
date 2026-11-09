@@ -2,7 +2,16 @@ import { useRef, useState, useSyncExternalStore } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Share } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Link2, Share2 } from 'lucide-react-native';
-import { userDisplayName, type PublicLink, type User } from '@jot/shared';
+import {
+  PUBLIC_LINK_EXPIRY_CHOICES,
+  isPublicLinkActive,
+  publicLinkExpiresAt,
+  publicLinkUrl,
+  userDisplayName,
+  type PublicLink,
+  type PublicLinkExpiryChoice,
+  type User,
+} from '@jot/shared';
 import { useTheme } from '../../theme/ThemeContext';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
@@ -11,13 +20,6 @@ import { useActiveServerBaseUrl } from '../../hooks/useActiveServerBaseUrl';
 import { usePublicLinkActions } from '../../hooks/usePublicLink';
 import { isOnlineWriteAllowed, isServerReachable, subscribeToServerReachability } from '../../api/serverReachability';
 import { displayMessage, errorMessageKey, getCurrentLocale } from '../../i18n/utils';
-import {
-  PUBLIC_LINK_EXPIRY_CHOICES,
-  isPublicLinkActive,
-  publicLinkExpiresAt,
-  publicLinkUrl,
-  type PublicLinkExpiryChoice,
-} from '../../utils/publicLink';
 import FormatRadioGroup, { type FormatOption } from '../settings/FormatRadioGroup';
 
 interface PublicLinkSectionProps {
