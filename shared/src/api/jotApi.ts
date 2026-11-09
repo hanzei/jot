@@ -25,9 +25,12 @@ import type {
   PATListResponse,
   PatchNoteItemRequest,
   PersonalAccessToken,
+  PublicLink,
+  PublicNote,
   RegisterRequest,
   ServerConfig,
   SessionListResponse,
+  SetPublicLinkRequest,
   SetUserPasswordRequest,
   ShareNoteRequest,
   UpdateMeRequest,
@@ -192,6 +195,19 @@ export function createJotApi(http: JotHttpClient) {
 
       deleteItems: (noteId: string, itemIds: string[]): Promise<NoteItem[]> =>
         data(http.post<NoteItem[]>(apiPaths.noteItemsDelete(noteId), { item_ids: itemIds })),
+
+      // Online-only one-shot operations; they never go through mobile's sync queue.
+      /** Creates the link, or changes only the expiry of an active one (same token). */
+      setPublicLink: (noteId: string, body: SetPublicLinkRequest): Promise<PublicLink> =>
+        data(http.put<PublicLink>(apiPaths.notePublicLink(noteId), body)),
+
+      /** Revokes the link for everyone who has it. */
+      deletePublicLink: (noteId: string): Promise<void> => done(http.delete(apiPaths.notePublicLink(noteId))),
+    },
+
+    /** Unauthenticated, read-only access through a public link. */
+    publicNotes: {
+      get: (token: string): Promise<PublicNote> => data(http.get<PublicNote>(apiPaths.publicNote(token))),
     },
 
     labels: {

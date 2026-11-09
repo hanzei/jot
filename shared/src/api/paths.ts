@@ -60,6 +60,13 @@ export const apiPaths = {
   noteItemsReorder: (noteId: string): string => `/notes/${noteId}/items/reorder`,
   noteItemsSetCompleted: (noteId: string): string => `/notes/${noteId}/items/set-completed`,
   noteItemsDelete: (noteId: string): string => `/notes/${noteId}/items/delete`,
+  /** `PUT` creates the link or changes its expiry, `DELETE` revokes it. */
+  notePublicLink: (noteId: string): string => `/notes/${noteId}/public-link`,
+
+  // Unauthenticated: a note and its images through the note's public link.
+  publicNote: (token: string): string => `/public/notes/${token}`,
+  publicNoteImage: (token: string, imageId: string): string => `/public/notes/${token}/images/${imageId}`,
+  publicNoteImageThumbnail: (token: string, imageId: string): string => `/public/notes/${token}/images/${imageId}/thumbnail`,
 
   labels: '/labels',
   label: (labelId: string): string => `/labels/${labelId}`,
