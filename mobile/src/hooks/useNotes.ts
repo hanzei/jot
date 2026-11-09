@@ -924,6 +924,8 @@ export function useDuplicateNote() {
         position: 0,
         is_shared: false,
         shared_with: [] as NoteShare[],
+        // A copy never inherits the source's public link (#1135).
+        public_link: null,
         deleted_at: null as string | null,
         created_at: now,
         updated_at: now,
@@ -1242,6 +1244,8 @@ export function useNoteShares(noteId: string | null) {
     // from a collaborator (read-only view + leave). Undefined until the note is
     // loaded; the screen treats an unknown owner as the owner-mode default.
     ownerId: note?.user_id,
+    // The note's cached public link, kept current by SSE `note_updated` events.
+    publicLink: note?.public_link,
     isLoading,
     isError,
   };

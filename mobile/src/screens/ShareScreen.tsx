@@ -19,6 +19,7 @@ import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useNoteShares, useShareNote, useUnshareNote, useLeaveNote } from '../hooks/useNotes';
 import UserAvatar from '../components/UserAvatar';
+import PublicLinkSection from './share/PublicLinkSection';
 import { useTheme } from '../theme/ThemeContext';
 import { useConfirm } from '../hooks/useConfirm';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
@@ -81,7 +82,7 @@ export default function ShareScreen() {
   const [pendingUserIds, setPendingUserIds] = useState<Set<string>>(new Set());
   const pendingUserIdsRef = useRef<Set<string>>(new Set());
 
-  const { data: currentShares, ownerId, isLoading: isLoadingShares, isError: isSharesError } = useNoteShares(noteId);
+  const { data: currentShares, ownerId, publicLink, isLoading: isLoadingShares, isError: isSharesError } = useNoteShares(noteId);
   const shareMutation = useShareNote();
   const unshareMutation = useUnshareNote();
   const leaveMutation = useLeaveNote();
@@ -489,6 +490,16 @@ export default function ShareScreen() {
             />
           )}
         </View>
+
+        {/* The owner and collaborators alike manage the note's public link. */}
+        {(isOwner || isReadOnlyViewer) && (
+          <PublicLinkSection
+            noteId={noteId}
+            publicLink={publicLink}
+            currentUserId={currentUser?.id}
+            usersById={usersById}
+          />
+        )}
 
         {/* Leaving is a collaborator-only action: it removes the current user's
             own share and drops the note from their list. */}
