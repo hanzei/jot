@@ -312,7 +312,7 @@
     "listItemLabel": "List item",
     "itemCheckbox": "{{item}} checkbox",
     "dragToReorderIndent": "Drag to reorder or indent",
-    "colorWhite": "White",
+    "colorDefault": "Default",
     "colorCoral": "Coral",
     "colorYellow": "Yellow",
     "colorLime": "Lime",

@@ -504,6 +504,16 @@ func TestMCPNoteValidation(t *testing.T) {
 		assert.Contains(t, msg, "valid CSS hex color")
 	})
 
+	t.Run("a color is stored as lowercase six-digit hex", func(t *testing.T) {
+		var created client.Note
+		callTool(t, sess, "create_note", map[string]any{"content": "x", "color": "#ABC"}, &created)
+		assert.Equal(t, "#aabbcc", created.Color)
+
+		var updated client.Note
+		callTool(t, sess, "update_note", map[string]any{"id": created.ID, "color": "#F28B82"}, &updated)
+		assert.Equal(t, "#f28b82", updated.Color)
+	})
+
 	t.Run("an empty color resets to the default", func(t *testing.T) {
 		var updated client.Note
 		callTool(t, sess, "update_note", map[string]any{"id": textNote.ID, "color": ""}, &updated)

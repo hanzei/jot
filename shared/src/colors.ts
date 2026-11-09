@@ -1,3 +1,5 @@
+import { DEFAULT_NOTE_COLOR } from './constants';
+
 export function hashUsername(username: string): number {
   let hash = 0;
   for (let i = 0; i < username.length; i++) {
@@ -46,9 +48,13 @@ export const NOTE_COLORS = [
   '#e8eaed',
 ] as const;
 
-/** Maps each NOTE_COLORS hex value to its i18n key (webapp/mobile locale `note.*` keys). */
+/**
+ * Maps each NOTE_COLORS hex value to its i18n key (webapp/mobile locale `note.*` keys).
+ * `#ffffff` (DEFAULT_NOTE_COLOR) is "no colour": the note follows the app
+ * theme, so it is named Default rather than White.
+ */
 export const NOTE_COLOR_NAME_KEYS: Record<(typeof NOTE_COLORS)[number], string> = {
-  '#ffffff': 'note.colorWhite',
+  '#ffffff': 'note.colorDefault',
   '#f28b82': 'note.colorCoral',
   '#fbbc04': 'note.colorYellow',
   '#ccff90': 'note.colorLime',
@@ -59,3 +65,29 @@ export const NOTE_COLOR_NAME_KEYS: Record<(typeof NOTE_COLORS)[number], string> 
   '#e6c9a8': 'note.colorSand',
   '#e8eaed': 'note.colorGray',
 };
+
+/**
+ * Canonical form of a note colour: lowercase six-digit hex (`#FFF` -> `#ffffff`),
+ * the form the server stores and NOTE_COLORS uses. Notes saved before the
+ * server normalized colours may still hold other spellings, so compare a
+ * stored colour against the palette only after this. Anything that is not a
+ * hex colour is returned unchanged.
+ */
+export function normalizeNoteColor(color: string): string {
+  // No .trim(): stored colours are never padded, and malformed notes with a
+  // missing colour must pass through rather than throw.
+  const match = /^#([\da-f]{3}|[\da-f]{6})$/i.exec(color);
+  if (!match) return color;
+  const hex = match[1]!.toLowerCase(); // the regex has one capture group, always set on a match
+  return hex.length === 3
+    ? `#${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`
+    : `#${hex}`;
+}
+
+/**
+ * Whether a note has a real colour, as opposed to the default "no colour"
+ * (empty or DEFAULT_NOTE_COLOR in any spelling), which follows the app theme.
+ */
+export function hasCustomNoteColor(color: string): boolean {
+  return !!color && normalizeNoteColor(color) !== DEFAULT_NOTE_COLOR;
+}
