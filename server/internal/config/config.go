@@ -43,6 +43,16 @@ type Config struct {
 	RateLimitPerMinute          int
 	RateLimitAuthPerMinute      int
 	RateLimitExpensivePerMinute int
+	RateLimitPublicPerMinute    int
+
+	// PublicLinksEnabled is the operator switch for public note links. When
+	// off, the public endpoints 404 and no link can be created, but existing
+	// links are kept (and come back when it is turned on again).
+	PublicLinksEnabled bool
+	// PublicURL is the origin people outside use to reach the instance
+	// (scheme://host[:port], no trailing slash), or "" when unset. Clients
+	// build public links from it.
+	PublicURL string
 
 	// OIDC / SSO. OIDCEnabled is derived: it is true when the four core vars
 	// are set. When it is false every other OIDC field is empty and LocalLogin
@@ -156,6 +166,7 @@ func Load() (*Config, error) {
 		LogLevel:            "info",
 		LogFormat:           "text",
 		RateLimitEnabled:    true,
+		PublicLinksEnabled:  true,
 	}
 
 	// Keep the allowed levels in sync with the logrus.ParseLevel call in main.go.
@@ -326,6 +337,26 @@ func Load() (*Config, error) {
 	}
 	cfg.RateLimitExpensivePerMinute = rateLimitExpensivePerMinute
 
+	rateLimitPublicPerMinute, err := parseIntRangeEnv("JOT_RATE_LIMIT_PUBLIC_PER_MINUTE", 120, 1, 1_000_000)
+	if err != nil {
+		return nil, err
+	}
+	cfg.RateLimitPublicPerMinute = rateLimitPublicPerMinute
+
+	publicLinksEnabled, err := parseBoolEnv("JOT_PUBLIC_LINKS_ENABLED", cfg.PublicLinksEnabled)
+	if err != nil {
+		return nil, err
+	}
+	cfg.PublicLinksEnabled = publicLinksEnabled
+
+	if v := os.Getenv("JOT_PUBLIC_URL"); v != "" {
+		publicURL, originErr := requireOriginURL("JOT_PUBLIC_URL", v)
+		if originErr != nil {
+			return nil, originErr
+		}
+		cfg.PublicURL = publicURL
+	}
+
 	if err := loadOIDC(cfg); err != nil {
 		return nil, err
 	}
@@ -455,4 +486,26 @@ func requireAbsoluteURL(name, v string) error {
 		return fmt.Errorf("invalid %s value %q: must be an absolute URL", name, v)
 	}
 	return nil
+}
+
+// requireOriginURL extends requireAbsoluteURL with an origin-only check: v
+// must be an http or https URL made of scheme, host and optional port only.
+// Jot is served from the root, so a path (other than a single trailing "/",
+// which is stripped), a query, a fragment or user info is rejected. It returns
+// the normalized origin, "scheme://host[:port]".
+func requireOriginURL(name, v string) (string, error) {
+	if err := requireAbsoluteURL(name, v); err != nil {
+		return "", err
+	}
+	u, err := url.Parse(v)
+	if err != nil {
+		return "", fmt.Errorf("invalid %s value %q: %w", name, v, err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return "", fmt.Errorf("invalid %s value %q: must use http or https", name, v)
+	}
+	if u.User != nil || strings.ContainsAny(v, "?#") || (u.Path != "" && u.Path != "/") || u.RawPath != "" {
+		return "", fmt.Errorf("invalid %s value %q: must be an origin (scheme, host and optional port) without a path, query or fragment", name, v)
+	}
+	return u.Scheme + "://" + u.Host, nil
 }

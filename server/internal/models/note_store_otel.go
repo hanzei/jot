@@ -340,3 +340,36 @@ func (s *NoteStore) ImportJotNotes(ctx context.Context, userID string, notes []J
 	defer end()
 	return s.inner.ImportJotNotes(ctx, userID, notes)
 }
+
+func (s *NoteStore) SetPublicLink(ctx context.Context, noteID, userID string, expiresAt *time.Time) (_ *PublicLink, err error) {
+	ctx, end := startSpan(ctx, s.instr, "NoteStore.SetPublicLink", &err,
+		attribute.String("note.id", noteID),
+	)
+	defer end()
+	return s.inner.SetPublicLink(ctx, noteID, userID, expiresAt)
+}
+
+func (s *NoteStore) DeletePublicLink(ctx context.Context, noteID string) (_ bool, err error) {
+	ctx, end := startSpan(ctx, s.instr, "NoteStore.DeletePublicLink", &err,
+		attribute.String("note.id", noteID),
+	)
+	defer end()
+	return s.inner.DeletePublicLink(ctx, noteID)
+}
+
+// GetPublicNote and GetPublicNoteImage deliberately record no token attribute:
+// a public link token is a credential and must never reach traces.
+
+func (s *NoteStore) GetPublicNote(ctx context.Context, token string) (_ *PublicNote, err error) {
+	ctx, end := startSpan(ctx, s.instr, "NoteStore.GetPublicNote", &err)
+	defer end()
+	return s.inner.GetPublicNote(ctx, token)
+}
+
+func (s *NoteStore) GetPublicNoteImage(ctx context.Context, token, imageID string) (_ *NoteImage, err error) {
+	ctx, end := startSpan(ctx, s.instr, "NoteStore.GetPublicNoteImage", &err,
+		attribute.String("image.id", imageID),
+	)
+	defer end()
+	return s.inner.GetPublicNoteImage(ctx, token, imageID)
+}

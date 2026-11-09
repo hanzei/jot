@@ -34,15 +34,17 @@ type NotesHandler struct {
 	events         *notify.Publisher
 	imageStore     *blobstore.ImageStore
 	uploadMaxBytes int64
-	notesCreated   metric.Int64Counter
-	notesUpdated   metric.Int64Counter
-	notesDeleted   metric.Int64Counter
-	notesRestored  metric.Int64Counter
+	// publicLinksEnabled is JOT_PUBLIC_LINKS_ENABLED.
+	publicLinksEnabled bool
+	notesCreated       metric.Int64Counter
+	notesUpdated       metric.Int64Counter
+	notesDeleted       metric.Int64Counter
+	notesRestored      metric.Int64Counter
 }
 
 // NewNotesHandler creates a NotesHandler with OTel instruments initialized from
 // the global MeterProvider. Returns an error if any instrument cannot be created.
-func NewNotesHandler(noteStore *models.NoteStore, userStore *models.UserStore, labelStore *models.LabelStore, hub *sse.Hub, imageStore *blobstore.ImageStore, uploadMaxBytes int64) (*NotesHandler, error) {
+func NewNotesHandler(noteStore *models.NoteStore, userStore *models.UserStore, labelStore *models.LabelStore, hub *sse.Hub, imageStore *blobstore.ImageStore, uploadMaxBytes int64, publicLinksEnabled bool) (*NotesHandler, error) {
 	meter := otel.GetMeterProvider().Meter("github.com/hanzei/jot/server")
 
 	notesCreated, err := meter.Int64Counter(
@@ -78,17 +80,18 @@ func NewNotesHandler(noteStore *models.NoteStore, userStore *models.UserStore, l
 	}
 
 	return &NotesHandler{
-		noteStore:      noteStore,
-		userStore:      userStore,
-		labelStore:     labelStore,
-		hub:            hub,
-		events:         notify.New(hub, noteStore),
-		imageStore:     imageStore,
-		uploadMaxBytes: uploadMaxBytes,
-		notesCreated:   notesCreated,
-		notesUpdated:   notesUpdated,
-		notesDeleted:   notesDeleted,
-		notesRestored:  notesRestored,
+		noteStore:          noteStore,
+		userStore:          userStore,
+		labelStore:         labelStore,
+		hub:                hub,
+		events:             notify.New(hub, noteStore),
+		imageStore:         imageStore,
+		uploadMaxBytes:     uploadMaxBytes,
+		publicLinksEnabled: publicLinksEnabled,
+		notesCreated:       notesCreated,
+		notesUpdated:       notesUpdated,
+		notesDeleted:       notesDeleted,
+		notesRestored:      notesRestored,
 	}, nil
 }
 

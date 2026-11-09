@@ -145,12 +145,15 @@ type Note struct {
 	SharedWith            []NoteShare `json:"shared_with,omitempty"`
 	IsShared              bool        `json:"is_shared"`
 	// Unread is null when there is nothing new for the requesting user.
-	Unread    *NoteUnread `json:"unread" enums:"new,updated" extensions:"x-nullable"`
-	Labels    []Label     `json:"labels"`
-	Images    []NoteImage `json:"images,omitempty"`
-	DeletedAt *time.Time  `json:"deleted_at"`
-	CreatedAt time.Time   `json:"created_at"`
-	UpdatedAt time.Time   `json:"updated_at"`
+	Unread *NoteUnread `json:"unread" enums:"new,updated" extensions:"x-nullable"`
+	Labels []Label     `json:"labels"`
+	Images []NoteImage `json:"images,omitempty"`
+	// PublicLink is the note's active public link, or null when it has none
+	// (an expired link is null too). Owner and collaborators alike see it.
+	PublicLink *PublicLink `json:"public_link" extensions:"x-nullable"`
+	DeletedAt  *time.Time  `json:"deleted_at"`
+	CreatedAt  time.Time   `json:"created_at"`
+	UpdatedAt  time.Time   `json:"updated_at"`
 }
 
 type NoteItem struct {

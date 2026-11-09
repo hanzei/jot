@@ -24,6 +24,7 @@ const (
 	bucketAuth      = "auth"
 	bucketBaseline  = "baseline"
 	bucketExpensive = "expensive"
+	bucketPublic    = "public"
 )
 
 // rateLimiter builds the rate-limiting middlewares wired into the router. All

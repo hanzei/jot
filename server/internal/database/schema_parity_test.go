@@ -101,6 +101,36 @@ func TestSchemaParity(t *testing.T) {
 
 			assert.NoError(t, insertLabel("labl0000000000000work2", "user00000000000parity2", "work"))
 		})
+
+		t.Run("a note has at most one public link, and tokens are unique", func(t *testing.T) {
+			for _, id := range []string{"note00000000000plink01", "note00000000000plink02"} {
+				_, err := db.ExecContext(ctx, d.RewritePlaceholders(
+					`INSERT INTO notes (id, user_id, note_type) VALUES (?, ?, 'text')`), id, "user000000000000parity")
+				require.NoError(t, err)
+			}
+			insertLink := func(id, noteID, token string) error {
+				_, err := db.ExecContext(ctx, d.RewritePlaceholders(
+					`INSERT INTO note_public_links (id, note_id, token, created_by) VALUES (?, ?, ?, ?)`),
+					id, noteID, token, "user000000000000parity")
+				return err
+			}
+			require.NoError(t, insertLink("plnk000000000000000001", "note00000000000plink01", "token-1"))
+
+			err := insertLink("plnk000000000000000002", "note00000000000plink01", "token-2")
+			require.Error(t, err)
+			assert.True(t, d.IsUniqueConstraintError(err), "want a unique violation, got %v", err)
+
+			err = insertLink("plnk000000000000000003", "note00000000000plink02", "token-1")
+			require.Error(t, err)
+			assert.True(t, d.IsUniqueConstraintError(err), "want a unique violation, got %v", err)
+
+			// Deleting the note cascades to its link.
+			_, err = db.ExecContext(ctx, d.RewritePlaceholders(`DELETE FROM notes WHERE id = ?`), "note00000000000plink01")
+			require.NoError(t, err)
+			var count int
+			require.NoError(t, db.QueryRowContext(ctx, `SELECT COUNT(*) FROM note_public_links`).Scan(&count))
+			assert.Zero(t, count)
+		})
 	})
 }
 

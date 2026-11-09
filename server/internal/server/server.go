@@ -85,6 +85,7 @@ type Server struct {
 	noteStore       *models.NoteStore
 	labelStore      *models.LabelStore
 	rateLimiter     *rateLimiter
+	tracerProvider  trace.TracerProvider
 }
 
 // New builds a server that logs through the logrus standard logger.
@@ -98,7 +99,14 @@ func New(cfg *config.Config) (*Server, error) {
 // suite uses this to give each test server a logger writing to that test's own
 // t.Log, which is what lets those tests run in parallel without fighting over
 // the standard logger's output.
-func NewWithLogger(cfg *config.Config, log *logrus.Logger) (_ *Server, err error) {
+func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
+	return newServer(cfg, log, otel.GetTracerProvider())
+}
+
+// newServer is NewWithLogger with the tracer provider the HTTP middleware
+// records request spans with, so a test can capture them without touching the
+// global provider.
+func newServer(cfg *config.Config, log *logrus.Logger, tracerProvider trace.TracerProvider) (_ *Server, err error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config must not be nil")
 	}
@@ -159,7 +167,7 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (_ *Server, err error
 	undo.push(func() { _ = imageStore.Close() })
 
 	authHandler := handlers.NewAuthHandler(userStore, noteStore, sessionService, userSettingsStore, hub, cfg.RegistrationEnabled, cfg.LocalLoginEnabled, cfg.PasswordMinLength)
-	notesHandler, err := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub, imageStore, int64(cfg.UploadMaxBytes))
+	notesHandler, err := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub, imageStore, int64(cfg.UploadMaxBytes), cfg.PublicLinksEnabled)
 	if err != nil {
 		return nil, fmt.Errorf("initialize notes handler: %w", err)
 	}
@@ -207,6 +215,7 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (_ *Server, err error
 		labelStore:      labelStore,
 		imageStore:      imageStore,
 		rateLimiter:     rl,
+		tracerProvider:  tracerProvider,
 	}
 
 	s.startPeriodicTask(ctx, "session-cleanup", time.Hour, false, func(ctx context.Context) error {
@@ -344,9 +353,14 @@ func buildOIDCHandler(
 
 func (s *Server) setupRoutes() error {
 	s.router.Use(requestID)
-	s.router.Use(otelhttp.NewMiddleware("", otelhttp.WithFilter(func(r *http.Request) bool {
-		return r.URL.Path != "/livez" && r.URL.Path != "/readyz" && r.URL.Path != "/api/v1/events"
-	})))
+	// redactTokenPaths hides public link tokens from the URL path otelhttp
+	// records as a span attribute, and restores the real path for routing.
+	s.router.Use(redactTokenPaths(otelhttp.NewMiddleware("",
+		otelhttp.WithTracerProvider(s.tracerProvider),
+		otelhttp.WithFilter(func(r *http.Request) bool {
+			return r.URL.Path != "/livez" && r.URL.Path != "/readyz" && r.URL.Path != "/api/v1/events"
+		}),
+	)))
 	// otelhttp sets the span name before chi populates RoutePattern, so a
 	// second middleware renames the span after routing is complete.
 	s.router.Use(chiRouteSpanNamer)
@@ -423,6 +437,18 @@ func (s *Server) setupRoutes() error {
 		// loops / SSE reconnect storms without penalizing normal use (CLAUDE.md
 		// threat model: unintentional internal overload). limit() memoizes by
 		// bucket name, so both groups below share the same underlying limiter.
+		// Public note links are the one other unauthenticated surface. They get
+		// their own per-IP bucket, shared by the note and its images and
+		// thumbnails, so a viewer loading a note with many images is not
+		// throttled by the login bucket and vice versa.
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.ClientIPFromRemoteAddr)
+			r.Use(s.rateLimiter.limit(bucketPublic, s.cfg.RateLimitPublicPerMinute, keyByClientIP))
+			r.Get("/public/notes/{token}", s.wrapHandler(s.notesHandler.GetPublicNote))
+			r.Get("/public/notes/{token}/images/{id}", s.wrapHandler(s.notesHandler.GetPublicNoteImage))
+			r.Get("/public/notes/{token}/images/{id}/thumbnail", s.wrapHandler(s.notesHandler.GetPublicNoteImageThumbnail))
+		})
+
 		baselineLimit := s.rateLimiter.limit(bucketBaseline, s.cfg.RateLimitPerMinute, keyByUserID)
 
 		r.Group(func(r chi.Router) {
@@ -479,6 +505,9 @@ func (s *Server) setupRoutes() error {
 			r.Post("/notes/{id}/share", s.wrapHandler(s.notesHandler.ShareNote))
 			r.Delete("/notes/{id}/shares/{user_id}", s.wrapHandler(s.notesHandler.UnshareNote))
 			r.Get("/notes/{id}/shares", s.wrapHandler(s.notesHandler.GetNoteShares))
+
+			r.Put("/notes/{id}/public-link", s.wrapHandler(s.notesHandler.SetPublicLink))
+			r.Delete("/notes/{id}/public-link", s.wrapHandler(s.notesHandler.DeletePublicLink))
 
 			r.Post("/notes/{id}/labels", s.wrapHandler(s.labelsHandler.AddLabel))
 			r.Delete("/notes/{id}/labels/{label_id}", s.wrapHandler(s.labelsHandler.RemoveLabel))
@@ -710,6 +739,13 @@ type configResponse struct {
 	PasswordMinLength   int       `json:"password_min_length"`
 	UploadMaxBytes      int       `json:"upload_max_bytes"`
 	SSO                 ssoConfig `json:"sso"`
+	// PublicLinksEnabled is JOT_PUBLIC_LINKS_ENABLED; clients hide the public
+	// link UI when it is false.
+	PublicLinksEnabled bool `json:"public_links_enabled"`
+	// PublicURL is JOT_PUBLIC_URL as a normalized origin
+	// ("https://jot.example.com"), or null when unset. Clients build public
+	// links from it, falling back to their own address.
+	PublicURL *string `json:"public_url" extensions:"x-nullable"`
 }
 
 // ssoConfig is the public, login-UI-facing slice of the OIDC configuration.
@@ -731,6 +767,10 @@ type ssoConfig struct {
 //	@Success	200	{object}	configResponse
 //	@Router		/config [get]
 func (s *Server) handleConfig(_ http.ResponseWriter, _ *http.Request) (int, any, error) {
+	var publicURL *string
+	if s.cfg.PublicURL != "" {
+		publicURL = &s.cfg.PublicURL
+	}
 	return http.StatusOK, configResponse{
 		RegistrationEnabled: s.cfg.RegistrationEnabled,
 		PasswordMinLength:   s.cfg.PasswordMinLength,
@@ -740,6 +780,8 @@ func (s *Server) handleConfig(_ http.ResponseWriter, _ *http.Request) (int, any,
 			ProviderName:      s.cfg.OIDCProviderName,
 			LocalLoginEnabled: s.cfg.LocalLoginEnabled,
 		},
+		PublicLinksEnabled: s.cfg.PublicLinksEnabled,
+		PublicURL:          publicURL,
 	}, nil
 }
 
@@ -786,6 +828,14 @@ func securityHeaders(cookieSecure bool) func(http.Handler) http.Handler {
 			if strings.HasPrefix(r.URL.Path, "/api/v1/") {
 				h.Set("Cache-Control", "no-store")
 			}
+			// Public links: keep the token out of the Referer of anything the
+			// page links to, and keep the page out of search engines. The
+			// /share/{token} HTML page (served by the SPA catch-all) matters
+			// most, since that is the URL people paste.
+			if _, ok := redactTokenPath(r.URL.Path); ok {
+				h.Set("Referrer-Policy", "no-referrer")
+				h.Set("X-Robots-Tag", "noindex")
+			}
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -813,7 +863,7 @@ func (s *Server) requestLoggerMiddleware(next http.Handler) http.Handler {
 		entry := s.log.WithFields(logrus.Fields{
 			"request_id": requestID,
 			"method":     r.Method,
-			"path":       r.URL.Path,
+			"path":       logPath(r.URL.Path),
 		})
 		span := trace.SpanFromContext(r.Context())
 		// Also on the span, so an operator who keeps traces but not logs can

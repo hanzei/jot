@@ -137,6 +137,8 @@ func defaultTestConfig(t *testing.T, tmpDir string) *config.Config {
 		PasswordMinLength:   10,
 		// Mirrors config.Load's default; OIDC tests override it explicitly.
 		LocalLoginEnabled: true,
+		// Mirrors config.Load's default.
+		PublicLinksEnabled: true,
 	}
 }
 

@@ -22,7 +22,10 @@
 //	@tag.description			Note CRUD, reorder, trash and import
 //
 //	@tag.name					sharing
-//	@tag.description			Share notes with other users
+//	@tag.description			Share notes with other users, and manage a note's public link
+//
+//	@tag.name					public
+//	@tag.description			Unauthenticated, read-only access to notes through their public link
 //
 //	@tag.name					labels
 //	@tag.description			Label management
