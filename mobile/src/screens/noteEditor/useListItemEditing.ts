@@ -52,6 +52,11 @@ import { useRevealFocusedInput } from './useRevealFocusedInput';
 // one row to the next does not flash it away and back.
 const ITEM_BLUR_SETTLE_MS = 150;
 
+// How long a parent's long-press may wait for the list to report the drag it
+// started before its group hold is released (see markGroupDragStarted). The
+// start arrives within a frame or two when it happens at all.
+const GROUP_DRAG_START_TIMEOUT_MS = 300;
+
 export interface UseListItemEditingParams {
   doc: EditorDocHandle;
   /** Current items as render state; the hook derives its lists from these. */
@@ -780,6 +785,17 @@ export function useListItemEditing({
   // Whether the held group's press turned into a drag. Until it does, lifting
   // the finger ungroups; once it has, the drop does (see commitDrag).
   const groupDragStartedRef = useRef(false);
+  // Watchdog for a long-press whose drag never starts. drag() is a no-op while
+  // the list is still settling a previous drop (or with dragging disabled), and
+  // then no onDragStart or drop ever arrives to release the hold — every group
+  // would stay a block and the reflow animation stay paused. If onDragStart has
+  // not confirmed the drag in time, release the hold.
+  const groupDragWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearGroupDragWatchdog = useCallback(() => {
+    if (groupDragWatchdogRef.current !== null) clearTimeout(groupDragWatchdogRef.current);
+    groupDragWatchdogRef.current = null;
+  }, []);
+  useEffect(() => clearGroupDragWatchdog, [clearGroupDragWatchdog]);
 
   const setGroupedParent = useCallback((parentId: string | null) => {
     if (groupedParentIdRef.current === parentId) return;
@@ -791,6 +807,7 @@ export function useListItemEditing({
     }
     groupedParentIdRef.current = parentId;
     groupDragStartedRef.current = false;
+    clearGroupDragWatchdog();
     setGroupedParentId(parentId);
     if (resumeReflowFrameRef.current !== null) cancelAnimationFrame(resumeReflowFrameRef.current);
     resumeReflowFrameRef.current = null;
@@ -803,7 +820,7 @@ export function useListItemEditing({
         setGroupReflowPaused(false);
       });
     }
-  }, [armAutoFocus]);
+  }, [armAutoFocus, clearGroupDragWatchdog]);
 
   const holdGroupForDrag = useCallback((itemId: string) => {
     // A previous hold whose drag never reported back is superseded here.
@@ -816,8 +833,14 @@ export function useListItemEditing({
   }, [setGroupedParent]);
 
   const markGroupDragStarted = useCallback((itemId: string) => {
-    if (groupedParentIdRef.current === itemId) groupDragStartedRef.current = true;
-  }, []);
+    if (groupedParentIdRef.current !== itemId) return;
+    groupDragStartedRef.current = true;
+    clearGroupDragWatchdog();
+    groupDragWatchdogRef.current = setTimeout(() => {
+      groupDragWatchdogRef.current = null;
+      if (groupedParentIdRef.current === itemId) setGroupedParent(null);
+    }, GROUP_DRAG_START_TIMEOUT_MS);
+  }, [clearGroupDragWatchdog, setGroupedParent]);
 
   // Id of the row a drag picked up, recorded at onDragStart. commitDrag uses it
   // to tell a drop that still describes the list it was measured against from
@@ -826,8 +849,11 @@ export function useListItemEditing({
   const dragOriginIdRef = useRef<string | null>(null);
 
   const rememberDragOrigin = useCallback((index: number) => {
-    dragOriginIdRef.current = uncheckedItemsRef.current[index]?.id ?? null;
-  }, []);
+    const originId = uncheckedItemsRef.current[index]?.id ?? null;
+    dragOriginIdRef.current = originId;
+    // The held group's drag really started; its drop will release the hold.
+    if (originId !== null && originId === groupedParentIdRef.current) clearGroupDragWatchdog();
+  }, [clearGroupDragWatchdog]);
 
   const handleListDragStart = useCallback(
     ({ index }: ReorderableListDragStartEvent) => {

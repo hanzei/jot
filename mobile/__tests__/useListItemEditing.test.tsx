@@ -599,6 +599,37 @@ describe('useListItemEditing — dragging a parent', () => {
     expect(markDirty).not.toHaveBeenCalled();
   });
 
+  it('releases the hold when the long-press never turns into a drag', async () => {
+    const view = await mountWith(groups());
+    await act(async () => {
+      editing(view).holdGroupForDrag('a');
+      editing(view).markGroupDragStarted('a');
+    });
+    // The finger lifting no longer releases it — a drag is assumed to be on.
+    await act(async () => {
+      editing(view).releaseGroupHold('a');
+    });
+    expect(editing(view).groupedParentId).toBe('a');
+    // No onDragStart arrives (the library ignored drag()): the watchdog fires.
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+    });
+    expect(editing(view).groupedParentId).toBeNull();
+    await act(async () => {
+      jest.advanceTimersByTime(50);
+    });
+    expect(editing(view).groupReflowPaused).toBe(false);
+  });
+
+  it('keeps the hold once the drag start is confirmed', async () => {
+    const view = await mountWith(groups());
+    await grab(view, 'a', 0);
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    expect(editing(view).groupedParentId).toBe('a');
+  });
+
   it('re-arms focus on a focused child as it moves into and out of the group', async () => {
     const view = await mountWith(groups());
     editing(view).focusedItemIdRef.current = 'a1';
