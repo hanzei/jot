@@ -109,6 +109,11 @@ const ZOOM_MS = 280;
 // reference stays stable across renders.
 const DRAG_CELL_ANIMATIONS = { opacity: 1, transform: [] };
 const noop = () => {};
+// Height of a held group's child cell (see renderActiveRow). Not zero: the list
+// only steps the lifted row past a neighbour that has some height, so zero-height
+// cells below a parent would stop its group from ever moving down.
+const GROUP_PLACEHOLDER_PX = 1;
+const GROUP_PLACEHOLDER_STYLE = { height: GROUP_PLACEHOLDER_PX };
 
 export default function NoteEditorScreen() {
   const navigation = useNavigation<EditorNavProp>();
@@ -660,6 +665,7 @@ export default function NoteEditorScreen() {
   const {
     uncheckedItems,
     groupedParentId,
+    groupReflowPaused,
     holdGroupForDrag,
     releaseGroupHold,
     markGroupDragStarted,
@@ -1289,8 +1295,12 @@ export default function NoteEditorScreen() {
       const originalIndex = itemIndexMapRef.current.get(item.id);
       if (originalIndex === undefined) return null;
       // A held group's children are drawn inside the parent's cell (below), so
-      // their own cells stay empty — zero height — until the group is released.
-      if (groupedParentId !== null && item.parentId === groupedParentId) return null;
+      // their own cells hold only a placeholder until the group is released.
+      // The group's drawing gives back the placeholders' height (negative margin)
+      // so nothing on screen moves when it is grouped.
+      if (groupedParentId !== null && item.parentId === groupedParentId) {
+        return <View style={GROUP_PLACEHOLDER_STYLE} testID="list-item-group-placeholder" />;
+      }
       const baseLevel = item.parentId ? 1 : 0;
       const hasChildren = itemHasChildren(itemsRef.current, item.id);
       const groupChildren = item.id === groupedParentId
@@ -1298,11 +1308,15 @@ export default function NoteEditorScreen() {
         : [];
       // The handle keeps its glyph but does nothing: the group is already
       // being dragged by its parent.
-      const groupRows = groupChildren.length === 0 ? null : groupChildren.map((child) => {
-        const childIndex = itemIndexMapRef.current.get(child.id);
-        if (childIndex === undefined) return null;
-        return <ListItem key={child.id} {...activeRowProps(child, childIndex, false)} onDrag={noop} />;
-      });
+      const groupRows = groupChildren.length === 0 ? null : (
+        <View style={{ marginBottom: -groupChildren.length * GROUP_PLACEHOLDER_PX }}>
+          {groupChildren.map((child) => {
+            const childIndex = itemIndexMapRef.current.get(child.id);
+            if (childIndex === undefined) return null;
+            return <ListItem key={child.id} {...activeRowProps(child, childIndex, false)} onDrag={noop} />;
+          })}
+        </View>
+      );
       return (
         <ActiveListRow
           itemId={item.id}
@@ -1698,7 +1712,7 @@ export default function NoteEditorScreen() {
             <NestedReorderableList<LocalItem>
               data={uncheckedItems}
               // Cells re-render when a parent starts or stops drawing its group.
-              extraData={groupedParentId}
+              extraData={`${groupedParentId ?? ''}:${groupReflowPaused}`}
               // `item` is typed non-optional, but the library reads
               // `data[i]` at drag-start indices while finishing a drop, and
               // those can outlive the row they pointed at (see commitDrag).
@@ -1725,8 +1739,9 @@ export default function NoteEditorScreen() {
               renderItem={renderActiveRow}
               // Slide remaining rows into place when an item is checked off (and
               // moves to the completed section) or deleted. Skipped under the OS
-              // Reduce Motion setting, like the editor's other animations.
-              {...(!isReduceMotionEnabledSync() && {
+              // Reduce Motion setting, like the editor's other animations, and
+              // paused around a group drag (see groupReflowPaused).
+              {...(!isReduceMotionEnabledSync() && !groupReflowPaused && {
                 itemLayoutAnimation: LinearTransition.duration(LIST_REFLOW_ANIM_MS),
               })}
             />

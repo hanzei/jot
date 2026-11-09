@@ -15,6 +15,7 @@ import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 // drag. jest.setup.js's list mock renders every cell, so the grouping shows up
 // as the children's rows moving inside the parent's `list-item-group`.
 interface ListProps {
+  itemLayoutAnimation?: unknown;
   onDragStart: (e: { index: number }) => void;
   onReorder: (e: { from: number; to: number }) => void;
 }
@@ -72,6 +73,35 @@ describe('NoteEditorScreen dragging a parent item', () => {
 
     await fireEvent(parentHandle, 'onPressOut');
     expect(queryByTestId('list-item-group')).toBeNull();
+  });
+
+  it("keeps a sliver of height in the children's own cells so the group can move down", async () => {
+    const { getAllByTestId, queryAllByTestId } = await render(<NoteEditorScreen />);
+    await fireEvent(getAllByTestId('list-item-drag-handle')[0]!, 'onPressIn');
+    // A zero-height cell would tie the library's slot comparison forever, so
+    // each child's cell keeps a placeholder (empty would be `null`).
+    const placeholders = queryAllByTestId('list-item-group-placeholder');
+    expect(placeholders).toHaveLength(2);
+    for (const placeholder of placeholders) expect(placeholder.props.style).toEqual({ height: 1 });
+  });
+
+  it('pauses the reflow animation while a group is held and through its drop', async () => {
+    const { getAllByTestId } = await render(<NoteEditorScreen />);
+    expect(latestListProps().itemLayoutAnimation).toBeDefined();
+
+    const parentHandle = getAllByTestId('list-item-drag-handle')[0]!;
+    await fireEvent(parentHandle, 'onPressIn');
+    expect(latestListProps().itemLayoutAnimation).toBeUndefined();
+
+    await fireEvent(parentHandle, 'onLongPress');
+    await act(() => {
+      latestListProps().onDragStart({ index: 0 });
+    });
+    await act(() => {
+      latestListProps().onReorder({ from: 0, to: 3 });
+    });
+    // Resumes on the render after the drop, once nothing is left to slide.
+    expect(latestListProps().itemLayoutAnimation).toBeDefined();
   });
 
   it('does not group a row without children', async () => {

@@ -93,6 +93,13 @@ export interface ListItemEditing {
    * rows render empty meanwhile.
    */
   groupedParentId: string | null;
+  /**
+   * True while a group is held and through the render that releases it. The
+   * list's reflow animation must stay off then: the cells a drop re-seats are
+   * already where the lifted group was drawn, and animating them would slide
+   * the children in a second time.
+   */
+  groupReflowPaused: boolean;
   /** The drag handle of `itemId` was pressed: group its children into its row. */
   holdGroupForDrag: (itemId: string) => void;
   /** The press on `itemId`'s handle ended; ungroup unless it became a drag. */
@@ -761,6 +768,11 @@ export function useListItemEditing({
   // starts the library measures (and lifts) the whole group. commitDrag only
   // moves the parent; normalizeItemOrder re-seats the children right under it.
   const [groupedParentId, setGroupedParentId] = useState<string | null>(null);
+  const [groupReflowPaused, setGroupReflowPaused] = useState(false);
+  // Resume the reflow animation once the ungrouping render has committed.
+  useEffect(() => {
+    if (groupedParentId === null && groupReflowPaused) setGroupReflowPaused(false);
+  }, [groupedParentId, groupReflowPaused]);
   // Ref twin, so commitDrag and the press handlers act without a render.
   const groupedParentIdRef = useRef<string | null>(null);
   // Whether the held group's press turned into a drag. Until it does, lifting
@@ -779,6 +791,7 @@ export function useListItemEditing({
     groupedParentIdRef.current = parentId;
     groupDragStartedRef.current = false;
     setGroupedParentId(parentId);
+    if (parentId !== null) setGroupReflowPaused(true);
   }, [armAutoFocus]);
 
   const holdGroupForDrag = useCallback((itemId: string) => {
@@ -1011,6 +1024,7 @@ export function useListItemEditing({
   return {
     uncheckedItems,
     groupedParentId,
+    groupReflowPaused,
     holdGroupForDrag,
     releaseGroupHold,
     markGroupDragStarted,
