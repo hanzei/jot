@@ -112,9 +112,15 @@ export default function NoteImageGallery<T extends GalleryImage>({ images, urls 
   const renderTile = (tile: Tile<T>, index: number) => {
     const isOverlayTile = overlayCount > 0 && index === visibleCount - 1;
     // An upload's size isn't known yet, so it gets a 4:3 frame.
-    const aspectRatio = tile.kind === 'image' ? `${tile.image.width} / ${tile.image.height}` : '4 / 3';
-    const frameStyle = isGrid ? undefined : { aspectRatio };
-    const frameClassName = `${TILE_FRAME_CLASSNAME} ${isGrid ? 'aspect-square' : 'block w-full max-h-80'} ${
+    const [ratioW, ratioH] = tile.kind === 'image' ? [tile.image.width, tile.image.height] : [4, 3];
+    // A lone tile is at most 20rem tall. Capping its width at the width that
+    // height implies, rather than capping the height alone, keeps the frame at
+    // the image's own ratio, so object-cover has nothing to crop.
+    const frameStyle = isGrid ? undefined : {
+      aspectRatio: `${ratioW} / ${ratioH}`,
+      maxWidth: `calc(20rem * ${ratioW} / ${ratioH})`,
+    };
+    const frameClassName = `${TILE_FRAME_CLASSNAME} ${isGrid ? 'aspect-square' : 'block w-full mx-auto'} ${
       spanLastTile && index === 2 ? 'col-span-2' : ''
     }`;
 
