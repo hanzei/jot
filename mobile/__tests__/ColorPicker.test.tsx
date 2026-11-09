@@ -32,12 +32,11 @@ describe('ColorPicker', () => {
     expect(getByTestId('color-swatch-ffffff').props.accessibilityState).toEqual({ selected: false });
   });
 
-  it('keeps the no-colour glyph on Default when selected and adds a check badge', async () => {
-    const { getByTestId, queryByTestId, rerender } = await renderPicker('#ffffff');
-    expect(getByTestId('color-swatch-default-selected')).toBeTruthy();
+  it.each([['#ffffff', 'ffffff'], ['#f28b82', 'f28b82']])('marks only the selected swatch with a check badge (%s)', async (color, id) => {
+    const { getByTestId, queryAllByTestId } = await renderPicker(color);
 
-    await rerender(<ColorPicker visible={true} currentColor="#f28b82" onSelect={jest.fn()} onClose={jest.fn()} />);
-    expect(queryByTestId('color-swatch-default-selected')).toBeNull();
+    expect(getByTestId(`color-swatch-${id}-selected`)).toBeTruthy();
+    expect(queryAllByTestId(/^color-swatch-.*-selected$/)).toHaveLength(1);
   });
 
   it('selects the default colour value when Default is pressed', async () => {

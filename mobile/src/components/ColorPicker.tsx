@@ -36,51 +36,34 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
           // The default "colour" is no colour: the note follows the app theme,
           // so its swatch shows the theme's own surface plus a "no colour"
           // glyph instead of a solid white that dark mode never renders.
-          if (color === DEFAULT_NOTE_COLOR) {
-            return (
-              <TouchableOpacity
-                key={color}
-                style={[styles.colorCircle, styles.defaultCircle, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                onPress={select}
-                testID={testID}
-                accessibilityLabel={accessibilityLabel}
-                accessibilityState={{ selected: isDefaultSelected }}
-              >
-                {/* The droplet always stays: it is what says "no colour". So
-                    selection is a check badge on the corner instead of a check
-                    that replaces the glyph, as on the real colours. */}
-                <DropletOff size={18} color={colors.icon} />
-                {isDefaultSelected && (
-                  <View
-                    style={[styles.checkBadge, { backgroundColor: colors.primary, borderColor: colors.sheetBackground }]}
-                    testID="color-swatch-default-selected"
-                  >
-                    <Check size={12} strokeWidth={3} color="#fff" />
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          }
-
-          const selected = currentColor.toLowerCase() === color;
+          const isDefault = color === DEFAULT_NOTE_COLOR;
+          const selected = isDefault ? isDefaultSelected : currentColor.toLowerCase() === color;
           return (
             <TouchableOpacity
               key={color}
               style={[
                 styles.colorCircle,
-                { backgroundColor: color },
-                LIGHT_NOTE_COLORS.has(color) && { borderWidth: 1, borderColor: colors.border },
+                isDefault
+                  ? { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }
+                  : { backgroundColor: color },
+                !isDefault && LIGHT_NOTE_COLORS.has(color) && { borderWidth: 1, borderColor: colors.border },
               ]}
               onPress={select}
               testID={testID}
               accessibilityLabel={accessibilityLabel}
               accessibilityState={{ selected }}
             >
+              {isDefault && <DropletOff size={18} color={colors.icon} />}
+              {/* Selection is a corner badge on every swatch: it never covers
+                  Default's glyph, and its blue reads the same on pale and
+                  saturated colours alike. */}
               {selected && (
-                <Check
-                  size={18}
-                  color={LIGHT_NOTE_COLORS.has(color) ? '#666' : '#333'}
-                />
+                <View
+                  style={[styles.checkBadge, { backgroundColor: colors.primary, borderColor: colors.sheetBackground }]}
+                  testID={`${testID}-selected`}
+                >
+                  <Check size={11} strokeWidth={3.5} color="#fff" />
+                </View>
               )}
             </TouchableOpacity>
           );
@@ -93,6 +76,8 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
 const styles = StyleSheet.create({
   palette: {
     gap: 10,
+    paddingBottom: 4,
+    paddingRight: 4,
   },
   colorCircle: {
     width: 44,
@@ -101,16 +86,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  defaultCircle: {
-    borderWidth: 1,
-  },
+  // Sits mostly outside the swatch so it never covers Default's glyph; the
+  // palette's padding keeps the horizontal ScrollView from clipping it.
   checkBadge: {
     position: 'absolute',
-    right: 0,
-    bottom: 0,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    right: -4,
+    bottom: -4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',

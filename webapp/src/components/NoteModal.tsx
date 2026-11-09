@@ -2500,9 +2500,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                         autoSaveNote();
                       }
                     }}
-                    className={`w-8 h-8 rounded-full border-2 flex items-center justify-center ${colorOption.class} ${
-                      color === colorOption.value ? 'ring-2 ring-blue-500' : ''
-                    }`}
+                    className={`relative w-8 h-8 rounded-full border-2 flex items-center justify-center ${colorOption.class}`}
                     title={colorOption.name}
                     aria-label={colorOption.name}
                     aria-pressed={color === colorOption.value}
@@ -2511,6 +2509,18 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                         colorClasses); the glyph says it is not a solid white. */}
                     {colorOption.value === DEFAULT_NOTE_COLOR && (
                       <DropletOff className="w-4 h-4 text-gray-500 dark:text-slate-400" aria-hidden="true" />
+                    )}
+                    {/* Selection is a corner badge on every swatch, matching
+                        mobile: it never covers Default's glyph. aria-pressed
+                        carries the state for assistive tech. */}
+                    {color === colorOption.value && (
+                      <span
+                        className="absolute -bottom-2 -right-2 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-blue-600 text-white ring-2 ring-white dark:ring-slate-900"
+                        aria-hidden="true"
+                        data-testid="color-swatch-selected"
+                      >
+                        <Check className="h-2.5 w-2.5" strokeWidth={3.5} />
+                      </span>
                     )}
                   </button>
                 ))}
