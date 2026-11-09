@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
-	"strings"
 	"time"
 )
 
@@ -86,11 +85,16 @@ func generatePublicLinkToken() (string, error) {
 // have not expired; it takes the current Timestamp as its one argument.
 const activePublicLinkCond = `(l.expires_at IS NULL OR l.expires_at > ?)`
 
-func scanPublicLink(rows *sql.Rows) (string, PublicLink, error) {
-	var noteID string
-	var link PublicLink
-	err := rows.Scan(&noteID, &link.Token, &link.CreatedBy, &link.CreatedAt, &link.ExpiresAt)
-	return noteID, link, err
+// notePublicLink is a public link row together with the note it belongs to.
+type notePublicLink struct {
+	noteID string
+	link   PublicLink
+}
+
+func scanNotePublicLink(rows *sql.Rows) (notePublicLink, error) {
+	var r notePublicLink
+	err := rows.Scan(&r.noteID, &r.link.Token, &r.link.CreatedBy, &r.link.CreatedAt, &r.link.ExpiresAt)
+	return r, err
 }
 
 // SetPublicLink sets the state of noteID's public link and returns it:
@@ -195,11 +199,7 @@ func (s *noteStore) getPublicLinksByNoteIDs(ctx context.Context, noteIDs []strin
 	now := Timestamp(Now())
 
 	for chunk := range slices.Chunk(noteIDs, noteIDsQueryBatchSize) {
-		placeholders := strings.Join(slices.Repeat([]string{"?"}, len(chunk)), ",")
-		args := make([]any, 0, len(chunk)+1)
-		for _, id := range chunk {
-			args = append(args, id)
-		}
+		placeholders, args := buildInClauseArgs(chunk)
 		args = append(args, now)
 
 		query := `SELECT l.note_id, l.token, l.created_by, l.created_at, l.expires_at
@@ -210,20 +210,12 @@ func (s *noteStore) getPublicLinksByNoteIDs(ctx context.Context, noteIDs []strin
 		if err != nil {
 			return nil, fmt.Errorf("failed to batch-get public links: %w", err)
 		}
-		for _, err := range scanRows(rows, func(rows *sql.Rows) (struct{}, error) {
-			noteID, link, err := scanPublicLink(rows)
-			if err == nil {
-				result[noteID] = &link
-			}
-			return struct{}{}, err
-		}) {
-			if err != nil {
-				_ = rows.Close()
-				return nil, fmt.Errorf("failed to scan public link: %w", err)
-			}
+		links, err := collectRows(rows, scanNotePublicLink)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan public links: %w", err)
 		}
-		if err := rows.Close(); err != nil {
-			return nil, fmt.Errorf("failed to close public links rows: %w", err)
+		for _, l := range links {
+			result[l.noteID] = &l.link
 		}
 	}
 	return result, nil

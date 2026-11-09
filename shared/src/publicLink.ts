@@ -1,3 +1,5 @@
+import { trimTrailingSlashes } from './api/paths';
+
 /** Path of the webapp page that shows a note through its public link. */
 export const PUBLIC_NOTE_PATH_PREFIX = '/share/';
 
@@ -10,8 +12,5 @@ export const PUBLIC_NOTE_PATH_PREFIX = '/share/';
  * and mobile both build links here so they come out identical.
  */
 export function publicNoteUrl(baseUrl: string, token: string): string {
-  // A loop rather than /\/+$/, which backtracks quadratically on long runs of '/'.
-  let end = baseUrl.length;
-  while (end > 0 && baseUrl[end - 1] === '/') end--;
-  return baseUrl.slice(0, end) + PUBLIC_NOTE_PATH_PREFIX + encodeURIComponent(token);
+  return trimTrailingSlashes(baseUrl) + PUBLIC_NOTE_PATH_PREFIX + encodeURIComponent(token);
 }

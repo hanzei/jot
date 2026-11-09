@@ -16,10 +16,15 @@ export const API_BASE_PATH = '/api/v1';
  * the active one yet). Without `origin` it is same-origin (`/api/v1/...`).
  */
 export function apiUrl(path: string, origin = ''): string {
+  return trimTrailingSlashes(origin) + API_BASE_PATH + path;
+}
+
+/** `url` without trailing `/`s, so a path can be appended to it. */
+export function trimTrailingSlashes(url: string): string {
   // A loop rather than /\/+$/, which backtracks quadratically on long runs of '/'.
-  let end = origin.length;
-  while (end > 0 && origin[end - 1] === '/') end--;
-  return origin.slice(0, end) + API_BASE_PATH + path;
+  let end = url.length;
+  while (end > 0 && url[end - 1] === '/') end--;
+  return url.slice(0, end);
 }
 
 export const apiPaths = {
