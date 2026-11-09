@@ -1,8 +1,9 @@
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Copy, Check, Link2 } from 'lucide-react';
-import { apiErrorCode, type Note, type PublicLink, type User } from '@jot/shared';
+import { userDisplayName, type Note, type PublicLink, type User } from '@jot/shared';
 import { notes } from '@/utils/api';
+import { apiErrorMessage } from '@/utils/apiError';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import {
@@ -11,15 +12,8 @@ import {
   publicLinkExpiresAt,
   publicLinkUrl,
   type PublicLinkExpiryChoice,
+  type PublicLinksConfig,
 } from '@/utils/publicLink';
-
-/** The `/config` fields the public link UI depends on. */
-export interface PublicLinksConfig {
-  /** `public_links_enabled`: the section is hidden when false. */
-  enabled: boolean;
-  /** `public_url`: the base for copied links, or null to use this page's origin. */
-  publicUrl: string | null;
-}
 
 interface PublicLinkSectionProps {
   note: Note;
@@ -28,7 +22,7 @@ interface PublicLinkSectionProps {
   /** The user directory, to name who created the link. */
   users: User[];
   /** Called with the note's new link (null once revoked), to update cached copies of the note. */
-  onChange: (noteId: string, link: PublicLink | null) => void;
+  onChange?: ((noteId: string, link: PublicLink | null) => void) | undefined;
 }
 
 const EXPIRY_LABEL_KEYS = {
@@ -48,7 +42,8 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
   const { t, i18n } = useTranslation();
   const expiryId = useId();
   const urlId = useId();
-  const [expiry, setExpiry] = useState<PublicLinkExpiryChoice>('never');
+  // '' is "not chosen yet"; see `selectedExpiry` below.
+  const [expiry, setExpiry] = useState<PublicLinkExpiryChoice | ''>('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [confirmingRevoke, setConfirmingRevoke] = useState(false);
@@ -57,20 +52,23 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
   if (!config.enabled) return null;
 
   const link = isPublicLinkActive(note.public_link) ? note.public_link : null;
-
-  const failureMessage = (err: unknown) =>
-    apiErrorCode(err) === 'public_links_disabled' ? t('publicLink.disabled') : t('publicLink.failed');
+  // Creating defaults to no expiry. Changing starts unchosen, so the button
+  // cannot quietly replace the link's current expiry with whatever the select
+  // happened to show.
+  const selectedExpiry = expiry || (link ? '' : 'never');
 
   // Creating and changing the expiry are the same request: PUT creates a link
   // when there is none and only moves the expiry of an active one.
   const handleSet = async () => {
+    if (!selectedExpiry) return;
     setBusy(true);
     setError('');
     try {
-      const updated = await notes.setPublicLink(note.id, { expires_at: publicLinkExpiresAt(expiry) });
-      onChange(note.id, updated);
+      const updated = await notes.setPublicLink(note.id, { expires_at: publicLinkExpiresAt(selectedExpiry) });
+      setExpiry('');
+      onChange?.(note.id, updated);
     } catch (err) {
-      setError(failureMessage(err));
+      setError(apiErrorMessage(err, t, 'publicLink.failed'));
     } finally {
       setBusy(false);
     }
@@ -82,11 +80,11 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
     try {
       await notes.deletePublicLink(note.id);
       setConfirmingRevoke(false);
-      setExpiry('never');
-      onChange(note.id, null);
-    } catch {
+      setExpiry('');
+      onChange?.(note.id, null);
+    } catch (err) {
       setConfirmingRevoke(false);
-      setError(t('publicLink.failed'));
+      setError(apiErrorMessage(err, t, 'publicLink.failed'));
     } finally {
       setBusy(false);
     }
@@ -99,9 +97,7 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
     if (createdBy === null) return t('publicLink.createdByFormer');
     if (createdBy === currentUserId) return t('publicLink.createdByYou');
     const creator = users.find(user => user.id === createdBy);
-    if (!creator) return null;
-    const name = `${creator.first_name} ${creator.last_name}`.trim() || creator.username;
-    return t('publicLink.createdBy', { name });
+    return creator ? t('publicLink.createdBy', { name: userDisplayName(creator) }) : null;
   };
 
   const url = link ? publicLinkUrl(link, config.publicUrl) : '';
@@ -163,16 +159,17 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
         </label>
         <select
           id={expiryId}
-          value={expiry}
+          value={selectedExpiry}
           onChange={(e) => setExpiry(e.target.value as PublicLinkExpiryChoice)}
           disabled={busy}
           className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 px-2 py-1.5 text-sm"
         >
+          {selectedExpiry === '' && <option value="" disabled>{t('publicLink.chooseExpiry')}</option>}
           {PUBLIC_LINK_EXPIRY_CHOICES.map(choice => (
             <option key={choice} value={choice}>{t(EXPIRY_LABEL_KEYS[choice])}</option>
           ))}
         </select>
-        <button type="button" onClick={() => void handleSet()} disabled={busy} className={buttonClassName}>
+        <button type="button" onClick={() => void handleSet()} disabled={busy || !selectedExpiry} className={buttonClassName}>
           {link ? t('publicLink.changeExpiry') : t('publicLink.create')}
         </button>
         {link && (

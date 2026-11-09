@@ -14,7 +14,8 @@ import {
 } from '@jot/shared';
 import { notes, users as usersApi } from '@/utils/api';
 import { useSizeTransition } from '@/hooks/useSizeTransition';
-import PublicLinkSection, { type PublicLinksConfig } from '@/components/PublicLinkSection';
+import PublicLinkSection from '@/components/PublicLinkSection';
+import { PUBLIC_LINKS_DISABLED, type PublicLinksConfig } from '@/utils/publicLink';
 
 interface ShareModalProps {
   note: Note | null;
@@ -34,9 +35,7 @@ interface ShareModalProps {
   onPublicLinkChange?: (noteId: string, link: PublicLink | null) => void;
 }
 
-const PUBLIC_LINKS_OFF: PublicLinksConfig = { enabled: false, publicUrl: null };
-
-export default function ShareModal({ note, isOpen, onClose, notesList, currentUserId, publicLinks = PUBLIC_LINKS_OFF, onPublicLinkChange }: ShareModalProps) {
+export default function ShareModal({ note, isOpen, onClose, notesList, currentUserId, publicLinks = PUBLIC_LINKS_DISABLED, onPublicLinkChange }: ShareModalProps) {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [shares, setShares] = useState<NoteShare[]>([]);
@@ -112,7 +111,7 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
   // Softly animate the modal's height when its contents change (a collaborator
   // added/removed, suggestions toggled, or a status message shown/hidden).
   const sizeTransitionKey =
-    `${shares.length}:${showSuggestions}:${orderedSuggestions.length}:${!!error}:${!!success}:${confirmingLeave}:${note?.public_link?.token ?? ''}`;
+    `${shares.length}:${showSuggestions}:${orderedSuggestions.length}:${!!error}:${!!success}:${confirmingLeave}:${note?.public_link?.token ?? ''}:${note?.public_link?.expires_at ?? ''}`;
   const panelRef = useSizeTransition<HTMLDivElement>(sizeTransitionKey);
 
   // Written as a promise chain rather than an `async` function so state is only
@@ -525,7 +524,7 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
               config={publicLinks}
               currentUserId={currentUserId}
               users={users}
-              onChange={(id, link) => onPublicLinkChange?.(id, link)}
+              onChange={onPublicLinkChange}
             />
 
             {/* Only offer leaving once identity is resolved: handleLeave needs a

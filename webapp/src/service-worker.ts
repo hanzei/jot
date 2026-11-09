@@ -5,6 +5,7 @@ import { precacheAndRoute, cleanupOutdatedCaches, createHandlerBoundToURL } from
 import { registerRoute, NavigationRoute } from 'workbox-routing';
 import { NetworkFirst, CacheFirst } from 'workbox-strategies';
 import { Queue } from 'workbox-background-sync';
+import { API_BASE_PATH, PUBLIC_NOTE_PATH_PREFIX, apiPaths } from '@jot/shared';
 
 // Precache the whole build — index.html and every hashed asset it references.
 // This is the only thing that serves build output: the precache swaps all of it
@@ -33,12 +34,12 @@ const SSE_PATH = '/api/v1/events';
 // once, which a NetworkFirst copy would undo whenever the network is slow, and
 // a visitor's device should not keep the note after they leave. The server
 // sends `Cache-Control: no-store`, but Workbox's runtime caches ignore it.
-const PUBLIC_API_PREFIX = '/api/v1/public/';
+const PUBLIC_API_PREFIX = API_BASE_PATH + apiPaths.publicNote('');
 
 // Public link management (create, change expiry, revoke) is online-only: a
 // queued PUT or DELETE replayed later would publish or revoke a note long after
 // the user saw the request fail.
-const PUBLIC_LINK_PATH = /^\/api\/v1\/notes\/[^/]+\/public-link$/;
+const PUBLIC_LINK_PATH = new RegExp(`^${API_BASE_PATH}${apiPaths.notePublicLink('[^/]+')}$`);
 
 // Note images are immutable for a given ID — the ID is minted per upload and
 // the bytes behind it never change — so cache-first is safe here in a way it is
@@ -122,7 +123,7 @@ const bgSyncQueue = new Queue('api-queue', {
 // for the note anyway, so going to it costs nothing offline.
 registerRoute(
   new NavigationRoute(createHandlerBoundToURL('/index.html'), {
-    denylist: [/^\/api\//, /^\/share\//],
+    denylist: [/^\/api\//, new RegExp(`^${PUBLIC_NOTE_PATH_PREFIX}`)],
   })
 );
 

@@ -1,5 +1,16 @@
 import { publicNoteUrl, type PublicLink } from '@jot/shared';
 
+/** The `/config` fields the public link UI depends on. */
+export interface PublicLinksConfig {
+  /** `public_links_enabled`: the share dialog's section is hidden when false. */
+  enabled: boolean;
+  /** `public_url`: the base for copied links, or null to use this page's origin. */
+  publicUrl: string | null;
+}
+
+/** Public links off: the default until `/config` says otherwise. */
+export const PUBLIC_LINKS_DISABLED: PublicLinksConfig = { enabled: false, publicUrl: null };
+
 /** The expiry choices offered when creating a public link or changing its expiry. */
 export const PUBLIC_LINK_EXPIRY_CHOICES = ['never', '7d', '30d', '3m'] as const;
 export type PublicLinkExpiryChoice = (typeof PUBLIC_LINK_EXPIRY_CHOICES)[number];

@@ -2,6 +2,7 @@ import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } fr
 import { Plus, FileText, Archive, Trash2, ClipboardCheck, ArrowUpDown, Search, X, Pin } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { notes, users as usersApi } from '@/utils/api';
+import { httpStatus } from '@/utils/apiError';
 import { getUser, getSettings, setSettings } from '@/utils/auth';
 import {
   UPLOAD_MAX_BYTES,
@@ -25,7 +26,7 @@ import SearchBar from '@/components/SearchBar';
 import AnimatedNoteGrid from '@/components/AnimatedNoteGrid';
 import NoteModal from '@/components/NoteModal';
 import ShareModal from '@/components/ShareModal';
-import type { PublicLinksConfig } from '@/components/PublicLinkSection';
+import type { PublicLinksConfig } from '@/utils/publicLink';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { useAuthenticatedLayout } from '@/components/AuthenticatedLayout';
@@ -1012,7 +1013,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
         const refreshed = await notes.getById(noteId);
         setEditingNote(refreshed);
       } catch (err: unknown) {
-        const status = (err as { response?: { status?: number } })?.response?.status;
+        const status = httpStatus(err);
         if (status === 403 || status === 404) {
           setIsModalOpen(false);
           setEditingNote(null);

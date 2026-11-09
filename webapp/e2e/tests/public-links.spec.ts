@@ -172,6 +172,9 @@ test.describe('Public link section of the share dialog', () => {
     await expect(publicLinkSection.section().getByRole('button', { name: 'Copied!' })).toBeVisible();
     expect(await readClipboard(page)).toBe(url);
 
+    // Nothing is preselected for a change, so the current expiry is never
+    // replaced by whatever the select happened to show.
+    await expect(publicLinkSection.section().getByRole('button', { name: 'Change expiry' })).toBeDisabled();
     // A new expiry keeps the URL, so links already sent keep working.
     await publicLinkSection.changeExpiry('Never');
     await expect(publicLinkSection.details()).toContainText('Never expires');

@@ -15,22 +15,19 @@ import { applyTheme, followThemePreference } from '@/utils/theme';
 import { LoginRedirect, PostAuthRedirect } from '@/components/AuthRedirect';
 import PublicNote from '@/pages/PublicNote';
 import { VALIDATION, UPLOAD_MAX_BYTES, PUBLIC_NOTE_PATH_PREFIX, type SSOConfig } from '@jot/shared';
-import type { PublicLinksConfig } from '@/components/PublicLinkSection';
+import { PUBLIC_LINKS_DISABLED, type PublicLinksConfig } from '@/utils/publicLink';
 
 // Default when the server omits `sso` (a pre-SSO server) or the config fetch
 // fails: SSO off, local login on — i.e. exactly today's behavior.
 const SSO_DISABLED: SSOConfig = { enabled: false, provider_name: '', local_login_enabled: true };
 
-// Default when the config fetch fails or the server predates public links:
-// the public link UI stays hidden.
-const PUBLIC_LINKS_DISABLED: PublicLinksConfig = { enabled: false, publicUrl: null };
-
 /**
  * A public note link renders on its own, ahead of everything below: no session
  * check, no config fetch, no SSE, so an anonymous visitor makes no
  * authenticated call (whose 401 would send them to /login) and a signed-in one
- * sees exactly what an anonymous one does. Decided from the entry URL, since
- * nothing inside the viewer navigates to or from it.
+ * sees the same note an anonymous one does. Only the theme follows this
+ * browser's stored preference, as it does on the login page. Decided from the
+ * entry URL, since nothing inside the viewer navigates to or from it.
  */
 function App() {
   if (window.location.pathname.startsWith(PUBLIC_NOTE_PATH_PREFIX)) {

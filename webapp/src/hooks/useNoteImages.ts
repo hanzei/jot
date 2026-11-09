@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IMAGE_MAX_PER_NOTE, generateId, imageMaxMB as sharedImageMaxMB, validateImageFile as validateImageFileRaw, type Note, type NoteImage } from '@jot/shared';
 import { images as imagesApi } from '@/utils/api';
+import { httpStatus } from '@/utils/apiError';
 import type { PendingImageUpload } from '@/components/NoteImageGallery';
 
 // Undo window for a client-deferred note image removal (spec: ~10s).
@@ -171,7 +172,7 @@ export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError, ensu
     }).catch((error) => {
       activeUploadIdsRef.current.delete(uploadId);
       console.error('Failed to upload image:', error);
-      const status = (error as { response?: { status?: number } })?.response?.status;
+      const status = httpStatus(error);
       const message = status === 413
         ? t('images.errorTooLarge', { maxMB: imageMaxMB })
         : t('images.uploadFailed');

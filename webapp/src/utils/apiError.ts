@@ -30,7 +30,12 @@ const API_ERROR_MESSAGE_KEYS: Partial<Record<ApiErrorCode, string>> = {
   unsupported_image_type: 'apiErrors.unsupportedImageType',
   invalid_image: 'apiErrors.invalidImage',
   invalid_import_file: 'apiErrors.invalidImportFile',
+  public_links_disabled: 'publicLink.disabled',
 };
+
+/** The HTTP status of a failed axios request, or undefined for a network error. */
+export const httpStatus = (err: unknown): number | undefined =>
+  (err as { response?: { status?: number } } | null)?.response?.status;
 
 /**
  * The message to show for a failed API request: a translation for a code the

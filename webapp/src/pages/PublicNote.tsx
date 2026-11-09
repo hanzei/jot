@@ -1,10 +1,11 @@
-import { useEffect, useId, useMemo, useState } from 'react';
+import { Fragment, useEffect, useId, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, Square, SquareCheck, FileQuestion } from 'lucide-react';
 import { VALIDATION, groupNoteItems, type PublicListNote, type PublicNote as PublicNoteData, type PublicNoteItem } from '@jot/shared';
 import { publicNoteImages, publicNotes } from '@/utils/api';
-import { renderMarkdown } from '@/utils/markdown';
+import { httpStatus } from '@/utils/apiError';
+import { inlineMarkdownToText, renderMarkdown } from '@/utils/markdown';
 import InlineMarkdown from '@/components/InlineMarkdown';
 import NoteImageGallery from '@/components/NoteImageGallery';
 
@@ -37,8 +38,7 @@ export default function PublicNote() {
         if (cancelled) return;
         // Every dead link is the same 404 on the server — unknown, revoked,
         // expired, trashed or switched off — and the page keeps it that way.
-        const status = (err as { response?: { status?: number } })?.response?.status;
-        setResult({ token, state: { status: status === 404 ? 'not_found' : 'error' } });
+        setResult({ token, state: { status: httpStatus(err) === 404 ? 'not_found' : 'error' } });
       });
     return () => { cancelled = true; };
   }, [token]);
@@ -137,25 +137,22 @@ function PublicListItems({ note }: { note: PublicListNote }) {
   // only, sends nothing, and a reload goes back to the note's state.
   const [collapsed, setCollapsed] = useState(note.checked_items_collapsed);
 
-  const { active, completed, itemsById } = useMemo(() => {
+  const { active, completed, completedRows } = useMemo(() => {
     const ordered = groupNoteItems(note.items);
-    return {
-      active: ordered.filter(item => !item.completed),
-      completed: ordered.filter(item => item.completed),
-      itemsById: new Map(ordered.map(item => [item.id, item])),
-    };
+    const itemsById = new Map(ordered.map(item => [item.id, item]));
+    const completed = ordered.filter(item => item.completed);
+    // As in the editor: a completed child whose parent is still active is
+    // shown under a muted copy of that parent, so it never leaves its group.
+    const completedRows: { item: PublicNoteItem; ghostParent: PublicNoteItem | null }[] = [];
+    let lastGhostParentId: string | null = null;
+    for (const item of completed) {
+      const parent = item.parent_id ? itemsById.get(item.parent_id) : undefined;
+      const activeParent = parent && !parent.completed ? parent : null;
+      completedRows.push({ item, ghostParent: activeParent && activeParent.id !== lastGhostParentId ? activeParent : null });
+      lastGhostParentId = activeParent?.id ?? null;
+    }
+    return { active: ordered.filter(item => !item.completed), completed, completedRows };
   }, [note.items]);
-
-  // As in the editor: a completed child whose parent is still active is shown
-  // under a dimmed copy of that parent, so it never leaves its group.
-  const completedRows: { item: PublicNoteItem; ghostParent: PublicNoteItem | null }[] = [];
-  let lastGhostParentId: string | null = null;
-  for (const item of completed) {
-    const parent = item.parent_id ? itemsById.get(item.parent_id) : undefined;
-    const ghostParent = parent && !parent.completed && lastGhostParentId !== parent.id ? parent : null;
-    lastGhostParentId = parent && !parent.completed ? parent.id : null;
-    completedRows.push({ item, ghostParent });
-  }
 
   return (
     <div>
@@ -178,7 +175,10 @@ function PublicListItems({ note }: { note: PublicListNote }) {
           </button>
           <ul id={completedListId} hidden={collapsed} className="space-y-2" data-testid="public-note-completed-items">
             {completedRows.map(({ item, ghostParent }) => (
-              <ItemGroupRows key={item.id} item={item} ghostParent={ghostParent} />
+              <Fragment key={item.id}>
+                {ghostParent && <ItemRow item={ghostParent} ghost />}
+                <ItemRow item={item} />
+              </Fragment>
             ))}
           </ul>
         </div>
@@ -187,16 +187,8 @@ function PublicListItems({ note }: { note: PublicListNote }) {
   );
 }
 
-function ItemGroupRows({ item, ghostParent }: { item: PublicNoteItem; ghostParent: PublicNoteItem | null }) {
-  return (
-    <>
-      {ghostParent && <ItemRow item={ghostParent} ghost />}
-      <ItemRow item={item} />
-    </>
-  );
-}
-
 function ItemRow({ item, ghost = false }: { item: PublicNoteItem; ghost?: boolean }) {
+  const { t } = useTranslation();
   const Box = item.completed ? SquareCheck : Square;
   const textClass = item.completed
     ? 'line-through text-gray-600 dark:text-gray-300'
@@ -208,6 +200,9 @@ function ItemRow({ item, ghost = false }: { item: PublicNoteItem; ghost?: boolea
       className="flex items-start gap-2 min-w-0"
       style={{ marginLeft: item.parent_id ? VALIDATION.INDENT_PX_PER_LEVEL : 0 }}
       data-completed={item.completed}
+      // The copy of a still-active parent heads its completed children; say so,
+      // since its look alone does not.
+      aria-label={ghost ? t('note.completedItemGroup', { title: inlineMarkdownToText(item.text) }) : undefined}
     >
       <Box aria-hidden="true" className="h-4 w-4 mt-1 flex-shrink-0 text-gray-500 dark:text-gray-400" />
       <InlineMarkdown text={item.text} className={`min-w-0 whitespace-pre-wrap break-words ${textClass}`} />

@@ -580,6 +580,7 @@
     "copied": "Copied!",
     "expiry": "Expires",
     "newExpiry": "New expiry",
+    "chooseExpiry": "Choose…",
     "expiryNever": "Never",
     "expiry7Days": "In 7 days",
     "expiry30Days": "In 30 days",
