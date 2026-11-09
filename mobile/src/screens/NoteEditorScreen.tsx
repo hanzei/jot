@@ -37,6 +37,7 @@ import { useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote
 import { useOfflineNote } from '../hooks/useOfflineNotes';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { useFailedNoteIds } from '../store/OfflineContext';
+import { useTopBanners } from '../hooks/useTopBanners';
 import { useToast } from '../hooks/useToast';
 import { useConfirm } from '../hooks/useConfirm';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -121,6 +122,9 @@ export default function NoteEditorScreen() {
   const { noteId: initialNoteId, sharedText, initialNoteType, readOnly, originRect, originColor } = route.params;
   const { t } = useTranslation();
   const failedNoteIds = useFailedNoteIds();
+  // The global "N changes couldn't be saved — Review" banner already says this
+  // while it shows; the note's own bar takes over once it is gone (dismissed).
+  const globalFailuresBannerShown = useTopBanners().shown.includes('syncFailures');
   const { upload_max_bytes: uploadMaxBytes } = useServerConfig();
   const uploadMaxMB = imageMaxMB(uploadMaxBytes);
 
@@ -1544,7 +1548,7 @@ export default function NoteEditorScreen() {
         </View>
       </View>
 
-      {!!noteId && failedNoteIds.has(noteId) && (
+      {!!noteId && failedNoteIds.has(noteId) && !globalFailuresBannerShown && (
         <TouchableOpacity
           style={[styles.failedBar, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}
           onPress={() => navigation.navigate('SyncFailures')}

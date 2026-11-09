@@ -16,7 +16,7 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
  * (#493). Tapping links to the per-failure resolution list; dismissing hides it
  * until a new failure arrives (OfflineContext re-surfaces it when the count
  * grows). Visibility and safe-area ownership are decided centrally by
- * {@link useVisibleTopBanners}; the count and dismiss action come from context.
+ * {@link useTopBanners}; the count and dismiss action come from context.
  */
 export default function SyncFailuresBanner({ visible, applyTopInset }: TopBannerProps) {
   const { syncFailureCount, dismissSyncFailuresBanner } = useOfflineContext();

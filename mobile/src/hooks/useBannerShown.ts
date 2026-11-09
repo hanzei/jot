@@ -1,8 +1,7 @@
-import { useVisibleTopBanners } from './useTopBanners';
+import { useTopBanners } from './useTopBanners';
 
 /**
- * Returns true when any top-of-screen banner is currently rendered (offline,
- * SSE reconnect, sync-error, revalidation-error, or sync-failures review).
+ * Returns true when a top-of-screen banner is currently shown.
  *
  * The topmost visible banner pads the top safe area itself, so content below it
  * must not pad it again. `ContentSafeArea` is the single consumer of this: it
@@ -10,10 +9,10 @@ import { useVisibleTopBanners } from './useTopBanners';
  * keeps screens, components, and React Navigation's headers from
  * double-counting it. Screens read `useSafeAreaInsets()`, not this hook.
  *
- * Derived from {@link useVisibleTopBanners} — the same source of truth the
+ * Derived from {@link useTopBanners} — the same source of truth the
  * banner renderer uses — so the content inset and the banner stack can never
  * disagree about whether a banner is showing.
  */
 export function useBannerShown(): boolean {
-  return useVisibleTopBanners().length > 0;
+  return useTopBanners().shown.length > 0;
 }

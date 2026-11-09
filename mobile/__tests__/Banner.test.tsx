@@ -118,6 +118,43 @@ describe('Banner', () => {
     expect(style.flexShrink).toBeUndefined();
   });
 
+  it('shows a chevron only when the banner is tappable', async () => {
+    const plain = await renderBanner({ visible: true, applyTopInset: true });
+    expect(plain.queryByTestId('banner-chevron')).toBeNull();
+    await plain.unmount();
+
+    const tappable = await render(
+      <Banner
+        visible
+        icon={CloudOff}
+        text="2 changes couldn't be saved — Review"
+        backgroundColor="#111827"
+        borderColor="#374151"
+        textColor="#ffffff"
+        onPress={jest.fn()}
+        accessibilityLabel="Review"
+        testID="banner"
+      />,
+    );
+    expect(tappable.getByTestId('banner-chevron')).toBeTruthy();
+  });
+
+  it('keeps showing its last content while animating closed', async () => {
+    const ui = (visible: boolean, text: string) => (
+      <Banner visible={visible} icon={CloudOff} text={text} backgroundColor="#111827" borderColor="#374151" textColor="#ffffff" testID="banner" />
+    );
+    const view = await render(ui(true, '1 change couldn\'t be saved'));
+    // The caller hides it because the count reached 0; the fade must not show that.
+    await view.rerender(ui(false, '0 changes couldn\'t be saved'));
+    expect(view.getByText('1 change couldn\'t be saved')).toBeTruthy();
+    expect(view.queryByText('0 changes couldn\'t be saved')).toBeNull();
+
+    await act(async () => {
+      jest.advanceTimersByTime(ANIMATION_DURATION_MS);
+    });
+    expect(view.queryByTestId('banner')).toBeNull();
+  });
+
   it('does not intercept touches while animating closed', async () => {
     const onPress = jest.fn();
     const ui = (visible: boolean) => (
