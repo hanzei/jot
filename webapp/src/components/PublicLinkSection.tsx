@@ -1,19 +1,22 @@
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Copy, Check, Link2 } from 'lucide-react';
-import { userDisplayName, type Note, type PublicLink, type User } from '@jot/shared';
-import { notes } from '@/utils/api';
-import { apiErrorMessage } from '@/utils/apiError';
-import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
-import ConfirmDialog from '@/components/ConfirmDialog';
 import {
   PUBLIC_LINK_EXPIRY_CHOICES,
   isPublicLinkActive,
   publicLinkExpiresAt,
   publicLinkUrl,
+  userDisplayName,
+  type Note,
+  type PublicLink,
   type PublicLinkExpiryChoice,
-  type PublicLinksConfig,
-} from '@/utils/publicLink';
+  type User,
+} from '@jot/shared';
+import { notes } from '@/utils/api';
+import { apiErrorMessage } from '@/utils/apiError';
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import type { PublicLinksConfig } from '@/utils/publicLink';
 
 interface PublicLinkSectionProps {
   note: Note;
@@ -100,7 +103,7 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
     return creator ? t('publicLink.createdBy', { name: userDisplayName(creator) }) : null;
   };
 
-  const url = link ? publicLinkUrl(link, config.publicUrl) : '';
+  const url = link ? publicLinkUrl(link, config.publicUrl, window.location.origin) : '';
   const createdBy = link ? creatorLabel(link.created_by) : null;
 
   const buttonClassName = 'px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50';
