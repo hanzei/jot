@@ -1290,6 +1290,25 @@ export default function NoteEditorScreen() {
     [autoFocusItemIdRef, getItemRef, getItemSelectionRef, listItemHandlers, isNoteShared, collaborators, hasNoteColor, completedItemTexts, handleAcceptSuggestion, isReadOnly],
   );
 
+  // While a group is held: each active top-level parent's active children, in
+  // order — the rows renderActiveRow draws inside that parent's cell. Built
+  // once per render rather than filtered per parent row, and derived from the
+  // rendered items so an edit or refresh landing mid-hold re-renders the cells
+  // instead of leaving a parent drawing stale children. null when nothing is
+  // held, so renderActiveRow keeps its identity across ordinary edits.
+  const groupChildrenByParent = useMemo(() => {
+    if (groupedParentId === null) return null;
+    const parentIds = new Set(uncheckedItems.filter((it) => it.parentId === null).map((it) => it.id));
+    const byParent = new Map<string, LocalItem[]>();
+    for (const it of uncheckedItems) {
+      if (it.parentId === null || !parentIds.has(it.parentId)) continue;
+      const siblings = byParent.get(it.parentId);
+      if (siblings) siblings.push(it);
+      else byParent.set(it.parentId, [it]);
+    }
+    return byParent;
+  }, [groupedParentId, uncheckedItems]);
+
   const renderActiveRow = useCallback(
     ({ item, index }: ReorderableListRenderItemInfo<LocalItem>) => {
       const originalIndex = itemIndexMapRef.current.get(item.id);
@@ -1301,15 +1320,13 @@ export default function NoteEditorScreen() {
       // another parent and its children — matching the drop, which can't nest a
       // parent and lands it before or after that group. The drawing gives back
       // the placeholders' height (negative margin), so nothing on screen moves.
-      const grouping = groupedParentId !== null;
-      if (grouping && item.parentId !== null) {
+      // A child no active parent draws (an orphan) keeps its own cell.
+      if (item.parentId !== null && groupChildrenByParent?.has(item.parentId)) {
         return <View style={GROUP_PLACEHOLDER_STYLE} testID="list-item-group-placeholder" />;
       }
       const baseLevel = item.parentId ? 1 : 0;
       const hasChildren = itemHasChildren(itemsRef.current, item.id);
-      const groupChildren = grouping && hasChildren
-        ? itemsRef.current.filter((child) => child.parentId === item.id && !child.completed)
-        : [];
+      const groupChildren = groupChildrenByParent?.get(item.id) ?? [];
       // The handle keeps its glyph but does nothing: the group is already
       // being dragged by its parent.
       const groupRows = groupChildren.length === 0 ? null : (
@@ -1341,7 +1358,7 @@ export default function NoteEditorScreen() {
         </ActiveListRow>
       );
     },
-    [itemIndexMapRef, itemsRef, dragTranslateX, groupedParentId, holdGroupForDrag, releaseGroupHold, markGroupDragStarted, activeRowProps],
+    [itemIndexMapRef, itemsRef, dragTranslateX, groupChildrenByParent, holdGroupForDrag, releaseGroupHold, markGroupDragStarted, activeRowProps],
   );
 
   /**

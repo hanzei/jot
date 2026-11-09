@@ -847,7 +847,10 @@ export function useListItemEditing({
       const originId = dragOriginIdRef.current;
       dragOriginIdRef.current = null;
       // The drop ends a group drag however it goes — moved, no-op or discarded.
-      setGroupedParent(null);
+      // Only a hold whose press became a drag, though: this drop can land
+      // ~200ms after the finger lifts, by which time another parent's handle
+      // may already be held for the next drag.
+      if (groupDragStartedRef.current) setGroupedParent(null);
       // `from`/`to` were measured when the drag began, and the library hands
       // them back only once its drop animation finishes — ~200ms after the
       // finger lifts. A background note refresh (SSE refetch, catch-up resync
@@ -895,6 +898,19 @@ export function useListItemEditing({
       // re-render lands; zeroing the shared value mid-drop could clobber that hold
       // and reintroduce the snap-back flash. The drag start resets it instead.
       if (!changed) return;
+      // Merge with existing checked items and normalize so each parent's
+      // children stay contiguous — a moved parent's children follow it.
+      const next = normalizeItemOrder([...reorderedUnchecked, ...checkedItemsRef.current]);
+      // A held group passes the 1px cells of its own or a neighbour group's
+      // children with a few px of travel, and normalizing re-seats it right
+      // back. Such a drop changed nothing, so skip the save and the haptic —
+      // but the list still remounted the cells it passed, so keep focus.
+      const nextActive = next.filter((item) => !item.completed);
+      if (nextActive.length === current.length
+        && nextActive.every((item, i) => item.id === current[i]?.id && item.parentId === current[i]?.parentId)) {
+        if (focusedItemIdRef.current) armAutoFocus(focusedItemIdRef.current);
+        return;
+      }
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       // A row whose slot changed gets force-remounted by the reorderable list
       // (new key, to fix a layout glitch), which drops a focused TextInput.
@@ -902,9 +918,7 @@ export function useListItemEditing({
       // remounted row re-opens the keyboard on itself instead of leaving focus
       // to fall back elsewhere (observed: the title input).
       if (focusedItemIdRef.current) armAutoFocus(focusedItemIdRef.current);
-      // Merge with existing checked items and normalize so each parent's
-      // children stay contiguous — a moved parent's children follow it.
-      setItems(normalizeItemOrder([...reorderedUnchecked, ...checkedItemsRef.current]));
+      setItems(next);
       markDirtyAndScheduleUpdate();
     },
     [armAutoFocus, markDirtyAndScheduleUpdate, dragTranslateX, itemsRef, setItems, setGroupedParent],

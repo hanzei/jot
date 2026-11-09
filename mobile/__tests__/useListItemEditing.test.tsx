@@ -566,6 +566,20 @@ describe('useListItemEditing — dragging a parent', () => {
       editing(view).handleListReorder({ from: 0, to: 2 });
     });
     expect(ids(view.result.current.doc.items)).toEqual(['a', 'a1', 'a2', 'b', 'c']);
+    expect(markDirty).not.toHaveBeenCalled();
+  });
+
+  it("keeps a new hold when the previous group's drop lands after it", async () => {
+    const view = await mountWith([...groups(), item('c1', { parentId: 'c' })]);
+    await grab(view, 'a', 0);
+    // The finger lifts and presses c's handle before a's drop animation ends.
+    await act(async () => {
+      editing(view).holdGroupForDrag('c');
+    });
+    await act(async () => {
+      editing(view).handleListReorder({ from: 0, to: 3 });
+    });
+    expect(editing(view).groupedParentId).toBe('c');
   });
 
   it('ungroups when the parent is released in place or the drop is discarded', async () => {
