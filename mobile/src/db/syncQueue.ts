@@ -121,14 +121,66 @@ export function isTransientHttpStatus(status: number | undefined): boolean {
  * payload, and any non-HTTP error thrown while processing the entry itself
  * (corrupted body, a local DB error) — those are charged and eventually
  * dead-lettered.
+ *
+ * A gateway status (502/503/504) is ambiguous: usually the proxy's Jot server
+ * is down (global), but a request that reproducibly exceeds the server's or the
+ * proxy's timeout gets one every time while every other request succeeds. The
+ * drains resolve that with {@link isGlobalDrainFailureProbed} — always call that
+ * one; this synchronous check treats a gateway status as entry-specific.
  */
-export function isGlobalDrainFailure(err: unknown, status: number | undefined): boolean {
+function isGlobalDrainFailure(err: unknown): boolean {
   // A non-HTTP error thrown while processing an entry is specific to that entry.
   if (!axios.isAxiosError(err)) return false;
   // Transport-level failure with no server response: network down or timeout.
   if (err.response === undefined) return true;
   // Statuses that block the whole queue regardless of the specific entry.
+  const { status } = err.response;
   return status === 401 || status === 408 || status === 429;
+}
+
+/**
+ * Whether an HTTP status is a gateway error (502 Bad Gateway, 503 Service
+ * Unavailable, 504 Gateway Timeout). Jot's API never returns these — its only
+ * 503 is the `/readyz` probe — so they come from a reverse proxy in front of it.
+ */
+function isGatewayStatus(status: number | undefined): boolean {
+  return status === 502 || status === 503 || status === 504;
+}
+
+/** Timeout for the probe in {@link isGlobalDrainFailureProbed}. */
+const SERVER_PROBE_TIMEOUT_MS = 5000;
+
+/**
+ * {@link isGlobalDrainFailure}, plus a decision on gateway statuses: when the
+ * entry got a 502/503/504, probe the server with a cheap read. If the server
+ * answers, the gateway error was specific to this entry and is charged as
+ * usual, so a request that always times out at the proxy is still
+ * dead-lettered after MAX_ENTRY_DRAIN_ATTEMPTS. If it doesn't, the server is
+ * down: the failure is global and charges nothing, so an outage no longer turns
+ * every queued change into a "couldn't be saved" one.
+ *
+ * The drains stop at the first global or below-cap failure, so this probes at
+ * most once per drain pass.
+ */
+export async function isGlobalDrainFailureProbed(err: unknown): Promise<boolean> {
+  if (isGlobalDrainFailure(err)) return true;
+  if (!axios.isAxiosError(err) || !isGatewayStatus(err.response?.status)) return false;
+  return !(await serverAnswers());
+}
+
+/**
+ * Whether the server itself answers a request right now. Any response other
+ * than a gateway status counts, an error status included.
+ */
+async function serverAnswers(): Promise<boolean> {
+  try {
+    await jot.about.get({ timeout: SERVER_PROBE_TIMEOUT_MS });
+    return true;
+  } catch (probeErr) {
+    return axios.isAxiosError(probeErr)
+      && probeErr.response !== undefined
+      && !isGatewayStatus(probeErr.response.status);
+  }
 }
 
 /** An error's message without its stack, for log lines where the stack is noise. */
@@ -982,18 +1034,20 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         }
 
         await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
-      } else if (isGlobalDrainFailure(err, status)) {
+      } else if (await isGlobalDrainFailureProbed(err)) {
         // No usable server response (network error/timeout) or a status that
         // blocks the whole queue regardless of this entry (401 re-auth, 408,
-        // 429 rate-limit). Every entry would fail the same way, so stop the
-        // drain without charging this entry's attempt counter and retry the
-        // remainder on the next reconnect (issue #714). Expected whenever the
+        // 429 rate-limit, or a 502/503/504 from a proxy whose server is down).
+        // Every entry would fail the same way, so stop the drain without
+        // charging this entry's attempt counter and retry the remainder on the
+        // next reconnect (issue #714). Expected whenever the
         // server drops away, so info, and the message alone: the stack of a
         // network error is bundle offsets that say nothing.
         console.info(`Queue drain stopped at entry id=${entry.id} (connectivity): ${errorSummary(err)}`);
         break;
       } else {
-        // Entry-specific transient failure: a 5xx tied to this op's payload, or a
+        // Entry-specific transient failure: a 5xx tied to this op's payload (a
+        // gateway status only when the server answered the probe), or a
         // non-HTTP error thrown while processing this entry (corrupted body, a
         // local DB error). Charge the entry's attempt counter; once it has failed
         // MAX_ENTRY_DRAIN_ATTEMPTS times, dead-letter it and continue *past* it so

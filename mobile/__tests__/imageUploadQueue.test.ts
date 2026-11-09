@@ -17,6 +17,7 @@ import {
   type PendingImageUploadEntry,
 } from '../src/db/imageUploadQueue';
 import { uploadNoteImage } from '../src/api/images';
+import { jot } from '../src/api/jot';
 import { getLocalNote, getPendingCreateNoteIds, markNotePendingCreate, markNoteSyncFailed, patchLocalNoteImages, saveNote } from '../src/db/noteQueries';
 import { subscribeToEnqueue, MAX_ENTRY_DRAIN_ATTEMPTS } from '../src/db/syncQueue';
 import { makeListNote, makeNoteItem, makeTextNote, seedImageUpload } from './helpers/fixtures';
@@ -25,6 +26,12 @@ import { silenceConsole } from './helpers/consoleGuard';
 
 jest.mock('../src/api/images', () => ({
   uploadNoteImage: jest.fn(),
+}));
+
+// The drain probes the server with `jot.about.get` when an upload gets a
+// gateway status (502/503/504).
+jest.mock('../src/api/jot', () => ({
+  jot: { about: { get: jest.fn() } },
 }));
 
 // The note queries run for real against the test database; only
@@ -37,6 +44,7 @@ jest.mock('../src/db/noteQueries', () => {
 const fs = globalThis.mockFileSystem;
 
 const mockUploadNoteImage = uploadNoteImage as jest.Mock;
+const mockProbe = jot.about.get as jest.Mock;
 const mockPatchLocalNoteImages = patchLocalNoteImages as jest.Mock;
 
 const UPLOAD_PATH = 'file:///docs/pending-image-uploads/upload-1';
@@ -273,13 +281,61 @@ describe('drainImageUploadQueue', () => {
 
   it('charges the attempt counter and stops below the cap on a persistent 5xx (#714)', async () => {
     await seedUpload({ id: 'up-5xx' });
-    const err = Object.assign(new Error('Server Error'), { isAxiosError: true, response: { status: 503 } });
+    const err = Object.assign(new Error('Server Error'), { isAxiosError: true, response: { status: 500 } });
     mockUploadNoteImage.mockRejectedValueOnce(err);
 
     const result = await drainImageUploadQueue(db);
 
     expect(await uploadRow('up-5xx')).toEqual({ status: 'queued', error_message: null, attempts: 1 });
     expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
+  });
+
+  it('charges a 500 without probing the server', async () => {
+    await saveNote(db, makeTextNote({ id: 'n1' }));
+    await seedUpload({ id: 'up-500', note_id: 'n1' });
+    mockUploadNoteImage.mockRejectedValueOnce(
+      Object.assign(new Error('Server Error'), { isAxiosError: true, response: { status: 500 } }),
+    );
+
+    await drainImageUploadQueue(db);
+
+    expect(mockProbe).not.toHaveBeenCalled();
+    expect(await uploadRow('up-500')).toEqual({ status: 'queued', error_message: null, attempts: 1 });
+  });
+
+  it('stops without charging on a gateway status while the server does not answer', async () => {
+    await saveNote(db, makeTextNote({ id: 'n1' }));
+    await seedUpload({ id: 'up-gw', note_id: 'n1', created_at: '2024-01-01T00:00:00Z', attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 });
+    await seedUpload({ id: 'up-next', note_id: 'n1', local_path: 'file:///docs/pending-image-uploads/up-next', created_at: '2024-01-02T00:00:00Z' });
+    mockUploadNoteImage.mockRejectedValueOnce(
+      Object.assign(new Error('Bad Gateway'), { isAxiosError: true, response: { status: 502 } }),
+    );
+    mockProbe.mockRejectedValueOnce(Object.assign(new Error('Bad Gateway'), { isAxiosError: true, response: { status: 502 } }));
+
+    const result = await drainImageUploadQueue(db);
+
+    expect(mockProbe).toHaveBeenCalledTimes(1);
+    expect(mockUploadNoteImage).toHaveBeenCalledTimes(1);
+    expect(await uploadRow('up-gw')).toEqual({ status: 'queued', error_message: null, attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 });
+    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
+  });
+
+  it('flags an upload that keeps timing out at the proxy while the server answers', async () => {
+    await saveNote(db, makeTextNote({ id: 'n1' }));
+    await seedUpload({ id: 'up-slow', note_id: 'n1', attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 });
+    mockUploadNoteImage.mockRejectedValueOnce(
+      Object.assign(new Error('Gateway Timeout'), { isAxiosError: true, response: { status: 504 } }),
+    );
+    mockProbe.mockResolvedValueOnce({});
+
+    const result = await drainImageUploadQueue(db);
+
+    expect(await uploadRow('up-slow')).toEqual({
+      status: 'error',
+      error_message: 'Gateway Timeout',
+      attempts: MAX_ENTRY_DRAIN_ATTEMPTS,
+    });
+    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 1 });
   });
 
   it('flags a persistently-failing upload as errored at the cap and continues past it (#714)', async () => {

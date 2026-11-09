@@ -275,6 +275,38 @@ describe('migrateDatabase', () => {
     });
   });
 
+  describe('queue attempt reset (502/503/504 no longer charged)', () => {
+    it('starts queued entries over and leaves errored uploads and dead-letter rows alone', async () => {
+      const db = createTestDb();
+      for (let i = 0; i < 8; i++) {
+        await MIGRATIONS[i]!(db);
+        await db.runAsync(`PRAGMA user_version = ${i + 1}`);
+      }
+      await db.runAsync("INSERT INTO sync_queue (operation, endpoint, method, created_at, attempts) VALUES ('update', '/notes/n1', 'PATCH', '2026-01-01T00:00:00Z', 4)");
+      await db.runAsync("INSERT INTO notes (id, user_id, created_at, updated_at) VALUES ('n1', 'u1', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')");
+      for (const [id, status] of [['queued-up', 'queued'], ['errored-up', 'error']] as const) {
+        await db.runAsync(
+          `INSERT INTO pending_image_uploads (id, note_id, local_path, filename, mime_type, status, created_at, attempts)
+           VALUES (?, 'n1', 'file:///x', 'x.png', 'image/png', ?, '2026-01-01T00:00:00Z', 5)`,
+          [id, status],
+        );
+      }
+      await db.runAsync(
+        `INSERT INTO dead_letter (operation, endpoint, method, status, created_at, failed_at, attempts)
+         VALUES ('update', '/notes/n1', 'PATCH', 503, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 5)`,
+      );
+
+      await migrateDatabase(db);
+
+      expect(await db.getAllAsync('SELECT attempts FROM sync_queue')).toEqual([{ attempts: 0 }]);
+      expect(await db.getAllAsync('SELECT id, attempts FROM pending_image_uploads ORDER BY id')).toEqual([
+        { id: 'errored-up', attempts: 5 },
+        { id: 'queued-up', attempts: 0 },
+      ]);
+      expect(await db.getAllAsync('SELECT attempts FROM dead_letter')).toEqual([{ attempts: 5 }]);
+    });
+  });
+
   describe('pre-versioned install', () => {
     it('converges on the fresh-install schema', async () => {
       const db = await preVersionedInstall();

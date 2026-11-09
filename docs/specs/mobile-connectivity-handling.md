@@ -190,13 +190,19 @@ Rules of thumb:
   `pending_image_uploads.attempts`). A *global* connectivity failure (no server
   response, or 401/408/429) stops the drain without charging the head entry; an
   *entry-specific* failure (a 5xx, or a non-HTTP processing throw) charges it.
+  A gateway status (502/503/504) is decided by a probe (`isGlobalDrainFailureProbed`):
+  Jot's API never returns one, so it comes from a reverse proxy, either because
+  the Jot server is down (the probe gets no answer → global, so an outage does
+  not dead-letter every queued change) or because this one request keeps
+  timing out (the server answers the probe → charged as usual).
   Once an entry has failed `MAX_ENTRY_DRAIN_ATTEMPTS` times it is **dead-lettered
   and the drain continues past it** (`#492`'s dead-letter table gains the op, the
   note is flagged `sync_state = 'failed'`), so unrelated later writes drain. A
   dead-lettered `create` also drops its note's dependent queued ops rather than
-  404-ing each one. (A long server-wide 5xx outage can dead-letter the head after
-  the cap even though the op was fine — accepted, since the op is preserved and
-  recoverable via the failed-changes review flow.)
+  404-ing each one. (A server that keeps answering 500 to every request can
+  still dead-letter the head after the cap even though the op was fine —
+  accepted, since the op is preserved and recoverable via the failed-changes
+  review flow.)
 
 (These are the *Sync Loop Safety* rules in `mobile/CLAUDE.md`; connectivity
 handling and loop safety are two halves of the same system.)
