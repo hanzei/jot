@@ -14,7 +14,6 @@ import {
   markLocalNoteDeleted,
   permanentDeleteLocalNote,
   patchLocalNoteImages,
-  setLocalNotePublicLink,
   upsertLabel,
 } from '../db/noteQueries';
 import { getProtectedNoteIds, saveServerNote } from '../db/syncQueue';
@@ -114,11 +113,6 @@ export function useSSE(
               // (deferring to a pending local edit on this note; see #487).
               try {
                 await saveServerNote(db, note);
-                // The link is server-owned, so it applies even when a pending
-                // edit made saveServerNote skip the rest of the snapshot.
-                if (note.public_link !== undefined) {
-                  await setLocalNotePublicLink(db, note_id, note.public_link);
-                }
               } catch (err) {
                 console.warn(`Failed to persist SSE ${event.type} for note id=${note_id}:`, err);
               }

@@ -351,8 +351,22 @@ function completedBinding(
   };
 }
 
+/**
+ * For a note `skipNoteIds` protects: a server snapshot still applies the note's
+ * public link, which is server-owned and never edited locally, so a pending
+ * edit can't hold back a link a collaborator created or revoked.
+ */
+async function saveSkippedNote(db: SQLiteDatabase, note: Note, options: SaveNoteOptions): Promise<void> {
+  if (options.serverSnapshot && note.public_link !== undefined) {
+    await setLocalNotePublicLink(db, note.id, note.public_link);
+  }
+}
+
 export async function saveNote(db: SQLiteDatabase, note: Note, options?: SaveNoteOptions): Promise<void> {
-  if (options?.skipNoteIds?.has(note.id)) return;
+  if (options?.skipNoteIds?.has(note.id)) {
+    await saveSkippedNote(db, note, options);
+    return;
+  }
   await withSerializedTransaction(db, () => saveNoteInTx(db, note, options?.serverSnapshot, options?.keepLocalCompletedIds));
 }
 
@@ -366,7 +380,10 @@ async function saveNotesInTx(
   options?: SaveNoteOptions,
 ): Promise<void> {
   for (const note of notes) {
-    if (options?.skipNoteIds?.has(note.id)) continue;
+    if (options?.skipNoteIds?.has(note.id)) {
+      await saveSkippedNote(db, note, options);
+      continue;
+    }
     await saveNoteInTx(db, note, options?.serverSnapshot);
   }
 }
@@ -705,10 +722,9 @@ export async function updateLocalNoteShares(
 }
 
 /**
- * Set only a note's cached public link, after this client created, changed or
- * revoked it, or an SSE event reported a change. The link is server-owned and
- * never edited offline, so it is written even while the note has a queued
- * edit — unlike a full server snapshot, which that edit protects (#487).
+ * Set only a note's cached public link: after this client created, changed or
+ * revoked it, or from a server snapshot of a note whose pending edit protects
+ * the rest of the row (#487).
  */
 export async function setLocalNotePublicLink(
   db: SQLiteDatabase,

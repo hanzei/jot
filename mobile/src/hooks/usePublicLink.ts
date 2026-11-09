@@ -19,8 +19,16 @@ export function usePublicLinkActions(noteId: string) {
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
 
+  // The server has already applied the change, so a failed cache write must
+  // not read as a failed request; the next fetch of the note corrects it.
   const applyLocally = useCallback(async (link: PublicLink | null) => {
-    await setLocalNotePublicLink(db, noteId, link);
+    try {
+      await setLocalNotePublicLink(db, noteId, link);
+    } catch {
+      // No error detail: the bound values include the link's token, which
+      // diagnostics logs must never carry.
+      console.warn(`Failed to cache the public link of note id=${noteId}`);
+    }
     await queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
   }, [db, noteId, queryClient]);
 

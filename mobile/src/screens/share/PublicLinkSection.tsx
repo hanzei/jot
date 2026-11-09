@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from 'react';
+import { useRef, useState, useSyncExternalStore } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Share } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Link2, Share2 } from 'lucide-react-native';
@@ -60,6 +60,8 @@ export default function PublicLinkSection({ noteId, publicLink, currentUserId, u
   // '' is "not chosen yet"; see `selectedExpiry` below.
   const [expiry, setExpiry] = useState<PublicLinkExpiryChoice | ''>('');
   const [busy, setBusy] = useState(false);
+  // Set synchronously, so a second tap before `busy` re-renders is ignored.
+  const busyRef = useRef(false);
   // An i18n key or a server message, for displayMessage.
   const [error, setError] = useState('');
 
@@ -71,8 +73,11 @@ export default function PublicLinkSection({ noteId, publicLink, currentUserId, u
   // cannot quietly replace the link's current expiry with whatever was shown.
   const selectedExpiry = expiry || (link ? '' : 'never');
   const controlsDisabled = busy || !online;
+  const submitDisabled = controlsDisabled || !selectedExpiry;
 
   const run = async (action: () => Promise<void>) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setError('');
     try {
@@ -81,6 +86,7 @@ export default function PublicLinkSection({ noteId, publicLink, currentUserId, u
     } catch (err) {
       setError(errorMessageKey(err) ?? 'publicLink.failed');
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
@@ -93,6 +99,7 @@ export default function PublicLinkSection({ noteId, publicLink, currentUserId, u
   };
 
   const handleRevoke = async () => {
+    if (busyRef.current) return;
     const confirmed = await confirm({
       title: t('publicLink.revokeTitle'),
       message: t('publicLink.revokeMessage'),
@@ -171,15 +178,15 @@ export default function PublicLinkSection({ noteId, publicLink, currentUserId, u
       <View style={styles.actions}>
         <TouchableOpacity
           onPress={handleSet}
-          disabled={controlsDisabled || !selectedExpiry}
+          disabled={submitDisabled}
           style={[
             styles.button,
             { backgroundColor: colors.primary, borderColor: colors.primary },
-            (controlsDisabled || !selectedExpiry) && styles.disabled,
+            submitDisabled && styles.disabled,
           ]}
           testID="public-link-submit"
           accessibilityRole="button"
-          accessibilityState={{ disabled: controlsDisabled || !selectedExpiry, busy }}
+          accessibilityState={{ disabled: submitDisabled, busy }}
         >
           <Text style={[styles.buttonText, styles.primaryButtonText]}>
             {link ? t('publicLink.changeExpiry') : t('publicLink.create')}

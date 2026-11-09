@@ -53,6 +53,20 @@ describe('note public link', () => {
     expect((await getLocalNote(db, 'n1'))?.public_link).toBeNull();
   });
 
+  it('takes the server link even for a note a pending edit protects', async () => {
+    await saveNote(db, makeTextNote({ id: 'n1', content: 'local edit' }));
+    await db.runAsync(
+      `INSERT INTO sync_queue (operation, endpoint, method, body, created_at) VALUES ('update', '/notes/n1', 'PATCH', '{}', '')`,
+    );
+
+    await saveServerNote(db, makeTextNote({ id: 'n1', content: 'server copy', public_link: link }));
+    await saveServerNotesScope(db, [makeTextNote({ id: 'n1', content: 'server copy', public_link: null })]);
+    expect(await getLocalNote(db, 'n1')).toMatchObject({ content: 'local edit', public_link: null });
+
+    await saveServerNote(db, makeTextNote({ id: 'n1', content: 'server copy', public_link: link }));
+    expect(await getLocalNote(db, 'n1')).toMatchObject({ content: 'local edit', public_link: link });
+  });
+
   it('sets only the link, leaving the rest of the note alone', async () => {
     await saveNote(db, makeTextNote({ id: 'n1', content: 'local edit', updated_at: '2026-11-02T00:00:00Z' }));
 
