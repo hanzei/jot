@@ -1635,6 +1635,7 @@ describe('useNotes hooks', () => {
       user_id: 'u1', created_at: 'old', updated_at: 'old',
       labels: [{ id: 'l1', user_id: 'u1', name: 'Work', created_at: '', updated_at: '' }],
       shared_with: [{ id: 's1', note_id: '123', shared_with_user_id: 'u2', shared_by_user_id: 'u1', username: 'bob', first_name: 'Bob', last_name: 'B', has_profile_icon: false, created_at: '', updated_at: '' }],
+      public_link: { token: 'q3XvT0b9Lr2Kp8WmZcE1yN4hUa7sDfGj6oBtYiR5lMw', created_by: 'u1', created_at: '', expires_at: null },
     };
     const sourceListNote = {
       id: '456', title: 'My List', content: '', note_type: 'list',
@@ -1668,6 +1669,8 @@ describe('useNotes hooks', () => {
       expect(localDuplicate.position).toBe(0);
       expect(localDuplicate.is_shared).toBe(false);
       expect(localDuplicate.shared_with).toEqual([]);
+      // A copy never inherits the source's public link (#1135).
+      expect(localDuplicate.public_link).toBeNull();
       expect(localDuplicate.labels).toEqual(sourceTextNote.labels);
 
       expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), localDuplicate);

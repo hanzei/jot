@@ -76,6 +76,18 @@ jest.mock('../src/api/serverReachability', () => ({
   isServerReachable: jest.fn(),
 }));
 
+// The section has its own suite (PublicLinkSection.test.tsx); this stub only
+// shows whether the screen renders it, and with which link.
+jest.mock('../src/screens/share/PublicLinkSection', () => {
+  const { Text } = jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    __esModule: true,
+    default: ({ publicLink }: { publicLink?: { token: string } | null }) => (
+      <Text testID="public-link-section-stub">{publicLink?.token ?? 'no link'}</Text>
+    ),
+  };
+});
+
 const mockSearchUsers = jest.mocked(jot.users.search);
 const mockUseNoteShares = useNoteShares as jest.MockedFunction<typeof useNoteShares>;
 const mockUseShareNote = useShareNote as jest.MockedFunction<typeof useShareNote>;
@@ -253,6 +265,12 @@ describe('ShareScreen user search connectivity', () => {
       expect(screen.getByText('@localmatch')).toBeTruthy();
     });
     expect(mockSearchUsers).not.toHaveBeenCalled();
+  });
+
+  it('offers the owner the public link section', async () => {
+    await renderShareScreen();
+
+    expect(screen.getByTestId('public-link-section-stub')).toHaveTextContent('no link');
   });
 });
 
@@ -451,6 +469,20 @@ describe('ShareScreen read-only viewer (collaborator)', () => {
     expect(screen.getByText(/\(you\)/)).toBeTruthy();
   });
 
+  it('offers the public link section to a collaborator too, with the cached link', async () => {
+    mockUseNoteShares.mockReturnValue({
+      data: viewerShares,
+      ownerId: owner.id,
+      publicLink: { token: 'tok-cached', created_by: owner.id, created_at: '2026-05-01T00:00:00Z', expires_at: null },
+      isLoading: false,
+      isError: false,
+    } as never);
+
+    await renderShareScreen();
+
+    await waitFor(() => expect(screen.getByTestId('public-link-section-stub')).toHaveTextContent('tok-cached'));
+  });
+
   it('heads the access list with the note owner, tagged as owner', async () => {
     await renderShareScreen();
 
@@ -517,6 +549,7 @@ describe('ShareScreen with unresolved ownership', () => {
 
     expect(screen.queryByTestId('share-search-input')).toBeNull();
     expect(screen.queryByTestId('leave-note-button')).toBeNull();
+    expect(screen.queryByTestId('public-link-section-stub')).toBeNull();
   });
 
   it('shows no owner picker and no leave action when the shares read errors', async () => {

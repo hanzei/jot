@@ -71,7 +71,7 @@ mode" for the write paths.
 |---|---|---|---|
 | **Writes** | note/item/label create·update·delete, share, reorder | Yes (queue) | Optimistic local commit + enqueue, return immediately. Gate the network attempt on `isOnlineWriteAllowed(isConnected)`. Roll back only on a *permanent* rejection. |
 | **Reads** | note list, note body, labels | Yes (cached data) | Serve local cache immediately; refresh in the background with bounded retries; never block load/refresh on the network. |
-| **Auth / one-shot** | login, register, logout, server switch, PAT create/revoke | No | Finite timeout — the longer `DEFAULT_REQUEST_TIMEOUT_MS`, since auth is excluded from the short write budget — + visible pending state + honest error. Optimistic where the local outcome is authoritative (logout). |
+| **Auth / one-shot** | login, register, logout, server switch, PAT create/revoke, public link create·re-time·revoke | No | Finite timeout — the longer `DEFAULT_REQUEST_TIMEOUT_MS`, since auth is excluded from the short write budget — + visible pending state + honest error. Optimistic where the local outcome is authoritative (logout). |
 | **Uploads** | note images, profile icon | Partial (image queue for note images) | Finite timeout (never `0`), cancellable, fall back to the upload queue where one exists. |
 
 ### 4.1 Writes — never block, ever
@@ -119,6 +119,12 @@ mode" for the write paths.
   the session/profile locally and land on the login screen immediately, firing
   `POST /logout` in the background best-effort (server-side invalidation is
   best-effort regardless; the raw token only ever lived in the client).
+- **Public links** (share screen) are offered only while
+  `isOnlineWriteAllowed()` holds; otherwise the section says a connection is
+  needed instead of queueing. The link is server-owned and shared by everyone
+  with access, so there is no meaningful optimistic local state, and a queued
+  revoke would leave the URL working for an unknown time. A success writes the
+  server's answer to the note's cached `public_link`.
 
 ### 4.4 Uploads
 

@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { deleteFileIfExists } from '../utils/fs';
-import { apiPaths, type Note, type NoteItem, type NoteUnread, type GetNotesParams, type Label, type NoteShare, type NoteImage, type ShareHistorySource } from '@jot/shared';
+import { apiPaths, type Note, type NoteItem, type NoteUnread, type GetNotesParams, type Label, type NoteShare, type NoteImage, type PublicLink, type ShareHistorySource } from '@jot/shared';
 import { getStrongRandomBytes } from '../utils/random';
 import { withSerializedTransaction } from './transaction';
 import { localCompletedWrites } from './localCompletedWrites';
@@ -26,6 +26,7 @@ interface NoteRow {
   shared_with_json: string;
   images_json: string;
   unread: string | null;
+  public_link_json: string | null;
 }
 
 interface NoteItemRow {
@@ -43,6 +44,20 @@ interface NoteItemRow {
 function parseUnread(value: string | null): NoteUnread | null {
   return value === 'new' || value === 'updated' ? value : null;
 }
+
+/** A note's cached public link: NULL (or an unreadable value) is no link. */
+function parsePublicLink(value: string | null): PublicLink | null {
+  if (!value) return null;
+  try {
+    const link = JSON.parse(value) as PublicLink | null;
+    return link && typeof link.token === 'string' ? link : null;
+  } catch {
+    return null;
+  }
+}
+
+const serializePublicLink = (link: PublicLink | null | undefined): string | null =>
+  link ? JSON.stringify(link) : null;
 
 function rowToNote(row: NoteRow, items: NoteItem[] = []): Note {
   let labels: Label[] = [];
@@ -64,6 +79,7 @@ function rowToNote(row: NoteRow, items: NoteItem[] = []): Note {
     position: row.position,
     is_shared: row.is_shared === 1,
     unread: parseUnread(row.unread),
+    public_link: parsePublicLink(row.public_link_json),
     deleted_at: row.deleted_at,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -213,8 +229,8 @@ async function saveNoteInTx(
     `INSERT INTO notes
        (id, user_id, title, content, note_type, version, color, pinned, archived, position,
         checked_items_collapsed, is_shared, deleted_at, created_at, updated_at,
-        labels_json, shared_with_json, images_json, unread)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        labels_json, shared_with_json, images_json, unread, public_link_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        user_id = excluded.user_id,
        title = excluded.title,
@@ -233,7 +249,8 @@ async function saveNoteInTx(
        labels_json = excluded.labels_json,
        shared_with_json = excluded.shared_with_json,
        images_json = excluded.images_json,
-       unread = excluded.unread`,
+       unread = excluded.unread,
+       public_link_json = excluded.public_link_json`,
     [
       note.id,
       note.user_id,
@@ -254,6 +271,7 @@ async function saveNoteInTx(
       JSON.stringify(note.shared_with ?? []),
       JSON.stringify(note.images ?? []),
       note.unread ?? null,
+      serializePublicLink(note.public_link),
     ],
   );
 
@@ -684,6 +702,26 @@ export async function updateLocalNoteShares(
     'UPDATE notes SET is_shared = ?, shared_with_json = ? WHERE id = ?',
     [shares.is_shared ? 1 : 0, JSON.stringify(shares.shared_with ?? []), id],
   );
+}
+
+/**
+ * Set only a note's cached public link, after this client created, changed or
+ * revoked it, or an SSE event reported a change. The link is server-owned and
+ * never edited offline, so it is written even while the note has a queued
+ * edit — unlike a full server snapshot, which that edit protects (#487).
+ */
+export async function setLocalNotePublicLink(
+  db: SQLiteDatabase,
+  id: string,
+  link: PublicLink | null,
+): Promise<void> {
+  await db.runAsync('UPDATE notes SET public_link_json = ? WHERE id = ?', [serializePublicLink(link), id]);
+}
+
+/** A note's cached `updated_at`, or null when the note isn't stored locally. */
+export async function getLocalNoteUpdatedAt(db: SQLiteDatabase, id: string): Promise<string | null> {
+  const row = await db.getFirstAsync<{ updated_at: string }>('SELECT updated_at FROM notes WHERE id = ?', [id]);
+  return row?.updated_at ?? null;
 }
 
 export async function renameLabelInLocalNotes(

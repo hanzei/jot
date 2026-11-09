@@ -42,6 +42,14 @@ export function parseCachedConfig(raw: string): ServerConfig | null {
       if (sso) {
         config.sso = sso;
       }
+      // Kept so the share screen's public link section has them offline too.
+      // Absent on a pre-public-links server's cache, which reads as off.
+      if (typeof parsed.public_links_enabled === 'boolean') {
+        config.public_links_enabled = parsed.public_links_enabled;
+      }
+      if (typeof parsed.public_url === 'string' || parsed.public_url === null) {
+        config.public_url = parsed.public_url;
+      }
       return config;
     }
   } catch {
@@ -59,8 +67,8 @@ async function loadCachedServerConfig(serverId: string): Promise<ServerConfig> {
 }
 
 // The active server's public /config values (password_min_length,
-// upload_max_bytes, registration_enabled, sso). Never blocks: renders the
-// cached or shared-default value immediately, then refreshes in the
+// upload_max_bytes, registration_enabled, sso, public links). Never blocks:
+// renders the cached or shared-default value immediately, then refreshes in the
 // background — per the mobile connectivity rules, auth screens must not freeze
 // on a network call, and there is no queue to fall back on for a GET. Reloads
 // when the active server changes, so the login screen's SSO button follows the

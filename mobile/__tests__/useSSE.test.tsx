@@ -5,10 +5,10 @@ import type { AppStateStatus } from 'react-native';
 import { AppState } from 'react-native';
 import { useSSE } from '../src/hooks/useSSE';
 import { SSEConnectionManager } from '../src/api/events';
-import type { SSEEvent, User } from '@jot/shared';
+import type { Note, SSEEvent, User } from '@jot/shared';
 import type { TestDatabase } from './helpers/testDb';
 import { makeLabel, makeListNote, makeTextNote } from './helpers/fixtures';
-import { saveNote } from '../src/db/noteQueries';
+import { getLocalNote, saveNote } from '../src/db/noteQueries';
 import { silenceConsole } from './helpers/consoleGuard';
 import {
   labelsQueryKey,
@@ -665,6 +665,79 @@ describe('useSSE', () => {
     });
 
     expect(onNotify).toHaveBeenCalledWith(event);
+  });
+
+  describe('"updated by someone else" notification', () => {
+    const link = {
+      token: 'q3XvT0b9Lr2Kp8WmZcE1yN4hUa7sDfGj6oBtYiR5lMw',
+      created_by: 'other-user',
+      created_at: '2026-11-01T00:00:00Z',
+      expires_at: null,
+    };
+    const cachedAt = '2026-11-01T10:00:00Z';
+
+    const deliver = async (onNotify: jest.Mock, note: Note) => {
+      const { Wrapper } = createWrapper();
+      await renderHook(() => useSSE(onNotify), { wrapper: Wrapper });
+      await act(async () => {
+        capturedCallback?.({ type: 'note_updated', source_user_id: 'other-user', data: { note_id: 'note-123', note } });
+      });
+      await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalled());
+    };
+
+    it('is not sent for a public link change, which leaves updated_at alone', async () => {
+      await saveNote(db, makeTextNote({ id: 'note-123', content: 'body', updated_at: cachedAt }));
+      const onNotify = jest.fn();
+
+      await deliver(onNotify, makeTextNote({ id: 'note-123', content: 'body', updated_at: cachedAt, public_link: link }));
+
+      expect(onNotify).not.toHaveBeenCalled();
+      // The link still lands, so an open share screen re-reads it.
+      await waitFor(async () => expect((await getLocalNote(db, 'note-123'))?.public_link).toEqual(link));
+    });
+
+    it('is sent for a content change', async () => {
+      await saveNote(db, makeTextNote({ id: 'note-123', content: 'old', updated_at: cachedAt, version: 3 }));
+      const onNotify = jest.fn();
+
+      await deliver(onNotify, makeTextNote({ id: 'note-123', content: 'new', updated_at: '2026-11-01T10:05:00Z', version: 4 }));
+
+      await waitFor(() => expect(onNotify).toHaveBeenCalledTimes(1));
+    });
+
+    it('is sent for an item change, which bumps updated_at but not version', async () => {
+      const item = { id: 'i1', note_id: 'note-123', text: 'Milk', completed: false, position: 0, parent_id: null, assigned_to: '', created_at: cachedAt, updated_at: cachedAt };
+      await saveNote(db, makeListNote({ id: 'note-123', updated_at: cachedAt, version: 2, items: [item] }));
+      const onNotify = jest.fn();
+
+      await deliver(onNotify, makeListNote({
+        id: 'note-123',
+        updated_at: '2026-11-01T10:05:00Z',
+        version: 2,
+        items: [{ ...item, completed: true, updated_at: '2026-11-01T10:05:00Z' }],
+      }));
+
+      await waitFor(() => expect(onNotify).toHaveBeenCalledTimes(1));
+    });
+
+    it('is sent for a note not cached yet', async () => {
+      const onNotify = jest.fn();
+
+      await deliver(onNotify, makeTextNote({ id: 'note-123', updated_at: cachedAt }));
+
+      await waitFor(() => expect(onNotify).toHaveBeenCalledTimes(1));
+    });
+
+    it('applies a link change even to a note with a pending local edit', async () => {
+      await saveNote(db, makeTextNote({ id: 'note-123', content: 'local edit', updated_at: cachedAt }));
+      await protectNote('note-123');
+
+      await deliver(jest.fn(), makeTextNote({ id: 'note-123', content: 'server copy', updated_at: cachedAt, public_link: link }));
+
+      await waitFor(async () => expect((await getLocalNote(db, 'note-123'))?.public_link).toEqual(link));
+      // The rest of the snapshot still defers to the pending edit (#487).
+      expect(await getLocalNote(db, 'note-123')).toMatchObject({ content: 'local edit' });
+    });
   });
 
   it('hard-removes the note for the recipient who lost access on note_unshared', async () => {

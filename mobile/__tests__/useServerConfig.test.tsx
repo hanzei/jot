@@ -175,6 +175,18 @@ describe('parseCachedConfig', () => {
     expect(parseCachedConfig(JSON.stringify({ ...base, sso: null }))).toEqual(base);
   });
 
+  it('keeps the public link fields, so the share screen has them offline', () => {
+    const publicLinks = { public_links_enabled: true, public_url: 'https://jot.example.com' };
+    expect(parseCachedConfig(JSON.stringify({ ...base, ...publicLinks }))).toEqual({ ...base, ...publicLinks });
+    expect(parseCachedConfig(JSON.stringify({ ...base, public_links_enabled: false, public_url: null })))
+      .toEqual({ ...base, public_links_enabled: false, public_url: null });
+  });
+
+  it('reads a pre-public-links entry as public links off', () => {
+    expect(parseCachedConfig(JSON.stringify(base))?.public_links_enabled).toBeUndefined();
+    expect(parseCachedConfig(JSON.stringify({ ...base, public_links_enabled: 'yes', public_url: 3 }))).toEqual(base);
+  });
+
   it('rejects an entry missing the base fields', () => {
     expect(parseCachedConfig(JSON.stringify({ sso: { enabled: true, provider_name: 'x', local_login_enabled: true } }))).toBeNull();
   });

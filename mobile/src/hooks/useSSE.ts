@@ -9,7 +9,14 @@ import { notifySseStateChange, setActiveSseManager } from '../api/sseState';
 import { CLIENT_ID } from '../api/client';
 import { isNoteSharedWithUser, type SSEEvent } from '@jot/shared';
 import { useNetworkStatus } from './useNetworkStatus';
-import { markLocalNoteDeleted, permanentDeleteLocalNote, patchLocalNoteImages, upsertLabel } from '../db/noteQueries';
+import {
+  getLocalNoteUpdatedAt,
+  markLocalNoteDeleted,
+  permanentDeleteLocalNote,
+  patchLocalNoteImages,
+  setLocalNotePublicLink,
+  upsertLabel,
+} from '../db/noteQueries';
 import { getProtectedNoteIds, saveServerNote } from '../db/syncQueue';
 import { isSseQuiesced, subscribeToServerSwitchLifecycle } from '../store/serverSwitchLifecycle';
 import { publishProfileIconUpdate } from '../store/profileIconEvents';
@@ -90,11 +97,28 @@ export function useSSE(
         switch (event.type) {
           case 'note_updated': {
             const { note_id, note } = event.data;
+            // Whether the event changes the note's content, judged against the
+            // cached copy before it is overwritten. Public link changes arrive
+            // as note_updated too but leave updated_at alone, while every
+            // content change (item check-offs included) bumps it. `version` is
+            // no substitute: item changes don't bump it. Without a payload or
+            // a cached copy there is nothing to compare, so it counts as one.
+            let contentChanged = true;
             if (note) {
+              try {
+                contentChanged = (await getLocalNoteUpdatedAt(db, note_id)) !== note.updated_at;
+              } catch (err) {
+                console.warn(`Failed to read cached note for SSE ${event.type} id=${note_id}:`, err);
+              }
               // Persist the updated note to SQLite so offline reads stay current
               // (deferring to a pending local edit on this note; see #487).
               try {
                 await saveServerNote(db, note);
+                // The link is server-owned, so it applies even when a pending
+                // edit made saveServerNote skip the rest of the snapshot.
+                if (note.public_link !== undefined) {
+                  await setLocalNotePublicLink(db, note_id, note.public_link);
+                }
               } catch (err) {
                 console.warn(`Failed to persist SSE ${event.type} for note id=${note_id}:`, err);
               }
@@ -104,8 +128,9 @@ export function useSSE(
             invalidateLabelQueries();
             // Don't fire the "updated by someone else" notification for changes
             // from the same user on another device — query invalidation above is
-            // sufficient to sync the state.
-            if (event.source_user_id !== userIdRef.current) {
+            // sufficient to sync the state — nor for a change that left the
+            // content alone, such as a public link being created or revoked.
+            if (event.source_user_id !== userIdRef.current && contentChanged) {
               onNotifyRef.current?.(event);
             }
             break;

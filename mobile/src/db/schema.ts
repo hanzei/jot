@@ -24,7 +24,8 @@ const migration1 = async (db: SQLiteDatabase): Promise<void> => {
       shared_with_json TEXT NOT NULL DEFAULT '[]',
       images_json TEXT NOT NULL DEFAULT '[]',
       sync_state TEXT NOT NULL DEFAULT 'synced',
-      unread TEXT
+      unread TEXT,
+      public_link_json TEXT
     );
 
     CREATE TABLE IF NOT EXISTS note_items (
@@ -312,7 +313,14 @@ const migration9 = async (db: SQLiteDatabase): Promise<void> => {
   await db.runAsync("UPDATE pending_image_uploads SET attempts = 0 WHERE status = 'queued' AND attempts > 0");
 };
 
-export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9];
+// Migration 10: cache each note's public read-only link (#1135) as JSON, NULL
+// when it has none. Fresh installs get the column from migration1; existing
+// rows start with no link until the next server fetch supplies one.
+const migration10 = async (db: SQLiteDatabase): Promise<void> => {
+  await addColumnIfMissing(db, 'notes', 'public_link_json', 'public_link_json TEXT');
+};
+
+export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10];
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   // Run PRAGMAs separately: sqlite3_exec (used by execAsync) stops on the
