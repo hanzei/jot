@@ -769,10 +769,11 @@ export function useListItemEditing({
   // moves the parent; normalizeItemOrder re-seats the children right under it.
   const [groupedParentId, setGroupedParentId] = useState<string | null>(null);
   const [groupReflowPaused, setGroupReflowPaused] = useState(false);
-  // Resume the reflow animation once the ungrouping render has committed.
-  useEffect(() => {
-    if (groupedParentId === null && groupReflowPaused) setGroupReflowPaused(false);
-  }, [groupedParentId, groupReflowPaused]);
+  // Pending frame that resumes the reflow animation after an ungroup.
+  const resumeReflowFrameRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (resumeReflowFrameRef.current !== null) cancelAnimationFrame(resumeReflowFrameRef.current);
+  }, []);
   // Ref twin, so commitDrag and the press handlers act without a render.
   const groupedParentIdRef = useRef<string | null>(null);
   // Whether the held group's press turned into a drag. Until it does, lifting
@@ -791,7 +792,17 @@ export function useListItemEditing({
     groupedParentIdRef.current = parentId;
     groupDragStartedRef.current = false;
     setGroupedParentId(parentId);
-    if (parentId !== null) setGroupReflowPaused(true);
+    if (resumeReflowFrameRef.current !== null) cancelAnimationFrame(resumeReflowFrameRef.current);
+    resumeReflowFrameRef.current = null;
+    if (parentId !== null) {
+      setGroupReflowPaused(true);
+    } else {
+      // Resume a frame later, so the ungrouping render lays out unanimated.
+      resumeReflowFrameRef.current = requestAnimationFrame(() => {
+        resumeReflowFrameRef.current = null;
+        setGroupReflowPaused(false);
+      });
+    }
   }, [armAutoFocus]);
 
   const holdGroupForDrag = useCallback((itemId: string) => {

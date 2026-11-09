@@ -59,6 +59,15 @@ describe('NoteEditorScreen dragging a parent item', () => {
     mockUseOfflineNote.mockReturnValue({ data: groupedNote() });
   });
 
+  // Ungrouping resumes the reflow animation on the next frame; the tests
+  // advance it explicitly, and a frame left pending is dropped here.
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it('draws the children inside the parent row while its handle is held', async () => {
     const { getAllByTestId, getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
     expect(queryByTestId('list-item-group')).toBeNull();
@@ -100,7 +109,11 @@ describe('NoteEditorScreen dragging a parent item', () => {
     await act(() => {
       latestListProps().onReorder({ from: 0, to: 3 });
     });
-    // Resumes on the render after the drop, once nothing is left to slide.
+    // Still paused for the drop's own render; resumes a frame later.
+    expect(latestListProps().itemLayoutAnimation).toBeUndefined();
+    await act(() => {
+      jest.advanceTimersByTime(50);
+    });
     expect(latestListProps().itemLayoutAnimation).toBeDefined();
   });
 

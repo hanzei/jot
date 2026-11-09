@@ -481,6 +481,15 @@ describe('useListItemEditing — dragging a parent', () => {
   type View = Awaited<ReturnType<typeof mountWith>>;
   const editing = (view: View) => view.result.current.editing;
 
+  // Ungrouping resumes the reflow animation on the next frame; keep that frame
+  // from firing outside act() after a test ends.
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   async function grab(view: View, id: string, index: number) {
     await act(async () => {
       editing(view).holdGroupForDrag(id);
