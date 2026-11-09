@@ -380,6 +380,32 @@ describe('API Client', () => {
       expect(warn).toHaveBeenCalledWith('API GET /notes/n1 failed with 502 (request ID none)');
     });
 
+    describe('reachability belief', () => {
+      afterEach(() => {
+        markServerReachable();
+      });
+
+      it.each([502, 503, 504])('marks the server unreachable on a %i from a proxy', async (status) => {
+        await expect(getResponseErrorHandler()({
+          response: { status, headers: {} },
+          config: { method: 'patch', url: '/notes/n1' },
+        })).rejects.toBeDefined();
+
+        expect(isServerReachable()).toBe(false);
+      });
+
+      it.each([500, 404])('keeps the server reachable on a %i, which the server itself sent', async (status) => {
+        markServerUnreachable();
+
+        await expect(getResponseErrorHandler()({
+          response: { status, headers: {} },
+          config: { method: 'patch', url: '/notes/n1' },
+        })).rejects.toBeDefined();
+
+        expect(isServerReachable()).toBe(true);
+      });
+    });
+
     it.each([
       ['a client error', { response: { status: 404, headers: { 'x-request-id': 'abc123' } } }],
       ['a request that got no response', { message: 'Network Error' }],

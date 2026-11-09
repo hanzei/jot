@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 import type { AuthResponse, LoginRequest, RegisterRequest } from '@jot/shared';
 import { apiPaths, apiRequestId, apiUrl, createJotApi, canonicalizeServerOrigin, isServerError } from '@jot/shared';
 import { randomUUID } from '../utils/random';
-import { markServerReachable, markServerUnreachable } from './serverReachability';
+import { isGatewayStatus, markServerReachable, markServerUnreachable } from './serverReachability';
 import {
   addServer,
   ensureServerRegistryMigrated,
@@ -524,10 +524,15 @@ api.interceptors.response.use(
 
     // Update the reachability belief: an HTTP error status still proves the
     // server answered, whereas the absence of a response (timeout / connection
-    // refused / DNS failure) means it did not — flip to unreachable so later
-    // writes skip the doomed network round-trip and queue immediately.
+    // refused / DNS failure) or a gateway status from a reverse proxy whose Jot
+    // server is down (502/503/504) means it did not — flip to unreachable so
+    // later writes skip the doomed network round-trip and queue immediately.
     if (error.response) {
-      markServerReachable();
+      if (isGatewayStatus(error.response.status)) {
+        markServerUnreachable();
+      } else {
+        markServerReachable();
+      }
       // One line per server error, carrying the server's request ID, so the
       // persisted logs (and the shared diagnostics report) can be matched to
       // the server's log line and trace. 4xx responses are left out: most are

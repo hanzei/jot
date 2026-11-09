@@ -12,8 +12,9 @@
  * Tracking server reachability lets the write path skip straight to the local
  * persist + enqueue path once the server is known-unreachable, and resume
  * hitting the network the moment it answers again. The signal is updated from
- * the axios interceptors (a response of any status means the server answered; a
- * transport failure means it did not) and from the SSE stream opening, and is
+ * the axios interceptors (a response means the server answered; a transport
+ * failure or a gateway status — see {@link isGatewayStatus} — means it did not)
+ * and from the SSE stream opening, and is
  * re-armed to reachable whenever the device regains connectivity so a new link
  * gets a fresh probe.
  *
@@ -63,6 +64,18 @@ function setReachable(next: boolean): void {
 }
 
 /**
+ * Whether an HTTP status is a gateway error (502 Bad Gateway, 503 Service
+ * Unavailable, 504 Gateway Timeout). Jot's API never returns these — the only
+ * 503 it sends is from the `/readyz` probe — so they come from a reverse proxy
+ * whose Jot server is down, restarting, or did not answer in time. A response
+ * like that proves the proxy answered, not the server, so it counts as the
+ * server being unreachable.
+ */
+export function isGatewayStatus(status: number | undefined): boolean {
+  return status === 502 || status === 503 || status === 504;
+}
+
+/**
  * Record that the server answered — a successful response, an HTTP error status
  * (still proof the server is up), the SSE stream opening, or a fresh device
  * connection worth re-probing.
@@ -73,7 +86,8 @@ export function markServerReachable(): void {
 
 /**
  * Record that a request failed at the transport layer (timeout, connection
- * refused, DNS failure) — the server did not answer.
+ * refused, DNS failure) or got a gateway status from a proxy — the server did
+ * not answer.
  */
 export function markServerUnreachable(): void {
   setReachable(false);

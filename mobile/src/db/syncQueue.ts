@@ -2,6 +2,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import axios from 'axios';
 import api from '../api/client';
 import { jot } from '../api/jot';
+import { isGatewayStatus } from '../api/serverReachability';
 import { completedCascadeScope, type GetNotesParams, type Note, type NoteItem } from '@jot/shared';
 import {
   getLocalNote,
@@ -108,9 +109,6 @@ export function isTransientHttpStatus(status: number | undefined): boolean {
   return status >= 500;
 }
 
-/** Statuses {@link isGlobalDrainFailure} treats as blocking the whole queue. */
-const GLOBAL_DRAIN_FAILURE_STATUSES: ReadonlySet<number> = new Set([401, 408, 429, 502, 503, 504]);
-
 /**
  * Of the *transient* failures, which ones block the whole queue rather than
  * being specific to the entry at the head (issue #714)? A global failure stops
@@ -119,25 +117,63 @@ const GLOBAL_DRAIN_FAILURE_STATUSES: ReadonlySet<number> = new Set([401, 408, 42
  * entry toward being dead-lettered so it can't wedge the head forever.
  *
  * Global: a transport-level failure with no server response (network down or a
- * client timeout), statuses that apply queue-wide (401 needs re-auth, 408
- * request timeout, 429 rate limit), and the gateway statuses 502/503/504.
- * Entry-specific: any other 5xx (in practice a 500 tied to this op's payload),
- * and any non-HTTP error thrown while processing the entry itself (corrupted
- * body, a local DB error) — those are charged and eventually dead-lettered.
+ * client timeout), plus statuses that apply queue-wide (401 needs re-auth, 408
+ * request timeout, 429 rate limit). Entry-specific: a 5xx tied to this op's
+ * payload, and any non-HTTP error thrown while processing the entry itself
+ * (corrupted body, a local DB error) — those are charged and eventually
+ * dead-lettered.
  *
- * 502/503/504 mean "the server is unreachable", not "this op is bad": Jot's API
- * never returns them, so they come from a reverse proxy in front of a Jot
- * server that is down, restarting, or too slow. Charging them per entry turned
- * every server outage into a run of dead-lettered, "couldn't be saved" changes
- * that would have replayed fine once the server came back.
+ * A gateway status (502/503/504) is ambiguous: usually the proxy's Jot server
+ * is down (global), but a request that reproducibly exceeds the server's or the
+ * proxy's timeout gets one every time while every other request succeeds. The
+ * drains resolve that with {@link isGlobalDrainFailureProbed}; this synchronous
+ * check treats it as entry-specific.
  */
-export function isGlobalDrainFailure(err: unknown, status: number | undefined): boolean {
+export function isGlobalDrainFailure(err: unknown): boolean {
   // A non-HTTP error thrown while processing an entry is specific to that entry.
   if (!axios.isAxiosError(err)) return false;
   // Transport-level failure with no server response: network down or timeout.
   if (err.response === undefined) return true;
   // Statuses that block the whole queue regardless of the specific entry.
-  return GLOBAL_DRAIN_FAILURE_STATUSES.has(status ?? 0);
+  const { status } = err.response;
+  return status === 401 || status === 408 || status === 429;
+}
+
+/** Timeout for the probe in {@link isGlobalDrainFailureProbed}. */
+const SERVER_PROBE_TIMEOUT_MS = 5000;
+
+/**
+ * {@link isGlobalDrainFailure}, plus a decision on gateway statuses: when the
+ * entry got a 502/503/504, probe the server with a cheap read. If the server
+ * answers, the gateway error was specific to this entry and is charged as
+ * usual, so a request that always times out at the proxy is still
+ * dead-lettered after MAX_ENTRY_DRAIN_ATTEMPTS. If it doesn't, the server is
+ * down: the failure is global and charges nothing, so an outage no longer turns
+ * every queued change into a "couldn't be saved" one.
+ *
+ * The drains stop at the first global or below-cap failure, so this probes at
+ * most once per drain pass.
+ */
+export async function isGlobalDrainFailureProbed(err: unknown): Promise<boolean> {
+  if (isGlobalDrainFailure(err)) return true;
+  if (!axios.isAxiosError(err) || !isGatewayStatus(err.response?.status)) return false;
+  return !(await serverAnswers());
+}
+
+/**
+ * Whether the server itself answers a request right now. Any response other
+ * than a gateway status counts, an error status included. The api client's
+ * interceptors update the reachability belief from the probe's outcome.
+ */
+async function serverAnswers(): Promise<boolean> {
+  try {
+    await jot.about.get({ timeout: SERVER_PROBE_TIMEOUT_MS });
+    return true;
+  } catch (probeErr) {
+    return axios.isAxiosError(probeErr)
+      && probeErr.response !== undefined
+      && !isGatewayStatus(probeErr.response.status);
+  }
 }
 
 /** An error's message without its stack, for log lines where the stack is noise. */
@@ -991,7 +1027,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         }
 
         await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
-      } else if (isGlobalDrainFailure(err, status)) {
+      } else if (await isGlobalDrainFailureProbed(err)) {
         // No usable server response (network error/timeout) or a status that
         // blocks the whole queue regardless of this entry (401 re-auth, 408,
         // 429 rate-limit, or a 502/503/504 from a proxy whose server is down). Every entry would fail the same way, so stop the
@@ -1002,7 +1038,8 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         console.info(`Queue drain stopped at entry id=${entry.id} (connectivity): ${errorSummary(err)}`);
         break;
       } else {
-        // Entry-specific transient failure: a 500 tied to this op's payload, or a
+        // Entry-specific transient failure: a 5xx tied to this op's payload (a
+        // gateway status only when the server answered the probe), or a
         // non-HTTP error thrown while processing this entry (corrupted body, a
         // local DB error). Charge the entry's attempt counter; once it has failed
         // MAX_ENTRY_DRAIN_ATTEMPTS times, dead-letter it and continue *past* it so

@@ -301,7 +301,18 @@ const migration8 = async (db: SQLiteDatabase): Promise<void> => {
   }
 };
 
-export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8];
+// Migration 9: drains used to charge every 502/503/504 to the entry at the
+// head, so a server outage behind a reverse proxy left queued changes and
+// image uploads with attempts they did not earn — one more failure could then
+// dead-letter a change that was never at fault. Gateway statuses are now only
+// charged when the server itself still answers, so start the still-queued
+// entries' counters over. Dead-lettered rows keep theirs: it records history.
+const migration9 = async (db: SQLiteDatabase): Promise<void> => {
+  await db.runAsync('UPDATE sync_queue SET attempts = 0 WHERE attempts > 0');
+  await db.runAsync("UPDATE pending_image_uploads SET attempts = 0 WHERE status = 'queued' AND attempts > 0");
+};
+
+export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9];
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   // Run PRAGMAs separately: sqlite3_exec (used by execAsync) stops on the
