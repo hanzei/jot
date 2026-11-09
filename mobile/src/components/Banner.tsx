@@ -36,8 +36,8 @@ interface BannerProps {
 /**
  * A top-of-screen status banner that animates open and closed and applies the
  * top safe-area inset itself (screens use headerShown: false). Shared by
- * OfflineBanner, SyncErrorBanner, and the tappable SyncFailuresBanner so the
- * show/hide animation lives in one place.
+ * StatusBanner and the tappable SyncFailuresBanner so the show/hide animation
+ * lives in one place.
  *
  * The banner sits *in flow* above the app content, so its height is what pushes
  * that content down — animating only the opacity would make the content jump a

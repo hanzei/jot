@@ -1,4 +1,4 @@
-import { useTopBanner } from './useTopBanners';
+import { useTopBanners } from './useTopBanners';
 
 /**
  * Returns true when a top-of-screen banner is currently shown.
@@ -9,10 +9,11 @@ import { useTopBanner } from './useTopBanners';
  * keeps screens, components, and React Navigation's headers from
  * double-counting it. Screens read `useSafeAreaInsets()`, not this hook.
  *
- * Derived from {@link useTopBanner} — the same source of truth the
+ * Derived from {@link useTopBanners} — the same source of truth the
  * banner renderer uses — so the content inset and the banner stack can never
  * disagree about whether a banner is showing.
  */
 export function useBannerShown(): boolean {
-  return useTopBanner() !== null;
+  const { status, syncFailures } = useTopBanners();
+  return status !== null || syncFailures;
 }

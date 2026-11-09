@@ -36,8 +36,7 @@ import { useTranslation } from 'react-i18next';
 import { useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, useMarkNoteViewed, NoteConversionCapError } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
-import { useFailedNoteIds } from '../store/OfflineContext';
-import { useReportNoteFailureBar } from '../store/noteFailureBar';
+import { useFailedNoteIds, useOfflineContext } from '../store/OfflineContext';
 import { useToast } from '../hooks/useToast';
 import { useConfirm } from '../hooks/useConfirm';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -122,6 +121,9 @@ export default function NoteEditorScreen() {
   const { noteId: initialNoteId, sharedText, initialNoteType, readOnly, originRect, originColor } = route.params;
   const { t } = useTranslation();
   const failedNoteIds = useFailedNoteIds();
+  // The global "N changes couldn't be saved — Review" banner already says this
+  // until it is dismissed; the note's own bar takes over after that.
+  const { syncFailuresBannerDismissed } = useOfflineContext();
   const { upload_max_bytes: uploadMaxBytes } = useServerConfig();
   const uploadMaxMB = imageMaxMB(uploadMaxBytes);
 
@@ -133,9 +135,6 @@ export default function NoteEditorScreen() {
   // editing and persistence hooks below act through.
   const editor = useEditorDoc({ initialNoteId, initialNoteType, sharedText, originColor });
   const { noteId, title, content, noteType, items, checkedItemsCollapsed, pinned, archived, color, labels, hasCreated } = editor;
-  // While this note shows its own failed-change bar, the global banner would
-  // repeat the same message above it.
-  useReportNoteFailureBar(!!noteId && failedNoteIds.has(noteId));
   const {
     noteIdRef,
     noteTypeRef,
@@ -1548,7 +1547,7 @@ export default function NoteEditorScreen() {
         </View>
       </View>
 
-      {!!noteId && failedNoteIds.has(noteId) && (
+      {!!noteId && failedNoteIds.has(noteId) && syncFailuresBannerDismissed && (
         <TouchableOpacity
           style={[styles.failedBar, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}
           onPress={() => navigation.navigate('SyncFailures')}

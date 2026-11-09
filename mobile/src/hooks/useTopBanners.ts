@@ -1,69 +1,70 @@
 import { useOfflineContext } from '../store/OfflineContext';
 import { useSSEContext } from '../store/SSEContext';
 import { useAuth } from '../store/AuthContext';
-import { useNoteFailureBarShown } from '../store/noteFailureBar';
 
-/** Identifiers for the top-of-screen status banners. */
-export type TopBannerKey =
+/** The connection/session states the status banner can report. */
+export type StatusBannerKey =
   | 'offline'
+  | 'revalidation'
   | 'sseReconnect'
-  | 'syncError'
-  | 'syncFailures'
-  | 'revalidation';
+  | 'syncError';
 
 /**
  * Props every top banner receives from {@link TopBanners}. Banners are purely
  * presentational: visibility and safe-area ownership are decided centrally by
- * {@link useTopBanner}.
+ * {@link useTopBanners}.
  */
 export interface TopBannerProps {
   /** Whether this banner is currently shown. Toggling animates a fade in/out. */
   visible: boolean;
   /**
-   * Whether this banner owns the top safe-area inset — true for the banner
-   * that is shown, so the inset is applied exactly once.
+   * Whether this banner owns the top safe-area inset. Only the upper of the
+   * two shown banners applies it, so the inset is never doubled.
    */
   applyTopInset: boolean;
 }
 
+export interface TopBannersState {
+  /** The one status to report, or null when the connection and session are fine. */
+  status: StatusBannerKey | null;
+  /** Whether the "N changes couldn't be saved — Review" banner is shown, below the status. */
+  syncFailures: boolean;
+}
+
 /**
- * The single top-of-screen banner to show, or null. At most one is ever
- * shown: several states are often true at once (a server outage is usually
- * also a stalled sync), and stacking a banner for each made the top of the
- * screen a wall of warnings that mostly repeated each other.
+ * Which top-of-screen banners to show. There are two kinds, and at most one of
+ * each:
  *
- * Priority, highest first:
- *
- * 1. `offline` — the device has no connection; nothing else matters until it
- *    does.
- * 2. `sseReconnect` — online, but the server's event stream is down: the
- *    server is unreachable. Changes queue and replay on their own.
- * 3. `syncError` — the server is reachable but the queue keeps failing to
- *    drain. Retries are automatic.
- * 4. `syncFailures` — changes the server rejected for good, which need the
- *    user to review them. Shown only once the connection states above are
- *    clear, since during an outage the cause is the connection, and hidden
- *    while a focused note shows its own failed-change bar, which says the
- *    same thing about that note.
- * 5. `revalidation` — the session couldn't be verified; the app uses local
- *    data.
+ * - **Status** — what is going on with the connection or session right now.
+ *   Several of these are often true at once (a server outage is usually also
+ *   a stalled sync), so only the most relevant one is shown, highest first:
+ *   1. `offline` — the device has no connection.
+ *   2. `revalidation` — the server rejected the session (e.g. 403). Ranked
+ *      above the connection states because a rejected session also breaks the
+ *      event stream and the sync, and this is the cause.
+ *   3. `sseReconnect` — online, but the server's event stream is down: the
+ *      server is unreachable. Changes queue and replay on their own.
+ *   4. `syncError` — the queue keeps failing to drain. Retries are automatic.
+ * - **Failed changes** — changes the server rejected for good, which only the
+ *   user can resolve. Shown below the status whatever the connection state
+ *   (they stay failed through it, and this banner is the way into the review
+ *   screen), until dismissed.
  *
  * Both the renderer ({@link TopBanners}) and the safe-area inset logic
- * (`useBannerShown` → `ContentSafeArea`) derive from this, so the top inset is
- * applied exactly once, by the shown banner, and content below sees a top
- * inset of 0 for exactly as long as a banner is claiming it.
+ * (`useBannerShown` → `ContentSafeArea`) derive from this, so they can never
+ * disagree about whether a banner is showing.
  */
-export function useTopBanner(): TopBannerKey | null {
+export function useTopBanners(): TopBannersState {
   const { isConnected, syncError, syncFailureCount, syncFailuresBannerDismissed } =
     useOfflineContext();
   const { sseReconnecting } = useSSEContext();
   const { revalidationFailed, isLocalMode } = useAuth();
-  const noteFailureBarShown = useNoteFailureBarShown();
 
-  if (!isConnected) return 'offline';
-  if (sseReconnecting && !isLocalMode) return 'sseReconnect';
-  if (syncError) return 'syncError';
-  if (syncFailureCount > 0 && !syncFailuresBannerDismissed && !noteFailureBarShown) return 'syncFailures';
-  if (revalidationFailed) return 'revalidation';
-  return null;
+  let status: StatusBannerKey | null = null;
+  if (!isConnected) status = 'offline';
+  else if (revalidationFailed) status = 'revalidation';
+  else if (sseReconnecting && !isLocalMode) status = 'sseReconnect';
+  else if (syncError) status = 'syncError';
+
+  return { status, syncFailures: syncFailureCount > 0 && !syncFailuresBannerDismissed };
 }

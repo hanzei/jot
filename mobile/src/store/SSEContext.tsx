@@ -22,7 +22,7 @@ interface SSEContextValue {
 }
 
 // A concrete default (rather than undefined) so consumers like
-// useTopBanner can read SSE state from anywhere in the tree without a
+// useTopBanners can read SSE state from anywhere in the tree without a
 // provider throwing — mirroring OfflineContext and the safe-area-inset
 // convention in mobile/CLAUDE.md.
 const SSEContext = createContext<SSEContextValue>({
