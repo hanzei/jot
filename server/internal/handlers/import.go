@@ -395,7 +395,8 @@ func validateJotImportNote(idx int, n jotImportNote) (models.JotImportNote, erro
 	if color == "" {
 		color = models.DefaultNoteColor
 	}
-	if err := validateColor(color); err != nil {
+	color, err := models.NormalizeNoteColor(color)
+	if err != nil {
 		return models.JotImportNote{}, fmt.Errorf("note #%d: %w", idx, err)
 	}
 

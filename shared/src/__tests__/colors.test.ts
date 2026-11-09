@@ -4,6 +4,7 @@ import {
   getAvatarColor,
   AVATAR_COLORS,
   NOTE_COLORS,
+  normalizeNoteColor,
 } from '../colors';
 
 describe('hashUsername', () => {
@@ -67,4 +68,31 @@ describe('color palettes', () => {
     }
   });
 
+});
+
+describe('normalizeNoteColor', () => {
+  it.each([
+    ['#ffffff', '#ffffff'],
+    ['#FFFFFF', '#ffffff'],
+    ['#fff', '#ffffff'],
+    ['#FfF', '#ffffff'],
+    ['#F28B82', '#f28b82'],
+    ['#abc', '#aabbcc'],
+  ])('normalizes %j to %j', (input, expected) => {
+    expect(normalizeNoteColor(input)).toBe(expected);
+  });
+
+  it.each(['', 'red', 'ffffff', '#12345', '#gggggg', ' #abc'])('leaves non-hex %j unchanged', (input) => {
+    expect(normalizeNoteColor(input)).toBe(input);
+  });
+
+  it('passes a missing colour through instead of throwing', () => {
+    expect(normalizeNoteColor(undefined as unknown as string)).toBeUndefined();
+  });
+
+  it('is the identity on every palette colour', () => {
+    for (const color of NOTE_COLORS) {
+      expect(normalizeNoteColor(color)).toBe(color);
+    }
+  });
 });

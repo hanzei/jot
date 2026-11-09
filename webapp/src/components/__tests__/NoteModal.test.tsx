@@ -2481,6 +2481,26 @@ describe('NoteModal', () => {
       expect(onRefresh).toHaveBeenCalled();
     });
 
+    // Notes saved before the server normalized colours can hold any hex
+    // spelling; the picker must still find the matching palette swatch, and
+    // merely opening such a note must not count as an edit.
+    it.each([
+      ['#FFFFFF', 'Default'],
+      ['#fff', 'Default'],
+      ['#F28B82', 'Coral'],
+    ])('marks the matching swatch selected for a legacy colour %s', async (color, swatch) => {
+      renderNoteModal({ ...defaultProps, note: createMockNote({ color }) });
+
+      fireEvent.click(screen.getByLabelText('Select note color'));
+      const button = screen.getByRole('button', { name: swatch });
+      expect(button).toHaveAttribute('aria-pressed', 'true');
+      expect(button).toHaveAttribute('tabindex', '0');
+      expect(screen.getAllByTestId('color-swatch-selected')).toHaveLength(1);
+
+      await vi.runAllTimersAsync();
+      expect(mockNotesUpdate).not.toHaveBeenCalled();
+    });
+
     it('does not autosave color on new notes', async () => {
       renderNoteModal(defaultProps);
 

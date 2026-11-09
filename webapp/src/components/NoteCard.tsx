@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, groupNoteItems, type Note, type User } from '@jot/shared';
+import { VALIDATION, groupNoteItems, normalizeNoteColor, type Note, type User } from '@jot/shared';
 import { notes, images as imagesApi } from '@/utils/api';
 import LetterAvatar from '@/components/LetterAvatar';
 import LabelChip from '@/components/LabelChip';
@@ -123,7 +123,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       '#e6c9a8': 'sand',
       '#e8eaed': 'gray',
     };
-    return colorMap[color] || '';
+    return colorMap[normalizeNoteColor(color)] || '';
   };
 
   const handleToggleArchive = async () => {

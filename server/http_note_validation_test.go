@@ -170,13 +170,26 @@ func TestNoteValidation(t *testing.T) {
 			}
 		})
 
-		t.Run("valid 3-digit hex on create succeeds", func(t *testing.T) {
+		t.Run("valid 3-digit hex on create is stored as lowercase six-digit hex", func(t *testing.T) {
 			note, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
 				Content: "test",
-				Color:   "#fff",
+				Color:   "#FfF",
 			})
 			require.NoError(t, err)
-			assert.Equal(t, "#fff", note.Color)
+			assert.Equal(t, "#ffffff", note.Color)
+
+			fetched, err := user.Client.GetNote(t.Context(), note.ID)
+			require.NoError(t, err)
+			assert.Equal(t, "#ffffff", fetched.Color)
+		})
+
+		t.Run("uppercase 6-digit hex on create is lowercased", func(t *testing.T) {
+			note, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
+				Content: "test",
+				Color:   "#F28B82",
+			})
+			require.NoError(t, err)
+			assert.Equal(t, "#f28b82", note.Color)
 		})
 
 		t.Run("valid 6-digit hex on create succeeds", func(t *testing.T) {
@@ -208,24 +221,28 @@ func TestNoteValidation(t *testing.T) {
 			}
 		})
 
-		t.Run("valid 3-digit hex on update succeeds", func(t *testing.T) {
+		t.Run("valid 3-digit hex on update is stored as six-digit hex", func(t *testing.T) {
 			note, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "test"})
 			require.NoError(t, err)
 
 			color := "#abc"
 			updated, err := user.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{Color: &color})
 			require.NoError(t, err)
-			assert.Equal(t, "#abc", updated.Color)
+			assert.Equal(t, "#aabbcc", updated.Color)
 		})
 
-		t.Run("valid 6-digit hex on update succeeds", func(t *testing.T) {
+		t.Run("uppercase 6-digit hex on update is lowercased", func(t *testing.T) {
 			note, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "test"})
 			require.NoError(t, err)
 
 			color := "#FFFFFF"
 			updated, err := user.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{Color: &color})
 			require.NoError(t, err)
-			assert.Equal(t, "#FFFFFF", updated.Color)
+			assert.Equal(t, "#ffffff", updated.Color)
+
+			fetched, err := user.Client.GetNote(t.Context(), note.ID)
+			require.NoError(t, err)
+			assert.Equal(t, "#ffffff", fetched.Color)
 		})
 
 		t.Run("empty string color on update uses default", func(t *testing.T) {

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import BottomSheet from './BottomSheet';
 import { hasCustomNoteColor } from '../utils/colorContrast';
-import { DEFAULT_NOTE_COLOR, NOTE_COLORS, LIGHT_NOTE_COLORS, NOTE_COLOR_NAME_KEYS } from '@jot/shared';
+import { DEFAULT_NOTE_COLOR, NOTE_COLORS, LIGHT_NOTE_COLORS, NOTE_COLOR_NAME_KEYS, normalizeNoteColor } from '@jot/shared';
 
 interface ColorPickerProps {
   visible: boolean;
@@ -37,7 +37,7 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
           // so its swatch shows the theme's own surface plus a "no colour"
           // glyph instead of a solid white that dark mode never renders.
           const isDefault = color === DEFAULT_NOTE_COLOR;
-          const selected = isDefault ? isDefaultSelected : currentColor.toLowerCase() === color;
+          const selected = isDefault ? isDefaultSelected : normalizeNoteColor(currentColor) === color;
           return (
             <TouchableOpacity
               key={color}

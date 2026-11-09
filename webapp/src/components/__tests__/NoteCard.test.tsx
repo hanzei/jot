@@ -66,6 +66,13 @@ describe('NoteCard', () => {
     mockConsoleError.mockClear();
   });
 
+  describe('Colour', () => {
+    it.each(['#f28b82', '#F28B82'])('renders the coral background for %s', (color) => {
+      renderNoteCard({ ...defaultProps, note: createMockListNote({ title: 'Test Note', color }) });
+      expect(screen.getByTestId('note-card')).toHaveClass('coral');
+    });
+  });
+
   describe('Unread badge', () => {
     it('shows no badge when there is nothing new', () => {
       renderNoteCard(defaultProps);

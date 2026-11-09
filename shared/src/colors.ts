@@ -63,3 +63,21 @@ export const NOTE_COLOR_NAME_KEYS: Record<(typeof NOTE_COLORS)[number], string> 
   '#e6c9a8': 'note.colorSand',
   '#e8eaed': 'note.colorGray',
 };
+
+/**
+ * Canonical form of a note colour: lowercase six-digit hex (`#FFF` -> `#ffffff`),
+ * the form the server stores and NOTE_COLORS uses. Notes saved before the
+ * server normalized colours may still hold other spellings, so compare a
+ * stored colour against the palette only after this. Anything that is not a
+ * hex colour is returned unchanged.
+ */
+export function normalizeNoteColor(color: string): string {
+  // No .trim(): stored colours are never padded, and malformed notes with a
+  // missing colour must pass through rather than throw.
+  const match = /^#([\da-f]{3}|[\da-f]{6})$/i.exec(color);
+  if (!match) return color;
+  const hex = match[1]!.toLowerCase(); // the regex has one capture group, always set on a match
+  return hex.length === 3
+    ? `#${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`
+    : `#${hex}`;
+}

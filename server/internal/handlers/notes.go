@@ -97,13 +97,15 @@ type CreateNoteRequest struct {
 	// note's primary key so an offline-created note can be replayed idempotently:
 	// a replay whose original create already committed is rejected with 409
 	// instead of inserting a duplicate. When empty the server generates one.
-	ID       string           `json:"id,omitempty"`
-	Title    string           `json:"title"`
-	Content  string           `json:"content"`
-	NoteType models.NoteType  `json:"note_type"`
-	Color    string           `json:"color,omitempty"`
-	Items    []CreateNoteItem `json:"items,omitempty"`
-	Labels   []string         `json:"labels,omitempty"`
+	ID       string          `json:"id,omitempty"`
+	Title    string          `json:"title"`
+	Content  string          `json:"content"`
+	NoteType models.NoteType `json:"note_type"`
+	// Color is a hex color (#rgb or #rrggbb), stored and returned as lowercase
+	// #rrggbb. Empty means the default (#ffffff).
+	Color  string           `json:"color,omitempty"`
+	Items  []CreateNoteItem `json:"items,omitempty"`
+	Labels []string         `json:"labels,omitempty"`
 	// Pinned creates the note already pinned for the creating user, so a client
 	// that let the user pin a note before it existed needs no follow-up PATCH.
 	Pinned bool `json:"pinned,omitempty"`
@@ -121,10 +123,12 @@ type CreateNoteItem struct {
 }
 
 type UpdateNoteRequest struct {
-	Title                 *string `json:"title"`
-	Content               *string `json:"content"`
-	Pinned                *bool   `json:"pinned"`
-	Archived              *bool   `json:"archived"`
+	Title    *string `json:"title"`
+	Content  *string `json:"content"`
+	Pinned   *bool   `json:"pinned"`
+	Archived *bool   `json:"archived"`
+	// Color is a hex color (#rgb or #rrggbb), stored and returned as lowercase
+	// #rrggbb. Empty resets to the default (#ffffff).
 	Color                 *string `json:"color"`
 	CheckedItemsCollapsed *bool   `json:"checked_items_collapsed"`
 	// BaseVersion enables optimistic concurrency for shared title/content
@@ -175,9 +179,11 @@ func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 		req.Color = models.DefaultNoteColor
 	}
 
-	if err := models.ValidateNoteColor(req.Color); err != nil {
+	color, err := models.NormalizeNoteColor(req.Color)
+	if err != nil {
 		return http.StatusBadRequest, err
 	}
+	req.Color = color
 
 	return http.StatusOK, nil
 }
@@ -667,9 +673,11 @@ func normalizeUpdateNoteRequest(req *UpdateNoteRequest) (int, error) {
 		if *req.Color == "" {
 			*req.Color = models.DefaultNoteColor
 		}
-		if err := models.ValidateNoteColor(*req.Color); err != nil {
+		color, err := models.NormalizeNoteColor(*req.Color)
+		if err != nil {
 			return http.StatusBadRequest, err
 		}
+		*req.Color = color
 	}
 	return http.StatusOK, nil
 }

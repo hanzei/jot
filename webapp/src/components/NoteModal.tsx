@@ -3,7 +3,7 @@ import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Users, Check
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, distinctCompletedTexts, findSuggestedItem, generateId, reviveSuggestedItem, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, toggleTaskMarkerAt, completedCascadeScope, completedPriorById, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, normalizeNoteColor, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, distinctCompletedTexts, findSuggestedItem, generateId, reviveSuggestedItem, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, toggleTaskMarkerAt, completedCascadeScope, completedPriorById, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
 import { renderMarkdown, renderInteractiveMarkdown, inlineMarkdownToText, type InteractiveMarkdownRender } from '@/utils/markdown';
 import LabelChip from '@/components/LabelChip';
@@ -425,8 +425,12 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
   // banner's Reload, which adopts a freshly fetched copy over local edits.
   const adoptNote = useCallback((next: Note | null) => {
     if (next) {
+      // Notes saved before the server normalized colours can hold #FFFFFF or
+      // #fff; the picker, the panel background and the save baseline all match
+      // against the lowercase palette, so adopt the canonical form.
+      const nextColor = normalizeNoteColor(next.color);
       setNoteType(next.note_type);
-      setColor(next.color);
+      setColor(nextColor);
       setPinned(next.pinned);
       setArchived(next.archived);
       let listItems: ListItem[] = [];
@@ -450,11 +454,11 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
           assigned_to: item.assigned_to ?? '',
         })));
         commitItems(listItems);
-        draft = { title: next.title, content: '', pinned: next.pinned, archived: next.archived, color: next.color, checked_items_collapsed: next.checked_items_collapsed };
+        draft = { title: next.title, content: '', pinned: next.pinned, archived: next.archived, color: nextColor, checked_items_collapsed: next.checked_items_collapsed };
       } else {
         setContent(next.content);
         commitItems([]);
-        draft = { title: '', content: next.content, pinned: next.pinned, archived: next.archived, color: next.color, checked_items_collapsed: false };
+        draft = { title: '', content: next.content, pinned: next.pinned, archived: next.archived, color: nextColor, checked_items_collapsed: false };
       }
       setNoteLabels(next.labels ?? []);
       setSavedBaseline(draft, listItems, next.version);
