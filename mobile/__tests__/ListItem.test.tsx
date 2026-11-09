@@ -1,9 +1,9 @@
 import React from 'react';
 import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
 import type { TestInstance } from 'test-renderer';
-import { Animated, Linking, Platform, StyleSheet, type TextInput } from 'react-native';
+import { Animated, Dimensions, Linking, Platform, StyleSheet, type TextInput } from 'react-native';
 import { VALIDATION } from '@jot/shared';
-import ListItem from '../src/components/ListItem';
+import ListItem, { suggestionsMaxHeightFor } from '../src/components/ListItem';
 import * as layoutAnimation from '../src/utils/layoutAnimation';
 import type { Collaborator } from '@jot/shared';
 
@@ -643,10 +643,10 @@ describe('ListItem', () => {
       await fireEvent(getByTestId('list-item-text'), 'focus');
       await rerender(row('buy'));
 
-      expect(queryByTestId('suggestion-chip-Buy milk')).not.toBeNull();
+      expect(queryByTestId('suggestion-row-Buy milk')).not.toBeNull();
     });
 
-    it('lists suggestions in a vertical, height-capped scroll view', async () => {
+    it('lists suggestions in a vertical, font-scaled, height-capped scroll view', async () => {
       const texts = ['Buy milk', 'Buy bread', 'Buy eggs', 'Buy butter', 'Buy cheese'];
       const { getByTestId, rerender } = await render(row('', { completedItemTexts: texts }));
 
@@ -654,11 +654,41 @@ describe('ListItem', () => {
       await rerender(row('buy', { completedItemTexts: texts }));
 
       const list = getByTestId('suggestions-list');
-      expect(list.props.horizontal).toBeFalsy();
+      expect(list.props.horizontal).toBeUndefined();
       // Required on Android for a ScrollView nested in the editor's list.
       expect(list.props.nestedScrollEnabled).toBe(true);
-      expect(StyleSheet.flatten(list.props.style).maxHeight).toBeGreaterThan(0);
-      for (const text of texts) expect(getByTestId(`suggestion-chip-${text}`)).toBeTruthy();
+      expect(StyleSheet.flatten(list.props.style).maxHeight).toBe(suggestionsMaxHeightFor(Dimensions.get('window').fontScale));
+      for (const text of texts) expect(getByTestId(`suggestion-row-${text}`)).toBeTruthy();
+    });
+
+    it('scales the height cap with the OS font scale', () => {
+      expect(suggestionsMaxHeightFor(2)).toBeGreaterThan(suggestionsMaxHeightFor(1));
+      // 3.5 rows of 18px text + 2 * (4px padding + 1px border), plus 4px gaps.
+      expect(suggestionsMaxHeightFor(1)).toBe(3.5 * (18 + 10 + 4));
+    });
+
+    it('accepts a tapped suggestion and hides the list', async () => {
+      const onAcceptSuggestion = jest.fn();
+      const { getByTestId, queryByTestId, rerender } = await render(row('', { onAcceptSuggestion }));
+
+      await fireEvent(getByTestId('list-item-text'), 'focus');
+      await rerender(row('buy', { onAcceptSuggestion }));
+      await fireEvent.press(getByTestId('suggestion-row-Buy milk'));
+
+      expect(onAcceptSuggestion).toHaveBeenCalledWith('Buy milk');
+      expect(queryByTestId('suggestions-list')).toBeNull();
+    });
+
+    it('reports the list on layout so the editor can reveal it', async () => {
+      const onSuggestionsLayout = jest.fn();
+      const { getByTestId, rerender } = await render(row('', { onSuggestionsLayout }));
+
+      await fireEvent(getByTestId('list-item-text'), 'focus');
+      await rerender(row('buy', { onSuggestionsLayout }));
+      await fireEvent(getByTestId('suggestions-list'), 'layout', { nativeEvent: { layout: { height: 40 } } });
+
+      expect(onSuggestionsLayout).toHaveBeenCalledTimes(1);
+      expect(onSuggestionsLayout.mock.calls[0]?.[0]).not.toBeNull();
     });
 
     it('offers none while editing an item that already had text', async () => {
@@ -667,7 +697,7 @@ describe('ListItem', () => {
       await fireEvent(getByTestId('list-item-text'), 'focus');
       await rerender(row('buy'));
 
-      expect(queryByTestId('suggestion-chip-Buy milk')).toBeNull();
+      expect(queryByTestId('suggestion-row-Buy milk')).toBeNull();
     });
 
     it('offers none on a row with sub-items', async () => {
@@ -676,7 +706,7 @@ describe('ListItem', () => {
       await fireEvent(getByTestId('list-item-text'), 'focus');
       await rerender(row('buy', { hasChildren: true }));
 
-      expect(queryByTestId('suggestion-chip-Buy milk')).toBeNull();
+      expect(queryByTestId('suggestion-row-Buy milk')).toBeNull();
     });
   });
 

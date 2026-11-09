@@ -8,6 +8,7 @@ import { getEffectiveColors } from '../../theme/colors';
 import ListItem, { DRAG_HANDLE_WIDTH, type ListItemSelectionHandle } from '../../components/ListItem';
 import { styles } from './styles';
 import type { LocalItem } from './listItemModel';
+import type { RevealTarget } from './revealInScrollView';
 
 /**
  * Per-item callbacks shared by the active list and the completed-items section.
@@ -23,6 +24,8 @@ export interface ListItemHandlers {
   onAssignPress: (itemId: string) => void;
   onFocus: (itemId: string) => void;
   onBlur: (itemId: string) => void;
+  /** Scrolls the editor so `target` (e.g. a row's suggestion list) is in view. */
+  onReveal: (target: RevealTarget | null) => void;
 }
 
 interface CheckedItemsSectionProps {
