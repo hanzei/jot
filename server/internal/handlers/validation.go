@@ -97,11 +97,6 @@ func validateSearchQuery(q string) error {
 	return nil
 }
 
-// validateColor is models.ValidateNoteColor, the rule shared with the MCP server.
-func validateColor(color string) error {
-	return models.ValidateNoteColor(color)
-}
-
 func validatePATName(name string) error {
 	n := utf8.RuneCountInString(name)
 	if n == 0 {

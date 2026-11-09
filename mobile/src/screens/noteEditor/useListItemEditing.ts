@@ -1003,8 +1003,9 @@ export function useListItemEditing({
       onAssignPress: openAssigneePicker,
       onFocus: handleFocusListItem,
       onBlur: handleBlurListItem,
+      onReveal: revealInput,
     }),
-    [handleItemCompletedToggle, handleItemTextChange, handleDeleteItem, handleItemEnterAtCursor, handleBackspaceOnEmpty, openAssigneePicker, handleFocusListItem, handleBlurListItem],
+    [handleItemCompletedToggle, handleItemTextChange, handleDeleteItem, handleItemEnterAtCursor, handleBackspaceOnEmpty, openAssigneePicker, handleFocusListItem, handleBlurListItem, revealInput],
   );
 
   return {

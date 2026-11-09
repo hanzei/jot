@@ -130,15 +130,6 @@ export const styles = StyleSheet.create({
   metaAvatarOverlap: {
     marginLeft: -6,
   },
-  metaLabelChip: {
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  metaLabelText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
   contentInput: {
     fontSize: 16,
     lineHeight: 24,

@@ -8,6 +8,7 @@ import {
   buildScalarPatch,
   createCompletedWriteTracker,
   diffItems,
+  hasCustomNoteColor,
   type CompletedWriteTracker,
   type CreateNoteRequest,
   type Note,
@@ -24,7 +25,6 @@ import {
 } from '../../hooks/useNotes';
 import { useSSESubscription } from '../../store/SSEContext';
 import { isServerReachable } from '../../api/serverReachability';
-import { isWhiteHexColor } from '../../utils/colorContrast';
 import type { ToastType } from '../../hooks/useToast';
 import { isBlankDraft, itemSnapshot, serializeItems, toLocalItems, type ItemSnapshot, type LocalItem } from './listItemModel';
 import type { EditorDocHandle } from './useEditorDoc';
@@ -440,7 +440,7 @@ export function useNoteEditorSync({
         }
         const labelNames = labelsRef.current.map((l) => l.name);
         const metadata = {
-          color: !isWhiteHexColor(currentColor) ? currentColor : undefined,
+          color: hasCustomNoteColor(currentColor) ? currentColor : undefined,
           // Pin toggled and labels picked before the note existed (see
           // handleTogglePin and openLabelPicker).
           pinned: currentPinned || undefined,

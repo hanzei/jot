@@ -312,7 +312,7 @@
     "listItemLabel": "Elemento dell'elenco",
     "itemCheckbox": "Casella di controllo {{item}}",
     "dragToReorderIndent": "Trascina per riordinare o rientrare",
-    "colorWhite": "Bianco",
+    "colorDefault": "Predefinito",
     "colorCoral": "Corallo",
     "colorYellow": "Giallo",
     "colorLime": "Verde lime",

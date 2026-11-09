@@ -26,6 +26,7 @@ type keepNoteJSON struct {
 	IsTrashed   bool               `json:"isTrashed"`
 	IsPinned    bool               `json:"isPinned"`
 	IsArchived  bool               `json:"isArchived"`
+	Color       string             `json:"color,omitempty"`
 	// Unix microseconds; zero leaves the field out, as Takeout may.
 	CreatedTimestampUsec    int64 `json:"createdTimestampUsec,omitempty"`
 	UserEditedTimestampUsec int64 `json:"userEditedTimestampUsec,omitempty"`
@@ -299,6 +300,46 @@ func TestImportNotesAppearInNotesList(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "imported note should appear in the notes list")
+}
+
+func TestImportKeepColorsMapToPalette(t *testing.T) {
+	t.Parallel()
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "importcolors", "password123", false)
+
+	// Every expected value is a NOTE_COLORS swatch (shared/src/colors.ts), so
+	// imported notes show a selected swatch in the picker.
+	want := map[string]string{
+		"DEFAULT":  "#ffffff",
+		"RED":      "#f28b82",
+		"ORANGE":   "#fbbc04",
+		"YELLOW":   "#fbbc04",
+		"GREEN":    "#ccff90",
+		"TEAL":     "#a7ffeb",
+		"BLUE":     "#aecbfa",
+		"CERULEAN": "#aecbfa",
+		"PURPLE":   "#d7aefb",
+		"PINK":     "#fdcfe8",
+		"BROWN":    "#e6c9a8",
+		"GRAY":     "#e8eaed",
+		"unknown":  "#ffffff",
+	}
+	files := make(map[string][]byte, len(want))
+	for keepColor := range want {
+		files[keepColor+".json"] = marshalKeepNote(t, keepNoteJSON{TextContent: "keep color " + keepColor, Color: keepColor})
+	}
+	_, err := user.Client.ImportNotes(t.Context(), "google_keep", "takeout.zip", bytes.NewReader(buildZip(t, files)))
+	require.NoError(t, err)
+
+	notes, err := user.Client.ListNotes(t.Context(), nil)
+	require.NoError(t, err)
+	got := make(map[string]string, len(notes))
+	for _, n := range notes {
+		if keepColor, ok := strings.CutPrefix(n.Content, "keep color "); ok {
+			got[keepColor] = n.Color
+		}
+	}
+	assert.Equal(t, want, got)
 }
 
 func TestImportPinnedAndArchivedNote(t *testing.T) {
