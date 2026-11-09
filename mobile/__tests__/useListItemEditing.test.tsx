@@ -522,6 +522,38 @@ describe('useListItemEditing — dragging a parent', () => {
     expect(markDirty).not.toHaveBeenCalled();
   });
 
+  it('does not duplicate the children when the drop lands before the folded render', async () => {
+    const view = await mountWith(groups());
+    // Start and drop in one act(), so the drop is committed against the list
+    // as last rendered — children still in it.
+    await act(async () => {
+      view.result.current.editing.handleListDragStart({ index: 0 });
+      view.result.current.editing.handleListReorder({ from: 0, to: 3 });
+    });
+    expect(ids(view.result.current.doc.items)).toEqual(['b', 'a', 'a1', 'a2', 'c']);
+  });
+
+  it('unfolds the children when a stale drop is discarded', async () => {
+    const view = await mountWith(groups());
+    markDirty.mockClear();
+    await startDrag(view, 0);
+    await act(async () => {
+      view.result.current.editing.handleListReorder({ from: 0, to: 9 });
+    });
+    expect(ids(view.result.current.editing.activeListRows)).toEqual(['a', 'a1', 'a2', 'b', 'c']);
+    expect(markDirty).not.toHaveBeenCalled();
+  });
+
+  it('re-arms focus on a focused child when the parent is released in place', async () => {
+    const view = await mountWith(groups());
+    view.result.current.editing.focusedItemIdRef.current = 'a1';
+    await startDrag(view, 0);
+    await act(async () => {
+      view.result.current.editing.handleListDragEnd({ from: 0, to: 0 });
+    });
+    expect(view.result.current.editing.autoFocusItemIdRef.current).toBe('a1');
+  });
+
   it('leaves the list alone when a childless row is dragged', async () => {
     const view = await mountWith(groups());
     await startDrag(view, 3);

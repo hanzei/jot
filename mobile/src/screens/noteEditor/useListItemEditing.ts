@@ -760,8 +760,8 @@ export function useListItemEditing({
   const activeListRowsRef = useRef(activeListRows);
   // eslint-disable-next-line react-hooks/refs -- same render-time sync as above, tracked in #777
   activeListRowsRef.current = activeListRows;
-  // The ref twin of draggedParentId, so commitDrag sees the collapse its drop
-  // was measured against even before React has re-rendered.
+  // The ref twin of draggedParentId: commitDrag reads it (and clears it) without
+  // waiting for a render, and without draggedParentId in its dependencies.
   const draggedParentIdRef = useRef<string | null>(null);
 
   // Id of the row a drag picked up, recorded at onDragStart. commitDrag uses it
@@ -804,9 +804,19 @@ export function useListItemEditing({
       const collapsedParentId = draggedParentIdRef.current;
       draggedParentIdRef.current = null;
       setDraggedParentId(null);
+      // `current` is the list as last rendered — the one the library's indices
+      // describe. A drop committed before the collapsed render landed still
+      // holds the children there, so only re-seat the ones it is missing, or
+      // they would be duplicated.
+      const inCurrent = new Set(current.map((item) => item.id));
       const foldedChildren = collapsedParentId === null
         ? []
-        : uncheckedItemsRef.current.filter((item) => item.parentId === collapsedParentId);
+        : uncheckedItemsRef.current.filter((item) => item.parentId === collapsedParentId && !inCurrent.has(item.id));
+      // Folding unmounted the children, so a child that held the caret lost it.
+      // Unfolding remounts it on every exit — moved, no-op or discarded drop —
+      // so re-arm its autoFocus before any of those returns.
+      const focusedId = focusedItemIdRef.current;
+      if (focusedId !== null && foldedChildren.some((item) => item.id === focusedId)) armAutoFocus(focusedId);
       // `from`/`to` were measured when the drag began, and the library hands
       // them back only once its drop animation finishes — ~200ms after the
       // finger lifts. A background note refresh (SSE refetch, catch-up resync
