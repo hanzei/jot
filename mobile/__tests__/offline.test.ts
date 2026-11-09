@@ -7,7 +7,7 @@
  */
 
 import { generateClientNoteId, isUnsyncedNoteId, removeLocalNotesNotIn, getLocalLabelCounts, saveNote, addLabelToLocalNote, removeLabelFromLocalNote, getLocalNotes } from '../src/db/noteQueries';
-import { drainQueue, getSyncQueueStats, isTransientHttpStatus, getDeadLetteredOperations, MAX_ENTRY_DRAIN_ATTEMPTS, PROCESSING_ERROR_STATUS } from '../src/db/syncQueue';
+import { drainQueue, getSyncQueueStats, isTransientHttpStatus, getDeadLetteredOperations, MAX_ENTRY_DRAIN_ATTEMPTS, PROCESSING_ERROR_STATUS, QUEUED_WRITE_TIMEOUT_MS } from '../src/db/syncQueue';
 import api from '../src/api/client';
 import { makeLabel, makeListNote, makeNoteItem, makeTextNote, remainingQueueIds, seedQueueEntry } from './helpers/fixtures';
 import type { NoteItem } from '@jot/shared';
@@ -39,6 +39,8 @@ jest.mock('../src/db/noteQueries', () => {
 });
 
 const mockApi = api as jest.Mocked<typeof api>;
+// Every replayed queue write carries the longer queued-write timeout (#1211).
+const REPLAY_CONFIG = { timeout: QUEUED_WRITE_TIMEOUT_MS };
 const mockSaveNote = saveNote as jest.MockedFunction<typeof saveNote>;
 
 let db: TestDatabase;
@@ -153,7 +155,7 @@ describe('drainQueue', () => {
 
     await drainQueue(db);
 
-    expect(mockApi.post).toHaveBeenCalledWith('/notes/abc', { title: 'hi' });
+    expect(mockApi.post).toHaveBeenCalledWith('/notes/abc', { title: 'hi' }, REPLAY_CONFIG);
     expect(await remainingQueueIds(db)).not.toContain(id);
   });
 
@@ -168,7 +170,7 @@ describe('drainQueue', () => {
 
     await drainQueue(db);
 
-    expect(mockApi.patch).toHaveBeenCalledWith('/notes/abc', { title: 'updated' });
+    expect(mockApi.patch).toHaveBeenCalledWith('/notes/abc', { title: 'updated' }, REPLAY_CONFIG);
     expect(await remainingQueueIds(db)).toEqual([]);
   });
 
@@ -178,7 +180,7 @@ describe('drainQueue', () => {
 
     await drainQueue(db);
 
-    expect(mockApi.delete).toHaveBeenCalledWith('/notes/abc');
+    expect(mockApi.delete).toHaveBeenCalledWith('/notes/abc', REPLAY_CONFIG);
     expect(await remainingQueueIds(db)).toEqual([]);
   });
 
@@ -332,7 +334,7 @@ describe('drainQueue', () => {
     ]);
     expect(discardedOperations).toEqual([{ operation: 'update', endpoint: '/notes/stuck', status: 500 }]);
     // ...and the later entry for an unaffected note still drains.
-    expect(mockApi.patch).toHaveBeenCalledWith('/notes/ok', {});
+    expect(mockApi.patch).toHaveBeenCalledWith('/notes/ok', {}, REPLAY_CONFIG);
     expect(await remainingQueueIds(db)).toEqual([]);
   });
 
@@ -451,6 +453,84 @@ describe('drainQueue', () => {
     expect(await remainingQueueIds(db)).toEqual([id]);
   });
 
+  describe('a client-side timeout (#1211)', () => {
+    const makeTimeoutError = (code: 'ECONNABORTED' | 'ETIMEDOUT') =>
+      Object.assign(new Error('timeout of 5000ms exceeded'), { isAxiosError: true, code, response: undefined });
+
+    const seedAtCap = async () => {
+      const first = await seedQueueEntry(db, {
+        operation: 'update',
+        endpoint: '/notes/abc',
+        method: 'PATCH',
+        body: {},
+        attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1,
+      });
+      const second = await seedQueueEntry(db, { operation: 'update', endpoint: '/notes/xyz', method: 'PATCH', body: {} });
+      return { first, second };
+    };
+
+    it.each(['ECONNABORTED', 'ETIMEDOUT'] as const)(
+      'is charged to the entry when the server answers the probe (%s), so it dead-letters at the cap',
+      async (code) => {
+        const { second } = await seedAtCap();
+        mockApi.patch.mockRejectedValueOnce(makeTimeoutError(code)); // this op always outlasts the write timeout
+        mockApi.get.mockResolvedValueOnce({ data: {} } as never);
+        mockApi.patch.mockResolvedValueOnce({ data: {} } as never); // the unaffected note
+
+        const { discardedOperations } = await drainQueue(db);
+
+        expect(mockApi.get).toHaveBeenCalledTimes(1);
+        expect(await deadLetterRows()).toMatchObject([
+          { endpoint: '/notes/abc', status: PROCESSING_ERROR_STATUS, attempts: MAX_ENTRY_DRAIN_ATTEMPTS },
+        ]);
+        expect(discardedOperations).toEqual([
+          { operation: 'update', endpoint: '/notes/abc', status: PROCESSING_ERROR_STATUS },
+        ]);
+        expect(mockApi.patch).toHaveBeenCalledWith('/notes/xyz', {}, REPLAY_CONFIG);
+        expect(await remainingQueueIds(db)).not.toContain(second);
+      },
+    );
+
+    it('is global when the server does not answer the probe: no charge, no dead-letter', async () => {
+      const { first, second } = await seedAtCap();
+      mockApi.patch.mockRejectedValueOnce(makeTimeoutError('ECONNABORTED'));
+      mockApi.get.mockRejectedValueOnce(makeTimeoutError('ECONNABORTED'));
+
+      const { discardedOperations } = await drainQueue(db);
+
+      expect(mockApi.get).toHaveBeenCalledTimes(1);
+      expect(await attemptsFor(first)).toBe(MAX_ENTRY_DRAIN_ATTEMPTS - 1);
+      expect(await remainingQueueIds(db)).toEqual([first, second]);
+      expect(mockApi.patch).toHaveBeenCalledTimes(1);
+      expect(discardedOperations).toEqual([]);
+      expect(await deadLetterRows()).toEqual([]);
+    });
+
+    it('does not probe on a plain network error', async () => {
+      const { first } = await seedAtCap();
+      mockApi.patch.mockRejectedValueOnce(
+        Object.assign(new Error('Network Error'), { isAxiosError: true, code: 'ERR_NETWORK', response: undefined }),
+      );
+
+      await drainQueue(db);
+
+      expect(mockApi.get).not.toHaveBeenCalled();
+      expect(await attemptsFor(first)).toBe(MAX_ENTRY_DRAIN_ATTEMPTS - 1);
+    });
+
+    it('does not probe on an aborted request (ECONNABORTED without a timeout)', async () => {
+      const { first } = await seedAtCap();
+      mockApi.patch.mockRejectedValueOnce(
+        Object.assign(new Error('Request aborted'), { isAxiosError: true, code: 'ECONNABORTED', response: undefined }),
+      );
+
+      await drainQueue(db);
+
+      expect(mockApi.get).not.toHaveBeenCalled();
+      expect(await attemptsFor(first)).toBe(MAX_ENTRY_DRAIN_ATTEMPTS - 1);
+    });
+  });
+
   describe('a gateway status (502/503/504) from a reverse proxy', () => {
     const seedAtCap = async () => {
       const first = await seedQueueEntry(db, {
@@ -501,7 +581,7 @@ describe('drainQueue', () => {
         { endpoint: '/notes/abc', status: 504, attempts: MAX_ENTRY_DRAIN_ATTEMPTS },
       ]);
       expect(discardedOperations).toEqual([{ operation: 'update', endpoint: '/notes/abc', status: 504 }]);
-      expect(mockApi.patch).toHaveBeenCalledWith('/notes/xyz', {});
+      expect(mockApi.patch).toHaveBeenCalledWith('/notes/xyz', {}, REPLAY_CONFIG);
       expect(await remainingQueueIds(db)).not.toContain(second);
     });
 
@@ -601,7 +681,7 @@ describe('drainQueue', () => {
 
     const { idMappings } = await drainQueue(db);
 
-    expect(mockApi.post).toHaveBeenCalledWith('/notes/src-123/duplicate', { id: clientId });
+    expect(mockApi.post).toHaveBeenCalledWith('/notes/src-123/duplicate', { id: clientId }, REPLAY_CONFIG);
     // The canonical note is saved locally and carries no pending marker.
     expect(await db.getFirstAsync('SELECT id, content, sync_state FROM notes WHERE id = ?', [clientId])).toEqual({
       id: clientId,
@@ -630,8 +710,8 @@ describe('drainQueue', () => {
     await drainQueue(db);
 
     // The label is created first, then the delete endpoint is remapped to the server id.
-    expect(mockApi.post).toHaveBeenCalledWith('/labels', { local_id: 'local_lbl_1', name: 'Work' });
-    expect(mockApi.delete).toHaveBeenCalledWith('/labels/srv_lbl_1');
+    expect(mockApi.post).toHaveBeenCalledWith('/labels', { local_id: 'local_lbl_1', name: 'Work' }, REPLAY_CONFIG);
+    expect(mockApi.delete).toHaveBeenCalledWith('/labels/srv_lbl_1', REPLAY_CONFIG);
     expect(await remainingQueueIds(db)).toEqual([]);
   });
 
@@ -676,7 +756,7 @@ describe('drainQueue', () => {
     const { discardedOperations } = await drainQueue(db);
 
     // Downstream delete endpoint remapped to the server label ID.
-    expect(mockApi.delete).toHaveBeenCalledWith(`/labels/${serverLblId}`);
+    expect(mockApi.delete).toHaveBeenCalledWith(`/labels/${serverLblId}`, REPLAY_CONFIG);
     expect(await remainingQueueIds(db)).toEqual([]);
     expect(discardedOperations).toEqual([{ operation: 'createLabel', endpoint: '/labels', status: 409 }]);
   });
@@ -994,7 +1074,7 @@ describe('drainQueue', () => {
 
     await drainQueue(db);
 
-    expect(mockApi.delete).toHaveBeenCalledWith('/notes/n1/labels/l1');
+    expect(mockApi.delete).toHaveBeenCalledWith('/notes/n1/labels/l1', REPLAY_CONFIG);
     expect(await db.getFirstAsync('SELECT labels_json FROM notes WHERE id = ?', ['n1'])).toEqual({
       labels_json: '[]',
     });
@@ -1012,7 +1092,7 @@ describe('drainQueue', () => {
 
     const { syncedSettings } = await drainQueue(db);
 
-    expect(mockApi.patch).toHaveBeenCalledWith('/users/me', { language: 'de' });
+    expect(mockApi.patch).toHaveBeenCalledWith('/users/me', { language: 'de' }, REPLAY_CONFIG);
     expect(await remainingQueueIds(db)).toEqual([]);
     expect(syncedSettings).toBe(true);
   });
@@ -1040,7 +1120,7 @@ describe('drainQueue', () => {
 
     await drainQueue(db);
 
-    expect(mockApi.post).toHaveBeenCalledWith('/notes/n1/share', { user_id: 'u2' });
+    expect(mockApi.post).toHaveBeenCalledWith('/notes/n1/share', { user_id: 'u2' }, REPLAY_CONFIG);
     // The optimistic `optimistic_<userId>` share row is replaced by re-fetching
     // the canonical note (share returns 204, so there is no response body). Only
     // the share columns are written, not a full saveNote, so the local content
@@ -1068,7 +1148,7 @@ describe('drainQueue', () => {
 
     await drainQueue(db);
 
-    expect(mockApi.delete).toHaveBeenCalledWith('/notes/n1/shares/u2');
+    expect(mockApi.delete).toHaveBeenCalledWith('/notes/n1/shares/u2', REPLAY_CONFIG);
     expect(mockApi.get).toHaveBeenCalledWith('/notes/n1');
     expect(await db.getFirstAsync('SELECT is_shared, shared_with_json FROM notes WHERE id = ?', ['n1'])).toEqual({
       is_shared: 0,

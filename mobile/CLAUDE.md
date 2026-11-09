@@ -98,7 +98,8 @@ truth, and the network is a background reconciler. Rationale and code map:
   Be optimistic where the local outcome is authoritative (logout clears locally,
   POSTs in the background).
 - **Timeouts are finite and tiered; never `timeout: 0`.** Writes use
-  `WRITE_REQUEST_TIMEOUT_MS`, reads/auth `DEFAULT_REQUEST_TIMEOUT_MS`.
+  `WRITE_REQUEST_TIMEOUT_MS`, queue replays `QUEUED_WRITE_TIMEOUT_MS`,
+  reads/auth `DEFAULT_REQUEST_TIMEOUT_MS`.
 - **Feedback is ambient** (banners, failed-note badge), not spinners or dialogs
   per action. Distinguish transient (queued) from permanent failures.
 - **Recovery:** re-arm reachability on any success / SSE reopen / reconnect, then

@@ -137,6 +137,12 @@ mode" for the write paths.
   short *because* a local fallback is waiting; the timeout is just "how long
   before we queue it." Applied to POST/PATCH/DELETE by the request interceptor
   in `src/api/client.ts` (multipart + auth excluded).
+- **Queued-write replays**: a longer budget (`QUEUED_WRITE_TIMEOUT_MS` in
+  `src/db/syncQueue.ts`, currently 30 s), passed explicitly so the interceptor
+  leaves it alone. A replay has no fallback to hurry toward — it just stays
+  queued — and a replay that times out while the server answers is charged
+  toward dead-lettering (§7, Queue liveness), so the short online budget would
+  dead-letter a large write on a slow but working link.
 - **Reads / auth**: the longer default (`DEFAULT_REQUEST_TIMEOUT_MS`, currently
   15 s) — no fallback, and they can be legitimately slow.
 - The timeout is the **worst case**. In the common "server known-down" case,
@@ -195,14 +201,21 @@ Rules of thumb:
   non-HTTP error thrown while processing a corrupted body) would otherwise wedge
   the head and starve every later write. Each entry therefore carries a
   persisted `attempts` counter (`sync_queue.attempts`,
-  `pending_image_uploads.attempts`). A *global* connectivity failure (no server
-  response, or 401/408/429) stops the drain without charging the head entry; an
+  `pending_image_uploads.attempts`). A *global* connectivity failure (a network
+  error with no server response, or 401/408/429) stops the drain without charging the head entry; an
   *entry-specific* failure (a 5xx, or a non-HTTP processing throw) charges it.
   A gateway status (502/503/504) is decided by a probe (`isGlobalDrainFailureProbed`):
   Jot's API never returns one, so it comes from a reverse proxy, either because
   the Jot server is down (the probe gets no answer → global, so an outage does
   not dead-letter every queued change) or because this one request keeps
-  timing out (the server answers the probe → charged as usual).
+  timing out (the server answers the probe → charged as usual). A client-side
+  timeout (axios `ECONNABORTED`/`ETIMEDOUT`, no response) is decided by the
+  same probe: a write that always outlasts `QUEUED_WRITE_TIMEOUT_MS` (or an
+  upload that outlasts `NOTE_IMAGE_UPLOAD_TIMEOUT_MS`) while the server answers
+  is charged, so it dead-letters at the cap instead of wedging the queue
+  (#1211). A plain network error (no response, not a timeout) is global
+  without a probe. The probe (`GET /about`) goes through the shared API client,
+  so its outcome also updates the server-reachability flag like any request.
   Once an entry has failed `MAX_ENTRY_DRAIN_ATTEMPTS` times it is **dead-lettered
   and the drain continues past it** (`#492`'s dead-letter table gains the op, the
   note is flagged `sync_state = 'failed'`), so unrelated later writes drain. A
