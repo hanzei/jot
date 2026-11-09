@@ -67,7 +67,7 @@ describe('useTopBanners', () => {
   const banners = async () => (await renderHook(() => useTopBanners())).result.current;
 
   it('shows nothing when everything is healthy', async () => {
-    expect(await banners()).toEqual({ status: null, syncFailures: false });
+    expect(await banners()).toEqual({ status: null, shown: [] });
   });
 
   it('reports only the offline status while offline, whatever else is true', async () => {
@@ -106,12 +106,17 @@ describe('useTopBanners', () => {
     ['the session was rejected', { revalidationFailed: true }, 'revalidation'],
   ] as const)('shows failed changes below the status while %s', async (_label, state, status) => {
     setup({ ...state, syncFailureCount: 2 });
-    expect(await banners()).toEqual({ status, syncFailures: true });
+    expect(await banners()).toEqual({ status, shown: ['status', 'syncFailures'] });
+  });
+
+  it('puts failed changes on top when there is no status', async () => {
+    setup({ syncFailureCount: 1 });
+    expect(await banners()).toEqual({ status: null, shown: ['syncFailures'] });
   });
 
   it('hides failed changes once dismissed', async () => {
     setup({ syncFailureCount: 3, syncFailuresBannerDismissed: true });
-    expect((await banners()).syncFailures).toBe(false);
+    expect((await banners()).shown).toEqual([]);
   });
 });
 

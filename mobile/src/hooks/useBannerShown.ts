@@ -14,6 +14,5 @@ import { useTopBanners } from './useTopBanners';
  * disagree about whether a banner is showing.
  */
 export function useBannerShown(): boolean {
-  const { status, syncFailures } = useTopBanners();
-  return status !== null || syncFailures;
+  return useTopBanners().shown.length > 0;
 }

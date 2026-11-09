@@ -37,7 +37,8 @@ interface BannerProps {
  * A top-of-screen status banner that animates open and closed and applies the
  * top safe-area inset itself (screens use headerShown: false). Shared by
  * StatusBanner and the tappable SyncFailuresBanner so the show/hide animation
- * lives in one place.
+ * lives in one place. While it animates closed it keeps the content it showed
+ * while open, so callers can hide it the moment their content stops applying.
  *
  * The banner sits *in flow* above the app content, so its height is what pushes
  * that content down — animating only the opacity would make the content jump a
@@ -55,20 +56,37 @@ interface BannerProps {
  * `topInset → topInset + row height`, with no step at either end, including the
  * frame this unmounts on.
  */
+/** What a banner shows, as opposed to how it behaves. */
+interface BannerContent {
+  icon: LucideIcon;
+  text: string;
+  backgroundColor: string;
+  borderColor: string;
+  textColor: string;
+  testID: string | undefined;
+}
+
+function sameContent(a: BannerContent, b: BannerContent): boolean {
+  return a.icon === b.icon && a.text === b.text && a.backgroundColor === b.backgroundColor
+    && a.borderColor === b.borderColor && a.textColor === b.textColor && a.testID === b.testID;
+}
+
 export default function Banner({
   visible,
-  icon: Icon,
-  text,
-  backgroundColor,
-  borderColor,
-  textColor,
   onPress,
   onDismiss,
   accessibilityLabel,
   dismissAccessibilityLabel,
-  testID,
   applyTopInset = true,
+  ...contentProps
 }: BannerProps) {
+  // While closing, keep showing what the banner showed while it was open: the
+  // caller has usually hidden it because the content stopped applying (a count
+  // reached 0, a status cleared), so its current props no longer make sense.
+  const live: BannerContent = { ...contentProps, testID: contentProps.testID };
+  const [lastShown, setLastShown] = useState(live);
+  if (visible && !sameContent(live, lastShown)) setLastShown(live);
+  const { icon: Icon, text, backgroundColor, borderColor, textColor, testID } = visible ? live : lastShown;
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const topInset = applyTopInset ? insets.top : 0;
   const [shouldRender, setShouldRender] = useState(visible);

@@ -24,11 +24,17 @@ export interface TopBannerProps {
   applyTopInset: boolean;
 }
 
+/** The two banner slots, in the order they stack from the top. */
+export type TopBannerSlot = 'status' | 'syncFailures';
+
 export interface TopBannersState {
   /** The one status to report, or null when the connection and session are fine. */
   status: StatusBannerKey | null;
-  /** Whether the "N changes couldn't be saved — Review" banner is shown, below the status. */
-  syncFailures: boolean;
+  /**
+   * The slots currently shown, top first. The first one owns the top
+   * safe-area inset, and content below drops its own while any is shown.
+   */
+  shown: TopBannerSlot[];
 }
 
 /**
@@ -66,5 +72,8 @@ export function useTopBanners(): TopBannersState {
   else if (sseReconnecting && !isLocalMode) status = 'sseReconnect';
   else if (syncError) status = 'syncError';
 
-  return { status, syncFailures: syncFailureCount > 0 && !syncFailuresBannerDismissed };
+  const shown: TopBannerSlot[] = [];
+  if (status !== null) shown.push('status');
+  if (syncFailureCount > 0 && !syncFailuresBannerDismissed) shown.push('syncFailures');
+  return { status, shown };
 }

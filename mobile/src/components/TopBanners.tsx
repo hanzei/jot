@@ -11,12 +11,12 @@ import SyncFailuresBanner from './SyncFailuresBanner';
  * device's real top inset, and everything below them needs it zeroed.
  */
 export default function TopBanners() {
-  const { status, syncFailures } = useTopBanners();
+  const { status, shown } = useTopBanners();
 
   return (
     <>
-      <StatusBanner status={status} applyTopInset={status !== null} />
-      <SyncFailuresBanner visible={syncFailures} applyTopInset={status === null && syncFailures} />
+      <StatusBanner status={status} applyTopInset={shown[0] === 'status'} />
+      <SyncFailuresBanner visible={shown.includes('syncFailures')} applyTopInset={shown[0] === 'syncFailures'} />
     </>
   );
 }

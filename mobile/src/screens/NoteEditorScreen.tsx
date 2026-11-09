@@ -36,7 +36,8 @@ import { useTranslation } from 'react-i18next';
 import { useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, useMarkNoteViewed, NoteConversionCapError } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
-import { useFailedNoteIds, useOfflineContext } from '../store/OfflineContext';
+import { useFailedNoteIds } from '../store/OfflineContext';
+import { useTopBanners } from '../hooks/useTopBanners';
 import { useToast } from '../hooks/useToast';
 import { useConfirm } from '../hooks/useConfirm';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -122,8 +123,8 @@ export default function NoteEditorScreen() {
   const { t } = useTranslation();
   const failedNoteIds = useFailedNoteIds();
   // The global "N changes couldn't be saved — Review" banner already says this
-  // until it is dismissed; the note's own bar takes over after that.
-  const { syncFailuresBannerDismissed } = useOfflineContext();
+  // while it shows; the note's own bar takes over once it is gone (dismissed).
+  const globalFailuresBannerShown = useTopBanners().shown.includes('syncFailures');
   const { upload_max_bytes: uploadMaxBytes } = useServerConfig();
   const uploadMaxMB = imageMaxMB(uploadMaxBytes);
 
@@ -1547,7 +1548,7 @@ export default function NoteEditorScreen() {
         </View>
       </View>
 
-      {!!noteId && failedNoteIds.has(noteId) && syncFailuresBannerDismissed && (
+      {!!noteId && failedNoteIds.has(noteId) && !globalFailuresBannerShown && (
         <TouchableOpacity
           style={[styles.failedBar, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}
           onPress={() => navigation.navigate('SyncFailures')}

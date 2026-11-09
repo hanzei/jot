@@ -12,9 +12,9 @@ describe('StatusBanner', () => {
 
   it.each([
     ['offline', 'offline-banner', /You're offline/i],
-    ['revalidation', 'revalidation-banner', /Couldn't verify your session/i],
-    ['sseReconnect', 'server-connecting-banner', /Connecting to server/i],
-    ['syncError', 'sync-error-banner', /Some changes haven't synced yet/i],
+    ['revalidation', 'status-banner', /Couldn't verify your session/i],
+    ['sseReconnect', 'status-banner', /Connecting to server/i],
+    ['syncError', 'status-banner', /Some changes haven't synced yet/i],
   ] as const)('renders the %s status', async (status, testID, text) => {
     const { getByTestId, getByText } = await render(<StatusBanner status={status} applyTopInset />);
     expect(getByTestId(testID)).toBeTruthy();
@@ -31,7 +31,7 @@ describe('StatusBanner', () => {
   it('swaps the content in place when the status changes', async () => {
     const view = await render(<StatusBanner status="sseReconnect" applyTopInset />);
     await view.rerender(<StatusBanner status="syncError" applyTopInset />);
-    expect(view.queryByTestId('server-connecting-banner')).toBeNull();
+    expect(view.queryByText(/Connecting to server/i)).toBeNull();
     expect(view.getByText(/Some changes haven't synced yet/i)).toBeTruthy();
   });
 
