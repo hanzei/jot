@@ -458,12 +458,78 @@ describe('useListItemEditing — derived lists', () => {
       item('d', { text: '   ', completed: true }),
     ]);
 
-    const { uncheckedItems, checkedItems, completedItemTexts, itemIndexMap } = result.current.editing;
-    expect(ids(uncheckedItems)).toEqual(['b']);
+    const { activeListRows, checkedItems, completedItemTexts, itemIndexMap } = result.current.editing;
+    expect(ids(activeListRows)).toEqual(['b']);
     expect(ids(checkedItems)).toEqual(['a', 'c', 'd']);
     // Case-insensitively deduplicated, and blank rows are not suggestions.
     expect(completedItemTexts).toEqual(['Milk']);
     expect(itemIndexMap.get('c')).toBe(2);
+  });
+});
+
+describe('useListItemEditing — dragging a parent', () => {
+  // A parent and its children move as one group: the children are folded out of
+  // the list's data while the parent is lifted, and re-seated under it on drop.
+  const groups = () => [
+    item('a'),
+    item('a1', { parentId: 'a' }),
+    item('a2', { parentId: 'a' }),
+    item('b'),
+    item('c'),
+  ];
+
+  async function startDrag(view: Awaited<ReturnType<typeof mountWith>>, index: number) {
+    await act(async () => {
+      view.result.current.editing.handleListDragStart({ index });
+    });
+  }
+
+  it('folds the children into the parent for the drag', async () => {
+    const view = await mountWith(groups());
+    await startDrag(view, 0);
+    expect(ids(view.result.current.editing.activeListRows)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('carries the children along when the parent is dropped lower', async () => {
+    const view = await mountWith(groups());
+    await startDrag(view, 0);
+    // In the folded list [a, b, c], drop a after b.
+    await act(async () => {
+      view.result.current.editing.handleListReorder({ from: 0, to: 1 });
+    });
+    expect(ids(view.result.current.doc.items)).toEqual(['b', 'a', 'a1', 'a2', 'c']);
+    expect(ids(view.result.current.editing.activeListRows)).toEqual(['b', 'a', 'a1', 'a2', 'c']);
+    expect(markDirty).toHaveBeenCalled();
+  });
+
+  it('carries the children along when the parent is dropped higher', async () => {
+    const view = await mountWith([item('b'), item('a'), item('a1', { parentId: 'a' }), item('c')]);
+    await startDrag(view, 1);
+    await act(async () => {
+      view.result.current.editing.handleListReorder({ from: 1, to: 0 });
+    });
+    expect(ids(view.result.current.doc.items)).toEqual(['a', 'a1', 'b', 'c']);
+  });
+
+  it('unfolds the children when the parent is released in place', async () => {
+    const view = await mountWith(groups());
+    markDirty.mockClear();
+    await startDrag(view, 0);
+    await act(async () => {
+      view.result.current.editing.handleListDragEnd({ from: 0, to: 0 });
+    });
+    expect(ids(view.result.current.editing.activeListRows)).toEqual(['a', 'a1', 'a2', 'b', 'c']);
+    expect(markDirty).not.toHaveBeenCalled();
+  });
+
+  it('leaves the list alone when a childless row is dragged', async () => {
+    const view = await mountWith(groups());
+    await startDrag(view, 3);
+    expect(ids(view.result.current.editing.activeListRows)).toEqual(['a', 'a1', 'a2', 'b', 'c']);
+    await act(async () => {
+      view.result.current.editing.handleListReorder({ from: 3, to: 4 });
+    });
+    expect(ids(view.result.current.doc.items)).toEqual(['a', 'a1', 'a2', 'c', 'b']);
   });
 });
 

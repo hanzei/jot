@@ -655,7 +655,7 @@ export default function NoteEditorScreen() {
     t,
   });
   const {
-    uncheckedItems,
+    activeListRows,
     checkedItems,
     itemIndexMap,
     itemIndexMapRef,
@@ -1662,7 +1662,7 @@ export default function NoteEditorScreen() {
         ) : (
           <View style={styles.listContainer}>
             <NestedReorderableList<LocalItem>
-              data={uncheckedItems}
+              data={activeListRows}
               // `item` is typed non-optional, but the library reads
               // `data[i]` at drag-start indices while finishing a drop, and
               // those can outlive the row they pointed at (see commitDrag).

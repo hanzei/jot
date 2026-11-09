@@ -85,8 +85,12 @@ export interface UseListItemEditingParams {
 }
 
 export interface ListItemEditing {
-  /** Active (unchecked) rows, in order. */
-  uncheckedItems: LocalItem[];
+  /**
+   * The rows the reorderable list renders: the active (unchecked) items in
+   * order, minus the children of a parent that is being dragged — those are
+   * folded into it for the drag and re-seated under it on drop.
+   */
+  activeListRows: LocalItem[];
   /** Completed rows, for the collapsed section below the list. */
   checkedItems: LocalItem[];
   /** id → index into the full `items` array, so rows don't need an indexOf. */
@@ -741,6 +745,25 @@ export function useListItemEditing({
   // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   uncheckedItemsRef.current = uncheckedItems;
 
+  // Id of a parent row being dragged. While set, its active children are left
+  // out of the list's data so they travel with it: the library can only move one
+  // cell, and leaving them in place would let the parent be dropped between (or
+  // after) its own children — normalizeItemOrder then re-seats it before them, so
+  // the drop silently did nothing or landed somewhere other than where it was
+  // shown. commitDrag puts the children back right under the parent.
+  const [draggedParentId, setDraggedParentId] = useState<string | null>(null);
+  const activeListRows = useMemo(
+    () => (draggedParentId === null ? uncheckedItems : uncheckedItems.filter((item) => item.parentId !== draggedParentId)),
+    [uncheckedItems, draggedParentId],
+  );
+  // The list the library's drag indices refer to.
+  const activeListRowsRef = useRef(activeListRows);
+  // eslint-disable-next-line react-hooks/refs -- same render-time sync as above, tracked in #777
+  activeListRowsRef.current = activeListRows;
+  // The ref twin of draggedParentId, so commitDrag sees the collapse its drop
+  // was measured against even before React has re-rendered.
+  const draggedParentIdRef = useRef<string | null>(null);
+
   // Id of the row a drag picked up, recorded at onDragStart. commitDrag uses it
   // to tell a drop that still describes the list it was measured against from
   // one whose indices have gone stale — see the guard there. null means "no
@@ -748,7 +771,15 @@ export function useListItemEditing({
   const dragOriginIdRef = useRef<string | null>(null);
 
   const rememberDragOrigin = useCallback((index: number) => {
-    dragOriginIdRef.current = uncheckedItemsRef.current[index]?.id ?? null;
+    const originId = activeListRowsRef.current[index]?.id ?? null;
+    dragOriginIdRef.current = originId;
+    // Fold a parent's children into it for the drag. The parent keeps its index
+    // (its children sit below it), so the drag the library just started stays
+    // valid; the rows below re-measure as they slide up.
+    if (originId !== null && uncheckedItemsRef.current.some((item) => item.parentId === originId)) {
+      draggedParentIdRef.current = originId;
+      setDraggedParentId(originId);
+    }
   }, []);
 
   const handleListDragStart = useCallback(
@@ -765,9 +796,17 @@ export function useListItemEditing({
   // every drop, which is how a purely sideways indent gets committed at all).
   const commitDrag = useCallback(
     (from: number, to: number) => {
-      const current = uncheckedItemsRef.current;
+      const current = activeListRowsRef.current;
       const originId = dragOriginIdRef.current;
       dragOriginIdRef.current = null;
+      // The children folded into a dragged parent, re-seated under it below.
+      // Unfold on every exit, including a discarded or no-op drop.
+      const collapsedParentId = draggedParentIdRef.current;
+      draggedParentIdRef.current = null;
+      setDraggedParentId(null);
+      const foldedChildren = collapsedParentId === null
+        ? []
+        : uncheckedItemsRef.current.filter((item) => item.parentId === collapsedParentId);
       // `from`/`to` were measured when the drag began, and the library hands
       // them back only once its drop animation finishes — ~200ms after the
       // finger lifts. A background note refresh (SSE refetch, catch-up resync
@@ -822,9 +861,10 @@ export function useListItemEditing({
       // remounted row re-opens the keyboard on itself instead of leaving focus
       // to fall back elsewhere (observed: the title input).
       if (focusedItemIdRef.current) armAutoFocus(focusedItemIdRef.current);
-      // Merge with existing checked items and normalize so each parent's
-      // children stay contiguous.
-      setItems(normalizeItemOrder([...reorderedUnchecked, ...checkedItemsRef.current]));
+      // Merge with the folded children and existing checked items and normalize
+      // so each parent's children stay contiguous — which seats the folded
+      // children right under their parent, in their original order.
+      setItems(normalizeItemOrder([...reorderedUnchecked, ...foldedChildren, ...checkedItemsRef.current]));
       markDirtyAndScheduleUpdate();
     },
     [armAutoFocus, markDirtyAndScheduleUpdate, dragTranslateX, itemsRef, setItems],
@@ -952,7 +992,7 @@ export function useListItemEditing({
   );
 
   return {
-    uncheckedItems,
+    activeListRows,
     checkedItems,
     itemIndexMap,
     itemIndexMapRef,
