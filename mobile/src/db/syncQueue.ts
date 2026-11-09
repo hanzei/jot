@@ -1037,9 +1037,10 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
       } else if (await isGlobalDrainFailureProbed(err)) {
         // No usable server response (network error/timeout) or a status that
         // blocks the whole queue regardless of this entry (401 re-auth, 408,
-        // 429 rate-limit, or a 502/503/504 from a proxy whose server is down). Every entry would fail the same way, so stop the
-        // drain without charging this entry's attempt counter and retry the
-        // remainder on the next reconnect (issue #714). Expected whenever the
+        // 429 rate-limit, or a 502/503/504 from a proxy whose server is down).
+        // Every entry would fail the same way, so stop the drain without
+        // charging this entry's attempt counter and retry the remainder on the
+        // next reconnect (issue #714). Expected whenever the
         // server drops away, so info, and the message alone: the stack of a
         // network error is bundle offsets that say nothing.
         console.info(`Queue drain stopped at entry id=${entry.id} (connectivity): ${errorSummary(err)}`);

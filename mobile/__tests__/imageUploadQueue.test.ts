@@ -290,6 +290,19 @@ describe('drainImageUploadQueue', () => {
     expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
   });
 
+  it('charges a 500 without probing the server', async () => {
+    await saveNote(db, makeTextNote({ id: 'n1' }));
+    await seedUpload({ id: 'up-500', note_id: 'n1' });
+    mockUploadNoteImage.mockRejectedValueOnce(
+      Object.assign(new Error('Server Error'), { isAxiosError: true, response: { status: 500 } }),
+    );
+
+    await drainImageUploadQueue(db);
+
+    expect(mockProbe).not.toHaveBeenCalled();
+    expect(await uploadRow('up-500')).toEqual({ status: 'queued', error_message: null, attempts: 1 });
+  });
+
   it('stops without charging on a gateway status while the server does not answer', async () => {
     await saveNote(db, makeTextNote({ id: 'n1' }));
     await seedUpload({ id: 'up-gw', note_id: 'n1', created_at: '2024-01-01T00:00:00Z', attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 });
