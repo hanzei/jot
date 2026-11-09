@@ -556,6 +556,20 @@ func resizeImage(data []byte) ([]byte, error) {
 // image's decoded config, used to determine source opaqueness before a
 // potential resize converts the image to RGBA and loses that information.
 // Shared by the profile-icon and note-image-thumbnail pipelines.
+// fitWithin scales w×h down, keeping the aspect ratio, so its longer side is
+// maxDim. Callers only use it when one side exceeds maxDim.
+func fitWithin(w, h, maxDim int) (int, int) {
+	var dstW, dstH int
+	if w >= h {
+		dstW = maxDim
+		dstH = h * maxDim / w
+	} else {
+		dstH = maxDim
+		dstW = w * maxDim / h
+	}
+	return max(dstW, 1), max(dstH, 1)
+}
+
 func resizeToJPEG(img image.Image, cfg image.Config, maxDim int) ([]byte, error) {
 	sourceOpaque := isOpaqueImage(cfg.ColorModel, img)
 
@@ -564,17 +578,7 @@ func resizeToJPEG(img image.Image, cfg image.Config, maxDim int) ([]byte, error)
 	srcH := bounds.Dy()
 
 	if srcW > maxDim || srcH > maxDim {
-		var dstW, dstH int
-		if srcW >= srcH {
-			dstW = maxDim
-			dstH = srcH * maxDim / srcW
-		} else {
-			dstH = maxDim
-			dstW = srcW * maxDim / srcH
-		}
-		dstW = max(dstW, 1)
-		dstH = max(dstH, 1)
-
+		dstW, dstH := fitWithin(srcW, srcH, maxDim)
 		dst := image.NewRGBA(image.Rect(0, 0, dstW, dstH))
 		draw.CatmullRom.Scale(dst, dst.Bounds(), img, bounds, draw.Src, nil)
 		img = dst

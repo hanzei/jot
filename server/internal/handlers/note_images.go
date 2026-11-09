@@ -31,6 +31,19 @@ var errImageLimitReached = apierr.New(apierr.CodeImageLimitReached, fmt.Sprintf(
 // bandwidth; the lightbox always serves the original at full size.
 const thumbnailMaxDimension = 512
 
+// NoteImageThumbnailSize is the size of the thumbnail generated for a w×h
+// note image: scaled down to thumbnailMaxDimension, never up. It returns
+// 0, 0 for an image whose size was not recorded.
+func NoteImageThumbnailSize(w, h int) (int, int) {
+	if w <= 0 || h <= 0 {
+		return 0, 0
+	}
+	if w <= thumbnailMaxDimension && h <= thumbnailMaxDimension {
+		return w, h
+	}
+	return fitWithin(w, h, thumbnailMaxDimension)
+}
+
 const (
 	mimeTypeJPEG = "image/jpeg"
 	mimeTypePNG  = "image/png"

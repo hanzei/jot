@@ -366,6 +366,12 @@ func (s *NoteStore) GetPublicNote(ctx context.Context, token string) (_ *PublicN
 	return s.inner.GetPublicNote(ctx, token)
 }
 
+func (s *NoteStore) GetPublicNotePreview(ctx context.Context, token string) (_ *PublicNotePreview, err error) {
+	ctx, end := startSpan(ctx, s.instr, "NoteStore.GetPublicNotePreview", &err)
+	defer end()
+	return s.inner.GetPublicNotePreview(ctx, token)
+}
+
 func (s *NoteStore) GetPublicNoteImage(ctx context.Context, token, imageID string) (_ *NoteImage, err error) {
 	ctx, end := startSpan(ctx, s.instr, "NoteStore.GetPublicNoteImage", &err,
 		attribute.String("image.id", imageID),
