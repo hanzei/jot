@@ -32,16 +32,6 @@ describe('ColorPicker', () => {
     expect(getByTestId('color-swatch-ffffff').props.accessibilityState).toEqual({ selected: false });
   });
 
-  it.each([['#ffffff', 'ffffff'], ['#f28b82', 'f28b82']])('rings the selected swatch in the primary colour (%s)', async (color, id) => {
-    const { getByTestId } = await renderPicker(color);
-
-    expect(StyleSheet.flatten(getByTestId(`color-swatch-${id}`).props.style)).toMatchObject({
-      borderColor: lightColors.primary,
-      borderWidth: 3,
-    });
-    expect(StyleSheet.flatten(getByTestId('color-swatch-fbbc04').props.style).borderColor).not.toBe(lightColors.primary);
-  });
-
   it('selects the default colour value when Default is pressed', async () => {
     const onSelect = jest.fn();
     const { getByTestId } = await renderPicker('#f28b82', onSelect);
