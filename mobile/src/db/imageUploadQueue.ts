@@ -229,13 +229,13 @@ export async function drainImageUploadQueue(db: SQLiteDatabase): Promise<ImageUp
         continue;
       }
       if (isGlobalDrainFailure(err, status)) {
-        // Connectivity failure (network/timeout/401/408/429) — every entry would
+        // Connectivity failure (network/timeout/401/408/429/502/503/504) — every entry would
         // fail the same way, so stop draining without charging this entry and
         // retry on the next reconnect (issue #714).
         console.info(`Image upload queue drain stopped at entry id=${entry.id} (connectivity): ${errorSummary(err)}`);
         break;
       }
-      // Entry-specific transient failure (a 5xx tied to this upload, or a non-HTTP
+      // Entry-specific transient failure (a 500 tied to this upload, or a non-HTTP
       // throw): charge the attempt counter. Once it reaches the cap, flag the row
       // `error` (surfaced with retry/dismiss in the gallery) and continue past it
       // so one persistently-failing upload can't wedge the whole queue (#714).

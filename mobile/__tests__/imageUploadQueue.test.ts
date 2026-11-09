@@ -273,12 +273,23 @@ describe('drainImageUploadQueue', () => {
 
   it('charges the attempt counter and stops below the cap on a persistent 5xx (#714)', async () => {
     await seedUpload({ id: 'up-5xx' });
-    const err = Object.assign(new Error('Server Error'), { isAxiosError: true, response: { status: 503 } });
+    const err = Object.assign(new Error('Server Error'), { isAxiosError: true, response: { status: 500 } });
     mockUploadNoteImage.mockRejectedValueOnce(err);
 
     const result = await drainImageUploadQueue(db);
 
     expect(await uploadRow('up-5xx')).toEqual({ status: 'queued', error_message: null, attempts: 1 });
+    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
+  });
+
+  it.each([502, 503, 504])('does not charge the attempt counter on a %i from a proxy (server unreachable)', async (status) => {
+    await seedUpload({ id: 'up-gw', attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 });
+    const err = Object.assign(new Error('Bad Gateway'), { isAxiosError: true, response: { status } });
+    mockUploadNoteImage.mockRejectedValueOnce(err);
+
+    const result = await drainImageUploadQueue(db);
+
+    expect(await uploadRow('up-gw')).toEqual({ status: 'queued', error_message: null, attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 });
     expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
   });
 

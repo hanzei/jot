@@ -108,6 +108,9 @@ export function isTransientHttpStatus(status: number | undefined): boolean {
   return status >= 500;
 }
 
+/** Statuses {@link isGlobalDrainFailure} treats as blocking the whole queue. */
+const GLOBAL_DRAIN_FAILURE_STATUSES: ReadonlySet<number> = new Set([401, 408, 429, 502, 503, 504]);
+
 /**
  * Of the *transient* failures, which ones block the whole queue rather than
  * being specific to the entry at the head (issue #714)? A global failure stops
@@ -116,11 +119,17 @@ export function isTransientHttpStatus(status: number | undefined): boolean {
  * entry toward being dead-lettered so it can't wedge the head forever.
  *
  * Global: a transport-level failure with no server response (network down or a
- * client timeout), plus statuses that apply queue-wide (401 needs re-auth, 408
- * request timeout, 429 rate limit). Entry-specific: a 5xx tied to this op's
- * payload, and any non-HTTP error thrown while processing the entry itself
- * (corrupted body, a local DB error) — those are charged and eventually
- * dead-lettered.
+ * client timeout), statuses that apply queue-wide (401 needs re-auth, 408
+ * request timeout, 429 rate limit), and the gateway statuses 502/503/504.
+ * Entry-specific: any other 5xx (in practice a 500 tied to this op's payload),
+ * and any non-HTTP error thrown while processing the entry itself (corrupted
+ * body, a local DB error) — those are charged and eventually dead-lettered.
+ *
+ * 502/503/504 mean "the server is unreachable", not "this op is bad": Jot's API
+ * never returns them, so they come from a reverse proxy in front of a Jot
+ * server that is down, restarting, or too slow. Charging them per entry turned
+ * every server outage into a run of dead-lettered, "couldn't be saved" changes
+ * that would have replayed fine once the server came back.
  */
 export function isGlobalDrainFailure(err: unknown, status: number | undefined): boolean {
   // A non-HTTP error thrown while processing an entry is specific to that entry.
@@ -128,7 +137,7 @@ export function isGlobalDrainFailure(err: unknown, status: number | undefined): 
   // Transport-level failure with no server response: network down or timeout.
   if (err.response === undefined) return true;
   // Statuses that block the whole queue regardless of the specific entry.
-  return status === 401 || status === 408 || status === 429;
+  return GLOBAL_DRAIN_FAILURE_STATUSES.has(status ?? 0);
 }
 
 /** An error's message without its stack, for log lines where the stack is noise. */
@@ -985,7 +994,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
       } else if (isGlobalDrainFailure(err, status)) {
         // No usable server response (network error/timeout) or a status that
         // blocks the whole queue regardless of this entry (401 re-auth, 408,
-        // 429 rate-limit). Every entry would fail the same way, so stop the
+        // 429 rate-limit, or a 502/503/504 from a proxy whose server is down). Every entry would fail the same way, so stop the
         // drain without charging this entry's attempt counter and retry the
         // remainder on the next reconnect (issue #714). Expected whenever the
         // server drops away, so info, and the message alone: the stack of a
@@ -993,7 +1002,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         console.info(`Queue drain stopped at entry id=${entry.id} (connectivity): ${errorSummary(err)}`);
         break;
       } else {
-        // Entry-specific transient failure: a 5xx tied to this op's payload, or a
+        // Entry-specific transient failure: a 500 tied to this op's payload, or a
         // non-HTTP error thrown while processing this entry (corrupted body, a
         // local DB error). Charge the entry's attempt counter; once it has failed
         // MAX_ENTRY_DRAIN_ATTEMPTS times, dead-letter it and continue *past* it so
