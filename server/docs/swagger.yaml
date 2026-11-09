@@ -273,6 +273,9 @@ definitions:
   handlers.CreateNoteRequest:
     properties:
       color:
+        description: |-
+          Color is a hex color (#rgb or #rrggbb), stored and returned as lowercase
+          #rrggbb. Empty means the default (#ffffff).
         type: string
       content:
         type: string
@@ -506,6 +509,9 @@ definitions:
       checked_items_collapsed:
         type: boolean
       color:
+        description: |-
+          Color is a hex color (#rgb or #rrggbb), stored and returned as lowercase
+          #rrggbb. Empty resets to the default (#ffffff).
         type: string
       content:
         type: string

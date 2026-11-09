@@ -289,7 +289,7 @@
     "listItemLabel": "Listenelement",
     "itemCheckbox": "{{item}} Checkbox",
     "dragToReorderIndent": "Zum Neuordnen oder Einrücken ziehen",
-    "colorWhite": "Weiß",
+    "colorDefault": "Standard",
     "colorCoral": "Koralle",
     "colorYellow": "Gelb",
     "colorLime": "Limette",

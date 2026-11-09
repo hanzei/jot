@@ -174,8 +174,9 @@ func resolveCreateNote(in createNoteInput) (models.NoteType, string, error) {
 	return noteType, color, nil
 }
 
-// validateNoteFields applies the note field limits shared with the REST API.
-// A nil pointer is a field the caller is not setting.
+// validateNoteFields applies the note field limits shared with the REST API,
+// rewriting *color to its canonical form. A nil pointer is a field the caller
+// is not setting.
 func validateNoteFields(title, content, color *string) error {
 	if title != nil {
 		if err := models.ValidateNoteTitle(*title); err != nil {
@@ -188,9 +189,11 @@ func validateNoteFields(title, content, color *string) error {
 		}
 	}
 	if color != nil {
-		if err := models.ValidateNoteColor(*color); err != nil {
+		normalized, err := models.NormalizeNoteColor(*color)
+		if err != nil {
 			return err
 		}
+		*color = normalized
 	}
 	return nil
 }

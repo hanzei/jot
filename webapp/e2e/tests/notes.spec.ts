@@ -31,6 +31,28 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteVisible('Title Only Note');
   });
 
+  test('colour picker marks the selected swatch with a corner badge, keeping Default\'s glyph', async ({ dashboardPage, page }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createTextNote('Colour badge note');
+    await dashboardPage.openTextNote('Colour badge note');
+    const dialog = page.getByRole('dialog').last();
+    await dialog.getByRole('button', { name: 'Select note color' }).click();
+
+    const defaultSwatch = dialog.getByRole('button', { name: 'Default', exact: true });
+    const coral = dialog.getByRole('button', { name: 'Coral', exact: true });
+    await expect(defaultSwatch).toHaveAttribute('aria-pressed', 'true');
+    await expect(defaultSwatch.getByTestId('color-swatch-selected')).toBeVisible();
+    await expect(defaultSwatch.locator('svg.lucide-droplet-off')).toBeVisible();
+    await expect(dialog.getByTestId('color-swatch-selected')).toHaveCount(1);
+
+    await coral.click();
+    await dialog.getByRole('button', { name: 'Select note color' }).click();
+    await expect(coral).toHaveAttribute('aria-pressed', 'true');
+    await expect(coral.getByTestId('color-swatch-selected')).toBeVisible();
+    await expect(defaultSwatch.getByTestId('color-swatch-selected')).toHaveCount(0);
+    await expect(dialog.getByTestId('color-swatch-selected')).toHaveCount(1);
+  });
+
   test('edits a note title and content', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('Original Title', 'Original content');

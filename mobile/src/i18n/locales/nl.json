@@ -312,7 +312,7 @@
     "listItemLabel": "Lijstitem",
     "itemCheckbox": "Selectievakje {{item}}",
     "dragToReorderIndent": "Sleep om te sorteren of in te springen",
-    "colorWhite": "Wit",
+    "colorDefault": "Standaard",
     "colorCoral": "Koraal",
     "colorYellow": "Geel",
     "colorLime": "Limoen",
