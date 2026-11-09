@@ -1,3 +1,5 @@
+import { DEFAULT_NOTE_COLOR, normalizeNoteColor } from '@jot/shared';
+
 function normalizeHexColor(color: string): string | null {
   const normalized = color.trim().replace(/^#/, '');
   if (!/^[\da-fA-F]{3}$|^[\da-fA-F]{6}$/.test(normalized)) return null;
@@ -55,7 +57,7 @@ export function isWhiteHexColor(color: string): boolean {
  * (empty or white), which follows the app theme.
  */
 export function hasCustomNoteColor(color: string): boolean {
-  return !!color && !isWhiteHexColor(color);
+  return !!color && normalizeNoteColor(color) !== DEFAULT_NOTE_COLOR;
 }
 
 /**

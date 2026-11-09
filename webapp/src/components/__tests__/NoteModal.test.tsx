@@ -2501,6 +2501,15 @@ describe('NoteModal', () => {
       expect(mockNotesUpdate).not.toHaveBeenCalled();
     });
 
+    it('keeps the picker reachable by Tab for an off-palette colour', () => {
+      renderNoteModal({ ...defaultProps, note: createMockNote({ color: '#34a853' }) });
+
+      fireEvent.click(screen.getByLabelText('Select note color'));
+      expect(screen.queryAllByTestId('color-swatch-selected')).toHaveLength(0);
+      expect(screen.getByRole('button', { name: 'Default' })).toHaveAttribute('tabindex', '0');
+      expect(screen.getByRole('button', { name: 'Coral' })).toHaveAttribute('tabindex', '-1');
+    });
+
     it('does not autosave color on new notes', async () => {
       renderNoteModal(defaultProps);
 

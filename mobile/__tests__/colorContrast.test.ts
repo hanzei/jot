@@ -1,4 +1,4 @@
-import { getCompletedSectionDividerColor, isWhiteHexColor } from '../src/utils/colorContrast';
+import { getCompletedSectionDividerColor, hasCustomNoteColor, isWhiteHexColor } from '../src/utils/colorContrast';
 
 describe('getCompletedSectionDividerColor', () => {
   it('returns darker divider for light backgrounds', () => {
@@ -33,5 +33,15 @@ describe('isWhiteHexColor', () => {
     expect(isWhiteHexColor('#fefefe')).toBe(false);
     expect(isWhiteHexColor('rgb(255,255,255)')).toBe(false);
     expect(isWhiteHexColor('invalid')).toBe(false);
+  });
+});
+
+describe('hasCustomNoteColor', () => {
+  it.each(['', '#ffffff', '#FFFFFF', '#fff'])('is false for the default colour %j', (color) => {
+    expect(hasCustomNoteColor(color)).toBe(false);
+  });
+
+  it.each(['#f28b82', '#F28B82', '#34a853'])('is true for %j', (color) => {
+    expect(hasCustomNoteColor(color)).toBe(true);
   });
 });
