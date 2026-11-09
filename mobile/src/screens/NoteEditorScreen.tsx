@@ -1285,6 +1285,7 @@ export default function NoteEditorScreen() {
             onFocus: () => listItemHandlers.onFocus(item.id),
             onBlur: () => listItemHandlers.onBlur(item.id),
             onAcceptSuggestion: (text) => handleAcceptSuggestion(item.id, text),
+            onSuggestionsLayout: listItemHandlers.onReveal,
           }}
         />
       );

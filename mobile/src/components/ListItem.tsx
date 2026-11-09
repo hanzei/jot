@@ -3,17 +3,20 @@ import {
   View,
   Text,
   TextInput,
-  ScrollView,
   StyleSheet,
   Animated,
   Platform,
+  useWindowDimensions,
   type GestureResponderEvent,
   type NativeSyntheticEvent,
   type TextLayoutEventData,
   type TextInputProps,
   type TextInput as TextInputType,
 } from 'react-native';
-import { TouchableOpacity } from 'react-native-gesture-handler';
+// The suggestion list's ScrollView comes from gesture-handler too: a plain RN
+// ScrollView does not cancel a gesture-handler touchable on Android, so a
+// scroll that starts on a suggestion would also accept it.
+import { ScrollView, TouchableOpacity } from 'react-native-gesture-handler';
 import { ExternalLink, GripVertical, Square, SquareCheck, UserPlus, X } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import UserAvatar from './UserAvatar';
@@ -84,6 +87,12 @@ interface ListItemProps {
   onFocus?: TextInputProps['onFocus'];
   onBlur?: () => void;
   onAcceptSuggestion?: (text: string) => void;
+  /**
+   * Called with the suggestion list each time it is laid out, so the editor can
+   * scroll it clear of the keyboard — revealing only the input would leave a
+   * list that opens below the last visible row hidden.
+   */
+  onSuggestionsLayout?: (list: React.ComponentRef<typeof ScrollView> | null) => void;
 }
 
 // Press-and-hold duration on the drag handle before a reorder drag begins.
@@ -128,6 +137,26 @@ const OPEN_LINK_BTN_HIT_SLOP = { top: 8, bottom: 8, left: 4, right: 0 };
 // before they unmount.
 const BLUR_HIDE_DELAY_MS = 200;
 
+// Suggestion row geometry, shared by the styles below and the list's height cap.
+const SUGGESTION_FONT_SIZE = 13;
+const SUGGESTION_LINE_HEIGHT = 18;
+const SUGGESTION_ROW_PADDING_V = 4;
+const SUGGESTION_ROW_BORDER = 1;
+const SUGGESTION_ROW_GAP = 4;
+// Rows shown before the list scrolls; the half row peeking out signals that it
+// does.
+const SUGGESTION_VISIBLE_ROWS = 3.5;
+
+/**
+ * The suggestion list's height cap. Text (and its line height) grows with the
+ * OS font scale, so the cap does too — a fixed pixel cap would show fewer rows
+ * at large accessibility sizes.
+ */
+export const suggestionsMaxHeightFor = (fontScale: number) => {
+  const rowHeight = SUGGESTION_LINE_HEIGHT * fontScale + 2 * (SUGGESTION_ROW_PADDING_V + SUGGESTION_ROW_BORDER);
+  return SUGGESTION_VISIBLE_ROWS * (rowHeight + SUGGESTION_ROW_GAP);
+};
+
 function ListItem({
   text,
   completed,
@@ -157,10 +186,14 @@ function ListItem({
   onFocus,
   onBlur,
   onAcceptSuggestion,
+  onSuggestionsLayout,
 }: ListItemProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const suggestionsListRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
+  const { fontScale } = useWindowDimensions();
+  const suggestionsMaxHeight = useMemo(() => suggestionsMaxHeightFor(fontScale), [fontScale]);
   // Whether the row was empty when the caret entered it, which decides whether
   // it offers suggestions at all (see SuggestionRow in @jot/shared).
   const [startedEmpty, setStartedEmpty] = useState(false);
@@ -624,27 +657,32 @@ function ListItem({
           ) : null}
         </View>
         {showSuggestions && suggestions.length > 0 && !completed && (
+          // A vertical list that opens below the row and pushes the rows under
+          // it down by its height. That height is capped at a few rows (see
+          // suggestionsList) and the rest scroll in place. Android only scrolls a
+          // ScrollView nested in the editor's list with nestedScrollEnabled.
           <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
+            ref={suggestionsListRef}
+            nestedScrollEnabled
             keyboardShouldPersistTaps="handled"
-            style={styles.suggestionsRow}
-            contentContainerStyle={styles.suggestionsContent}
+            style={[styles.suggestionsList, { maxHeight: suggestionsMaxHeight }]}
+            testID="suggestions-list"
+            onLayout={() => onSuggestionsLayout?.(suggestionsListRef.current)}
             accessibilityLabel={t('note.completedSuggestions')}
           >
             {suggestions.map((s) => (
               <TouchableOpacity
                 key={s}
-                style={[styles.suggestionChip, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]}
+                style={[styles.suggestionRow, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]}
                 onPress={() => {
                   if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
                   setShowSuggestions(false);
                   onAcceptSuggestion?.(s);
                 }}
-                testID={`suggestion-chip-${s}`}
+                testID={`suggestion-row-${s}`}
                 accessibilityRole="button"
               >
-                <Text style={[styles.suggestionChipText, { color: colors.primary }]} numberOfLines={1}>
+                <Text style={[styles.suggestionRowText, { color: colors.primary }]} numberOfLines={1}>
                   {s}
                 </Text>
               </TouchableOpacity>
@@ -762,23 +800,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  suggestionsRow: {
+  suggestionsList: {
     marginTop: 2,
     marginBottom: 2,
   },
   suggestionsContent: {
-    gap: 6,
-    paddingRight: 8,
+    gap: SUGGESTION_ROW_GAP,
   },
-  suggestionChip: {
+  suggestionRow: {
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: SUGGESTION_ROW_BORDER,
     paddingHorizontal: 10,
-    paddingVertical: 3,
-    maxWidth: 180,
+    paddingVertical: SUGGESTION_ROW_PADDING_V,
   },
-  suggestionChipText: {
-    fontSize: 13,
+  suggestionRowText: {
+    fontSize: SUGGESTION_FONT_SIZE,
+    lineHeight: SUGGESTION_LINE_HEIGHT,
   },
 });
 
