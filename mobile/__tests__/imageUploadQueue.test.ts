@@ -338,6 +338,39 @@ describe('drainImageUploadQueue', () => {
     expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 1 });
   });
 
+  it('flags an upload that keeps timing out client-side while the server answers (#1211)', async () => {
+    await saveNote(db, makeTextNote({ id: 'n1' }));
+    await seedUpload({ id: 'up-timeout', note_id: 'n1', attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 });
+    mockUploadNoteImage.mockRejectedValueOnce(
+      Object.assign(new Error('timeout of 90000ms exceeded'), { isAxiosError: true, code: 'ECONNABORTED', response: undefined }),
+    );
+    mockProbe.mockResolvedValueOnce({});
+
+    const result = await drainImageUploadQueue(db);
+
+    expect(mockProbe).toHaveBeenCalledTimes(1);
+    expect(await uploadRow('up-timeout')).toEqual({
+      status: 'error',
+      error_message: 'timeout of 90000ms exceeded',
+      attempts: MAX_ENTRY_DRAIN_ATTEMPTS,
+    });
+    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 1 });
+  });
+
+  it('stops without charging on a client-side timeout while the server does not answer (#1211)', async () => {
+    await saveNote(db, makeTextNote({ id: 'n1' }));
+    await seedUpload({ id: 'up-timeout', note_id: 'n1', attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 });
+    const timeout = () => Object.assign(new Error('timeout exceeded'), { isAxiosError: true, code: 'ECONNABORTED', response: undefined });
+    mockUploadNoteImage.mockRejectedValueOnce(timeout());
+    mockProbe.mockRejectedValueOnce(timeout());
+
+    const result = await drainImageUploadQueue(db);
+
+    expect(mockProbe).toHaveBeenCalledTimes(1);
+    expect(await uploadRow('up-timeout')).toEqual({ status: 'queued', error_message: null, attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 });
+    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
+  });
+
   it('flags a persistently-failing upload as errored at the cap and continues past it (#714)', async () => {
     await saveNote(db, makeTextNote({ id: 'n1' }));
     await saveNote(db, makeTextNote({ id: 'n2' }));

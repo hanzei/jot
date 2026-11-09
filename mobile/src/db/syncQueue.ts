@@ -122,11 +122,13 @@ export function isTransientHttpStatus(status: number | undefined): boolean {
  * (corrupted body, a local DB error) — those are charged and eventually
  * dead-lettered.
  *
- * A gateway status (502/503/504) is ambiguous: usually the proxy's Jot server
- * is down (global), but a request that reproducibly exceeds the server's or the
- * proxy's timeout gets one every time while every other request succeeds. The
- * drains resolve that with {@link isGlobalDrainFailureProbed} — always call that
- * one; this synchronous check treats a gateway status as entry-specific.
+ * Two failures are ambiguous: a gateway status (502/503/504) and a client-side
+ * timeout. Usually the server is down or unreachable (global), but a request
+ * that reproducibly exceeds the proxy's or the client's timeout fails that way
+ * every time while every other request succeeds (#1211). The drains resolve
+ * that with {@link isGlobalDrainFailureProbed} — always call that one; this
+ * synchronous check treats a gateway status as entry-specific and a client
+ * timeout as global.
  */
 function isGlobalDrainFailure(err: unknown): boolean {
   // A non-HTTP error thrown while processing an entry is specific to that entry.
@@ -147,22 +149,36 @@ function isGatewayStatus(status: number | undefined): boolean {
   return status === 502 || status === 503 || status === 504;
 }
 
+/**
+ * Whether a request failed because the client gave up waiting for a response
+ * (axios reports its own `timeout` as ECONNABORTED, or ETIMEDOUT with
+ * `transitional.clarifyTimeoutError`), as opposed to a plain network error.
+ */
+function isClientTimeout(err: unknown): boolean {
+  return axios.isAxiosError(err)
+    && err.response === undefined
+    && (err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT');
+}
+
 /** Timeout for the probe in {@link isGlobalDrainFailureProbed}. */
 const SERVER_PROBE_TIMEOUT_MS = 5000;
 
 /**
- * {@link isGlobalDrainFailure}, plus a decision on gateway statuses: when the
- * entry got a 502/503/504, probe the server with a cheap read. If the server
- * answers, the gateway error was specific to this entry and is charged as
- * usual, so a request that always times out at the proxy is still
- * dead-lettered after MAX_ENTRY_DRAIN_ATTEMPTS. If it doesn't, the server is
- * down: the failure is global and charges nothing, so an outage no longer turns
- * every queued change into a "couldn't be saved" one.
+ * {@link isGlobalDrainFailure}, plus a decision on the ambiguous failures: when
+ * the entry got a 502/503/504 or timed out client-side, probe the server with a
+ * cheap read. If the server answers, the failure was specific to this entry and
+ * is charged as usual, so a request that always times out — at the proxy or at
+ * the client's own write timeout (#1211) — is still dead-lettered after
+ * MAX_ENTRY_DRAIN_ATTEMPTS instead of wedging the queue. If it doesn't, the
+ * server is down or unreachable: the failure is global and charges nothing, so
+ * an outage no longer turns every queued change into a "couldn't be saved" one.
+ * A plain network error (no response, not a timeout) is global without a probe.
  *
  * The drains stop at the first global or below-cap failure, so this probes at
  * most once per drain pass.
  */
 export async function isGlobalDrainFailureProbed(err: unknown): Promise<boolean> {
+  if (isClientTimeout(err)) return !(await serverAnswers());
   if (isGlobalDrainFailure(err)) return true;
   if (!axios.isAxiosError(err) || !isGatewayStatus(err.response?.status)) return false;
   return !(await serverAnswers());
@@ -612,7 +628,8 @@ export interface DiscardedOperation {
    * The status that caused the discard: a permanent (non-transient 4xx) HTTP
    * status, a transient HTTP status (5xx) that never recovered after
    * MAX_ENTRY_DRAIN_ATTEMPTS tries, or PROCESSING_ERROR_STATUS (0) for a
-   * non-HTTP local processing error (issue #714).
+   * failure with no HTTP status: a non-HTTP local processing error (issue #714)
+   * or a client timeout while the server answered the probe (#1211).
    */
   status: number;
 }
@@ -1035,9 +1052,10 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
 
         await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
       } else if (await isGlobalDrainFailureProbed(err)) {
-        // No usable server response (network error/timeout) or a status that
-        // blocks the whole queue regardless of this entry (401 re-auth, 408,
-        // 429 rate-limit, or a 502/503/504 from a proxy whose server is down).
+        // No usable server response (a network error, or a timeout while the
+        // server does not answer the probe) or a status that blocks the whole
+        // queue regardless of this entry (401 re-auth, 408, 429 rate-limit, or
+        // a 502/503/504 from a proxy whose server is down).
         // Every entry would fail the same way, so stop the drain without
         // charging this entry's attempt counter and retry the remainder on the
         // next reconnect (issue #714). Expected whenever the
@@ -1047,7 +1065,8 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         break;
       } else {
         // Entry-specific transient failure: a 5xx tied to this op's payload (a
-        // gateway status only when the server answered the probe), or a
+        // gateway status or a client timeout only when the server answered the
+        // probe), or a
         // non-HTTP error thrown while processing this entry (corrupted body, a
         // local DB error). Charge the entry's attempt counter; once it has failed
         // MAX_ENTRY_DRAIN_ATTEMPTS times, dead-letter it and continue *past* it so
@@ -1075,7 +1094,8 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
 
         // Cap reached — dead-letter and continue. Use the effective (id-remapped)
         // endpoint/body so the row agrees with what was actually sent. HTTP 5xx
-        // keeps its status; a non-HTTP throw records PROCESSING_ERROR_STATUS (0).
+        // keeps its status; a non-HTTP throw or a client timeout records
+        // PROCESSING_ERROR_STATUS (0).
         const deadLetterStatus = status ?? PROCESSING_ERROR_STATUS;
         const errorMessage = errorSummary(err);
         console.warn(

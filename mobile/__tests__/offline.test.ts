@@ -451,6 +451,72 @@ describe('drainQueue', () => {
     expect(await remainingQueueIds(db)).toEqual([id]);
   });
 
+  describe('a client-side timeout (#1211)', () => {
+    const makeTimeoutError = (code: 'ECONNABORTED' | 'ETIMEDOUT') =>
+      Object.assign(new Error('timeout of 5000ms exceeded'), { isAxiosError: true, code, response: undefined });
+
+    const seedAtCap = async () => {
+      const first = await seedQueueEntry(db, {
+        operation: 'update',
+        endpoint: '/notes/abc',
+        method: 'PATCH',
+        body: {},
+        attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1,
+      });
+      const second = await seedQueueEntry(db, { operation: 'update', endpoint: '/notes/xyz', method: 'PATCH', body: {} });
+      return { first, second };
+    };
+
+    it.each(['ECONNABORTED', 'ETIMEDOUT'] as const)(
+      'is charged to the entry when the server answers the probe (%s), so it dead-letters at the cap',
+      async (code) => {
+        const { second } = await seedAtCap();
+        mockApi.patch.mockRejectedValueOnce(makeTimeoutError(code)); // this op always outlasts the write timeout
+        mockApi.get.mockResolvedValueOnce({ data: {} } as never);
+        mockApi.patch.mockResolvedValueOnce({ data: {} } as never); // the unaffected note
+
+        const { discardedOperations } = await drainQueue(db);
+
+        expect(mockApi.get).toHaveBeenCalledTimes(1);
+        expect(await deadLetterRows()).toMatchObject([
+          { endpoint: '/notes/abc', status: PROCESSING_ERROR_STATUS, attempts: MAX_ENTRY_DRAIN_ATTEMPTS },
+        ]);
+        expect(discardedOperations).toEqual([
+          { operation: 'update', endpoint: '/notes/abc', status: PROCESSING_ERROR_STATUS },
+        ]);
+        expect(mockApi.patch).toHaveBeenCalledWith('/notes/xyz', {});
+        expect(await remainingQueueIds(db)).not.toContain(second);
+      },
+    );
+
+    it('is global when the server does not answer the probe: no charge, no dead-letter', async () => {
+      const { first, second } = await seedAtCap();
+      mockApi.patch.mockRejectedValueOnce(makeTimeoutError('ECONNABORTED'));
+      mockApi.get.mockRejectedValueOnce(makeTimeoutError('ECONNABORTED'));
+
+      const { discardedOperations } = await drainQueue(db);
+
+      expect(mockApi.get).toHaveBeenCalledTimes(1);
+      expect(await attemptsFor(first)).toBe(MAX_ENTRY_DRAIN_ATTEMPTS - 1);
+      expect(await remainingQueueIds(db)).toEqual([first, second]);
+      expect(mockApi.patch).toHaveBeenCalledTimes(1);
+      expect(discardedOperations).toEqual([]);
+      expect(await deadLetterRows()).toEqual([]);
+    });
+
+    it('does not probe on a plain network error', async () => {
+      const { first } = await seedAtCap();
+      mockApi.patch.mockRejectedValueOnce(
+        Object.assign(new Error('Network Error'), { isAxiosError: true, code: 'ERR_NETWORK', response: undefined }),
+      );
+
+      await drainQueue(db);
+
+      expect(mockApi.get).not.toHaveBeenCalled();
+      expect(await attemptsFor(first)).toBe(MAX_ENTRY_DRAIN_ATTEMPTS - 1);
+    });
+  });
+
   describe('a gateway status (502/503/504) from a reverse proxy', () => {
     const seedAtCap = async () => {
       const first = await seedQueueEntry(db, {
