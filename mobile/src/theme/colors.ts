@@ -35,6 +35,10 @@ export interface ThemeColors {
   searchBackground: string;
   searchBorder: string;
   draggingBackground: string;
+  /** Fill of a label chip on an uncoloured note or card. */
+  chipBackground: string;
+  /** Text of a label chip on an uncoloured note or card. */
+  chipText: string;
 }
 
 export const lightColors: ThemeColors = {
@@ -72,6 +76,8 @@ export const lightColors: ThemeColors = {
   searchBackground: '#fff',
   searchBorder: '#e5e7eb',
   draggingBackground: '#f0f4ff',
+  chipBackground: '#dbeafe',
+  chipText: '#1d4ed8',
 };
 
 export const darkColors: ThemeColors = {
@@ -82,7 +88,10 @@ export const darkColors: ThemeColors = {
   textSecondary: '#9ca3af',
   textMuted: '#6b7280',
   border: '#374151',
-  borderLight: '#1f2937',
+  // Between surface (#1f2937) and border: it is drawn on surfaces, sheets and
+  // cards, so it must not equal them (it once did, hiding every divider and
+  // label chip in dark mode). themeContrast.test.ts guards this.
+  borderLight: '#2d3748',
   primary: '#3b82f6',
   primaryLight: '#1e3a5f',
   error: '#f87171',
@@ -109,6 +118,8 @@ export const darkColors: ThemeColors = {
   searchBackground: '#1f2937',
   searchBorder: '#374151',
   draggingBackground: '#1e3a5f',
+  chipBackground: '#1e3a5f',
+  chipText: '#93c5fd',
 };
 
 export function getColors(scheme: ColorSchemeName): ThemeColors {
@@ -121,6 +132,8 @@ export interface EffectiveNoteColors {
   icon: string;
   iconMuted: string;
   border: string;
+  chipBackground: string;
+  chipText: string;
 }
 
 // Notes with a custom background color always render their light-mode text
@@ -135,6 +148,8 @@ export function getEffectiveColors(hasNoteColor: boolean, colors: ThemeColors): 
       icon: colors.icon,
       iconMuted: colors.iconMuted,
       border: colors.border,
+      chipBackground: colors.chipBackground,
+      chipText: colors.chipText,
     };
   }
   return {
@@ -143,5 +158,7 @@ export function getEffectiveColors(hasNoteColor: boolean, colors: ThemeColors): 
     icon: '#444',
     iconMuted: '#888',
     border: '#bbb',
+    chipBackground: 'rgba(0,0,0,0.08)',
+    chipText: '#444',
   };
 }

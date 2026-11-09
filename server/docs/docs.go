@@ -3744,6 +3744,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "color": {
+                    "description": "Color is a hex color (#rgb or #rrggbb), stored and returned as lowercase\n#rrggbb. Empty means the default (#ffffff).",
                     "type": "string"
                 },
                 "content": {
@@ -4076,6 +4077,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "color": {
+                    "description": "Color is a hex color (#rgb or #rrggbb), stored and returned as lowercase\n#rrggbb. Empty resets to the default (#ffffff).",
                     "type": "string"
                 },
                 "content": {

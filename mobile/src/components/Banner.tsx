@@ -129,7 +129,7 @@ export default function Banner({
   const body = (
     <View style={styles.content}>
       <Icon size={16} color={textColor} />
-      <Text style={[styles.text, { color: textColor }]}>{text}</Text>
+      <Text style={[styles.text, { color: textColor }]} testID={testID ? `${testID}-text` : undefined}>{text}</Text>
     </View>
   );
 
@@ -202,14 +202,18 @@ const styles = StyleSheet.create({
   content: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: 8,
   },
   text: {
     fontSize: 14,
     fontWeight: '600',
-    textAlign: 'center',
-    flexShrink: 1,
+    // `flex: 1` (a zero flex basis) rather than `flexShrink: 1`: a shrunk text
+    // node keeps the height it was first measured at on Android, so a message
+    // that wraps — long copy, or any copy at a large font scale — was laid out
+    // one line tall and its second line clipped. With a zero basis the text is
+    // measured once, at the width it actually gets. That leaves no free space
+    // to centre the icon + text group in, so the text is start-aligned.
+    flex: 1,
   },
   dismiss: {
     padding: 2,

@@ -12,6 +12,13 @@ import { jot } from '../api/jot';
 /** Cap on log entries embedded in a shared diagnostics report, to keep the payload shareable. */
 const SHARED_REPORT_LOG_LIMIT = 500;
 
+/**
+ * Budget for the best-effort server build lookup. The share sheet waits on it,
+ * so it is far shorter than the default read timeout: a server that cannot
+ * answer `/about` in a few seconds should not hold the report back.
+ */
+export const SERVER_BUILD_INFO_TIMEOUT_MS = 3000;
+
 /** Sync state that only the mounted provider tree (database, OfflineContext) can supply. */
 export interface DiagnosticsSyncState {
   queue: SyncQueueStats;
@@ -100,14 +107,15 @@ function buildDiagnosticsReport(input: DiagnosticsReportInput, serverBuild: Abou
 
 export async function shareDiagnosticsReport(input: DiagnosticsReportInput): Promise<void> {
   // Server build info lets a maintainer spot app/server version skew without
-  // asking for it. It is best-effort: the default (finite) read timeout bounds
-  // the wait, a device known offline or a server already believed unreachable
-  // is not tried at all, and any failure just leaves the fields null so the
-  // report still goes out.
+  // asking for it. It is best-effort: a short dedicated timeout bounds the wait
+  // (the reachability belief defaults to reachable, so a down server is often
+  // only discovered by this very request), a device known offline or a server
+  // already believed unreachable is not tried at all, and any failure just
+  // leaves the fields null so the report still goes out.
   let serverBuild: AboutInfo | null = null;
   if (input.isConnected !== false && isServerReachable()) {
     try {
-      serverBuild = await jot.about.get();
+      serverBuild = await jot.about.get({ timeout: SERVER_BUILD_INFO_TIMEOUT_MS });
     } catch {
       serverBuild = null;
     }

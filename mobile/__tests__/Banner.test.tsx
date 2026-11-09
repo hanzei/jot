@@ -108,6 +108,16 @@ describe('Banner', () => {
     expect(StyleSheet.flatten(getByTestId('banner').props.style).overflow).toBe('hidden');
   });
 
+  // A shrunk (flexShrink) text node keeps its first-measured single-line height
+  // on Android, clipping wrapped copy; a zero flex basis measures it at the
+  // width it actually gets.
+  it('sizes the text from a zero flex basis so wrapped lines are not clipped', async () => {
+    const { getByTestId } = await renderBanner({ visible: true, applyTopInset: true });
+    const style = StyleSheet.flatten(getByTestId('banner-text').props.style);
+    expect(style.flex).toBe(1);
+    expect(style.flexShrink).toBeUndefined();
+  });
+
   it('does not intercept touches while animating closed', async () => {
     const onPress = jest.fn();
     const ui = (visible: boolean) => (
