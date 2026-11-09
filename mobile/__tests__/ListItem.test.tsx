@@ -646,6 +646,21 @@ describe('ListItem', () => {
       expect(queryByTestId('suggestion-chip-Buy milk')).not.toBeNull();
     });
 
+    it('lists suggestions in a vertical, height-capped scroll view', async () => {
+      const texts = ['Buy milk', 'Buy bread', 'Buy eggs', 'Buy butter', 'Buy cheese'];
+      const { getByTestId, rerender } = await render(row('', { completedItemTexts: texts }));
+
+      await fireEvent(getByTestId('list-item-text'), 'focus');
+      await rerender(row('buy', { completedItemTexts: texts }));
+
+      const list = getByTestId('suggestions-list');
+      expect(list.props.horizontal).toBeFalsy();
+      // Required on Android for a ScrollView nested in the editor's list.
+      expect(list.props.nestedScrollEnabled).toBe(true);
+      expect(StyleSheet.flatten(list.props.style).maxHeight).toBeGreaterThan(0);
+      for (const text of texts) expect(getByTestId(`suggestion-chip-${text}`)).toBeTruthy();
+    });
+
     it('offers none while editing an item that already had text', async () => {
       const { getByTestId, queryByTestId, rerender } = await render(row('buy now'));
 

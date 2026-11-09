@@ -624,11 +624,15 @@ function ListItem({
           ) : null}
         </View>
         {showSuggestions && suggestions.length > 0 && !completed && (
+          // Vertical and height-capped so a long suggestion list scrolls in
+          // place instead of pushing the rows below it down. Android only
+          // scrolls a ScrollView nested in the editor's list with
+          // nestedScrollEnabled.
           <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
+            nestedScrollEnabled
             keyboardShouldPersistTaps="handled"
-            style={styles.suggestionsRow}
+            style={styles.suggestionsList}
+            testID="suggestions-list"
             contentContainerStyle={styles.suggestionsContent}
             accessibilityLabel={t('note.completedSuggestions')}
           >
@@ -762,20 +766,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  suggestionsRow: {
+  suggestionsList: {
     marginTop: 2,
     marginBottom: 2,
+    // About three rows; further suggestions scroll.
+    maxHeight: 96,
   },
   suggestionsContent: {
-    gap: 6,
+    gap: 4,
     paddingRight: 8,
   },
   suggestionChip: {
     borderRadius: 12,
     borderWidth: 1,
     paddingHorizontal: 10,
-    paddingVertical: 3,
-    maxWidth: 180,
+    paddingVertical: 4,
   },
   suggestionChipText: {
     fontSize: 13,
