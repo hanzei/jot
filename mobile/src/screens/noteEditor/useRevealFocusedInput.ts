@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef } from 'react';
 import type { LayoutChangeEvent, ScrollView, TextInput } from 'react-native';
 import { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
-import { revealInScrollView } from './revealInScrollView';
+import { revealInScrollView, type RevealTarget } from './revealInScrollView';
 
 // Room kept between a revealed input and the edges of the visible area, so it
 // is not flush against the formatting bar.
@@ -28,7 +28,7 @@ export function useRevealFocusedInput(
     scrollOffset.set(event.contentOffset.y);
   });
 
-  const reveal = useCallback((input: TextInput | null, shownHeight: number | null = null) => {
+  const reveal = useCallback((input: RevealTarget | null, shownHeight: number | null = null) => {
     revealInScrollView(scrollViewRef.current, input, {
       scrollOffset: () => scrollOffset.get(),
       margin: REVEAL_MARGIN,

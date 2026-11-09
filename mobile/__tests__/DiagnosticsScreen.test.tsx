@@ -18,6 +18,8 @@ import { getSseState, subscribeToSseState } from '../src/api/sseState';
 import { MAX_ENTRY_DRAIN_ATTEMPTS } from '../src/db/syncQueue';
 import { seedImageUpload } from './helpers/fixtures';
 import { jot } from '../src/api/jot';
+import { SERVER_BUILD_INFO_TIMEOUT_MS } from '../src/utils/diagnosticsReport';
+import { silenceConsole } from './helpers/consoleGuard';
 
 jest.mock('../src/api/jot', () => ({
   jot: {
@@ -272,6 +274,46 @@ describe('DiagnosticsScreen', () => {
         go_version: null,
       }),
     );
+  });
+
+  it('bounds the about fetch with a short dedicated timeout', async () => {
+    const { findByText } = await renderScreen();
+    await shareReport(findByText);
+
+    expect(mockGetAboutInfo).toHaveBeenCalledWith({ timeout: SERVER_BUILD_INFO_TIMEOUT_MS });
+  });
+
+  it('shows a pending state and ignores repeat presses while the report is being built', async () => {
+    let resolveAbout: (info: Awaited<ReturnType<typeof jot.about.get>>) => void = () => {};
+    mockGetAboutInfo.mockReturnValue(new Promise((resolve) => { resolveAbout = resolve; }));
+    const { findByTestId, queryByTestId, findByText } = await renderScreen();
+
+    // The press is awaited only after the about fetch resolves: until then the
+    // handler (and so RNTL's press) is still pending.
+    const firstPress = fireEvent.press(await findByText('Share Diagnostics Report'));
+    expect(await findByTestId('diagnostics-share-pending')).toBeTruthy();
+    const secondPress = fireEvent.press(await findByTestId('diagnostics-share'));
+    expect(mockGetAboutInfo).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveAbout({ version: '0.9.0', commit: 'def5678', build_time: '2026-09-30T08:00:00Z', go_version: 'go1.25.0' });
+      await firstPress;
+      await secondPress;
+    });
+    expect(Share.share).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(queryByTestId('diagnostics-share-pending')).toBeNull());
+  });
+
+  it('recovers the share button when the share sheet fails', async () => {
+    silenceConsole('warn', /Failed to share diagnostics report/);
+    (Share.share as jest.Mock).mockRejectedValueOnce(new Error('share failed'));
+    const { findByText } = await renderScreen();
+
+    await act(async () => {
+      await fireEvent.press(await findByText('Share Diagnostics Report'));
+    });
+    await waitFor(() => expect(Share.share).toHaveBeenCalledTimes(1));
+    expect(await findByText('Share Diagnostics Report')).toBeTruthy();
   });
 
   it('skips the about fetch when the server is known unreachable', async () => {

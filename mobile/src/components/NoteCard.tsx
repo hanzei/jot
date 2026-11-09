@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { CircleAlert, CloudOff, Square } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, groupNoteItems, type Note, type NoteItem, type User } from '@jot/shared';
+import { VALIDATION, groupNoteItems, hasCustomNoteColor, type Note, type NoteItem, type User } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../store/AuthContext';
 import { useFailedNoteIds } from '../store/OfflineContext';
@@ -11,8 +11,8 @@ import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
 import { usePendingImageUploads } from '../hooks/usePendingImageUploads';
 import { noteImageThumbnailUrl } from '../api/images';
 import UserAvatar from './UserAvatar';
+import LabelChip from './LabelChip';
 import CachedNoteImage from './CachedNoteImage';
-import { isWhiteHexColor } from '../utils/colorContrast';
 import MarkdownPreview from './MarkdownPreview';
 import InlineMarkdown from './InlineMarkdown';
 import type { LayoutRect } from '../navigation/RootNavigator';
@@ -163,7 +163,7 @@ function NoteCard({ note, onPress, onLongPress, onLabelPress }: NoteCardProps) {
   const { t } = useTranslation();
   const failedNoteIds = useFailedNoteIds();
   const didNotSync = failedNoteIds.has(note.id);
-  const hasColor = !!(note.color && !isWhiteHexColor(note.color));
+  const hasColor = hasCustomNoteColor(note.color);
   const unreadColors = UNREAD_BADGE_COLORS[isDark && !hasColor ? 'dark' : 'light'];
   const baseUrl = useActiveServerBaseUrl();
   // Images queued offline (or mid-retry) never reach note.images until the
@@ -325,22 +325,15 @@ function NoteCard({ note, onPress, onLongPress, onLabelPress }: NoteCardProps) {
         {note.labels && note.labels.length > 0 ? (
           <View style={styles.labels}>
             {note.labels.map((label) => (
-              onLabelPress ? (
-                <TouchableOpacity
-                  key={label.id}
-                  style={[styles.labelChip, { backgroundColor: hasColor ? 'rgba(0,0,0,0.08)' : colors.borderLight }]}
-                  onPress={() => onLabelPress(label.id, label.name)}
-                  activeOpacity={0.6}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('note.filterByLabel', { label: label.name })}
-                >
-                  <Text style={[styles.labelText, { color: hasColor ? '#666' : colors.textSecondary }]}>{label.name}</Text>
-                </TouchableOpacity>
-              ) : (
-                <View key={label.id} style={[styles.labelChip, { backgroundColor: hasColor ? 'rgba(0,0,0,0.08)' : colors.borderLight }]}>
-                  <Text style={[styles.labelText, { color: hasColor ? '#666' : colors.textSecondary }]}>{label.name}</Text>
-                </View>
-              )
+              <LabelChip
+                key={label.id}
+                name={label.name}
+                hasNoteColor={hasColor}
+                size="small"
+                onPress={onLabelPress ? () => onLabelPress(label.id, label.name) : undefined}
+                testID={`note-card-label-${label.id}`}
+                accessibilityLabel={t('note.filterByLabel', { label: label.name })}
+              />
             ))}
           </View>
         ) : null}
@@ -465,14 +458,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 4,
-  },
-  labelChip: {
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  labelText: {
-    fontSize: 11,
   },
   avatarRow: {
     flexDirection: 'row',

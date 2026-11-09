@@ -44,18 +44,31 @@ func (kn keepNote) isEmpty() bool {
 	return kn.Title == "" && kn.TextContent == "" && len(kn.ListContent) == 0
 }
 
+// keepColorToHex maps a Keep color name onto Jot's note palette
+// (shared/src/colors.ts NOTE_COLORS), so imported notes match a picker swatch.
+// Jot's palette is Keep's own, so most names map 1:1. Keep's Yellow and Orange
+// both become Jot's Yellow (#fbbc04, Keep's Orange), and Keep's light-cyan Blue
+// joins Cerulean on Periwinkle, since Jot has no closer swatch for either.
 func keepColorToHex(color string) string {
 	switch strings.ToUpper(color) {
-	case "YELLOW":
-		return "#fbbc04"
-	case "GREEN", "TEAL":
-		return "#34a853"
+	case "RED":
+		return "#f28b82" // Coral
+	case "ORANGE", "YELLOW":
+		return "#fbbc04" // Yellow
+	case "GREEN":
+		return "#ccff90" // Lime
+	case "TEAL":
+		return "#a7ffeb" // Teal
 	case "BLUE", "CERULEAN":
-		return "#4285f4"
-	case "RED", "PINK":
-		return "#ea4335"
-	case "PURPLE", "GRAY", "GREY", "BROWN":
-		return "#9aa0a6"
+		return "#aecbfa" // Periwinkle
+	case "PURPLE":
+		return "#d7aefb" // Lavender
+	case "PINK":
+		return "#fdcfe8" // Pink
+	case "BROWN":
+		return "#e6c9a8" // Sand
+	case "GRAY", "GREY":
+		return "#e8eaed" // Gray
 	default:
 		return models.DefaultNoteColor
 	}

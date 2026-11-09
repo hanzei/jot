@@ -14,6 +14,9 @@
 
 import type { ScrollView, TextInput } from 'react-native';
 
+/** What can be revealed: a row's input, or a scroll view laid out under it. */
+export type RevealTarget = TextInput | ScrollView;
+
 interface Measurable {
   measureInWindow: (callback: (x: number, y: number, width: number, height: number) => void) => void;
 }
@@ -96,7 +99,7 @@ export type RevealOptions = Pick<RevealGeometry, 'margin' | 'shownHeight'> & {
  */
 export function revealInScrollView(
   scrollView: ScrollView | null,
-  target: TextInput | null,
+  target: RevealTarget | null,
   { scrollOffset, margin, shownHeight }: RevealOptions,
 ): void {
   // ScrollView's declared type omits the host methods its instance has.

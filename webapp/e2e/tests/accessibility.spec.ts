@@ -50,7 +50,7 @@ const LONG_CODE_NOTE = [
 /** Every swatch in the note colour picker, by its accessible name. */
 const NOTE_COLOURS = [
   'Coral', 'Yellow', 'Lime', 'Teal', 'Periwinkle',
-  'Lavender', 'Pink', 'Sand', 'Gray', 'White',
+  'Lavender', 'Pink', 'Sand', 'Gray', 'Default',
 ] as const;
 
 /**

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/sirupsen/logrus"
@@ -47,12 +48,20 @@ func ValidateNoteContent(content string) error {
 	return nil
 }
 
-// ValidateNoteColor checks that color is a CSS hex color (#rgb or #rrggbb).
-func ValidateNoteColor(color string) error {
+// NormalizeNoteColor checks that color is a CSS hex color (#rgb or #rrggbb)
+// and returns its canonical form: lowercase, six digits (#FFF -> #ffffff).
+// Clients compare stored colors against their lowercase palette, so every
+// write surface stores this form. Rows written before it was enforced are
+// not migrated; clients normalize what they read.
+func NormalizeNoteColor(color string) (string, error) {
 	if !hexColorRegex.MatchString(color) {
-		return errors.New("color must be a valid CSS hex color (e.g. #fff or #ffffff)")
+		return "", errors.New("color must be a valid CSS hex color (e.g. #fff or #ffffff)")
 	}
-	return nil
+	hex := strings.ToLower(color[1:])
+	if len(hex) == 3 {
+		hex = string([]byte{hex[0], hex[0], hex[1], hex[1], hex[2], hex[2]})
+	}
+	return "#" + hex, nil
 }
 
 // ValidateLabelName enforces the label name length limit. Callers trim and

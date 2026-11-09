@@ -1,11 +1,12 @@
 import { useState, useEffect, useEffectEvent, useMemo, useRef, useCallback, useId, type ReactElement, type ReactNode } from 'react';
-import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Users, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, Pin, EllipsisVertical, Square, Undo2 } from 'lucide-react';
+import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Users, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, Pin, EllipsisVertical, Square, Undo2, DropletOff } from 'lucide-react';
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, distinctCompletedTexts, findSuggestedItem, generateId, reviveSuggestedItem, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, toggleTaskMarkerAt, completedCascadeScope, completedPriorById, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, normalizeNoteColor, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, distinctCompletedTexts, findSuggestedItem, generateId, reviveSuggestedItem, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, toggleTaskMarkerAt, completedCascadeScope, completedPriorById, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
 import { renderMarkdown, renderInteractiveMarkdown, inlineMarkdownToText, type InteractiveMarkdownRender } from '@/utils/markdown';
+import LabelChip from '@/components/LabelChip';
 import LabelPicker from '@/components/LabelPicker';
 import NoteImageGallery from '@/components/NoteImageGallery';
 import LetterAvatar from '@/components/LetterAvatar';
@@ -52,15 +53,6 @@ import {
 // Re-exported so the row-reveal styling has a single import site for callers
 // that reach for it through the modal rather than the row component.
 export { ROW_REVEAL_CLASSES } from '@/components/SortableItem';
-
-// A single label pill shown in the note modal's avatars/labels row.
-function LabelChip({ name }: { name: string }) {
-  return (
-    <span className="inline-flex items-center bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5 text-xs">
-      {name}
-    </span>
-  );
-}
 
 // Keyboard-shortcut hint chip shown at the trailing edge of overflow menu items.
 function MenuKbd({ children }: { children: ReactNode }) {
@@ -417,6 +409,10 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     name: NOTE_COLOR_NAME_KEYS[value] ? t(NOTE_COLOR_NAME_KEYS[value]) : value,
     class: colorClasses[value] ?? '',
   }));
+  // Roving tab stop of the colour picker: the selected swatch, or the first
+  // one when the note's colour matches none (e.g. an old Keep import), so the
+  // group stays reachable by Tab.
+  const swatchTabStop = colors.some(c => c.value === color) ? color : colors[0]?.value;
 
   // Only offered on touch devices, where the mobile app can actually be
   // installed. Read once on mount: a pointer type doesn't change under a live
@@ -433,8 +429,12 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
   // banner's Reload, which adopts a freshly fetched copy over local edits.
   const adoptNote = useCallback((next: Note | null) => {
     if (next) {
+      // Notes saved before the server normalized colours can hold #FFFFFF or
+      // #fff; the picker, the panel background and the save baseline all match
+      // against the lowercase palette, so adopt the canonical form.
+      const nextColor = normalizeNoteColor(next.color);
       setNoteType(next.note_type);
-      setColor(next.color);
+      setColor(nextColor);
       setPinned(next.pinned);
       setArchived(next.archived);
       let listItems: ListItem[] = [];
@@ -458,11 +458,11 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
           assigned_to: item.assigned_to ?? '',
         })));
         commitItems(listItems);
-        draft = { title: next.title, content: '', pinned: next.pinned, archived: next.archived, color: next.color, checked_items_collapsed: next.checked_items_collapsed };
+        draft = { title: next.title, content: '', pinned: next.pinned, archived: next.archived, color: nextColor, checked_items_collapsed: next.checked_items_collapsed };
       } else {
         setContent(next.content);
         commitItems([]);
-        draft = { title: '', content: next.content, pinned: next.pinned, archived: next.archived, color: next.color, checked_items_collapsed: false };
+        draft = { title: '', content: next.content, pinned: next.pinned, archived: next.archived, color: nextColor, checked_items_collapsed: false };
       }
       setNoteLabels(next.labels ?? []);
       setSavedBaseline(draft, listItems, next.version);
@@ -2497,7 +2497,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                 {colors.map((colorOption) => (
                   <button
                     key={colorOption.value}
-                    tabIndex={colorOption.value === color ? 0 : -1}
+                    tabIndex={colorOption.value === swatchTabStop ? 0 : -1}
                     onClick={() => {
                       const newColor = colorOption.value;
                       setColor(newColor);
@@ -2508,13 +2508,29 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                         autoSaveNote();
                       }
                     }}
-                    className={`w-8 h-8 rounded-full border-2 ${colorOption.class} ${
-                      color === colorOption.value ? 'ring-2 ring-blue-500' : ''
-                    }`}
+                    className={`relative w-8 h-8 rounded-full border-2 flex items-center justify-center ${colorOption.class}`}
                     title={colorOption.name}
                     aria-label={colorOption.name}
                     aria-pressed={color === colorOption.value}
-                  />
+                  >
+                    {/* "No colour": the swatch already follows the theme (see
+                        colorClasses); the glyph says it is not a solid white. */}
+                    {colorOption.value === DEFAULT_NOTE_COLOR && (
+                      <DropletOff className="w-4 h-4 text-gray-500 dark:text-slate-400" aria-hidden="true" />
+                    )}
+                    {/* Selection is a corner badge on every swatch, matching
+                        mobile: it never covers Default's glyph. aria-pressed
+                        carries the state for assistive tech. */}
+                    {color === colorOption.value && (
+                      <span
+                        className="absolute -bottom-2 -right-2 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-blue-600 text-white ring-2 ring-white dark:ring-slate-900"
+                        aria-hidden="true"
+                        data-testid="color-swatch-selected"
+                      >
+                        <Check className="h-2.5 w-2.5" strokeWidth={3.5} />
+                      </span>
+                    )}
+                  </button>
                 ))}
               </div>
             )}

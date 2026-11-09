@@ -267,6 +267,23 @@ func TestImportJotJSONValidation(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
+	t.Run("color is stored as lowercase six-digit hex", func(t *testing.T) {
+		payload := makePayload(`{"title":"","content":"color import","note_type":"text","color":"#FFF","pinned":false,"archived":false,"position":0,"labels":[]}`)
+		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.zip", bytes.NewReader(jotBundle(t, string(payload), nil)))
+		require.NoError(t, err)
+
+		notes, err := user.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		var found bool
+		for _, n := range notes {
+			if n.Content == "color import" {
+				found = true
+				assert.Equal(t, "#ffffff", n.Color)
+			}
+		}
+		assert.True(t, found, "imported note not listed")
+	})
+
 	t.Run("text note with items returns 400", func(t *testing.T) {
 		payload := makePayload(`{"title":"X","content":"","note_type":"text","color":"#ffffff","pinned":false,"archived":false,"position":0,"labels":[],"items":[{"text":"item","completed":false,"position":0,"indent_level":0}]}`)
 		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.zip", bytes.NewReader(jotBundle(t, string(payload), nil)))

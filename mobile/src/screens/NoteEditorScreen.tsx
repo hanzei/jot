@@ -42,19 +42,20 @@ import { useConfirm } from '../hooks/useConfirm';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Markdown from '../components/Markdown';
 import ColorPicker from '../components/ColorPicker';
+import LabelChip from '../components/LabelChip';
 import LabelPicker from '../components/LabelPicker';
 import AssigneePicker from '../components/AssigneePicker';
 import AddImageActionSheet from '../components/AddImageActionSheet';
 import { useUploadNoteImage, useDeleteNoteImage } from '../hooks/useNoteImages';
 import { usePendingImageUploads, useRetryPendingImageUpload, useDismissPendingImageUpload } from '../hooks/usePendingImageUploads';
 import type { ImageUploadFile } from '../api/images';
-import { buildCollaborators, generateId, IMAGE_MAX_PER_NOTE, exceedsCodePointLimit, toggleTaskMarkerAt, truncateToCodePoints, validateImageFile as validateImageFileRaw, imageMaxMB, type Collaborator, type NoteImage, type NoteUnread } from '@jot/shared';
+import { buildCollaborators, generateId, hasCustomNoteColor, IMAGE_MAX_PER_NOTE, exceedsCodePointLimit, toggleTaskMarkerAt, truncateToCodePoints, validateImageFile as validateImageFileRaw, imageMaxMB, type Collaborator, type NoteImage, type NoteUnread } from '@jot/shared';
 import { useServerConfig } from '../hooks/useServerConfig';
 import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
 import { useTheme } from '../theme/ThemeContext';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
-import { getCompletedSectionDividerColor, isWhiteHexColor } from '../utils/colorContrast';
+import { getCompletedSectionDividerColor } from '../utils/colorContrast';
 import { formatEditorStateForShare } from '../utils/noteTextFormatter';
 import { getActiveServer, listServers, type ServerAccountEntry } from '../store/serverAccounts';
 import { setPendingShare, usePendingShare } from '../store/shareIntent';
@@ -1193,7 +1194,7 @@ export default function NoteEditorScreen() {
   // Disable inputs while waiting for existing note to hydrate
   const isHydrating = initialNoteId !== null && !existingNote;
 
-  const hasNoteColor = !!color && !isWhiteHexColor(color);
+  const hasNoteColor = hasCustomNoteColor(color);
 
   // A brand-new note with nothing in it yet (isBlankDraft), which flushSave
   // declines to create. Archive is disabled here: there is nothing to archive,
@@ -1285,6 +1286,7 @@ export default function NoteEditorScreen() {
             onFocus: () => listItemHandlers.onFocus(item.id),
             onBlur: () => listItemHandlers.onBlur(item.id),
             onAcceptSuggestion: (text) => handleAcceptSuggestion(item.id, text),
+            onSuggestionsLayout: listItemHandlers.onReveal,
           }}
         />
       );
@@ -1750,24 +1752,14 @@ export default function NoteEditorScreen() {
         {(displayCollaborators.length > 0 || labels.length > 0) && (
           <View style={styles.metaRow} testID="note-meta-row">
             {labels.map((label) => (
-              !isReadOnly ? (
-                <TouchableOpacity
-                  key={label.id}
-                  style={[styles.metaLabelChip, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.borderLight }]}
-                  onPress={openLabelPicker}
-                  testID={`note-meta-label-${label.id}`}
-                  accessibilityLabel={`${t('labels.title')}: ${label.name}`}
-                >
-                  <Text style={[styles.metaLabelText, { color: hasNoteColor ? '#666' : colors.textSecondary }]}>{label.name}</Text>
-                </TouchableOpacity>
-              ) : (
-                <View
-                  key={label.id}
-                  style={[styles.metaLabelChip, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.borderLight }]}
-                >
-                  <Text style={[styles.metaLabelText, { color: hasNoteColor ? '#666' : colors.textSecondary }]}>{label.name}</Text>
-                </View>
-              )
+              <LabelChip
+                key={label.id}
+                name={label.name}
+                hasNoteColor={hasNoteColor}
+                onPress={isReadOnly ? undefined : openLabelPicker}
+                testID={`note-meta-label-${label.id}`}
+                accessibilityLabel={`${t('labels.title')}: ${label.name}`}
+              />
             ))}
 
             {displayCollaborators.length > 0 && (() => {

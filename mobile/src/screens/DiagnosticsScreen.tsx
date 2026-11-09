@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Platform,
   ScrollView,
   StyleSheet,
@@ -145,19 +146,34 @@ export default function DiagnosticsScreen() {
     setSnapshot((prev) => ({ ...prev, logs: [] }));
   }, []);
 
+  // The report waits on a best-effort server lookup before the share sheet
+  // opens, so show that the press registered and ignore repeat presses.
+  const [isSharing, setIsSharing] = useState(false);
+  const isSharingRef = useRef(false);
+
   const handleShare = useCallback(async () => {
-    await shareDiagnosticsReport({
-      serverUrl: snapshot.serverUrl,
-      isConnected: snapshot.isConnected,
-      sync: {
-        queue: snapshot.queue,
-        imageUploads: snapshot.imageUploads,
-        lastSyncedAt,
-        syncError,
-        consecutiveFailureCount,
-        deadLetterCount: syncFailureCount,
-      },
-    });
+    if (isSharingRef.current) return;
+    isSharingRef.current = true;
+    setIsSharing(true);
+    try {
+      await shareDiagnosticsReport({
+        serverUrl: snapshot.serverUrl,
+        isConnected: snapshot.isConnected,
+        sync: {
+          queue: snapshot.queue,
+          imageUploads: snapshot.imageUploads,
+          lastSyncedAt,
+          syncError,
+          consecutiveFailureCount,
+          deadLetterCount: syncFailureCount,
+        },
+      });
+    } catch (error) {
+      console.warn('Failed to share diagnostics report:', error);
+    } finally {
+      isSharingRef.current = false;
+      setIsSharing(false);
+    }
   }, [snapshot, lastSyncedAt, syncError, consecutiveFailureCount, syncFailureCount]);
 
   const { lifecycle, sse } = snapshot;
@@ -369,13 +385,20 @@ export default function DiagnosticsScreen() {
             <Text style={[styles.actionButtonText, { color: colors.text }]}>{t('diagnostics.refresh')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: colors.primary }]}
+            style={[styles.actionButton, { backgroundColor: colors.primary }, isSharing && styles.actionButtonDisabled]}
             onPress={handleShare}
+            disabled={isSharing}
             accessibilityRole="button"
+            accessibilityState={{ disabled: isSharing, busy: isSharing }}
+            testID="diagnostics-share"
           >
-            <Text style={[styles.actionButtonText, styles.actionButtonTextPrimary]}>
-              {t('diagnostics.shareDiagnostics')}
-            </Text>
+            {isSharing ? (
+              <ActivityIndicator color="#fff" testID="diagnostics-share-pending" />
+            ) : (
+              <Text style={[styles.actionButtonText, styles.actionButtonTextPrimary]}>
+                {t('diagnostics.shareDiagnostics')}
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -549,6 +572,9 @@ const styles = StyleSheet.create({
   },
   actionButtonOutline: {
     borderWidth: 1,
+  },
+  actionButtonDisabled: {
+    opacity: 0.7,
   },
   actionButtonText: {
     fontSize: 14,
