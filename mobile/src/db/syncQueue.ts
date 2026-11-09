@@ -2,7 +2,6 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import axios from 'axios';
 import api from '../api/client';
 import { jot } from '../api/jot';
-import { isGatewayStatus } from '../api/serverReachability';
 import { completedCascadeScope, type GetNotesParams, type Note, type NoteItem } from '@jot/shared';
 import {
   getLocalNote,
@@ -126,10 +125,10 @@ export function isTransientHttpStatus(status: number | undefined): boolean {
  * A gateway status (502/503/504) is ambiguous: usually the proxy's Jot server
  * is down (global), but a request that reproducibly exceeds the server's or the
  * proxy's timeout gets one every time while every other request succeeds. The
- * drains resolve that with {@link isGlobalDrainFailureProbed}; this synchronous
- * check treats it as entry-specific.
+ * drains resolve that with {@link isGlobalDrainFailureProbed} — always call that
+ * one; this synchronous check treats a gateway status as entry-specific.
  */
-export function isGlobalDrainFailure(err: unknown): boolean {
+function isGlobalDrainFailure(err: unknown): boolean {
   // A non-HTTP error thrown while processing an entry is specific to that entry.
   if (!axios.isAxiosError(err)) return false;
   // Transport-level failure with no server response: network down or timeout.
@@ -137,6 +136,15 @@ export function isGlobalDrainFailure(err: unknown): boolean {
   // Statuses that block the whole queue regardless of the specific entry.
   const { status } = err.response;
   return status === 401 || status === 408 || status === 429;
+}
+
+/**
+ * Whether an HTTP status is a gateway error (502 Bad Gateway, 503 Service
+ * Unavailable, 504 Gateway Timeout). Jot's API never returns these — its only
+ * 503 is the `/readyz` probe — so they come from a reverse proxy in front of it.
+ */
+function isGatewayStatus(status: number | undefined): boolean {
+  return status === 502 || status === 503 || status === 504;
 }
 
 /** Timeout for the probe in {@link isGlobalDrainFailureProbed}. */
@@ -162,8 +170,7 @@ export async function isGlobalDrainFailureProbed(err: unknown): Promise<boolean>
 
 /**
  * Whether the server itself answers a request right now. Any response other
- * than a gateway status counts, an error status included. The api client's
- * interceptors update the reachability belief from the probe's outcome.
+ * than a gateway status counts, an error status included.
  */
 async function serverAnswers(): Promise<boolean> {
   try {

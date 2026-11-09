@@ -203,10 +203,6 @@ Rules of thumb:
   still dead-letter the head after the cap even though the op was fine —
   accepted, since the op is preserved and recoverable via the failed-changes
   review flow.)
-- **Gateway statuses mean unreachable**: the api client's interceptor marks the
-  server unreachable on a 502/503/504 (`isGatewayStatus` in
-  `serverReachability.ts`), the same as on a transport failure, so writes queue
-  immediately and drains pause during a proxy-fronted outage.
 
 (These are the *Sync Loop Safety* rules in `mobile/CLAUDE.md`; connectivity
 handling and loop safety are two halves of the same system.)
