@@ -10,10 +10,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// Note and label field limits, enforced by every write surface (the REST
-// handlers and the MCP server). They live here rather than in one handler
-// package so both share a single definition. All character limits are measured
-// in Unicode code points (utf8.RuneCountInString).
+// Note, label and search limits, enforced by both the REST handlers and the
+// MCP server. They live here rather than in one handler package so both share
+// a single definition. All character limits are measured in Unicode code
+// points (utf8.RuneCountInString).
 // Keep in sync with shared/src/constants.ts VALIDATION.
 const (
 	NoteTitleMaxLength   = 200
@@ -23,6 +23,9 @@ const (
 	// short phrase is truncated anyway; 100 matches the PAT name limit and
 	// leaves room for multi-word names in any script.
 	LabelNameMaxLength = 100
+	// SearchQueryMaxLength caps a note or user search query, which is matched
+	// with a LIKE scan.
+	SearchQueryMaxLength = 500
 )
 
 // ErrLabelNameTooLong is returned by the label store when a name exceeds
@@ -62,6 +65,14 @@ func NormalizeNoteColor(color string) (string, error) {
 		hex = string([]byte{hex[0], hex[0], hex[1], hex[1], hex[2], hex[2]})
 	}
 	return "#" + hex, nil
+}
+
+// ValidateSearchQuery enforces the search query length limit.
+func ValidateSearchQuery(q string) error {
+	if utf8.RuneCountInString(q) > SearchQueryMaxLength {
+		return fmt.Errorf("search query must be %d characters or fewer", SearchQueryMaxLength)
+	}
+	return nil
 }
 
 // ValidateLabelName enforces the label name length limit. Callers trim and

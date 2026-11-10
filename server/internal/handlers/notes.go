@@ -145,7 +145,7 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 		LabelID:  q.Get("label"),
 	}
 
-	if err := validateSearchQuery(filter.Search); err != nil {
+	if err := models.ValidateSearchQuery(filter.Search); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 
