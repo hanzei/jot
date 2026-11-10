@@ -53,6 +53,8 @@ var (
 	ErrNoteNotInTrash       = errors.New("note not found in trash or not owned by user")
 	ErrNoteShareNotFound    = errors.New("note share not found")
 	ErrNoteAlreadyShared    = errors.New("note already shared with user")
+	ErrNotNoteOwner         = errors.New("not owner")
+	ErrCannotShareWithSelf  = errors.New("cannot share with self")
 	ErrNoteExists           = errors.New("note already exists")
 	ErrNoteVersionConflict  = errors.New("note was modified by another write")
 	ErrNoteFieldNotAllowed  = errors.New("field not allowed for this note type")

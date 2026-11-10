@@ -74,6 +74,7 @@ func (h *Handler) buildServer(req *http.Request) *mcp.Server {
 	h.registerNoteTools(srv, user.ID)
 	h.registerNoteItemTools(srv, user.ID)
 	h.registerLabelTools(srv, user.ID)
+	h.registerSharingTools(srv, user.ID)
 	return srv
 }
 

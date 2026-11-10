@@ -5,10 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/hanzei/jot/server/internal/apierr"
-	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
-	"github.com/hanzei/jot/server/internal/sse"
 )
 
 type ShareNoteRequest struct {
@@ -47,36 +44,8 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, a
 		return http.StatusBadRequest, nil, err
 	}
 
-	if !models.IsValidID(req.UserID) {
-		return http.StatusBadRequest, nil, errors.New("invalid user_id")
-	}
-
-	isOwner, err := h.noteStore.IsOwner(r.Context(), id, user.ID)
-	if err != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("check note ownership: %w", err)
-	}
-	if !isOwner {
-		return http.StatusForbidden, nil, errors.New("not owner")
-	}
-
-	if req.UserID == user.ID {
-		return http.StatusBadRequest, nil, apierr.New(apierr.CodeCannotShareWithSelf, "cannot share with self")
-	}
-
-	if _, lookupErr := h.userStore.GetByID(r.Context(), req.UserID); lookupErr != nil {
-		return storeError(lookupErr, "get user")
-	}
-
-	err = h.noteStore.ShareNote(r.Context(), id, user.ID, req.UserID)
-	if err != nil {
+	if err := h.notes.Share(r.Context(), id, user.ID, req.UserID); err != nil {
 		return storeError(err, "share note")
-	}
-
-	// Publish personalized events so each recipient sees only their own labels.
-	if audienceIDs, err := h.noteStore.GetNoteAudienceIDs(r.Context(), id); err == nil {
-		h.events.NoteShared(r.Context(), id, audienceIDs, user.ID, req.UserID)
-	} else {
-		logutil.FromContext(r.Context()).WithError(err).WithField("note_id", id).Error("Failed to get note audience for SSE publish")
 	}
 
 	return http.StatusNoContent, nil, nil
@@ -113,36 +82,8 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusBadRequest, nil, idErr
 	}
 
-	// Owners may remove any collaborator. A non-owner may remove only their own
-	// share — i.e. leave a note shared with them. Any other combination is
-	// forbidden. Removing only your own access never crosses an auth boundary
-	// (it reduces your own privileges), so ownership is not required for it.
-	if userID != user.ID {
-		isOwner, err := h.noteStore.IsOwner(r.Context(), id, user.ID)
-		if err != nil {
-			return http.StatusInternalServerError, nil, fmt.Errorf("check note ownership: %w", err)
-		}
-		if !isOwner {
-			return http.StatusForbidden, nil, errors.New("not owner")
-		}
-	}
-
-	// Fetch audience before unsharing so the target user is still in the list.
-	audienceIDs, audienceErr := h.noteStore.GetNoteAudienceIDs(r.Context(), id)
-
-	err := h.noteStore.UnshareNote(r.Context(), id, userID)
-	if err != nil {
+	if err := h.notes.Unshare(r.Context(), id, user.ID, userID); err != nil {
 		return storeError(err, "unshare note")
-	}
-
-	if audienceErr == nil && h.hub != nil {
-		h.hub.Publish(r.Context(), audienceIDs, sse.Event{
-			Type:         sse.EventNoteUnshared,
-			SourceUserID: user.ID,
-			TargetUserID: userID,
-			ClientID:     clientIDFromContext(r.Context()),
-			Data:         sse.NoteEventData{NoteID: id},
-		})
 	}
 
 	return http.StatusNoContent, nil, nil

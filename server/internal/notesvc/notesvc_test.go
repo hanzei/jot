@@ -43,7 +43,7 @@ func newTestService(t *testing.T, driver string) (*Service, *sdkmetric.ManualRea
 	t.Cleanup(func() { _ = provider.Shutdown(t.Context()) })
 
 	noteStore := models.NewNoteStore(db, d, 0)
-	svc, err := New(noteStore, models.NewLabelStore(db, d, 0), imageStore, notify.New(nil, noteStore), provider.Meter("test"))
+	svc, err := New(noteStore, models.NewLabelStore(db, d, 0), models.NewUserStore(db, d, 0), imageStore, notify.New(nil, noteStore), provider.Meter("test"))
 	require.NoError(t, err)
 	return svc, reader
 }

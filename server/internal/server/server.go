@@ -172,7 +172,7 @@ func newServer(cfg *config.Config, log *logrus.Logger, tracerProvider trace.Trac
 	undo.push(func() { _ = imageStore.Close() })
 
 	authHandler := handlers.NewAuthHandler(userStore, noteStore, sessionService, userSettingsStore, hub, cfg.RegistrationEnabled, cfg.LocalLoginEnabled, cfg.PasswordMinLength)
-	notes, err := notesvc.New(noteStore, labelStore, imageStore, notify.New(hub, noteStore), meter)
+	notes, err := notesvc.New(noteStore, labelStore, userStore, imageStore, notify.New(hub, noteStore), meter)
 	if err != nil {
 		return nil, fmt.Errorf("initialize notes service: %w", err)
 	}

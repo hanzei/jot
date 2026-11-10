@@ -857,3 +857,186 @@ func TestMCPItemAssignment(t *testing.T) {
 		assert.Contains(t, msg, "invalid assigned_to format")
 	})
 }
+
+// TestMCPRestoreNote verifies that restore_note undoes delete_note and tells
+// every collaborator the note is back.
+func TestMCPRestoreNote(t *testing.T) {
+	t.Parallel()
+	ts := setupTestServer(t)
+	owner := ts.createTestUser(t, "mcprestoreowner", "password123", false)
+	collaborator := ts.createTestUser(t, "mcprestorecollab", "password123", false)
+	sess := setupMCPSession(t, ts, owner)
+
+	var note client.Note
+	callTool(t, sess, "create_note", map[string]any{"content": "Restore me"}, &note)
+	require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collaborator.User.ID))
+
+	t.Run("a note not in the trash is rejected", func(t *testing.T) {
+		msg := callToolExpectError(t, sess, "restore_note", map[string]any{"id": note.ID})
+		assert.Contains(t, msg, "not found in trash")
+	})
+
+	callTool(t, sess, "delete_note", map[string]any{"id": note.ID}, nil)
+
+	t.Run("a collaborator cannot restore", func(t *testing.T) {
+		collabSess := setupMCPSession(t, ts, collaborator)
+		callToolExpectError(t, collabSess, "restore_note", map[string]any{"id": note.ID})
+	})
+
+	sseCtx, sseCancel := context.WithCancel(t.Context())
+	t.Cleanup(sseCancel)
+	collabEvents, err := collaborator.Client.SubscribeSSE(sseCtx)
+	require.NoError(t, err)
+
+	var restored client.Note
+	callTool(t, sess, "restore_note", map[string]any{"id": note.ID}, &restored)
+	assert.Equal(t, note.ID, restored.ID)
+	assert.Equal(t, "Restore me", restored.Content)
+
+	var active []client.Note
+	callTool(t, sess, "list_notes", map[string]any{}, &active)
+	require.Len(t, active, 1)
+	assert.Equal(t, note.ID, active[0].ID)
+
+	event, found := waitForSSEEvent(collabEvents, func(e client.SSEEvent) bool {
+		return e.Type == string(sse.EventNoteUpdated) && e.SourceUserID == owner.User.ID &&
+			e.NoteData != nil && e.NoteData.NoteID == note.ID
+	}, 3*time.Second)
+	require.True(t, found, "restore_note should publish note_updated to the collaborator")
+	require.NotNil(t, event.NoteData.Note)
+	assert.Equal(t, "Restore me", event.NoteData.Note.Content)
+}
+
+// TestMCPListUsers verifies that list_users matches GET /users: everyone but
+// the caller, filtered by search, with the search length validated.
+func TestMCPListUsers(t *testing.T) {
+	t.Parallel()
+	ts := setupTestServer(t)
+	caller := ts.createTestUser(t, "mcplistcaller", "password123", false)
+	ana := ts.createTestUser(t, "mcplistana", "password123", false)
+	bob := ts.createTestUser(t, "mcplistbob", "password123", false)
+	sess := setupMCPSession(t, ts, caller)
+
+	type listUsersResult struct {
+		Users []struct {
+			ID       string `json:"id"`
+			Username string `json:"username"`
+		} `json:"users"`
+		Truncated bool `json:"truncated"`
+	}
+
+	t.Run("without search lists everyone but the caller", func(t *testing.T) {
+		var result listUsersResult
+		callTool(t, sess, "list_users", map[string]any{}, &result)
+		got := make([]string, 0, len(result.Users))
+		for _, u := range result.Users {
+			got = append(got, u.ID)
+		}
+		assert.Contains(t, got, ana.User.ID)
+		assert.Contains(t, got, bob.User.ID)
+		assert.NotContains(t, got, caller.User.ID)
+		assert.False(t, result.Truncated)
+	})
+
+	t.Run("search filters", func(t *testing.T) {
+		var result listUsersResult
+		callTool(t, sess, "list_users", map[string]any{"search": "ana"}, &result)
+		require.Len(t, result.Users, 1)
+		assert.Equal(t, ana.User.ID, result.Users[0].ID)
+		assert.Equal(t, "mcplistana", result.Users[0].Username)
+	})
+
+	t.Run("an overlong search is rejected", func(t *testing.T) {
+		msg := callToolExpectError(t, sess, "list_users", map[string]any{"search": strings.Repeat("a", 1000)})
+		assert.Contains(t, msg, "characters or fewer")
+	})
+}
+
+// TestMCPShareNote verifies share_note and unshare_note: the REST API's rules
+// and the same note_shared and note_unshared events.
+func TestMCPShareNote(t *testing.T) {
+	t.Parallel()
+	ts := setupTestServer(t)
+	owner := ts.createTestUser(t, "mcpshareowner", "password123", false)
+	collaborator := ts.createTestUser(t, "mcpsharecollab", "password123", false)
+	other := ts.createTestUser(t, "mcpshareother", "password123", false)
+	ownerSess := setupMCPSession(t, ts, owner)
+	collabSess := setupMCPSession(t, ts, collaborator)
+
+	sseCtx, sseCancel := context.WithCancel(t.Context())
+	t.Cleanup(sseCancel)
+	collabEvents, err := collaborator.Client.SubscribeSSE(sseCtx)
+	require.NoError(t, err)
+	otherEvents, err := other.Client.SubscribeSSE(sseCtx)
+	require.NoError(t, err)
+
+	var note client.Note
+	callTool(t, ownerSess, "create_note", map[string]any{"content": "Plans"}, &note)
+
+	isEvent := func(eventType sse.EventType, source, target string) func(client.SSEEvent) bool {
+		return func(e client.SSEEvent) bool {
+			return e.Type == string(eventType) && e.SourceUserID == source && e.TargetUserID == target &&
+				e.NoteData != nil && e.NoteData.NoteID == note.ID
+		}
+	}
+
+	t.Run("share_note shares and notifies the new collaborator", func(t *testing.T) {
+		var result map[string]any
+		callTool(t, ownerSess, "share_note", map[string]any{"note_id": note.ID, "user_id": collaborator.User.ID}, &result)
+		assert.Equal(t, true, result["shared"])
+
+		_, found := waitForSSEEvent(collabEvents, isEvent(sse.EventNoteShared, owner.User.ID, collaborator.User.ID), 3*time.Second)
+		require.True(t, found, "share_note should publish note_shared to the new collaborator")
+
+		var fetched client.Note
+		callTool(t, collabSess, "get_note", map[string]any{"id": note.ID}, &fetched)
+		assert.Equal(t, "Plans", fetched.Content)
+	})
+
+	t.Run("share_note errors", func(t *testing.T) {
+		tests := []struct {
+			name string
+			sess *mcp.ClientSession
+			user string
+			want string
+		}{
+			{"already shared", ownerSess, collaborator.User.ID, "already shared"},
+			{"with self", ownerSess, owner.User.ID, "cannot share with self"},
+			{"invalid user ID", ownerSess, "not-an-id", "invalid user_id"},
+			{"unknown user", ownerSess, "AAAAAAAAAAAAAAAAAAAAAA", "user not found"},
+			{"not the owner", collabSess, other.User.ID, "not owner"},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				msg := callToolExpectError(t, tt.sess, "share_note", map[string]any{"note_id": note.ID, "user_id": tt.user})
+				assert.Contains(t, msg, tt.want)
+			})
+		}
+	})
+
+	t.Run("only the owner can remove someone else", func(t *testing.T) {
+		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, other.User.ID))
+		msg := callToolExpectError(t, collabSess, "unshare_note", map[string]any{"note_id": note.ID, "user_id": other.User.ID})
+		assert.Contains(t, msg, "not owner")
+	})
+
+	t.Run("the owner removes a collaborator", func(t *testing.T) {
+		var result map[string]any
+		callTool(t, ownerSess, "unshare_note", map[string]any{"note_id": note.ID, "user_id": other.User.ID}, &result)
+		assert.Equal(t, false, result["shared"])
+
+		_, found := waitForSSEEvent(otherEvents, isEvent(sse.EventNoteUnshared, owner.User.ID, other.User.ID), 3*time.Second)
+		require.True(t, found, "unshare_note should publish note_unshared to the removed user")
+	})
+
+	t.Run("a collaborator leaves by omitting user_id", func(t *testing.T) {
+		var result map[string]any
+		callTool(t, collabSess, "unshare_note", map[string]any{"note_id": note.ID}, &result)
+		assert.Equal(t, collaborator.User.ID, result["user_id"])
+
+		_, found := waitForSSEEvent(collabEvents, isEvent(sse.EventNoteUnshared, collaborator.User.ID, collaborator.User.ID), 3*time.Second)
+		require.True(t, found, "leaving should publish note_unshared")
+
+		callToolExpectError(t, collabSess, "get_note", map[string]any{"id": note.ID})
+	})
+}

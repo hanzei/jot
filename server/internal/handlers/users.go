@@ -1,11 +1,6 @@
 package handlers
 
-import (
-	"fmt"
-	"net/http"
-
-	"github.com/hanzei/jot/server/internal/models"
-)
+import "net/http"
 
 // UserInfo contains safe public fields returned when listing users for share-target search.
 type UserInfo struct {
@@ -17,18 +12,11 @@ type UserInfo struct {
 	HasProfileIcon bool   `json:"has_profile_icon"`
 }
 
-// userSearchLimit caps GET /users?search=: the pickers that search are
-// typeahead lists, so more rows than this only means the term needs refining.
-// Listing without a term is not capped, since clients use it to resolve
-// user IDs to names and avatars.
-const userSearchLimit = 50
-
 // UserSearchResponse is the GET /users body.
 type UserSearchResponse struct {
 	Users []UserInfo `json:"users"`
-	// Truncated is true when a search matched more than userSearchLimit users
-	// and only the first userSearchLimit are returned. Always false without a
-	// search term.
+	// Truncated is true when a search matched more than 50 users and only the
+	// first 50 are returned. Always false without a search term.
 	Truncated bool `json:"truncated"`
 }
 
@@ -51,45 +39,21 @@ func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusUnauthorized, nil, authErr
 	}
 
-	search := r.URL.Query().Get("search")
-
-	if err := models.ValidateSearchQuery(search); err != nil {
-		return http.StatusBadRequest, nil, err
+	users, truncated, err := h.notes.ListUsers(r.Context(), currentUser.ID, r.URL.Query().Get("search"))
+	if err != nil {
+		return storeError(err, "list users")
 	}
 
-	var users []*models.User
-	var err error
-	truncated := false
-	if search != "" {
-		// One extra row tells a result of exactly the limit apart from a
-		// truncated one.
-		users, err = h.userStore.Search(r.Context(), search, currentUser.ID, userSearchLimit+1)
-		if err != nil {
-			return http.StatusInternalServerError, nil, fmt.Errorf("search users: %w", err)
-		}
-		if len(users) > userSearchLimit {
-			users = users[:userSearchLimit]
-			truncated = true
-		}
-	} else {
-		users, err = h.userStore.GetAll(r.Context())
-		if err != nil {
-			return http.StatusInternalServerError, nil, fmt.Errorf("get all users: %w", err)
-		}
-	}
-
-	userInfos := []UserInfo{}
+	userInfos := make([]UserInfo, 0, len(users))
 	for _, user := range users {
-		if user.ID != currentUser.ID {
-			userInfos = append(userInfos, UserInfo{
-				ID:             user.ID,
-				Username:       user.Username,
-				FirstName:      user.FirstName,
-				LastName:       user.LastName,
-				Role:           user.Role,
-				HasProfileIcon: user.HasProfileIcon,
-			})
-		}
+		userInfos = append(userInfos, UserInfo{
+			ID:             user.ID,
+			Username:       user.Username,
+			FirstName:      user.FirstName,
+			LastName:       user.LastName,
+			Role:           user.Role,
+			HasProfileIcon: user.HasProfileIcon,
+		})
 	}
 
 	return http.StatusOK, UserSearchResponse{Users: userInfos, Truncated: truncated}, nil

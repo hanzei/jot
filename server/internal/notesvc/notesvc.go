@@ -1,6 +1,7 @@
 // Package notesvc owns the note write operations shared by the REST handlers
 // and the MCP tools: validation, the store calls, SSE events, blob cleanup and
-// metrics. Each transport decodes its own input, calls the service, and shapes
+// metrics. It also owns the user search both offer for picking share targets
+// and assignees. Each transport decodes its own input, calls the service, and shapes
 // the result and errors for its client, so a rule changed here applies to both.
 //
 // Errors are store sentinels (models.Err*), errors marked with apierr.Invalid
@@ -29,6 +30,7 @@ import (
 type Service struct {
 	noteStore  *models.NoteStore
 	labelStore *models.LabelStore
+	userStore  *models.UserStore
 	imageStore *blobstore.ImageStore
 	events     *notify.Publisher
 
@@ -40,8 +42,8 @@ type Service struct {
 
 // New creates a Service recording its metrics with meter. Returns an error if
 // any instrument cannot be created.
-func New(noteStore *models.NoteStore, labelStore *models.LabelStore, imageStore *blobstore.ImageStore, events *notify.Publisher, meter metric.Meter) (*Service, error) {
-	s := &Service{noteStore: noteStore, labelStore: labelStore, imageStore: imageStore, events: events}
+func New(noteStore *models.NoteStore, labelStore *models.LabelStore, userStore *models.UserStore, imageStore *blobstore.ImageStore, events *notify.Publisher, meter metric.Meter) (*Service, error) {
+	s := &Service{noteStore: noteStore, labelStore: labelStore, userStore: userStore, imageStore: imageStore, events: events}
 
 	for _, c := range []struct {
 		dst         *metric.Int64Counter

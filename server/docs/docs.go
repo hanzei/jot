@@ -4478,7 +4478,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "truncated": {
-                    "description": "Truncated is true when a search matched more than userSearchLimit users\nand only the first userSearchLimit are returned. Always false without a\nsearch term.",
+                    "description": "Truncated is true when a search matched more than 50 users and only the\nfirst 50 are returned. Always false without a search term.",
                     "type": "boolean"
                 },
                 "users": {

@@ -70,6 +70,16 @@ func (p *Publisher) NoteShared(ctx context.Context, noteID string, audienceIDs [
 	p.personalizedNote(ctx, noteID, audienceIDs, sourceUserID, targetUserID, sse.EventNoteShared)
 }
 
+// NoteUnshared sends note_unshared to audienceIDs, which the caller must
+// resolve before the unshare so targetUserID, who just lost access, still
+// hears of it.
+func (p *Publisher) NoteUnshared(ctx context.Context, noteID string, audienceIDs []string, sourceUserID, targetUserID string) {
+	if p.hub == nil {
+		return
+	}
+	p.publishTargeted(ctx, audienceIDs, sse.EventNoteUnshared, sourceUserID, targetUserID, sse.NoteEventData{NoteID: noteID})
+}
+
 func (p *Publisher) personalizedNote(ctx context.Context, noteID string, audienceIDs []string, sourceUserID, targetUserID string, eventType sse.EventType) {
 	if p.hub == nil {
 		return
