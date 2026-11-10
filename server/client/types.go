@@ -100,13 +100,20 @@ type PublicLink struct {
 // Content is set for text notes only; Items and CheckedItemsCollapsed for
 // list notes only.
 type PublicNote struct {
-	NoteType              NoteType         `json:"note_type"`
-	Title                 string           `json:"title"`
-	UpdatedAt             time.Time        `json:"updated_at"`
-	ImageIDs              []string         `json:"image_ids"`
-	Content               *string          `json:"content,omitempty"`
-	Items                 []PublicNoteItem `json:"items,omitempty"`
-	CheckedItemsCollapsed *bool            `json:"checked_items_collapsed,omitempty"`
+	NoteType              NoteType          `json:"note_type"`
+	Title                 string            `json:"title"`
+	UpdatedAt             time.Time         `json:"updated_at"`
+	Images                []PublicNoteImage `json:"images"`
+	Content               *string           `json:"content,omitempty"`
+	Items                 []PublicNoteItem  `json:"items,omitempty"`
+	CheckedItemsCollapsed *bool             `json:"checked_items_collapsed,omitempty"`
+}
+
+// PublicNoteImage is an image as served through a public link.
+type PublicNoteImage struct {
+	ID     string `json:"id"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
 }
 
 // PublicNoteItem is a list item as served through a public link.

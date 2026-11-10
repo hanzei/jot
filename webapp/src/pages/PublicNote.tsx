@@ -82,16 +82,14 @@ function Message({ title, body }: { title: string; body: string }) {
 function PublicNoteView({ note, token }: { note: PublicNoteData; token: string }) {
   const { t, i18n } = useTranslation();
   const imageUrls = useMemo(() => publicNoteImages(token), [token]);
-  // The response carries image IDs only, so the gallery gets a numbered name
-  // for each and no size (it frames unsized images at 4:3).
+  // The response carries no filenames, so the gallery gets a numbered name
+  // for each image.
   const images = useMemo(
-    () => note.image_ids.map((id, index) => ({
-      id,
+    () => note.images.map((image, index) => ({
+      ...image,
       filename: t('publicNote.imageAlt', { number: index + 1 }),
-      width: 0,
-      height: 0,
     })),
-    [note.image_ids, t],
+    [note.images, t],
   );
   const contentHtml = useMemo(
     () => (note.note_type === 'text' ? renderMarkdown(note.content) : ''),
