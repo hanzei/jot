@@ -371,8 +371,10 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     isReconnectingRef.current = true;
-    // This reconnect drains below, after revalidating the session, so the flip
-    // the next line may cause must not resume a parked drain ahead of it.
+    // This reconnect drains below, after revalidating the session, so no pending
+    // timer (a resume, a write's debounce, a backoff) and no flip the next line
+    // may cause may drain ahead of it.
+    clearDrainTimer();
     drainParkedRef.current = false;
     // The device just regained connectivity: re-arm the server-reachable belief
     // so the next write probes the network again instead of staying parked on the
@@ -396,7 +398,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     } finally {
       isReconnectingRef.current = false;
     }
-  }, [revalidateSession, performDrain]);
+  }, [revalidateSession, performDrain, clearDrainTimer]);
 
   useEffect(() => {
     // Seed the initial state from the real network status before subscribing to changes,
@@ -458,6 +460,9 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       failureCountRef.current = 0;
       setConsecutiveFailureCount(0);
       setSyncError(false);
+      // A drain in flight may finish before this debounce fires and clear it on
+      // success; request its rerun so the write is not stranded.
+      if (isDrainingRef.current) rerunRequestedRef.current = true;
       scheduleDrain(ENQUEUE_DRAIN_DEBOUNCE_MS);
     });
     return unsubscribe;

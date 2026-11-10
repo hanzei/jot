@@ -102,8 +102,10 @@ parks: its backoff chain ends there. A flip from `false` to `true` resumes a
 parked drain, and does nothing when no drain parked. Anything that schedules or
 runs a drain itself clears the park, so the flip never shortcuts a pending
 backoff timer, never runs ahead of `handleReconnect` (which re-arms the flag
-itself and drains after revalidating the session), and never drains past the
-failure cap. It also keeps the failure count, so a write that keeps failing
+itself, cancels any pending drain timer, and drains after revalidating the
+session), and never drains past the failure cap. A write queued while a drain
+runs requests a rerun, so the finishing drain cannot strand it by clearing that
+write's pending timer. It also keeps the failure count, so a write that keeps failing
 still reaches the cap.
 
 **Known cost.** If the API times out while the SSE stream stays healthy (an
