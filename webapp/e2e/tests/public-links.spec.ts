@@ -281,6 +281,14 @@ test.describe('Public link section of the share dialog', () => {
     await expect(publicLinkSection.newExpirySelect()).toHaveCount(0);
     await expect(publicLinkSection.details()).toContainText('Expires');
     await expect(publicLinkSection.changeButton()).toBeFocused();
+
+    // Revoked elsewhere: the same notice, and focus moves to Create link.
+    await publicLinkSection.changeButton().click();
+    await expect(publicLinkSection.section().getByRole('status')).toBeEmpty();
+    await expect(publicLinkSection.newExpirySelect()).toBeFocused();
+    await revokePublicLink(page.request, noteId);
+    await expect(publicLinkSection.section().getByRole('status')).toHaveText("The link was changed elsewhere, so your new expiry wasn't saved.");
+    await expect(publicLinkSection.createButton()).toBeFocused();
   });
 
   test('is hidden when the server has public links switched off', async ({ page, authenticatedUser, dashboardPage, publicLinkSection }) => {

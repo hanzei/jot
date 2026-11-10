@@ -66,8 +66,14 @@ export class PublicLinkSection {
     await this.urlField().waitFor();
   }
 
+  /**
+   * Clicks Copy link (labelled "Copied!" for a moment after a copy) and waits
+   * for "Copied!", which shows only once the clipboard write has finished.
+   */
   async copy() {
-    await this.section().getByRole('button', { name: 'Copy link' }).click();
+    const button = this.section().getByRole('button', { name: /^(Copy link|Copied!)$/ });
+    await button.click();
+    await expect(button).toHaveText('Copied!');
   }
 
   /** Change → pick `expiry` → Save, waiting for the editor to close. */

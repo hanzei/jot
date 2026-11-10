@@ -60,30 +60,35 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
   const [confirmingRevoke, setConfirmingRevoke] = useState(false);
   const { copied, copy } = useCopyToClipboard();
   const changeRef = useRef<HTMLButtonElement>(null);
+  const createRef = useRef<HTMLButtonElement>(null);
   const editorSelectRef = useRef<HTMLSelectElement>(null);
   const wasEditing = useRef(false);
 
   const link = isPublicLinkActive(note.public_link) ? note.public_link : null;
-  const linkKey = link ? `${link.token} ${link.expires_at ?? 'never'}` : null;
+  // Keyed on the link as held, active or not, so one that merely expired is
+  // told apart from one changed elsewhere.
+  const linkKey = note.public_link ? `${note.public_link.token} ${note.public_link.expires_at ?? 'never'}` : null;
 
   // The link changed or went away elsewhere (over SSE) while the editor was
   // open: close it and say so, rather than keep a choice made against a link
-  // that no longer looks like that. Skipped while our own request is in
-  // flight, since its SSE echo can arrive before its response.
-  if (editing && !busy && editing.linkKey !== linkKey) {
+  // that no longer looks like that. A link that only expired closes it
+  // without the notice. Skipped while our own request is in flight, since its
+  // SSE echo can arrive before its response.
+  if (editing && !busy && (!link || editing.linkKey !== linkKey)) {
     setEditing(null);
-    setChangedElsewhere(true);
+    setChangedElsewhere(editing.linkKey !== linkKey);
   }
 
   const isEditing = editing !== null;
   // Opening the editor moves focus to its select; closing it returns focus to
-  // Change when it went nowhere (the focused control was removed).
+  // Change when it went nowhere (the focused control was removed), or to
+  // Create link when the link itself is gone.
   useEffect(() => {
     if (isEditing && !wasEditing.current) {
       editorSelectRef.current?.focus();
     } else if (!isEditing && wasEditing.current) {
       const active = document.activeElement;
-      if (!active || active === document.body) changeRef.current?.focus();
+      if (!active || active === document.body) (changeRef.current ?? createRef.current)?.focus();
     }
     wasEditing.current = isEditing;
   }, [isEditing]);
@@ -231,7 +236,7 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
           >
             {expiryOptions}
           </select>
-          <button type="button" onClick={() => void setPublicLink(createExpiry)} disabled={busy} className={buttonClassName}>
+          <button ref={createRef} type="button" onClick={() => void setPublicLink(createExpiry)} disabled={busy} className={buttonClassName}>
             {t('publicLink.create')}
           </button>
         </div>
@@ -243,10 +248,11 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
           onKeyDown={(e) => {
             if (e.key !== 'Escape') return;
             // Close only the editor: the share dialog ignores an Escape whose
-            // default was prevented.
+            // default was prevented. Like Cancel, it waits out a Save in
+            // flight, which would apply the new expiry anyway.
             e.preventDefault();
             e.stopPropagation();
-            setEditing(null);
+            if (!busy) setEditing(null);
           }}
         >
           <label htmlFor={expiryId} className="text-sm text-gray-700 dark:text-gray-300">
