@@ -282,6 +282,27 @@ test.describe('Public link section of the share dialog', () => {
     await expect(publicLinkSection.createButton()).toBeFocused();
   });
 
+  test('says so when the link cannot be copied', async ({ page, authenticatedUser, dashboardPage, publicLinkSection }) => {
+    void authenticatedUser;
+    // Both ways to copy fail, as in a browser that blocks the clipboard.
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: () => Promise.reject(new Error('blocked')) },
+        configurable: true,
+      });
+      document.execCommand = () => false;
+    });
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Copy failure note');
+    await dashboardPage.openNote('Copy failure note');
+    await dashboardPage.openShareModalFromModal();
+    await publicLinkSection.create();
+
+    await publicLinkSection.section().getByRole('button', { name: 'Copy link' }).click();
+    await expect(publicLinkSection.section().getByRole('alert')).toHaveText("Couldn't copy the link to the clipboard.");
+    await expect(publicLinkSection.section().getByRole('button', { name: 'Copied!' })).toHaveCount(0);
+  });
+
   test('is hidden when the server has public links switched off', async ({ page, authenticatedUser, dashboardPage, publicLinkSection }) => {
     void authenticatedUser;
     await page.route('**/api/v1/config', async (route) => {

@@ -585,6 +585,7 @@
     "urlLabel": "URL van de openbare link",
     "copy": "Link kopiëren",
     "copied": "Gekopieerd!",
+    "copyFailed": "De link kan niet naar het klembord worden gekopieerd.",
     "expiry": "Verloopt",
     "newExpiry": "Nieuwe vervaldatum",
     "chooseExpiry": "Kiezen…",

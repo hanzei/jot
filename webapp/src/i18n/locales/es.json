@@ -592,6 +592,7 @@
     "urlLabel": "URL del enlace público",
     "copy": "Copiar enlace",
     "copied": "¡Copiado!",
+    "copyFailed": "No se pudo copiar el enlace al portapapeles.",
     "expiry": "Caduca",
     "newExpiry": "Nueva caducidad",
     "chooseExpiry": "Elegir…",

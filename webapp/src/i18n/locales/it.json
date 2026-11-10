@@ -592,6 +592,7 @@
     "urlLabel": "URL del link pubblico",
     "copy": "Copia link",
     "copied": "Copiato!",
+    "copyFailed": "Impossibile copiare il link negli appunti.",
     "expiry": "Scade",
     "newExpiry": "Nuova scadenza",
     "chooseExpiry": "Scegli…",

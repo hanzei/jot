@@ -585,6 +585,7 @@
     "urlLabel": "Public link URL",
     "copy": "Copy link",
     "copied": "Copied!",
+    "copyFailed": "Couldn't copy the link to the clipboard.",
     "expiry": "Expires",
     "newExpiry": "New expiry",
     "chooseExpiry": "Choose…",

@@ -592,6 +592,7 @@
     "urlLabel": "URL do link público",
     "copy": "Copiar link",
     "copied": "Copiado!",
+    "copyFailed": "Não foi possível copiar o link para a área de transferência.",
     "expiry": "Expira",
     "newExpiry": "Nova data de expiração",
     "chooseExpiry": "Escolher…",

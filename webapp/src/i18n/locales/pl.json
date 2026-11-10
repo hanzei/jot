@@ -599,6 +599,7 @@
     "urlLabel": "Adres URL linku publicznego",
     "copy": "Kopiuj link",
     "copied": "Skopiowano!",
+    "copyFailed": "Nie udało się skopiować linku do schowka.",
     "expiry": "Wygasa",
     "newExpiry": "Nowy termin wygaśnięcia",
     "chooseExpiry": "Wybierz…",

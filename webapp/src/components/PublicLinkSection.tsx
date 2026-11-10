@@ -128,6 +128,13 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
     }
   };
 
+  // The link is shown only shortened, so a copy that fails must say so: there
+  // is no other way to get the full URL here.
+  const handleCopy = async () => {
+    setError('');
+    if (!(await copy(url))) setError(t('publicLink.copyFailed'));
+  };
+
   const openEditor = () => {
     if (!linkKey) return;
     setChangedElsewhere(false);
@@ -190,7 +197,7 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
               <span className="sr-only">{t('publicLink.urlLabel')}: </span>
               {shortPublicNoteUrl(baseUrl, link.token)}
             </p>
-            <button type="button" onClick={() => void copy(url)} className={`${buttonClassName} flex items-center justify-center`}>
+            <button type="button" onClick={() => void handleCopy()} className={`${buttonClassName} flex items-center justify-center`}>
               {copied
                 ? <Check aria-hidden="true" className="h-4 w-4 mr-1" />
                 : <Copy aria-hidden="true" className="h-4 w-4 mr-1" />}

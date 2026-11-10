@@ -585,6 +585,7 @@
     "urlLabel": "URL des öffentlichen Links",
     "copy": "Link kopieren",
     "copied": "Kopiert!",
+    "copyFailed": "Der Link konnte nicht in die Zwischenablage kopiert werden.",
     "expiry": "Läuft ab",
     "newExpiry": "Neuer Ablauf",
     "chooseExpiry": "Auswählen…",
