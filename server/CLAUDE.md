@@ -23,3 +23,7 @@ columns.
 - Do **not** re-wrap a sentinel (`sql.ErrNoRows`, `ErrNoteNotFound`, …) that has
   already been matched with `errors.Is` and is being returned as-is.
 - Do not wrap errors inside `defer` functions or log statements.
+- Exception: `internal/notesvc` returns store errors unwrapped. Its callers
+  (the REST handlers and MCP tools) name the operation themselves, and a
+  sentinel's message is the REST error message, so a prefix there would
+  change the API.

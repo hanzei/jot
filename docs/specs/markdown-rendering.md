@@ -369,7 +369,7 @@ nesting nobody asked for.
 
 The clients cannot send `parent_id` here — the item ids do not exist until the
 conversion is persisted — so they send `indent_level` (0 or 1) and the server
-rebuilds `parent_id` in `buildCreateNoteItems`, attaching each indented item to
+rebuilds `parent_id` in `notesvc.buildItems`, attaching each indented item to
 the nearest preceding top-level one. An indented item with no such predecessor
 stays top-level. Mobile mirrors that same walk locally in
 `applyConvertedNoteLocally` so an offline conversion matches what the replay

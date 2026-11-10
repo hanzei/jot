@@ -7,13 +7,15 @@
 // for invalid input, ErrItemLimitReached, or internal errors. The REST
 // handlers map them to statuses with apierr.SentinelStatus.
 //
-// Errors from a method's main store call are returned unwrapped: each
-// transport already names the operation (REST in its 500 log, MCP in the tool
-// error), and a sentinel's message is what a REST client sees, so a prefix
-// added here would show up twice or change the API's error messages.
+// Store errors are returned unwrapped: each transport already names the
+// operation (REST in its 500 log, MCP in the tool error), and a sentinel's
+// message is what a REST client sees, so a prefix added here would show up
+// twice or change the API's error messages. The exception is a read-back
+// after a committed write (see refetchError).
 package notesvc
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -199,7 +201,7 @@ func (s *Service) checkNewLabelNames(ctx context.Context, userID string, names [
 			return lengthErr
 		}
 		if err != nil {
-			return fmt.Errorf("check label name: %w", err)
+			return err
 		}
 	}
 	return nil
@@ -211,10 +213,10 @@ func (s *Service) attachLabels(ctx context.Context, noteID, userID string, names
 	for _, name := range names {
 		label, _, err := s.labelStore.GetOrCreateLabel(ctx, userID, name)
 		if err != nil {
-			return fmt.Errorf("get or create label: %w", err)
+			return err
 		}
 		if err = s.noteStore.AddLabelToNote(ctx, noteID, label.ID, userID); err != nil {
-			return fmt.Errorf("add label to note: %w", err)
+			return err
 		}
 	}
 	return nil
@@ -229,7 +231,7 @@ func (s *Service) attachLabels(ctx context.Context, noteID, userID string, names
 // in, which skips the collision check it runs on a supplied ID.
 func buildItems(items []NewItem) ([]models.NewNoteItem, error) {
 	ordered := slices.Clone(items)
-	slices.SortStableFunc(ordered, func(a, b NewItem) int { return a.Position - b.Position })
+	slices.SortStableFunc(ordered, func(a, b NewItem) int { return cmp.Compare(a.Position, b.Position) })
 
 	built := make([]models.NewNoteItem, 0, len(ordered))
 	lastTopLevel := -1 // index into built; -1 when no top-level item precedes
