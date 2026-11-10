@@ -552,8 +552,12 @@ func resizeImage(data []byte) ([]byte, error) {
 }
 
 // fitWithin scales w×h down, keeping the aspect ratio, so its longer side is
-// maxDim. Callers only use it when one side exceeds maxDim.
+// maxDim. A size that already fits is returned unchanged: images are never
+// scaled up.
 func fitWithin(w, h, maxDim int) (int, int) {
+	if w <= maxDim && h <= maxDim {
+		return w, h
+	}
 	var dstW, dstH int
 	if w >= h {
 		dstW = maxDim
@@ -577,8 +581,7 @@ func resizeToJPEG(img image.Image, cfg image.Config, maxDim int) ([]byte, error)
 	srcW := bounds.Dx()
 	srcH := bounds.Dy()
 
-	if srcW > maxDim || srcH > maxDim {
-		dstW, dstH := fitWithin(srcW, srcH, maxDim)
+	if dstW, dstH := fitWithin(srcW, srcH, maxDim); dstW != srcW || dstH != srcH {
 		dst := image.NewRGBA(image.Rect(0, 0, dstW, dstH))
 		draw.CatmullRom.Scale(dst, dst.Bounds(), img, bounds, draw.Src, nil)
 		img = dst

@@ -43,6 +43,17 @@ func (ts *TestServer) sharePage(t *testing.T, path string) string {
 	return string(body)
 }
 
+// shareListNote creates a list note from req with an active public link, and
+// returns the note's ID and the link's token.
+func shareListNote(t *testing.T, owner *TestUser, req *client.CreateListNoteRequest) (string, string) {
+	t.Helper()
+	note, err := owner.Client.CreateListNote(t.Context(), req)
+	require.NoError(t, err)
+	link, err := owner.Client.SetPublicLink(t.Context(), note.ID, nil)
+	require.NoError(t, err)
+	return note.ID, link.Token
+}
+
 func TestSharePreviewCard(t *testing.T) {
 	t.Parallel()
 	ts, index := setupSharePreviewServer(t, nil)
@@ -64,15 +75,12 @@ func TestSharePreviewCard(t *testing.T) {
 	}
 
 	t.Run("list note: escaped title, share description, no content", func(t *testing.T) {
-		note, err := owner.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+		_, token := shareListNote(t, owner, &client.CreateListNoteRequest{
 			Title: `Groceries "><script>alert(1)</script>`,
 			Items: []client.CreateNoteItem{{Text: "secret item text"}},
 		})
-		require.NoError(t, err)
-		link, err := owner.Client.SetPublicLink(t.Context(), note.ID, nil)
-		require.NoError(t, err)
 
-		page := ts.sharePage(t, "/share/"+link.Token)
+		page := ts.sharePage(t, "/share/"+token)
 		escaped := "Groceries &#34;&gt;&lt;script&gt;alert(1)&lt;/script&gt;"
 		assert.Contains(t, page, "<title>"+escaped+"</title>")
 		assert.Contains(t, page, `<meta property="og:title" content="`+escaped+`" />`)
@@ -102,30 +110,24 @@ func TestSharePreviewCard(t *testing.T) {
 	})
 
 	t.Run("blank list title gets the fallback", func(t *testing.T) {
-		note, err := owner.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{Title: "   "})
-		require.NoError(t, err)
-		link, err := owner.Client.SetPublicLink(t.Context(), note.ID, nil)
-		require.NoError(t, err)
-		assert.Contains(t, ts.sharePage(t, "/share/"+link.Token), "<title>Shared note</title>")
+		_, token := shareListNote(t, owner, &client.CreateListNoteRequest{Title: "   "})
+		assert.Contains(t, ts.sharePage(t, "/share/"+token), "<title>Shared note</title>")
 	})
 
 	t.Run("first image is the earliest, with its thumbnail size", func(t *testing.T) {
-		note, err := owner.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{Title: "Trip"})
+		noteID, token := shareListNote(t, owner, &client.CreateListNoteRequest{Title: "Trip"})
+		later, err := owner.Client.UploadNoteImage(t.Context(), noteID, "later.png", bytes.NewReader(testPNG(t, 8, 8)))
 		require.NoError(t, err)
-		later, err := owner.Client.UploadNoteImage(t.Context(), note.ID, "later.png", bytes.NewReader(testPNG(t, 8, 8)))
-		require.NoError(t, err)
-		first, err := owner.Client.UploadNoteImage(t.Context(), note.ID, "first.png", bytes.NewReader(testPNG(t, 1024, 640)))
+		first, err := owner.Client.UploadNoteImage(t.Context(), noteID, "first.png", bytes.NewReader(testPNG(t, 1024, 640)))
 		require.NoError(t, err)
 		// Uploaded second but created first: the card follows created_at,
 		// the order the app shows images in.
 		ts.exec(t, `UPDATE note_images SET created_at = ? WHERE id = ?`,
 			models.Timestamp(models.Now().Add(-time.Hour)), first.ID)
-		link, err := owner.Client.SetPublicLink(t.Context(), note.ID, nil)
-		require.NoError(t, err)
 
-		page := ts.sharePage(t, "/share/"+link.Token)
-		thumbnail := "/api/v1/public/notes/" + link.Token + "/images/" + first.ID + "/thumbnail"
-		assert.Contains(t, page, `<meta property="og:image" content="`+thumbnail+`" />`)
+		page := ts.sharePage(t, "/share/"+token)
+		thumbnail := token + "/images/" + first.ID + "/thumbnail"
+		assert.Contains(t, page, `<meta property="og:image" content="/api/v1/public/notes/`+thumbnail+`" />`)
 		assert.NotContains(t, page, later.ID)
 		assert.NotContains(t, page, "pwa-512x512.png")
 		assert.Contains(t, page, `<meta property="og:image:type" content="image/jpeg" />`)
@@ -136,51 +138,39 @@ func TestSharePreviewCard(t *testing.T) {
 		assert.Equal(t, 1, strings.Count(page, `name="twitter:card"`), "the large card replaces the small one")
 
 		// The tags describe the thumbnail the preview service then fetches.
-		status, header, _ := rawRequest(t, ts.httpClient, http.MethodGet, ts.HTTPServer.URL+thumbnail, nil, nil)
+		status, header, _ := ts.publicGet(t, thumbnail)
 		require.Equal(t, http.StatusOK, status)
 		assert.Equal(t, "image/jpeg", header.Get("Content-Type"))
 	})
 
 	t.Run("images with the same created_at: the card shows the viewer's first", func(t *testing.T) {
-		note, err := owner.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{Title: "Imported"})
-		require.NoError(t, err)
+		noteID, token := shareListNote(t, owner, &client.CreateListNoteRequest{Title: "Imported"})
 		for _, name := range []string{"a.png", "b.png", "c.png"} {
-			_, err = owner.Client.UploadNoteImage(t.Context(), note.ID, name, bytes.NewReader(testPNG(t, 4, 4)))
+			_, err := owner.Client.UploadNoteImage(t.Context(), noteID, name, bytes.NewReader(testPNG(t, 4, 4)))
 			require.NoError(t, err)
 		}
 		// An import stamps every image with one timestamp; id breaks the tie.
 		ts.exec(t, `UPDATE note_images SET created_at = ? WHERE note_id = ?`,
-			models.Timestamp(models.Now().Add(-time.Hour)), note.ID)
-		link, err := owner.Client.SetPublicLink(t.Context(), note.ID, nil)
-		require.NoError(t, err)
+			models.Timestamp(models.Now().Add(-time.Hour)), noteID)
 
-		pub, err := ts.newClient().GetPublicNote(t.Context(), link.Token)
+		pub, err := ts.newClient().GetPublicNote(t.Context(), token)
 		require.NoError(t, err)
 		require.Len(t, pub.Images, 3)
-		page := ts.sharePage(t, "/share/"+link.Token)
+		page := ts.sharePage(t, "/share/"+token)
 		assert.Contains(t, page, "/images/"+pub.Images[0].ID+"/thumbnail", "the card's image is the first one the viewer shows")
 	})
 
 	t.Run("share page keeps its headers and is gzipped", func(t *testing.T) {
-		note, err := owner.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{Title: "Zipped"})
-		require.NoError(t, err)
-		link, err := owner.Client.SetPublicLink(t.Context(), note.ID, nil)
-		require.NoError(t, err)
+		_, token := shareListNote(t, owner, &client.CreateListNoteRequest{Title: "Zipped"})
 
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/share/"+link.Token, nil)
-		require.NoError(t, err)
-		req.Header.Set("Accept-Encoding", "gzip")
 		// A Transport that sees Accept-Encoding set by the caller leaves the
 		// body compressed.
-		resp, err := ts.httpClient.Do(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-		require.Equal(t, http.StatusOK, resp.StatusCode)
-		assert.Equal(t, "gzip", resp.Header.Get("Content-Encoding"))
-		assert.Equal(t, "noindex", resp.Header.Get("X-Robots-Tag"))
-		assert.Equal(t, "no-referrer", resp.Header.Get("Referrer-Policy"))
-		_, err = io.Copy(io.Discard, resp.Body)
-		require.NoError(t, err)
+		status, header, _ := rawRequest(t, ts.httpClient, http.MethodGet, ts.HTTPServer.URL+"/share/"+token, nil,
+			http.Header{"Accept-Encoding": {"gzip"}})
+		require.Equal(t, http.StatusOK, status)
+		assert.Equal(t, "gzip", header.Get("Content-Encoding"))
+		assert.Equal(t, "noindex", header.Get("X-Robots-Tag"))
+		assert.Equal(t, "no-referrer", header.Get("Referrer-Policy"))
 	})
 }
 
@@ -194,11 +184,7 @@ func TestSharePreviewGenericPages(t *testing.T) {
 
 	newLinkedNote := func(t *testing.T) (string, string) {
 		t.Helper()
-		note, err := owner.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{Title: "Private title"})
-		require.NoError(t, err)
-		link, err := owner.Client.SetPublicLink(t.Context(), note.ID, nil)
-		require.NoError(t, err)
-		return note.ID, link.Token
+		return shareListNote(t, owner, &client.CreateListNoteRequest{Title: "Private title"})
 	}
 
 	liveNote, liveToken := newLinkedNote(t)
@@ -243,13 +229,10 @@ func TestSharePreviewSwitchOff(t *testing.T) {
 		cfg.PublicLinksEnabled = false
 	})
 	owner := on.createTestUser(t, "previewswitch", "password123", false)
-	note, err := owner.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{Title: "Switched"})
-	require.NoError(t, err)
-	link, err := owner.Client.SetPublicLink(t.Context(), note.ID, nil)
-	require.NoError(t, err)
+	_, token := shareListNote(t, owner, &client.CreateListNoteRequest{Title: "Switched"})
 
-	assert.Contains(t, on.sharePage(t, "/share/"+link.Token), "<title>Switched</title>")
-	assert.Equal(t, string(index), off.sharePage(t, "/share/"+link.Token))
+	assert.Contains(t, on.sharePage(t, "/share/"+token), "<title>Switched</title>")
+	assert.Equal(t, string(index), off.sharePage(t, "/share/"+token))
 }
 
 func TestSharePreviewPublicURL(t *testing.T) {
@@ -266,22 +249,19 @@ func TestSharePreviewPublicURL(t *testing.T) {
 			t.Parallel()
 			ts, _ := setupSharePreviewServer(t, func(cfg *config.Config) { cfg.PublicURL = tt.publicURL })
 			owner := ts.createTestUser(t, "previewurl", "password123", false)
-			note, err := owner.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{Title: "Absolute"})
-			require.NoError(t, err)
-			img, err := owner.Client.UploadNoteImage(t.Context(), note.ID, "a.png", bytes.NewReader(testPNG(t, 4, 4)))
-			require.NoError(t, err)
-			link, err := owner.Client.SetPublicLink(t.Context(), note.ID, nil)
+			noteID, token := shareListNote(t, owner, &client.CreateListNoteRequest{Title: "Absolute"})
+			img, err := owner.Client.UploadNoteImage(t.Context(), noteID, "a.png", bytes.NewReader(testPNG(t, 4, 4)))
 			require.NoError(t, err)
 
 			// og:url must be absolute, so it is only there with JOT_PUBLIC_URL.
-			wantURL := `<meta property="og:url" content="` + tt.publicURL + "/share/" + link.Token + `" />`
+			wantURL := `<meta property="og:url" content="` + tt.publicURL + "/share/" + token + `" />`
 			if tt.publicURL == "" {
 				wantURL = ""
 			}
-			wantImage := `<meta property="og:image" content="` + tt.publicURL + "/api/v1/public/notes/" + link.Token + "/images/" + img.ID + `/thumbnail" />`
+			wantImage := `<meta property="og:image" content="` + tt.publicURL + "/api/v1/public/notes/" + token + "/images/" + img.ID + `/thumbnail" />`
 
 			for _, host := range []string{"", "evil.example.org"} {
-				req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/share/"+link.Token, nil)
+				req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/share/"+token, nil)
 				require.NoError(t, err)
 				if host != "" {
 					req.Host = host

@@ -259,6 +259,7 @@ func (s *noteStore) GetPublicNote(ctx context.Context, token string) (*PublicNot
 		return nil, fmt.Errorf("failed to get public note: %w", err)
 	}
 
+	note.Title = note.NoteType.visibleTitle(note.Title)
 	if note.NoteType == NoteTypeList {
 		items, itemsErr := s.getItemsByNoteID(ctx, noteID)
 		if itemsErr != nil {
@@ -272,8 +273,6 @@ func (s *noteStore) GetPublicNote(ctx context.Context, token string) (*PublicNot
 		}
 		note.CheckedItemsCollapsed = &collapsed
 	} else {
-		// Mirrors SanitizeNote: a text note has no title.
-		note.Title = ""
 		note.Content = &content
 	}
 
@@ -364,10 +363,7 @@ func (s *noteStore) GetPublicNotePreview(ctx context.Context, token string) (*Pu
 		}
 		return nil, fmt.Errorf("failed to get public note preview: %w", err)
 	}
-	if noteType == NoteTypeText {
-		// Mirrors SanitizeNote: a text note has no title.
-		preview.Title = ""
-	}
+	preview.Title = noteType.visibleTitle(preview.Title)
 	if imageID.Valid {
 		preview.FirstImage = &PublicNoteImage{ID: imageID.String, Width: int(width.Int64), Height: int(height.Int64)}
 	}

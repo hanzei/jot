@@ -38,9 +38,7 @@ func NoteImageThumbnailSize(w, h int) (int, int) {
 	if w <= 0 || h <= 0 {
 		return 0, 0
 	}
-	if w <= thumbnailMaxDimension && h <= thumbnailMaxDimension {
-		return w, h
-	}
+	// The same rule resizeToJPEG applies when it generates the thumbnail.
 	return fitWithin(w, h, thumbnailMaxDimension)
 }
 

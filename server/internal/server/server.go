@@ -567,26 +567,22 @@ func (s *Server) setupRoutes() error {
 		return fmt.Errorf("open static directory %s: %w", safeStaticDir, err)
 	}
 	s.staticRoot = staticRoot
-	static := FileServer(staticRoot, s.sharePreview)
 	// The public link viewer page looks its link up for the preview card
 	// (share_preview.go), so it draws from the public API's per-IP bucket.
 	s.router.With(
 		middleware.ClientIPFromRemoteAddr,
 		s.rateLimiter.limit(bucketPublic, s.cfg.RateLimitPublicPerMinute, keyByClientIP),
-	).Get(sharePathPrefix+"*", static)
-	s.router.Get("/*", static)
+	).Get(sharePathPrefix+"*", FileServer(staticRoot, s.sharePreview))
+	s.router.Get("/*", FileServer(staticRoot, nil))
 	return nil
 }
-
-// indexRewriter may replace the index.html served for an SPA path: it returns
-// the body to serve instead, or nil to serve index unchanged.
-type indexRewriter func(r *http.Request, index []byte) []byte
 
 // FileServer returns a GET handler, mounted at the router root, that serves
 // files from root using os.Root for traversal-resistant filesystem access, and
 // index.html for every path that is not a file (SPA routing). rewriteIndex,
-// when non-nil, may replace that index.html per request.
-func FileServer(root *os.Root, rewriteIndex indexRewriter) http.HandlerFunc {
+// when non-nil, returns the index.html to serve for a request: index itself to
+// leave it unchanged.
+func FileServer(root *os.Root, rewriteIndex func(r *http.Request, index []byte) []byte) http.HandlerFunc {
 	fsys := root.FS()
 	fileServer := http.FileServerFS(fsys)
 
@@ -615,9 +611,7 @@ func FileServer(root *os.Root, rewriteIndex indexRewriter) http.HandlerFunc {
 				return
 			}
 			if rewriteIndex != nil {
-				if rewritten := rewriteIndex(req, index); rewritten != nil {
-					index = rewritten
-				}
+				index = rewriteIndex(req, index)
 			}
 
 			w.Header().Set("Content-Type", "text/html")
