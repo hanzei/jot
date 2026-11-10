@@ -390,6 +390,11 @@ for (const theme of THEMES) {
       await publicLinkSection.create('In 30 days');
       await expect(publicLinkSection.details()).toContainText('Created by you');
       await expectNoViolations(page, { include: ['[data-testid="public-link-section"]'] });
+
+      // The open expiry editor.
+      await publicLinkSection.changeButton().click();
+      await expect(publicLinkSection.newExpirySelect()).toBeFocused();
+      await expectNoViolations(page, { include: ['[data-testid="public-link-section"]'] });
     });
 
     test('admin page has no WCAG A/AA violations', async ({ page }) => {

@@ -16,6 +16,20 @@ export function publicNoteUrl(baseUrl: string, token: string): string {
   return trimTrailingSlashes(baseUrl) + PUBLIC_NOTE_PATH_PREFIX + encodeURIComponent(token);
 }
 
+/** How many characters of the token `shortPublicNoteUrl` keeps. */
+const VISIBLE_TOKEN_CHARS = 4;
+
+/**
+ * `publicNoteUrl(baseUrl, token)` for display only: no scheme, and the token
+ * cut to its first few characters and an ellipsis, e.g.
+ * `jot.example.com/share/W15w…`. The token is the only key to the note, so
+ * clients show this instead of the full URL, keeping the token out of
+ * screenshots and screen shares, and copy or share the full URL.
+ */
+export function shortPublicNoteUrl(baseUrl: string, token: string): string {
+  return publicNoteUrl(baseUrl, token.slice(0, VISIBLE_TOKEN_CHARS)).replace(/^[a-z][a-z\d+.-]*:\/\//i, '') + '…';
+}
+
 /**
  * The URL to hand out for `link`: built on `publicUrl` (`public_url` from
  * `GET /config`, set by the operator's `JOT_PUBLIC_URL`) when set, since the
