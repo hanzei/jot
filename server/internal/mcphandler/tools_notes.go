@@ -50,6 +50,9 @@ type listNotesInput struct {
 
 func (h *Handler) handleListNotes(userID string) mcp.ToolHandlerFor[listNotesInput, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in listNotesInput) (*mcp.CallToolResult, any, error) {
+		if err := models.ValidateSearchQuery(in.Search); err != nil {
+			return toolError("list notes: %w", err)
+		}
 		// Search is a full-text scan, rate-limited like GET /notes?search=.
 		if in.Search != "" {
 			allowed, err := h.allowExpensive(ctx, userID)

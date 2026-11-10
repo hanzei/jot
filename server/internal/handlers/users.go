@@ -53,7 +53,7 @@ func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int,
 
 	search := r.URL.Query().Get("search")
 
-	if err := validateSearchQuery(search); err != nil {
+	if err := models.ValidateSearchQuery(search); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 

@@ -40,7 +40,6 @@ const (
 	noteContentMaxLength  = models.NoteContentMaxLength
 	noteItemTextMaxLength = models.NoteItemTextMaxLength
 	noteItemsMaxCount     = models.NoteItemsMaxCount
-	searchQueryMaxLength  = 500
 	patNameMaxLength      = 100
 	// maxPATsPerUser caps the number of personal access tokens a user can hold.
 	// Keep in sync with shared/src/constants.ts VALIDATION.PAT_MAX_COUNT.
@@ -81,13 +80,6 @@ func validatePassword(password string, minLength int) error {
 	}
 	if len(password) > passwordMaxBytes {
 		return fmt.Errorf("password must be %d bytes or fewer", passwordMaxBytes)
-	}
-	return nil
-}
-
-func validateSearchQuery(q string) error {
-	if utf8.RuneCountInString(q) > searchQueryMaxLength {
-		return fmt.Errorf("search query must be %d characters or fewer", searchQueryMaxLength)
 	}
 	return nil
 }

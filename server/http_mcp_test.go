@@ -517,6 +517,13 @@ func TestMCPNoteValidation(t *testing.T) {
 	var listNote client.Note
 	callTool(t, sess, "create_note", map[string]any{"title": "list", "note_type": "list"}, &listNote)
 
+	t.Run("search query over the limit is rejected", func(t *testing.T) {
+		msg := callToolExpectError(t, sess, "list_notes", map[string]any{"search": strings.Repeat("a", 501)})
+		assert.Equal(t, "list notes: search query must be 500 characters or fewer", msg, "the same message REST returns")
+
+		callTool(t, sess, "list_notes", map[string]any{"search": strings.Repeat("ä", 500)}, nil)
+	})
+
 	t.Run("content over the limit is rejected", func(t *testing.T) {
 		tooLong := strings.Repeat("a", 10001)
 		msg := callToolExpectError(t, sess, "create_note", map[string]any{"content": tooLong})
