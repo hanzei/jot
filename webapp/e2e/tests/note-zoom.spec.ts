@@ -17,7 +17,7 @@ interface RecordedAnimation {
   isPanel: boolean;
   isGhost: boolean;
   ariaHidden: string | null;
-  frames: Array<{ transform?: string; opacity?: number }>;
+  frames: Array<{ transform?: string; opacity?: number; height?: string }>;
   duration: number;
   rect: { x: number; y: number; width: number; height: number };
 }
@@ -116,6 +116,22 @@ test.describe('Note modal zoom', () => {
 
     // The snapshot and its backdrop are removed once the close finishes.
     await expect(ghosts(page)).toHaveCount(0);
+  });
+
+  test('the panel grows to its real height while zooming in', async ({ page, dashboardPage, authenticatedUser }) => {
+    void authenticatedUser;
+    await dashboardPage.createListNote('Tall list', ['One', 'Two', 'Three', 'Four']);
+    await recordAnimations(page);
+
+    // The list's items land after the zoom has started, so the panel's height
+    // animation (useSizeTransition) runs while it is still scaled down. It must
+    // aim for the panel's layout height, not its shrunken on-screen height.
+    await dashboardPage.openNote('Tall list');
+    const heights = (await recorded(page)).filter(a => a.isPanel && a.frames.some(f => f.height));
+    expect(heights.length).toBeGreaterThan(0);
+    const finalHeight = parseFloat(lastFrame(heights[heights.length - 1]!).height!);
+    const panelHeight = await page.locator('[data-note-modal-panel]').evaluate(el => (el as HTMLElement).offsetHeight);
+    expect(finalHeight).toBeCloseTo(panelHeight, 0);
   });
 
   test('closes onto the card where it is now, not where it was clicked', async ({ page, dashboardPage, authenticatedUser }) => {

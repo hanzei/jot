@@ -30,7 +30,10 @@ export function useSizeTransition<T extends HTMLElement>(
     const element = ref.current;
     if (!element) return;
 
-    const nextHeight = element.getBoundingClientRect().height;
+    // The layout height, not getBoundingClientRect(): that includes transforms,
+    // so a panel mid-way through scaling in (the note modal's zoom, a dialog's
+    // scale-95 enter) would report its shrunken size and animate towards it.
+    const nextHeight = element.offsetHeight;
     const prevHeight = previousHeight.current;
     previousHeight.current = nextHeight;
 
