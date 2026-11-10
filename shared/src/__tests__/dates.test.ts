@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calendarDaysAgo } from '../dates';
+import { calendarDaysAgo, patLastUsedMessage } from '../dates';
 
 describe('calendarDaysAgo', () => {
   const now = new Date(2026, 10, 10, 9, 30);
@@ -21,5 +21,21 @@ describe('calendarDaysAgo', () => {
 
   it('is negative for a later day', () => {
     expect(calendarDaysAgo(new Date(2026, 10, 11, 0, 5), now)).toBe(-1);
+  });
+});
+
+describe('patLastUsedMessage', () => {
+  const now = new Date(2026, 10, 10, 9, 30);
+
+  it('picks the key for how many days ago the token was used', () => {
+    expect(patLastUsedMessage(null, 'en-US', now)).toEqual({ key: 'settings.patsNoRecordedUse', values: {} });
+    expect(patLastUsedMessage(new Date(2026, 10, 10, 8).toISOString(), 'en-US', now)).toEqual({ key: 'settings.patsLastUsedToday', values: {} });
+    expect(patLastUsedMessage(new Date(2026, 10, 9, 23).toISOString(), 'en-US', now)).toEqual({ key: 'settings.patsLastUsedYesterday', values: {} });
+    expect(patLastUsedMessage(new Date(2026, 10, 5, 12).toISOString(), 'en-US', now)).toEqual({ key: 'settings.patsLastUsedDaysAgo', values: { days: 5 } });
+  });
+
+  it('formats the date in the given locale once a month has passed', () => {
+    expect(patLastUsedMessage(new Date(2025, 2, 4, 12).toISOString(), 'en-US', now))
+      .toEqual({ key: 'settings.patsLastUsedOn', values: { date: 'Mar 4, 2025' } });
   });
 });
