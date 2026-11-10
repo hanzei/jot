@@ -97,6 +97,15 @@ func (s *Service) AddLabelToNote(ctx context.Context, noteID, userID, name strin
 	if err != nil {
 		return nil, err
 	}
+	// Check access before attachLabels creates the label, so a note the user
+	// cannot reach does not leave a new, unattached label behind.
+	hasAccess, err := s.noteStore.HasAccess(ctx, noteID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !hasAccess {
+		return nil, models.ErrNoteNoAccess
+	}
 	if err = s.attachLabels(ctx, noteID, userID, []string{name}); err != nil {
 		return nil, err
 	}
