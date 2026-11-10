@@ -268,7 +268,7 @@ func validateItem(item NewItem) error {
 		return err
 	}
 	if item.ID != "" && !models.IsValidID(item.ID) {
-		return apierr.Invalid(errors.New("invalid item ID format"))
+		return errInvalidItemID
 	}
 	return nil
 }
