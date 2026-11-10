@@ -248,7 +248,7 @@ func labelError(err error, op string) (int, any, error) {
 	case errors.Is(err, models.ErrLabelNotFoundOrNotOwned):
 		return http.StatusNotFound, nil, errors.New("label not found")
 	case errors.Is(err, models.ErrNoteNoAccess):
-		return http.StatusForbidden, nil, errors.New("no access to note")
+		return http.StatusForbidden, nil, err
 	}
 	return storeError(err, op)
 }

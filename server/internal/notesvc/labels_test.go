@@ -82,12 +82,7 @@ func TestLabels(t *testing.T) {
 				}, http.StatusBadRequest, apierr.CodeValidationFailed},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
-					err := tc.call()
-					require.Error(t, err)
-					status, ok := apierr.SentinelStatus(err)
-					require.True(t, ok, "no status for %v", err)
-					assert.Equal(t, tc.status, status)
-					assert.Equal(t, tc.code, apierr.CodeFor(status, err))
+					requireAPIError(t, tc.call(), tc.status, tc.code)
 				})
 			}
 		})
@@ -99,7 +94,6 @@ func TestLabels(t *testing.T) {
 			require.NoError(t, err)
 			newID, err := models.GenerateID()
 			require.NoError(t, err)
-			missing := "0000000000000000missing"
 
 			_, _, err = svc.CreateLabel(ctx, testUserID, taken.ID, "fresh")
 			require.ErrorIs(t, err, models.ErrLabelIDConflict)
@@ -107,13 +101,13 @@ func TestLabels(t *testing.T) {
 			require.ErrorIs(t, err, models.ErrLabelNameConflict)
 			_, err = svc.RenameLabel(ctx, other.ID, testUserID, "kept")
 			require.ErrorIs(t, err, models.ErrLabelNameConflict)
-			_, err = svc.AddLabelToNote(ctx, missing, testUserID, "orphan")
+			_, err = svc.AddLabelToNote(ctx, missingID, testUserID, "orphan")
 			require.ErrorIs(t, err, models.ErrNoteNoAccess)
 			_, err = svc.labelStore.GetLabelByName(ctx, testUserID, "orphan")
 			require.ErrorIs(t, err, models.ErrLabelNotFoundOrNotOwned, "no label is created for an unreachable note")
-			_, err = svc.RenameLabel(ctx, missing, testUserID, "x")
+			_, err = svc.RenameLabel(ctx, missingID, testUserID, "x")
 			require.ErrorIs(t, err, models.ErrLabelNotFoundOrNotOwned)
-			require.ErrorIs(t, svc.DeleteLabel(ctx, missing, testUserID), models.ErrLabelNotFoundOrNotOwned)
+			require.ErrorIs(t, svc.DeleteLabel(ctx, missingID, testUserID), models.ErrLabelNotFoundOrNotOwned)
 		})
 
 		t.Run("delete detaches the label", func(t *testing.T) {
