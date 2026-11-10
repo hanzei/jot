@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -17,10 +18,17 @@ import (
 // setupMCPSession connects an MCP client to the test server, authenticated as tu.
 func setupMCPSession(t *testing.T, ts *TestServer, tu *TestUser) *mcp.ClientSession {
 	t.Helper()
+	return connectMCP(t, ts, tu.Client.HTTPClient())
+}
+
+// connectMCP connects an MCP client to the test server through httpClient,
+// which carries whatever authentication the test needs.
+func connectMCP(t *testing.T, ts *TestServer, httpClient *http.Client) *mcp.ClientSession {
+	t.Helper()
 	c := mcp.NewClient(&mcp.Implementation{Name: "test-client"}, nil)
 	transport := &mcp.StreamableClientTransport{
 		Endpoint:             ts.HTTPServer.URL + "/api/v1/mcp",
-		HTTPClient:           tu.Client.HTTPClient(),
+		HTTPClient:           httpClient,
 		DisableStandaloneSSE: true,
 	}
 	sess, err := c.Connect(t.Context(), transport, nil)
@@ -463,6 +471,28 @@ func TestMCPUnauthenticated(t *testing.T) {
 	}
 	_, err := c.Connect(t.Context(), transport, nil)
 	require.Error(t, err, "expected connection to fail without authentication")
+}
+
+// TestMCPRecordsPATUse verifies that an MCP session authenticated with a
+// personal access token, which is how MCP clients are configured, shows up as
+// the token's last use.
+func TestMCPRecordsPATUse(t *testing.T) {
+	t.Parallel()
+	ts := setupTestServer(t)
+	tu := ts.createTestUser(t, "mcpuser", "password123", false)
+	pat := createPAT(t, ts, tu, "assistant")
+
+	sess := connectMCP(t, ts, &http.Client{Transport: &headerRoundTripper{
+		header: http.Header{"Authorization": {"Bearer " + pat.Token}},
+		base:   ts.HTTPServer.Client().Transport,
+	}})
+
+	var notes []client.Note
+	callTool(t, sess, "list_notes", map[string]any{}, &notes)
+
+	pats := listPATs(t, ts, tu)
+	require.Len(t, pats, 1)
+	assert.NotNil(t, pats[0].LastUsedAt, "an MCP request authenticated with the token records its use")
 }
 
 // TestMCPNoteValidation verifies that the MCP note tools apply the same field

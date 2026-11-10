@@ -27,7 +27,10 @@ type patResponse struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"created_at"`
-	Token     string    `json:"token,omitempty"`
+	// LastUsedAt is null until the token's first recorded use, and is only
+	// rewritten once the stored value is an hour old.
+	LastUsedAt *time.Time `json:"last_used_at" extensions:"x-nullable"`
+	Token      string     `json:"token,omitempty"`
 }
 
 // PATListResponse is the GET /pats body.
@@ -58,9 +61,10 @@ func (h *PATsHandler) ListPATs(w http.ResponseWriter, r *http.Request) (int, any
 	responses := make([]patResponse, 0, len(pats))
 	for _, p := range pats {
 		responses = append(responses, patResponse{
-			ID:        p.ID,
-			Name:      p.Name,
-			CreatedAt: p.CreatedAt,
+			ID:         p.ID,
+			Name:       p.Name,
+			CreatedAt:  p.CreatedAt,
+			LastUsedAt: p.LastUsedAt,
 		})
 	}
 

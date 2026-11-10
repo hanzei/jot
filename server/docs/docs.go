@@ -4506,6 +4506,11 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "last_used_at": {
+                    "description": "LastUsedAt is null until the token's first recorded use, and is only\nrewritten once the stored value is an hour old.",
+                    "type": "string",
+                    "x-nullable": true
+                },
                 "name": {
                     "type": "string"
                 },
