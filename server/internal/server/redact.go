@@ -13,7 +13,7 @@ const redactedToken = "{token}"
 // tokenPathPrefixes are the paths whose next segment is a public link token:
 // the public API and the webapp's viewer page. A token is a credential, so it
 // must never reach request logs or span attributes.
-var tokenPathPrefixes = []string{"/api/v1/public/notes/", sharePathPrefix}
+var tokenPathPrefixes = []string{publicNotesPathPrefix, sharePathPrefix}
 
 // redactTokenPath returns path with the public link token segment replaced by
 // redactedToken, and whether path carries a token at all.

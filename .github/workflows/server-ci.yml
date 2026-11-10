@@ -11,6 +11,8 @@ on:
       - "server/**"
       # The Go Markdown export is pinned to this fixture too.
       - "shared/src/listToMarkdownCases.json"
+      # The share-page preview tests render the real index.html (#1209).
+      - "webapp/index.html"
       - ".github/workflows/**"
       - "Taskfile.yml"
       - ".golangci.yml"

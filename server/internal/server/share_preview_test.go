@@ -21,6 +21,14 @@ func readWebappIndex(t *testing.T) []byte {
 	return index
 }
 
+// previewBlock returns index's block from start through end, markers included.
+func previewBlock(t *testing.T, index, start, end string) string {
+	t.Helper()
+	from, to := strings.Index(index, start), strings.Index(index, end)
+	require.True(t, from >= 0 && to > from, "block %s…%s", start, end)
+	return index[from : to+len(end)]
+}
+
 func TestSharePreviewMarkersInIndex(t *testing.T) {
 	t.Parallel()
 	index := string(readWebappIndex(t))
@@ -30,12 +38,12 @@ func TestSharePreviewMarkersInIndex(t *testing.T) {
 		require.Equal(t, 1, strings.Count(index, block[1]), "marker %s", block[1])
 		assert.Less(t, strings.Index(index, block[0]), strings.Index(index, block[1]), "%s comes before its end marker", block[0])
 	}
-	text := index[strings.Index(index, previewTextStart):strings.Index(index, previewTextEnd)]
+	text := previewBlock(t, index, previewTextStart, previewTextEnd)
 	assert.Contains(t, text, "<title>")
 	assert.Contains(t, text, `name="description"`)
 	assert.Contains(t, text, `property="og:title"`)
 	assert.Contains(t, text, `property="og:description"`)
-	image := index[strings.Index(index, previewImageStart):strings.Index(index, previewImageEnd)]
+	image := previewBlock(t, index, previewImageStart, previewImageEnd)
 	assert.Contains(t, image, `property="og:image"`)
 	assert.Contains(t, image, `property="og:image:alt"`)
 }
@@ -49,7 +57,7 @@ func TestRenderSharePreview(t *testing.T) {
 		t.Parallel()
 		out, ok := renderSharePreview(index, &models.PublicNotePreview{
 			Title:      "Groceries",
-			FirstImage: &models.NoteImage{ID: "img1", Width: 2048, Height: 1024},
+			FirstImage: &models.PublicNoteImage{ID: "img1", Width: 2048, Height: 1024},
 		}, "https://jot.example.com", token)
 		require.True(t, ok)
 		html := string(out)
@@ -77,19 +85,17 @@ func TestRenderSharePreview(t *testing.T) {
 		require.True(t, ok)
 		html := string(out)
 		assert.NotContains(t, html, `property="og:url"`, "og:url must be absolute, so it needs JOT_PUBLIC_URL")
-		img := string(index[strings.Index(string(index), previewImageStart):])
-		img = img[:strings.Index(img, previewImageEnd)+len(previewImageEnd)]
-		assert.Contains(t, html, img, "the image block is untouched")
+		assert.Contains(t, html, previewBlock(t, string(index), previewImageStart, previewImageEnd), "the image block is untouched")
 	})
 
 	t.Run("small image keeps its size; unknown size has no size tags", func(t *testing.T) {
 		t.Parallel()
-		out, ok := renderSharePreview(index, &models.PublicNotePreview{FirstImage: &models.NoteImage{ID: "a", Width: 300, Height: 200}}, "", token)
+		out, ok := renderSharePreview(index, &models.PublicNotePreview{FirstImage: &models.PublicNoteImage{ID: "a", Width: 300, Height: 200}}, "", token)
 		require.True(t, ok)
 		assert.Contains(t, string(out), `<meta property="og:image:width" content="300" />`)
 		assert.Contains(t, string(out), `<meta property="og:image:height" content="200" />`)
 
-		out, ok = renderSharePreview(index, &models.PublicNotePreview{FirstImage: &models.NoteImage{ID: "a"}}, "", token)
+		out, ok = renderSharePreview(index, &models.PublicNotePreview{FirstImage: &models.PublicNoteImage{ID: "a"}}, "", token)
 		require.True(t, ok)
 		assert.NotContains(t, string(out), "og:image:width")
 		assert.NotContains(t, string(out), "og:image:height")
@@ -100,7 +106,7 @@ func TestRenderSharePreview(t *testing.T) {
 		_, ok := renderSharePreview([]byte("<html></html>"), &models.PublicNotePreview{}, "", token)
 		assert.False(t, ok)
 		noImageEnd := strings.Replace(string(index), previewImageEnd, "", 1)
-		_, ok = renderSharePreview([]byte(noImageEnd), &models.PublicNotePreview{FirstImage: &models.NoteImage{ID: "a"}}, "", token)
+		_, ok = renderSharePreview([]byte(noImageEnd), &models.PublicNotePreview{FirstImage: &models.PublicNoteImage{ID: "a"}}, "", token)
 		assert.False(t, ok)
 	})
 }

@@ -33,9 +33,12 @@ function requirePreviewMarkers(): Plugin {
     apply: 'build',
     enforce: 'post',
     generateBundle(_options, bundle) {
+      // Only the app build runs this (the service worker build has its own
+      // plugin list), so a missing index.html means the guard would silently
+      // stop guarding: fail instead.
       const index = bundle['index.html'];
       if (!index || index.type !== 'asset') {
-        return;
+        this.error('index.html is missing from the build output, so its link-preview markers cannot be checked');
       }
       const html = typeof index.source === 'string' ? index.source : new TextDecoder().decode(index.source);
       const missing = PREVIEW_MARKERS.filter((marker) => !html.includes(marker));

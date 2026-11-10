@@ -551,14 +551,13 @@ func resizeImage(data []byte) ([]byte, error) {
 	return resizeToJPEG(img, cfg, maxProfileIconDimension)
 }
 
-// resizeToJPEG resizes img to fit within maxDim x maxDim (preserving aspect
-// ratio; a no-op if it already fits) and re-encodes it as JPEG. cfg is the
-// image's decoded config, used to determine source opaqueness before a
-// potential resize converts the image to RGBA and loses that information.
-// Shared by the profile-icon and note-image-thumbnail pipelines.
 // fitWithin scales w×h down, keeping the aspect ratio, so its longer side is
-// maxDim. Callers only use it when one side exceeds maxDim.
+// maxDim. A size that already fits is returned unchanged: images are never
+// scaled up.
 func fitWithin(w, h, maxDim int) (int, int) {
+	if w <= maxDim && h <= maxDim {
+		return w, h
+	}
 	var dstW, dstH int
 	if w >= h {
 		dstW = maxDim
@@ -570,6 +569,11 @@ func fitWithin(w, h, maxDim int) (int, int) {
 	return max(dstW, 1), max(dstH, 1)
 }
 
+// resizeToJPEG resizes img to fit within maxDim x maxDim (preserving aspect
+// ratio; a no-op if it already fits) and re-encodes it as JPEG. cfg is the
+// image's decoded config, used to determine source opaqueness before a
+// potential resize converts the image to RGBA and loses that information.
+// Shared by the profile-icon and note-image-thumbnail pipelines.
 func resizeToJPEG(img image.Image, cfg image.Config, maxDim int) ([]byte, error) {
 	sourceOpaque := isOpaqueImage(cfg.ColorModel, img)
 
@@ -577,8 +581,7 @@ func resizeToJPEG(img image.Image, cfg image.Config, maxDim int) ([]byte, error)
 	srcW := bounds.Dx()
 	srcH := bounds.Dy()
 
-	if srcW > maxDim || srcH > maxDim {
-		dstW, dstH := fitWithin(srcW, srcH, maxDim)
+	if dstW, dstH := fitWithin(srcW, srcH, maxDim); dstW != srcW || dstH != srcH {
 		dst := image.NewRGBA(image.Rect(0, 0, dstW, dstH))
 		draw.CatmullRom.Scale(dst, dst.Bounds(), img, bounds, draw.Src, nil)
 		img = dst

@@ -42,7 +42,7 @@ func newTestFileServer(t *testing.T) func(t *testing.T, path string, headers map
 	r := chi.NewRouter()
 	r.Get("/*", FileServer(root, func(req *http.Request, index []byte) []byte {
 		if req.URL.Path != "/rewritten" {
-			return nil
+			return index
 		}
 		if string(index) != testIndex {
 			t.Errorf("rewriter got index %q", index)
