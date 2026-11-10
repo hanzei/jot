@@ -1,30 +1,22 @@
 package handlers
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/models"
-	"github.com/hanzei/jot/server/internal/notify"
-	"github.com/hanzei/jot/server/internal/sse"
+	"github.com/hanzei/jot/server/internal/notesvc"
 )
 
 type LabelsHandler struct {
-	noteStore  *models.NoteStore
 	labelStore *models.LabelStore
-	events     *notify.Publisher
+	notes      *notesvc.Service
 }
 
-func NewLabelsHandler(noteStore *models.NoteStore, labelStore *models.LabelStore, hub *sse.Hub) *LabelsHandler {
-	return &LabelsHandler{
-		noteStore:  noteStore,
-		labelStore: labelStore,
-		events:     notify.New(hub, noteStore),
-	}
+func NewLabelsHandler(labelStore *models.LabelStore, notes *notesvc.Service) *LabelsHandler {
+	return &LabelsHandler{labelStore: labelStore, notes: notes}
 }
 
 type AddLabelRequest struct {
@@ -97,36 +89,16 @@ func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int
 		return http.StatusBadRequest, nil, errors.New("invalid request body")
 	}
 
-	req.Name = strings.TrimSpace(req.Name)
-	if req.Name == "" {
-		return http.StatusBadRequest, nil, errors.New("label name is required")
+	label, created, err := h.notes.CreateLabel(r.Context(), user.ID, req.ID, req.Name)
+	switch {
+	case errors.Is(err, models.ErrLabelIDConflict):
+		return http.StatusConflict, nil, errors.New("label already exists")
+	case errors.Is(err, models.ErrLabelNameConflict):
+		// Only a create with a client-supplied ID is strict about names.
+		return http.StatusConflict, nil, err
+	case err != nil:
+		return storeError(err, "create label")
 	}
-
-	var (
-		label   *models.Label
-		created bool
-		err     error
-	)
-	if req.ID != "" {
-		var status int
-		label, status, err = h.createLabelWithID(r.Context(), user.ID, req.ID, req.Name)
-		if err != nil {
-			return status, nil, err
-		}
-		// A client-supplied ID means a real create: a name match on an existing
-		// label is a 409, never a silent hand-back.
-		created = true
-	} else {
-		label, created, err = h.labelStore.GetOrCreateLabel(r.Context(), user.ID, req.Name)
-		if err != nil {
-			// An overlong name still matches an existing label; only a new
-			// one is rejected (ErrLabelNameTooLong, a 422).
-			return storeError(err, "get or create label")
-		}
-	}
-
-	// Best-effort realtime update for other sessions of the same user.
-	h.events.LabelsChanged(r.Context(), user.ID, label)
 
 	// 201 when a label was inserted, 200 when an existing one was returned
 	// unchanged. Without an ID this endpoint is get-or-create — the webapp and
@@ -137,26 +109,6 @@ func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int
 		return http.StatusCreated, label, nil
 	}
 	return http.StatusOK, label, nil
-}
-
-// createLabelWithID is CreateLabel's strict-create path for a client-supplied
-// ID, returning the HTTP status to surface on failure.
-func (h *LabelsHandler) createLabelWithID(ctx context.Context, userID, id, name string) (*models.Label, int, error) {
-	if !models.IsValidID(id) {
-		return nil, http.StatusBadRequest, errors.New("invalid label ID format")
-	}
-	label, err := h.labelStore.CreateLabel(ctx, userID, id, name)
-	switch {
-	case err == nil:
-		return label, http.StatusCreated, nil
-	case errors.Is(err, models.ErrLabelIDConflict):
-		return nil, http.StatusConflict, errors.New("label already exists")
-	case errors.Is(err, models.ErrLabelNameConflict):
-		return nil, http.StatusConflict, models.ErrLabelNameConflict
-	default:
-		status, mapped := storeStatus(err, "create label")
-		return nil, status, mapped
-	}
 }
 
 // RenameLabel godoc
@@ -188,35 +140,13 @@ func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int
 		return http.StatusBadRequest, nil, errors.New("invalid request body")
 	}
 
-	req.Name = strings.TrimSpace(req.Name)
-	if req.Name == "" {
-		return http.StatusBadRequest, nil, errors.New("label name is required")
+	label, err := h.notes.RenameLabel(r.Context(), labelID, user.ID, req.Name)
+	if errors.Is(err, models.ErrLabelNameConflict) {
+		return http.StatusBadRequest, nil, err
 	}
-	if err := models.ValidateLabelName(req.Name); err != nil {
-		return http.StatusUnprocessableEntity, nil, err
-	}
-
-	noteIDs, err := h.labelStore.GetLabelNoteIDs(r.Context(), labelID, user.ID)
 	if err != nil {
-		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
-			return http.StatusNotFound, nil, errors.New("label not found")
-		}
-		return storeError(err, "get label note IDs")
+		return labelError(err, "rename label")
 	}
-
-	label, err := h.labelStore.RenameLabel(r.Context(), labelID, user.ID, req.Name)
-	if err != nil {
-		if errors.Is(err, models.ErrLabelNameConflict) {
-			return http.StatusBadRequest, nil, models.ErrLabelNameConflict
-		}
-		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
-			return http.StatusNotFound, nil, errors.New("label not found")
-		}
-		return storeError(err, "rename label")
-	}
-
-	h.events.LabelNoteUpdates(r.Context(), noteIDs, user.ID)
-
 	return http.StatusOK, label, nil
 }
 
@@ -250,34 +180,10 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 		return http.StatusBadRequest, nil, errors.New("invalid request body")
 	}
 
-	req.Name = strings.TrimSpace(req.Name)
-	if req.Name == "" {
-		return http.StatusBadRequest, nil, errors.New("label name is required")
-	}
-
-	label, _, err := h.labelStore.GetOrCreateLabel(r.Context(), user.ID, req.Name)
+	note, err := h.notes.AddLabelToNote(r.Context(), noteID, user.ID, req.Name)
 	if err != nil {
-		return storeError(err, "get or create label")
+		return labelError(err, "add label to note")
 	}
-
-	if err = h.noteStore.AddLabelToNote(r.Context(), noteID, label.ID, user.ID); err != nil {
-		if errors.Is(err, models.ErrNoteNoAccess) {
-			return http.StatusForbidden, nil, errors.New("no access to note")
-		}
-		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
-			return http.StatusNotFound, nil, errors.New("label not found")
-		}
-		return storeError(err, "add label to note")
-	}
-
-	note, err := h.noteStore.GetByID(r.Context(), noteID, user.ID)
-	if err != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
-	}
-
-	// Labels are per-user, so only the acting user's view of the note changed.
-	h.events.NoteUpdated(r.Context(), noteID, note, user.ID, false)
-
 	return http.StatusOK, note, nil
 }
 
@@ -303,21 +209,10 @@ func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int
 	noteID := chi.URLParam(r, "id")
 	labelID := chi.URLParam(r, "label_id")
 
-	if err := h.noteStore.RemoveLabelFromNote(r.Context(), noteID, labelID, user.ID); err != nil {
-		if errors.Is(err, models.ErrNoteNoAccess) {
-			return http.StatusForbidden, nil, errors.New("no access to note")
-		}
-		return storeError(err, "remove label from note")
-	}
-
-	note, err := h.noteStore.GetByID(r.Context(), noteID, user.ID)
+	note, err := h.notes.RemoveLabelFromNote(r.Context(), noteID, labelID, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
+		return labelError(err, "remove label from note")
 	}
-
-	// Labels are per-user, so only the acting user's view of the note changed.
-	h.events.NoteUpdated(r.Context(), noteID, note, user.ID, false)
-
 	return http.StatusOK, note, nil
 }
 
@@ -338,22 +233,22 @@ func (h *LabelsHandler) DeleteLabel(w http.ResponseWriter, r *http.Request) (int
 		return http.StatusUnauthorized, nil, authErr
 	}
 
-	labelID := chi.URLParam(r, "id")
-	noteIDs, err := h.labelStore.GetLabelNoteIDs(r.Context(), labelID, user.ID)
-	if err != nil {
-		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
-			return http.StatusNotFound, nil, errors.New("label not found")
-		}
-		return storeError(err, "get label note IDs")
+	if err := h.notes.DeleteLabel(r.Context(), chi.URLParam(r, "id"), user.ID); err != nil {
+		return labelError(err, "delete label")
 	}
-	if err := h.labelStore.DeleteLabel(r.Context(), labelID, user.ID); err != nil {
-		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
-			return http.StatusNotFound, nil, errors.New("label not found")
-		}
-		return storeError(err, "delete label")
-	}
-
-	h.events.LabelNoteUpdates(r.Context(), noteIDs, user.ID)
-
 	return http.StatusNoContent, nil, nil
+}
+
+// labelError maps a label operation's error to a response. The label routes
+// differ from apierr's sentinel table in two places: a missing label reads
+// "label not found", and a note the user cannot reach is a 403 rather than
+// the 404 the note routes return.
+func labelError(err error, op string) (int, any, error) {
+	switch {
+	case errors.Is(err, models.ErrLabelNotFoundOrNotOwned):
+		return http.StatusNotFound, nil, errors.New("label not found")
+	case errors.Is(err, models.ErrNoteNoAccess):
+		return http.StatusForbidden, nil, err
+	}
+	return storeError(err, op)
 }

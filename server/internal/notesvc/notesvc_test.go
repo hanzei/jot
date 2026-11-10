@@ -19,6 +19,9 @@ import (
 
 const testUserID = "user0000000000000notesvc"
 
+// missingID is a well-formed ID that no row has.
+const missingID = "0000000000000000missing"
+
 // newTestService returns a Service on a fresh migrated database for driver,
 // with no SSE hub, recording metrics into the returned reader.
 func newTestService(t *testing.T, driver string) (*Service, *sdkmetric.ManualReader) {
@@ -43,6 +46,17 @@ func newTestService(t *testing.T, driver string) (*Service, *sdkmetric.ManualRea
 	svc, err := New(noteStore, models.NewLabelStore(db, d, 0), imageStore, notify.New(nil, noteStore), provider.Meter("test"))
 	require.NoError(t, err)
 	return svc, reader
+}
+
+// requireAPIError asserts that err maps to status and code the way the REST
+// handlers map it.
+func requireAPIError(t *testing.T, err error, status int, code apierr.Code) {
+	t.Helper()
+	require.Error(t, err)
+	got, ok := apierr.SentinelStatus(err)
+	require.True(t, ok, "no status for %v", err)
+	assert.Equal(t, status, got)
+	assert.Equal(t, code, apierr.CodeFor(got, err))
 }
 
 // counterValue returns the current total of the counter called name, 0 if it
@@ -171,11 +185,7 @@ func TestServiceErrors(t *testing.T) {
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				_, err := svc.Create(ctx, testUserID, tc.in)
-				require.Error(t, err)
-				status, ok := apierr.SentinelStatus(err)
-				require.True(t, ok, "no status for %v", err)
-				assert.Equal(t, tc.status, status)
-				assert.Equal(t, tc.code, apierr.CodeFor(status, err))
+				requireAPIError(t, err, tc.status, tc.code)
 			})
 		}
 
@@ -184,8 +194,8 @@ func TestServiceErrors(t *testing.T) {
 		assert.Empty(t, notes)
 		assert.Zero(t, counterValue(t, reader, "notes.created"))
 
-		missing := "0000000000000000missing"
-		_, err = svc.Update(ctx, missing, testUserID, models.NoteUpdate{Content: &missing})
+		content := "x"
+		_, err = svc.Update(ctx, missingID, testUserID, models.NoteUpdate{Content: &content})
 		require.ErrorIs(t, err, models.ErrNoteNotFound)
 		assert.Zero(t, counterValue(t, reader, "notes.updated"))
 	})

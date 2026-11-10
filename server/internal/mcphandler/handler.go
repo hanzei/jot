@@ -14,8 +14,6 @@ import (
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/notesvc"
-	"github.com/hanzei/jot/server/internal/notify"
-	"github.com/hanzei/jot/server/internal/sse"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -25,23 +23,19 @@ type Handler struct {
 	labelStore *models.LabelStore
 	// notes performs the note writes shared with the REST API.
 	notes *notesvc.Service
-	// events publishes the same SSE events the REST handlers do, so a change
-	// made over MCP reaches open webapp and mobile clients.
-	events *notify.Publisher
 	// allowExpensive draws from the user's expensive-operation rate-limit
 	// bucket, the one GET /notes?search= uses (see the server's
 	// rateLimiter.allowUser).
 	allowExpensive func(ctx context.Context, userID string) (bool, error)
 }
 
-// New creates a new Handler backed by the provided stores and notes service,
-// publishing change events to hub.
-func New(noteStore *models.NoteStore, labelStore *models.LabelStore, notes *notesvc.Service, hub *sse.Hub, allowExpensive func(ctx context.Context, userID string) (bool, error)) *Handler {
+// New creates a new Handler backed by the provided stores for reads and the
+// notes service for writes.
+func New(noteStore *models.NoteStore, labelStore *models.LabelStore, notes *notesvc.Service, allowExpensive func(ctx context.Context, userID string) (bool, error)) *Handler {
 	return &Handler{
 		noteStore:      noteStore,
 		labelStore:     labelStore,
 		notes:          notes,
-		events:         notify.New(hub, noteStore),
 		allowExpensive: allowExpensive,
 	}
 }

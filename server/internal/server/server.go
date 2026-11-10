@@ -177,7 +177,7 @@ func newServer(cfg *config.Config, log *logrus.Logger, tracerProvider trace.Trac
 		return nil, fmt.Errorf("initialize notes service: %w", err)
 	}
 	notesHandler := handlers.NewNotesHandler(noteStore, userStore, notes, hub, imageStore, int64(cfg.UploadMaxBytes), cfg.PublicLinksEnabled)
-	labelsHandler := handlers.NewLabelsHandler(noteStore, labelStore, hub)
+	labelsHandler := handlers.NewLabelsHandler(labelStore, notes)
 	eventsHandler := handlers.NewEventsHandler(hub)
 	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, imageStore, sessionService, hub,
 		time.Now(), //nolint:gocritic // uptime reference; keeps the monotonic clock, never persisted
@@ -555,7 +555,7 @@ func (s *Server) setupRoutes() error {
 			}
 
 			allowExpensive := s.rateLimiter.allowUser(bucketExpensive, s.cfg.RateLimitExpensivePerMinute)
-			r.Handle("/mcp", mcphandler.New(s.noteStore, s.labelStore, s.notes, s.hub, allowExpensive).NewStreamableHTTPHandler())
+			r.Handle("/mcp", mcphandler.New(s.noteStore, s.labelStore, s.notes, allowExpensive).NewStreamableHTTPHandler())
 		})
 
 		r.Group(func(r chi.Router) {
