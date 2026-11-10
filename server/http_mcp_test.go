@@ -631,3 +631,177 @@ func TestMCPPublishesSSE(t *testing.T) {
 		require.True(t, found, "delete_note should publish note_deleted to the collaborator")
 	})
 }
+
+// TestMCPCreateNoteLabelsAndPinned verifies that create_note attaches labels
+// and pins the note in the same call.
+func TestMCPCreateNoteLabelsAndPinned(t *testing.T) {
+	t.Parallel()
+	ts := setupTestServer(t)
+	tu := ts.createTestUser(t, "mcpcreatelabels", "password123", false)
+	sess := setupMCPSession(t, ts, tu)
+
+	var seed client.Note
+	callTool(t, sess, "create_note", map[string]any{"content": "seed", "labels": []string{"Work"}}, &seed)
+	require.Len(t, seed.Labels, 1)
+	workID := seed.Labels[0].ID
+
+	t.Run("labels and pinned are applied", func(t *testing.T) {
+		var created client.Note
+		callTool(t, sess, "create_note", map[string]any{
+			"content": "Quarterly report",
+			"pinned":  true,
+			// " work " and "WORK" resolve to the existing label; "" is skipped.
+			"labels": []string{" work ", "WORK", "", "reports"},
+		}, &created)
+		assert.True(t, created.Pinned)
+		require.Len(t, created.Labels, 2)
+		assert.ElementsMatch(t, []string{"Work", "reports"}, []string{created.Labels[0].Name, created.Labels[1].Name})
+		assert.Contains(t, []string{created.Labels[0].ID, created.Labels[1].ID}, workID)
+
+		var fetched client.Note
+		callTool(t, sess, "get_note", map[string]any{"id": created.ID}, &fetched)
+		assert.True(t, fetched.Pinned)
+		assert.Len(t, fetched.Labels, 2)
+	})
+
+	t.Run("a new label name over the limit creates nothing", func(t *testing.T) {
+		var before []client.Note
+		callTool(t, sess, "list_notes", map[string]any{}, &before)
+
+		msg := callToolExpectError(t, sess, "create_note", map[string]any{
+			"content": "never created",
+			"labels":  []string{strings.Repeat("a", 101)},
+		})
+		assert.Contains(t, msg, "label name must be 100 characters or fewer")
+
+		var after []client.Note
+		callTool(t, sess, "list_notes", map[string]any{}, &after)
+		assert.Len(t, after, len(before))
+	})
+}
+
+// TestMCPUpdateNoteBaseVersion verifies the optimistic-concurrency guard on
+// update_note: a current base_version applies, a stale one changes nothing.
+func TestMCPUpdateNoteBaseVersion(t *testing.T) {
+	t.Parallel()
+	ts := setupTestServer(t)
+	tu := ts.createTestUser(t, "mcpbaseversion", "password123", false)
+	sess := setupMCPSession(t, ts, tu)
+
+	var note client.Note
+	callTool(t, sess, "create_note", map[string]any{"content": "v1"}, &note)
+	staleVersion := note.Version
+
+	var updated client.Note
+	callTool(t, sess, "update_note", map[string]any{
+		"id":           note.ID,
+		"content":      "v2",
+		"base_version": note.Version,
+	}, &updated)
+	assert.Equal(t, "v2", updated.Content)
+	assert.Greater(t, updated.Version, staleVersion)
+
+	msg := callToolExpectError(t, sess, "update_note", map[string]any{
+		"id":           note.ID,
+		"content":      "stale edit",
+		"pinned":       true,
+		"base_version": staleVersion,
+	})
+	assert.Contains(t, msg, "get_note")
+
+	var fetched client.Note
+	callTool(t, sess, "get_note", map[string]any{"id": note.ID}, &fetched)
+	assert.Equal(t, "v2", fetched.Content)
+	assert.Equal(t, updated.Version, fetched.Version)
+	assert.False(t, fetched.Pinned, "a rejected update must not apply its per-user fields either")
+}
+
+// TestMCPItemAssignment verifies assigned_to on the item tools and the
+// my_tasks filter on list_notes.
+func TestMCPItemAssignment(t *testing.T) {
+	t.Parallel()
+	ts := setupTestServer(t)
+	owner := ts.createTestUser(t, "mcpassignowner", "password123", false)
+	collaborator := ts.createTestUser(t, "mcpassigncollab", "password123", false)
+	outsider := ts.createTestUser(t, "mcpassignoutsider", "password123", false)
+	ownerSess := setupMCPSession(t, ts, owner)
+	collabSess := setupMCPSession(t, ts, collaborator)
+
+	var note client.Note
+	callTool(t, ownerSess, "create_note", map[string]any{
+		"title": "Chores",
+		"items": []map[string]any{{"text": "Dishes"}},
+	}, &note)
+	require.Len(t, note.Items, 1)
+	dishesID := note.Items[0].ID
+
+	t.Run("an unshared note rejects assignment", func(t *testing.T) {
+		msg := callToolExpectError(t, ownerSess, "update_note_item", map[string]any{
+			"note_id":     note.ID,
+			"item_id":     dishesID,
+			"assigned_to": owner.User.ID,
+		})
+		assert.Contains(t, msg, "unshared note")
+	})
+
+	require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collaborator.User.ID))
+
+	t.Run("create_note_item assigns", func(t *testing.T) {
+		var item client.NoteItem
+		callTool(t, ownerSess, "create_note_item", map[string]any{
+			"note_id":     note.ID,
+			"text":        "Laundry",
+			"assigned_to": collaborator.User.ID,
+		}, &item)
+		assert.Equal(t, collaborator.User.ID, item.AssignedTo)
+
+		var tasks []client.Note
+		callTool(t, collabSess, "list_notes", map[string]any{"my_tasks": true}, &tasks)
+		require.Len(t, tasks, 1)
+		assert.Equal(t, note.ID, tasks[0].ID)
+
+		callTool(t, ownerSess, "list_notes", map[string]any{"my_tasks": true}, &tasks)
+		assert.Empty(t, tasks)
+	})
+
+	t.Run("update_note_item assigns and unassigns", func(t *testing.T) {
+		var item client.NoteItem
+		callTool(t, ownerSess, "update_note_item", map[string]any{
+			"note_id":     note.ID,
+			"item_id":     dishesID,
+			"assigned_to": owner.User.ID,
+		}, &item)
+		assert.Equal(t, owner.User.ID, item.AssignedTo)
+		assert.Equal(t, "Dishes", item.Text, "omitted fields must keep their value")
+
+		var tasks []client.Note
+		callTool(t, ownerSess, "list_notes", map[string]any{"my_tasks": true}, &tasks)
+		require.Len(t, tasks, 1)
+
+		callTool(t, ownerSess, "update_note_item", map[string]any{
+			"note_id":     note.ID,
+			"item_id":     dishesID,
+			"assigned_to": "",
+		}, &item)
+		assert.Empty(t, item.AssignedTo)
+
+		callTool(t, ownerSess, "list_notes", map[string]any{"my_tasks": true}, &tasks)
+		assert.Empty(t, tasks)
+	})
+
+	t.Run("an assignee without access is rejected", func(t *testing.T) {
+		msg := callToolExpectError(t, ownerSess, "create_note_item", map[string]any{
+			"note_id":     note.ID,
+			"text":        "Groceries",
+			"assigned_to": outsider.User.ID,
+		})
+		assert.Contains(t, msg, "does not have access")
+
+		msg = callToolExpectError(t, ownerSess, "update_note_item", map[string]any{
+			"note_id":     note.ID,
+			"item_id":     dishesID,
+			"assigned_to": "not-an-id",
+		})
+		assert.Contains(t, msg, "invalid assigned_to format")
+	})
+}
