@@ -48,6 +48,21 @@ export function formatDateInLocale(value: string | Date, locale: string | undefi
   return isNaN(date.getTime()) ? '—' : date.toLocaleString(locale, DATE_STYLE_OPTIONS[style]);
 }
 
+// A region subtag: two letters (GB) or three digits (419).
+const REGION = /^(?:[A-Za-z]{2}|\d{3})$/;
+
+/**
+ * The locale to format dates in: the app language from Settings, plus the
+ * device's region when it has one. The language alone gives every English
+ * user US conventions (12-hour clock, month first); with the region, English
+ * in the UK formats as en-GB. A pairing `Intl` has no data for falls back to
+ * the language, so "de-US" still formats as German.
+ */
+export function dateLocale(language: string | undefined, region: string | null | undefined): string | undefined {
+  if (!language) return undefined;
+  return region && REGION.test(region) ? `${language}-${region}` : language;
+}
+
 /**
  * The i18n key and interpolation values describing when a personal access
  * token was last used. Writes of last_used_at are throttled server-side, so the

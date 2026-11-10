@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calendarDaysAgo, formatDateInLocale, patLastUsedMessage, type DateStyle } from '../dates';
+import { calendarDaysAgo, dateLocale, formatDateInLocale, patLastUsedMessage, type DateStyle } from '../dates';
 
 describe('calendarDaysAgo', () => {
   const now = new Date(2026, 10, 10, 9, 30);
@@ -50,6 +50,26 @@ describe('formatDateInLocale', () => {
   it('shows a dash for a value that does not parse', () => {
     expect(formatDateInLocale('not a date', 'en-US', 'date')).toBe('—');
     expect(formatDateInLocale('', 'en-US', 'dateTime')).toBe('—');
+  });
+});
+
+describe('dateLocale', () => {
+  it('adds the device region to the app language', () => {
+    expect(dateLocale('en', 'GB')).toBe('en-GB');
+    expect(dateLocale('es', '419')).toBe('es-419');
+    // The language still decides the words; the region only adjusts conventions.
+    expect(dateLocale('de', 'US')).toBe('de-US');
+  });
+
+  it('is the language alone without a usable region', () => {
+    expect(dateLocale('en', null)).toBe('en');
+    expect(dateLocale('en', undefined)).toBe('en');
+    expect(dateLocale('en', '')).toBe('en');
+    expect(dateLocale('en', 'Latn')).toBe('en');
+  });
+
+  it('is undefined without a language', () => {
+    expect(dateLocale(undefined, 'GB')).toBeUndefined();
   });
 });
 

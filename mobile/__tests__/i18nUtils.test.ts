@@ -1,3 +1,4 @@
+import { getLocales, type Locale } from 'expo-localization';
 import { VALIDATION } from '@jot/shared';
 import i18n from '../src/i18n';
 import { LocalizedError, displayMessage, errorMessageKey, extractApiError, formatDate } from '../src/i18n/utils';
@@ -62,13 +63,27 @@ describe('displayMessage', () => {
 
 describe('formatDate', () => {
   const evening = new Date(2026, 10, 10, 21, 34);
+  // Once, so jest.setup.js's default device locale is back for the next test.
+  const deviceLocale = (languageTag: string, regionCode: string | null) =>
+    (getLocales as jest.MockedFunction<typeof getLocales>).mockReturnValueOnce([{ languageTag, regionCode } as Locale]);
 
   afterEach(async () => {
     await i18n.changeLanguage('en');
   });
 
   it('formats in the app language, not the device language', async () => {
+    deviceLocale('en-US', 'US');
     await i18n.changeLanguage('de');
     expect(formatDate(evening, 'dateTime')).toBe('10. Nov. 2026, 21:34');
+  });
+
+  it('takes the clock and field order from the device region', () => {
+    deviceLocale('en-GB', 'GB');
+    expect(formatDate(evening, 'dateTime')).toBe('10 Nov 2026, 21:34');
+  });
+
+  it('uses the language alone when the device has no region', () => {
+    deviceLocale('en', null);
+    expect(formatDate(evening, 'date')).toBe('Nov 10, 2026');
   });
 });

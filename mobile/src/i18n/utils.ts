@@ -1,6 +1,8 @@
 import type { TFunction } from 'i18next';
+import { getLocales } from 'expo-localization';
 import {
   apiErrorParams,
+  dateLocale,
   formatDateInLocale,
   parseApiError,
   type ApiErrorCode,
@@ -13,12 +15,14 @@ export function displayMessage(t: TFunction, message: string): string {
 }
 
 /**
- * Formats a timestamp in the app language. See `DateStyle` for which style to
- * use. Every date the app shows goes through here; ESLint rejects
+ * Formats a timestamp in the app language, with the device's regional
+ * conventions (12h or 24h clock, field order). See `DateStyle` for which style
+ * to use. Every date the app shows goes through here; ESLint rejects
  * `toLocale*String` and `Intl.DateTimeFormat` elsewhere.
  */
 export function formatDate(value: string | Date, style: DateStyle): string {
-  return formatDateInLocale(value, i18n.resolvedLanguage || i18n.language || undefined, style);
+  const language = i18n.resolvedLanguage || i18n.language || undefined;
+  return formatDateInLocale(value, dateLocale(language, getLocales()[0]?.regionCode), style);
 }
 
 /**

@@ -14,4 +14,16 @@ describe('formatDate', () => {
     await i18n.changeLanguage('de');
     expect(formatDate(evening, 'dateTime')).toBe('10. Nov. 2026, 21:34');
   });
+
+  it('takes the clock and field order from the browser region', async () => {
+    vi.spyOn(navigator, 'language', 'get').mockReturnValue('en-GB');
+    await i18n.changeLanguage('en');
+    expect(formatDate(evening, 'dateTime')).toBe('10 Nov 2026, 21:34');
+  });
+
+  it('uses the language alone when the browser has no region', async () => {
+    vi.spyOn(navigator, 'language', 'get').mockReturnValue('en');
+    await i18n.changeLanguage('en');
+    expect(formatDate(evening, 'date')).toBe('Nov 10, 2026');
+  });
 });
