@@ -21,8 +21,9 @@
       The one exception is an active public link, /share/<token> (#1209): that
       note is already readable by anyone holding the URL, so the server
       (internal/server/share_preview.go) swaps the two jot-preview blocks below
-      for the note's title and its first image's thumbnail. Never its text: a
-      card stays in chat histories after the link is revoked. Every other
+      for the note's title, a fixed "shared note" description and the first
+      image's thumbnail. Never the note's text: a card stays in chat histories
+      after the link is revoked. Every other
       path, and every dead link, gets this file byte for byte. The server finds
       the blocks by their marker comments, so keep each marker pair intact and
       on its own lines; the build fails if one goes missing (vite.config.ts).
@@ -33,7 +34,8 @@
       The server never builds an absolute URL from the Host header; a share
       card's og:url and og:image are absolute only when JOT_PUBLIC_URL is set.
 
-      The description says what Jot is and nothing about signing in: one card is
+      The generic description says what Jot is and nothing about signing in
+      (a share card says what clicking does instead): one card is
       served to every reader, so it cannot reflect whether this one has a
       session, and a "sign in to view" would be simply wrong for the recipient
       who is already logged in. It would also mis-explain the card — there is no
@@ -43,14 +45,14 @@
       Not translated: crawlers do not run JS, so i18next has not loaded when
       these are read. Same reason <title> below is static English.
     -->
-    <meta name="description" content="Jot is a self-hosted app for notes, lists and tasks." />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Jot" />
-    <meta property="og:description" content="Jot is a self-hosted app for notes, lists and tasks." />
-    <!-- jot-preview:title -->
+    <!-- jot-preview:text -->
     <title>Jot - Your Notes</title>
+    <meta name="description" content="Jot is a self-hosted app for notes, lists and tasks." />
     <meta property="og:title" content="Jot - Your Notes" />
-    <!-- /jot-preview:title -->
+    <meta property="og:description" content="Jot is a self-hosted app for notes, lists and tasks." />
+    <!-- /jot-preview:text -->
     <!-- jot-preview:image -->
     <meta property="og:image" content="/pwa-512x512.png" />
     <meta property="og:image:type" content="image/png" />

@@ -49,8 +49,21 @@ func TestSharePreviewCard(t *testing.T) {
 	owner := ts.createTestUser(t, "previewowner", "password123", false)
 	genericDescription := `<meta name="description" content="Jot is a self-hosted app for notes, lists and tasks." />`
 	require.Contains(t, string(index), genericDescription)
+	// The fixed share description: what the link is and what clicking does,
+	// never anything from the note.
+	shareDescriptions := []string{
+		`<meta name="description" content="A note shared from Jot. Open to view it." />`,
+		`<meta property="og:description" content="A note shared from Jot. Open to view it." />`,
+	}
+	requireShareDescription := func(t *testing.T, page string) {
+		t.Helper()
+		for _, tag := range shareDescriptions {
+			assert.Contains(t, page, tag)
+		}
+		assert.NotContains(t, page, genericDescription)
+	}
 
-	t.Run("list note: escaped title, generic description, no content", func(t *testing.T) {
+	t.Run("list note: escaped title, share description, no content", func(t *testing.T) {
 		note, err := owner.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
 			Title: `Groceries "><script>alert(1)</script>`,
 			Items: []client.CreateNoteItem{{Text: "secret item text"}},
@@ -65,7 +78,7 @@ func TestSharePreviewCard(t *testing.T) {
 		assert.Contains(t, page, `<meta property="og:title" content="`+escaped+`" />`)
 		assert.NotContains(t, page, "<script>alert(1)")
 		assert.Contains(t, page, `<meta property="og:url" content="/share/`+link.Token+`" />`)
-		assert.Contains(t, page, genericDescription, "the description stays generic")
+		requireShareDescription(t, page)
 		assert.NotContains(t, page, "secret item text")
 		// No images: the app icon card stays.
 		assert.Contains(t, page, `<meta property="og:image" content="/pwa-512x512.png" />`)
@@ -84,7 +97,7 @@ func TestSharePreviewCard(t *testing.T) {
 		assert.Contains(t, page, "<title>Shared note</title>")
 		assert.Contains(t, page, `<meta property="og:title" content="Shared note" />`)
 		assert.NotContains(t, page, "secret body text")
-		assert.Contains(t, page, genericDescription)
+		requireShareDescription(t, page)
 	})
 
 	t.Run("blank list title gets the fallback", func(t *testing.T) {

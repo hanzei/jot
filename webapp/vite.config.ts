@@ -23,7 +23,7 @@ function gitCommit(): string | null {
 // marker comments. Fail the build if the emitted index.html lost one, rather
 // than letting every share link silently fall back to the generic card.
 const PREVIEW_MARKERS = [
-  '<!-- jot-preview:title -->', '<!-- /jot-preview:title -->',
+  '<!-- jot-preview:text -->', '<!-- /jot-preview:text -->',
   '<!-- jot-preview:image -->', '<!-- /jot-preview:image -->',
 ];
 

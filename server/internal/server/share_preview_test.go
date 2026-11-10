@@ -25,14 +25,16 @@ func TestSharePreviewMarkersInIndex(t *testing.T) {
 	t.Parallel()
 	index := string(readWebappIndex(t))
 
-	for _, block := range [][2]string{{previewTitleStart, previewTitleEnd}, {previewImageStart, previewImageEnd}} {
+	for _, block := range [][2]string{{previewTextStart, previewTextEnd}, {previewImageStart, previewImageEnd}} {
 		require.Equal(t, 1, strings.Count(index, block[0]), "marker %s", block[0])
 		require.Equal(t, 1, strings.Count(index, block[1]), "marker %s", block[1])
 		assert.Less(t, strings.Index(index, block[0]), strings.Index(index, block[1]), "%s comes before its end marker", block[0])
 	}
-	title := index[strings.Index(index, previewTitleStart):strings.Index(index, previewTitleEnd)]
-	assert.Contains(t, title, "<title>")
-	assert.Contains(t, title, `property="og:title"`)
+	text := index[strings.Index(index, previewTextStart):strings.Index(index, previewTextEnd)]
+	assert.Contains(t, text, "<title>")
+	assert.Contains(t, text, `name="description"`)
+	assert.Contains(t, text, `property="og:title"`)
+	assert.Contains(t, text, `property="og:description"`)
 	image := index[strings.Index(index, previewImageStart):strings.Index(index, previewImageEnd)]
 	assert.Contains(t, image, `property="og:image"`)
 	assert.Contains(t, image, `property="og:image:alt"`)
@@ -62,7 +64,9 @@ func TestRenderSharePreview(t *testing.T) {
 		assert.NotContains(t, html, "Jot - Your Notes")
 		assert.NotContains(t, html, "pwa-512x512.png")
 		assert.NotContains(t, html, "jot-preview:", "the markers go with the blocks they mark")
-		assert.Contains(t, html, `<meta name="description" content="Jot is a self-hosted app for notes, lists and tasks." />`)
+		assert.Contains(t, html, `<meta name="description" content="A note shared from Jot. Open to view it." />`)
+		assert.Contains(t, html, `<meta property="og:description" content="A note shared from Jot. Open to view it." />`)
+		assert.NotContains(t, html, "self-hosted app", "the generic description is replaced, not duplicated")
 	})
 
 	t.Run("no image keeps the app icon", func(t *testing.T) {

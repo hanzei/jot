@@ -17,6 +17,7 @@ import { createListNote, createTextNote, revokePublicLink, setPublicLink, signUp
 // serves index.html for any unmatched path, which is exactly the point.
 const NOTE_PATH = '/notes/e1IZ1FHENdjEMCQVgTeqPJ';
 const IMAGE_PATH = '/pwa-512x512.png';
+const SHARE_DESCRIPTION = 'A note shared from Jot. Open to view it.';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const noteImageFile = {
@@ -152,9 +153,11 @@ test.describe('link preview metadata', () => {
     expect(metaContent(html, 'property', 'og:title')).toBe('Weekend trip');
     expect(metaContent(html, 'property', 'og:url')).toMatch(new RegExp(`/share/${token}$`));
     expect(html).not.toContain('Passport hidden item');
-    // The description stays the generic one.
-    expect(metaContent(html, 'property', 'og:description')).toBe(metaContent(loginHtml, 'property', 'og:description'));
-    expect(metaContent(html, 'name', 'description')).toBe(metaContent(loginHtml, 'name', 'description'));
+    // A fixed description of what the link is, never anything from the note,
+    // in place of the generic one.
+    expect(metaContent(html, 'property', 'og:description')).toBe(SHARE_DESCRIPTION);
+    expect(metaContent(html, 'name', 'description')).toBe(SHARE_DESCRIPTION);
+    expect(metaContent(loginHtml, 'property', 'og:description')).not.toBe(SHARE_DESCRIPTION);
 
     const imageUrl = metaContent(html, 'property', 'og:image');
     expect(imageUrl).toMatch(new RegExp(`/api/v1/public/notes/${token}/images/${imageId}/thumbnail$`));
@@ -182,6 +185,7 @@ test.describe('link preview metadata', () => {
     const html = await (await request.get(`/share/${token}`)).text();
     expect(titleText(html)).toBe('Shared note');
     expect(metaContent(html, 'property', 'og:title')).toBe('Shared note');
+    expect(metaContent(html, 'property', 'og:description')).toBe(SHARE_DESCRIPTION);
     expect(metaContent(html, 'property', 'og:image')).toBe(IMAGE_PATH);
     expect(html).not.toContain('Text that must stay out of the card');
   });

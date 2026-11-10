@@ -21,19 +21,24 @@ const sharePathPrefix = "/share/"
 // services do not run JS, so there is no locale to pick.
 const shareFallbackTitle = "Shared note"
 
+// shareDescription describes every share card: what the link is and what
+// clicking does. Never anything from the note itself. Static English for the
+// same reason as shareFallbackTitle.
+const shareDescription = "A note shared from Jot. Open to view it."
+
 // The marker comments around the two blocks of webapp/index.html that a share
 // page's card replaces. webapp/vite.config.ts fails the build when the emitted
 // index.html lost one, and TestSharePreviewMarkersInIndex checks the source.
 const (
-	previewTitleStart = "<!-- jot-preview:title -->"
-	previewTitleEnd   = "<!-- /jot-preview:title -->"
+	previewTextStart  = "<!-- jot-preview:text -->"
+	previewTextEnd    = "<!-- /jot-preview:text -->"
 	previewImageStart = "<!-- jot-preview:image -->"
 	previewImageEnd   = "<!-- /jot-preview:image -->"
 )
 
 // sharePreview is the SPA fallback's index rewriter (#1209). For an active
 // public link at /share/{token} it returns index.html with the note's title
-// and first image in the link-preview tags; for every other request, and every
+// and first image, and the fixed shareDescription, in the link-preview tags; for every other request, and every
 // dead link, it returns nil so index.html is served byte for byte. The token
 // never reaches a log line: it is a credential.
 func (s *Server) sharePreview(r *http.Request, index []byte) []byte {
@@ -71,12 +76,14 @@ func renderSharePreview(index []byte, preview *models.PublicNotePreview, publicU
 	}
 	esc := html.EscapeString
 
-	var titleBlock strings.Builder
-	titleBlock.WriteString("<title>" + esc(title) + "</title>\n")
-	titleBlock.WriteString(`    <meta property="og:title" content="` + esc(title) + `" />` + "\n")
-	titleBlock.WriteString(`    <meta property="og:url" content="` + esc(publicURL+sharePathPrefix+token) + `" />`)
+	var textBlock strings.Builder
+	textBlock.WriteString("<title>" + esc(title) + "</title>\n")
+	textBlock.WriteString(`    <meta name="description" content="` + shareDescription + `" />` + "\n")
+	textBlock.WriteString(`    <meta property="og:title" content="` + esc(title) + `" />` + "\n")
+	textBlock.WriteString(`    <meta property="og:description" content="` + shareDescription + `" />` + "\n")
+	textBlock.WriteString(`    <meta property="og:url" content="` + esc(publicURL+sharePathPrefix+token) + `" />`)
 
-	out, ok := replaceBlock(index, previewTitleStart, previewTitleEnd, titleBlock.String())
+	out, ok := replaceBlock(index, previewTextStart, previewTextEnd, textBlock.String())
 	if !ok {
 		return nil, false
 	}
