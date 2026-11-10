@@ -167,19 +167,19 @@ test.describe('Public link section of the share dialog', () => {
 
     await expect(publicLinkSection.urlField()).toHaveCount(0);
     await publicLinkSection.create('In 7 days');
-    const url = await publicLinkSection.url();
-    // Built on this page's origin: the e2e server sets no JOT_PUBLIC_URL.
-    expect(url).toMatch(new RegExp(`^${new URL(page.url()).origin}/share/[A-Za-z0-9_-]{43}$`));
     await expect(publicLinkSection.details()).toContainText('Expires');
     await expect(publicLinkSection.details()).toContainText('Created by you');
 
-    await publicLinkSection.copy();
+    // Copy link copies the full URL, built on this page's origin (the e2e
+    // server sets no JOT_PUBLIC_URL), while the section shows it shortened.
+    const url = await publicLinkSection.url();
     await expect(publicLinkSection.section().getByRole('button', { name: 'Copied!' })).toBeVisible();
-    expect(await readClipboard(page)).toBe(url);
+    expect(url).toMatch(new RegExp(`^${new URL(page.url()).origin}/share/[A-Za-z0-9_-]{43}$`));
+    // Screen readers hear the label, then the shortened link.
+    const { host, pathname } = new URL(url);
+    await expect(publicLinkSection.urlField()).toHaveText(`Public link URL: ${host}/share/${pathname.slice('/share/'.length, '/share/'.length + 4)}…`);
+    await publicLinkSection.expectTokenHidden(url);
 
-    // Nothing is preselected for a change, so the current expiry is never
-    // replaced by whatever the select happened to show.
-    await expect(publicLinkSection.section().getByRole('button', { name: 'Change expiry' })).toBeDisabled();
     // A new expiry keeps the URL, so links already sent keep working.
     await publicLinkSection.changeExpiry('Never');
     await expect(publicLinkSection.details()).toContainText('Never expires');
@@ -206,7 +206,81 @@ test.describe('Public link section of the share dialog', () => {
 
     await publicLinkSection.create();
     await publicLinkSection.copy();
-    expect(await readClipboard(page)).toMatch(/^https:\/\/jot\.example\.com\/share\/[A-Za-z0-9_-]{43}$/);
+    const url = await readClipboard(page);
+    expect(url).toMatch(/^https:\/\/jot\.example\.com\/share\/[A-Za-z0-9_-]{43}$/);
+    await expect(publicLinkSection.urlField()).toHaveText(/^Public link URL: jot\.example\.com\/share\/[A-Za-z0-9_-]{4}…$/);
+    await publicLinkSection.expectTokenHidden(url);
+  });
+
+  test('asks for a new expiry only after Change, and Cancel sends nothing', async ({ page, authenticatedUser, dashboardPage, publicLinkSection }) => {
+    void authenticatedUser;
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Cancel expiry note');
+    await dashboardPage.openNote('Cancel expiry note');
+    await dashboardPage.openShareModalFromModal();
+    await publicLinkSection.create('In 7 days');
+
+    // An active link shows its details and Change, not an expiry form.
+    await expect(publicLinkSection.changeButton()).toBeVisible();
+    await expect(publicLinkSection.newExpirySelect()).toHaveCount(0);
+    await expect(publicLinkSection.saveButton()).toHaveCount(0);
+    const details = await publicLinkSection.details().textContent();
+
+    const requests = recordApiRequests(page);
+    await publicLinkSection.changeButton().click();
+    await expect(publicLinkSection.newExpirySelect()).toBeFocused();
+    // Nothing is preselected, so Save cannot quietly replace the current expiry.
+    await expect(publicLinkSection.saveButton()).toBeDisabled();
+    await publicLinkSection.newExpirySelect().selectOption({ label: 'Never' });
+    await expect(publicLinkSection.saveButton()).toBeEnabled();
+    await publicLinkSection.cancelButton().click();
+
+    await expect(publicLinkSection.newExpirySelect()).toHaveCount(0);
+    await expect(publicLinkSection.changeButton()).toBeFocused();
+    await expect(publicLinkSection.details()).toHaveText(details!);
+    expect(paths(requests)).toEqual([]);
+  });
+
+  test('Change → Save re-times the link and keeps its URL', async ({ page, authenticatedUser, dashboardPage, publicLinkSection }) => {
+    void authenticatedUser;
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Save expiry note');
+    await dashboardPage.openNote('Save expiry note');
+    await dashboardPage.openShareModalFromModal();
+    await publicLinkSection.create('Never');
+    await expect(publicLinkSection.details()).toContainText('Never expires');
+    const url = await publicLinkSection.url();
+
+    const requests = recordApiRequests(page);
+    await publicLinkSection.changeExpiry('In 30 days');
+    await expect(publicLinkSection.details()).toContainText('Expires');
+    await expect(publicLinkSection.details()).not.toContainText('Never expires');
+    await expect(publicLinkSection.changeButton()).toBeFocused();
+    const puts = requests.filter((req) => req.method() === 'PUT');
+    expect(paths(puts)).toEqual([expect.stringMatching(/^\/api\/v1\/notes\/[^/]+\/public-link$/)]);
+    expect(await publicLinkSection.url()).toBe(url);
+  });
+
+  test('closes the expiry editor and says so when the link changes elsewhere', async ({ page, authenticatedUser, dashboardPage, publicLinkSection }) => {
+    void authenticatedUser;
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Changed elsewhere note');
+    await dashboardPage.openNote('Changed elsewhere note');
+    await dashboardPage.openShareModalFromModal();
+    await publicLinkSection.create('Never');
+
+    await publicLinkSection.changeButton().click();
+    await publicLinkSection.newExpirySelect().selectOption({ label: 'In 7 days' });
+
+    // Another session re-times the link; the change arrives over SSE.
+    const { notes } = (await (await page.request.get('/api/v1/notes')).json()) as { notes: Array<{ id: string; title: string }> };
+    const noteId = notes.find((n) => n.title === 'Changed elsewhere note')!.id;
+    await setPublicLink(page.request, noteId, new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString());
+
+    await expect(publicLinkSection.section().getByRole('status')).toHaveText("The link was changed elsewhere, so your new expiry wasn't saved.");
+    await expect(publicLinkSection.newExpirySelect()).toHaveCount(0);
+    await expect(publicLinkSection.details()).toContainText('Expires');
+    await expect(publicLinkSection.changeButton()).toBeFocused();
   });
 
   test('is hidden when the server has public links switched off', async ({ page, authenticatedUser, dashboardPage, publicLinkSection }) => {
