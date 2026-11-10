@@ -16,7 +16,7 @@ import SidebarLabels from '@/components/SidebarLabels';
 import { useSidebarLabelsController } from '@/hooks/useSidebarLabelsController';
 import { auth } from '@/utils/api';
 import { removeUser, isAdmin } from '@/utils/auth';
-import type { Label, LabelWithCount } from '@jot/shared';
+import { DEFAULT_TRASH_RETENTION_DAYS, type Label, type LabelWithCount } from '@jot/shared';
 
 interface LabelCallbacks {
   onRenameSuccess?: (label: Label, newName: string) => void | Promise<void>;
@@ -44,9 +44,11 @@ export const useAuthenticatedLayout = () => useOutletContext<AuthenticatedLayout
 
 interface AuthenticatedLayoutProps {
   onLogout: () => void;
+  /** `/config`'s `trash_retention_days`, for the bin tab's tooltip. 0 means no automatic purge. */
+  trashRetentionDays?: number;
 }
 
-const AuthenticatedLayout = ({ onLogout }: AuthenticatedLayoutProps) => {
+const AuthenticatedLayout = ({ onLogout, trashRetentionDays = DEFAULT_TRASH_RETENTION_DAYS }: AuthenticatedLayoutProps) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
@@ -142,12 +144,14 @@ const AuthenticatedLayout = ({ onLogout }: AuthenticatedLayoutProps) => {
     },
     {
       label: t('dashboard.tabBin'),
-      title: t('dashboard.binTooltip'),
+      title: trashRetentionDays === 0
+        ? t('dashboard.binTooltipUntilEmptied')
+        : t('dashboard.binTooltip', { count: trashRetentionDays }),
       icon: <Trash2 className="h-4 w-4 shrink-0" />,
       href: '/?view=bin',
       isActive: isAtDashboard && view === 'bin',
     },
-  ], [t, isAtDashboard, view]);
+  ], [t, isAtDashboard, view, trashRetentionDays]);
 
   const handleLabelSelect = useCallback((labelId: string) => {
     // When on Dashboard, toggle the label selection; from other pages, navigate to Dashboard

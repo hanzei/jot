@@ -463,6 +463,9 @@ type ServerConfig struct {
 	// PublicURL is the origin public links are built from, or nil when the
 	// operator has not set one.
 	PublicURL *string `json:"public_url"`
+	// TrashRetentionDays is how many days a trashed note is kept before it is
+	// deleted for good; 0 means it is kept until the trash is emptied.
+	TrashRetentionDays int `json:"trash_retention_days"`
 }
 
 // SSOConfig is the public SSO slice of the server config: only what the login

@@ -24,13 +24,14 @@ import { useConfirm } from '../hooks/useConfirm';
 import { useTheme } from '../theme/ThemeContext';
 import SkeletonNoteList from '../components/SkeletonNoteList';
 import NoteCard from '../components/NoteCard';
-import { apiPaths, normalizeNoteSort, sortNotesForDisplay, type Note, type NoteSort } from '@jot/shared';
+import { apiPaths, DEFAULT_TRASH_RETENTION_DAYS, normalizeNoteSort, sortNotesForDisplay, type Note, type NoteSort } from '@jot/shared';
 import type { RootStackParamList, LayoutRect } from '../navigation/RootNavigator';
 import { isSortWarningDismissed, dismissSortWarning } from '../utils/sortWarningDismissed';
 import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
 import { enqueueOperation, isQueueableError } from '../db/syncQueue';
 import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
+import { useServerConfig } from '../hooks/useServerConfig';
 import { styles } from './notesList/styles';
 import { buildNoteSections, type LocalReorderState } from './notesList/noteListUtils';
 import NotesListHeader from './notesList/NotesListHeader';
@@ -68,6 +69,10 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
   const { isConnected } = useNetworkStatus();
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const { trash_retention_days: trashRetentionDays = DEFAULT_TRASH_RETENTION_DAYS } = useServerConfig();
+  const binInfo = trashRetentionDays === 0
+    ? t('dashboard.binInfoUntilEmptied')
+    : t('dashboard.binInfo', { count: trashRetentionDays });
   const { confirm } = useConfirm();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const fabBottom = Math.max(insets.bottom + 20, 20);
@@ -635,7 +640,7 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
           <View style={[styles.trashBanner, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}>
             <Info size={16} color={colors.warningText} style={styles.trashBannerIcon} />
             <Text style={[styles.trashBannerText, { color: colors.warningText }]}>
-              {t('dashboard.binInfo')}
+              {binInfo}
             </Text>
           </View>
         )}
@@ -691,7 +696,7 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
           <View style={styles.trashBannerMessage}>
             <Info size={16} color={colors.warningText} style={styles.trashBannerIcon} />
             <Text style={[styles.trashBannerText, { color: colors.warningText }]}>
-              {t('dashboard.binInfo')}
+              {binInfo}
             </Text>
           </View>
           {trashCount > 0 && (

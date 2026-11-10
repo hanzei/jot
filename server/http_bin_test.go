@@ -2,10 +2,16 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/hanzei/jot/server/client"
+	"github.com/hanzei/jot/server/internal/config"
+	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/server"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -273,4 +279,59 @@ func TestBinEmptyTrashDoesNotAffectOtherUsersTrashedNotes(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, userBTrash, 1)
 	assert.Equal(t, userBNote.ID, userBTrash[0].ID)
+}
+
+// TestBinTrashPurgeRespectsRetention checks that the trash-purge task uses
+// JOT_TRASH_RETENTION_DAYS. The purge runs when a server starts, so the test
+// backdates trashed notes and then starts more servers on the same database
+// to trigger it.
+func TestBinTrashPurgeRespectsRetention(t *testing.T) {
+	t.Parallel()
+
+	var cfg *config.Config
+	ts := setupTestServerWithConfig(t, func(c *config.Config) {
+		cfg = c
+	})
+	user := ts.createTestUser(t, "binretention", "password123", false)
+
+	trashedDaysAgo := func(days int) string {
+		note := createAndTrashNote(t, user, fmt.Sprintf("trashed %d days ago", days))
+		deletedAt := models.Now().Add(-time.Duration(days) * 24 * time.Hour)
+		ts.exec(t, "UPDATE notes SET deleted_at = ? WHERE id = ?", models.Timestamp(deletedAt), note.ID)
+		return note.ID
+	}
+	recent := trashedDaysAgo(8)
+	old := trashedDaysAgo(31)
+
+	// startServer starts a server on ts's database with the given retention
+	// and stops it when the test ends.
+	startServer := func(days int) {
+		c := *cfg
+		c.TrashRetentionDays = days
+		log := logrus.New()
+		log.SetOutput(io.Discard)
+		s, err := server.NewWithLogger(&c, log)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			s.StopBackgroundTasks()
+			_ = s.GetDB().Close()
+		})
+	}
+
+	t.Run("0 keeps every trashed note", func(t *testing.T) {
+		startServer(0)
+		assert.Never(t, func() bool {
+			return countNotesByID(t, ts, old) == 0
+		}, 200*time.Millisecond, 10*time.Millisecond)
+	})
+
+	t.Run("30 days purges only notes trashed longer ago", func(t *testing.T) {
+		startServer(30)
+		// Both notes are checked in one purge transaction, so once the old
+		// note is gone the recent one has already been considered.
+		require.Eventually(t, func() bool {
+			return countNotesByID(t, ts, old) == 0
+		}, 5*time.Second, 10*time.Millisecond)
+		assert.Equal(t, 1, countNotesByID(t, ts, recent))
+	})
 }

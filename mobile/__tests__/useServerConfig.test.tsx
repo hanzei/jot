@@ -187,6 +187,12 @@ describe('parseCachedConfig', () => {
     expect(parseCachedConfig(JSON.stringify({ ...base, public_links_enabled: 'yes', public_url: 3 }))).toEqual(base);
   });
 
+  it('keeps the trash retention, including 0, and drops a malformed one', () => {
+    expect(parseCachedConfig(JSON.stringify({ ...base, trash_retention_days: 30 }))).toEqual({ ...base, trash_retention_days: 30 });
+    expect(parseCachedConfig(JSON.stringify({ ...base, trash_retention_days: 0 }))).toEqual({ ...base, trash_retention_days: 0 });
+    expect(parseCachedConfig(JSON.stringify({ ...base, trash_retention_days: '30' }))).toEqual(base);
+  });
+
   it('rejects an entry missing the base fields', () => {
     expect(parseCachedConfig(JSON.stringify({ sso: { enabled: true, provider_name: 'x', local_login_enabled: true } }))).toBeNull();
   });

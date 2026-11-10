@@ -334,6 +334,24 @@ test.describe('Notes', () => {
     await dashboardPage.expectBinInfoVisible();
   });
 
+  test('bin help shows the server\'s trash retention', async ({ dashboardPage }) => {
+    await dashboardPage.overrideTrashRetentionDays(30);
+    await dashboardPage.goto();
+
+    await dashboardPage.expectBinTabTooltip('Deleted notes — removed after 30 days');
+    await dashboardPage.switchToBin();
+    await dashboardPage.expectBinInfoVisible('Notes in the bin are deleted after 30 days');
+  });
+
+  test('bin help says notes are kept when the automatic purge is off', async ({ dashboardPage }) => {
+    await dashboardPage.overrideTrashRetentionDays(0);
+    await dashboardPage.goto();
+
+    await dashboardPage.expectBinTabTooltip('Deleted notes — kept until the bin is emptied');
+    await dashboardPage.switchToBin();
+    await dashboardPage.expectBinInfoVisible('Notes in the bin are kept until it is emptied');
+  });
+
   test('unarchives a note and it reappears in main view', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('To Unarchive');

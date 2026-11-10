@@ -38,6 +38,9 @@ type Config struct {
 	LogLevel            string
 	LogFormat           string
 	SlowQueryThreshold  time.Duration
+	// TrashRetentionDays is how long a trashed note is kept before the
+	// trash-purge task deletes it for good. 0 turns the purge off.
+	TrashRetentionDays int
 
 	RateLimitEnabled            bool
 	RateLimitPerMinute          int
@@ -167,6 +170,7 @@ func Load() (*Config, error) {
 		LogFormat:           "text",
 		RateLimitEnabled:    true,
 		PublicLinksEnabled:  true,
+		TrashRetentionDays:  7,
 	}
 
 	// Keep the allowed levels in sync with the logrus.ParseLevel call in main.go.
@@ -312,6 +316,13 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	cfg.SlowQueryThreshold = slowQueryThreshold
+
+	// 0 turns the automatic trash purge off.
+	trashRetentionDays, err := parseIntRangeEnv("JOT_TRASH_RETENTION_DAYS", cfg.TrashRetentionDays, 0, 36500)
+	if err != nil {
+		return nil, err
+	}
+	cfg.TrashRetentionDays = trashRetentionDays
 
 	rateLimitEnabled, err := parseBoolEnv("JOT_RATE_LIMIT_ENABLED", true)
 	if err != nil {

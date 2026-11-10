@@ -33,6 +33,13 @@ export interface ServerConfig {
    * address. Optional for the same reason as `public_links_enabled`.
    */
   public_url?: string | null;
+  /**
+   * `JOT_TRASH_RETENTION_DAYS`: how many days a trashed note is kept before it
+   * is deleted for good. `0` means it is kept until the trash is emptied.
+   * Optional for the same reason as `public_links_enabled`; treat a missing
+   * value as `DEFAULT_TRASH_RETENTION_DAYS`.
+   */
+  trash_retention_days?: number;
 }
 
 export interface AboutInfo {
