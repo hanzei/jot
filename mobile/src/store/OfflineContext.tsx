@@ -458,10 +458,13 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   // next write, reconnect or foreground (#1217). Unlike those triggers this does
   // not reset the failure count: a flip can repeat every keepalive, and the cap
   // must still stop retries against a write that keeps failing. A pending
-  // backoff timer is left alone so the flip cannot shortcut it.
+  // backoff timer is left alone so the flip cannot shortcut it, and a reconnect
+  // in progress (which re-arms the belief itself) drains after revalidating the
+  // session, so the flip must not drain ahead of it.
   useEffect(() => {
     return subscribeToServerReachability((reachable) => {
       if (!reachable || !isConnectedRef.current) return;
+      if (isReconnectingRef.current) return;
       if (failureCountRef.current >= MAX_CONSECUTIVE_DRAIN_FAILURES) return;
       if (drainTimerRef.current !== null) return;
       scheduleDrain(ENQUEUE_DRAIN_DEBOUNCE_MS);

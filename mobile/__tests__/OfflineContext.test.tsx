@@ -434,21 +434,38 @@ describe('OfflineProvider queue draining', () => {
     expect(lastSyncError).toBe(true);
   });
 
-  it('does not drain on a re-arm while the server was already reachable', async () => {
+  it('drains once when a foreground reconnect re-arms reachability (#1217)', async () => {
+    // handleReconnect re-arms the belief and then drains after revalidating the
+    // session; the reachability listener must not add a second, earlier drain.
+    silenceConsole('info', /^Server reachability:/);
     await renderProvider();
     await flush();
     const drainsAfterMount = mockDrainQueue.mock.calls.length;
 
-    // markServerReachable is called on every response; only a real flip counts.
     await act(() => {
-      serverReachability.markServerReachable();
+      serverReachability.markServerUnreachable();
     });
+    // Session revalidation on a slow link outlasts the flip's drain debounce.
+    mockRevalidate.mockImplementationOnce(() => new Promise((resolve) => {
+      setTimeout(() => resolve(true), 5000);
+    }));
+    const handler = getAppStateHandler();
+    await act(async () => {
+      handler('active');
+    });
+    await flush();
     await act(async () => {
       jest.advanceTimersByTime(1000);
     });
     await flush();
-
+    // No drain before the session is revalidated.
     expect(mockDrainQueue).toHaveBeenCalledTimes(drainsAfterMount);
+
+    await act(async () => {
+      jest.advanceTimersByTime(4000);
+    });
+    await flush();
+    expect(mockDrainQueue).toHaveBeenCalledTimes(drainsAfterMount + 1);
   });
 
   it('resets the retry budget and resumes draining when a new write is enqueued after the cap', async () => {

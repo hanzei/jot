@@ -42,6 +42,9 @@ describe('SSEConnectionManager', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetStoredSession.mockResolvedValue('test-token');
+    // clearAllMocks keeps implementations, so a test that moved the generation
+    // must not leak it into the next one.
+    mockGetCurrentSwitchGenerationId.mockReturnValue(1);
     markServerReachable();
   });
 
@@ -187,7 +190,23 @@ describe('SSEConnectionManager', () => {
 
     expect(isServerReachable()).toBe(false);
 
-    mockGetCurrentSwitchGenerationId.mockReturnValue(1);
+    manager.disconnect();
+  });
+
+  it('does not re-arm server reachability when a stream opened before a server switch connects', async () => {
+    const manager = new SSEConnectionManager();
+    await manager.connect(jest.fn());
+
+    const openHandler = mockAddEventListener.mock.calls.find(
+      (call: [string, unknown]) => call[0] === 'open',
+    )?.[1] as () => void;
+
+    mockGetCurrentSwitchGenerationId.mockReturnValue(2);
+    markServerUnreachable();
+    openHandler();
+
+    expect(isServerReachable()).toBe(false);
+
     manager.disconnect();
   });
 

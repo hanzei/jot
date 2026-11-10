@@ -92,7 +92,10 @@ export class SSEConnectionManager {
         // The stream opened, so the server is reachable — an always-on recovery
         // signal that flips writes back to the network path even with no other
         // request in flight (e.g. the server came back while the note sat idle).
-        markServerReachable();
+        // A stream from before a server switch says nothing about the new server.
+        if (this.generationId === getCurrentSwitchGenerationId() && !isSseQuiesced()) {
+          markServerReachable();
+        }
         this.statusChangeCallback?.('connected');
       });
 
