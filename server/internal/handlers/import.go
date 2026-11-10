@@ -18,6 +18,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/hanzei/jot/server/internal/apierr"
+	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 )
@@ -355,7 +356,7 @@ func (b *bundleImageImporter) releasePins() {
 // (dedup) is left alone.
 func (b *bundleImageImporter) rollback(ctx context.Context) {
 	b.releasePins() // reclaim skips pinned hashes
-	reclaimOrphanedImageBlobs(ctx, b.h.noteStore, b.h.imageStore, b.shas)
+	blobstore.ReclaimOrphaned(ctx, b.h.noteStore, b.h.imageStore, b.shas)
 }
 
 // importImageFilename returns the display name to store for an imported

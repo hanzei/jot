@@ -300,7 +300,7 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, 
 		return storeError(err, "delete user")
 	}
 
-	reclaimOrphanedImageBlobs(r.Context(), h.noteStore, h.imageStore, shas)
+	blobstore.ReclaimOrphaned(r.Context(), h.noteStore, h.imageStore, shas)
 
 	return http.StatusNoContent, nil, nil
 }
@@ -336,7 +336,7 @@ func (h *AdminHandler) DeleteUserNotes(w http.ResponseWriter, r *http.Request) (
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("delete notes for user: %w", err)
 	}
-	reclaimOrphanedImageBlobs(r.Context(), h.noteStore, h.imageStore, shas)
+	blobstore.ReclaimOrphaned(r.Context(), h.noteStore, h.imageStore, shas)
 
 	return http.StatusOK, DeleteUserNotesResponse{Deleted: deleted}, nil
 }

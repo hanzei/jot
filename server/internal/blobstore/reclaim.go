@@ -27,6 +27,21 @@ func ReclaimIfOrphaned(ctx context.Context, refCounter RefCounter, store *ImageS
 	return err
 }
 
+// ReclaimOrphaned runs ReclaimIfOrphaned for each of shas, the hashes a row
+// delete that already committed left as candidates. Errors are logged rather
+// than returned: the delete succeeded, and Sweep retries what this misses.
+// The context is detached from cancellation (keeping its values, such as the
+// request logger), because a client disconnecting mid-cleanup would otherwise
+// leak the blobs until the next sweep.
+func ReclaimOrphaned(ctx context.Context, refCounter RefCounter, store *ImageStore, shas []string) {
+	ctx = context.WithoutCancel(ctx)
+	for _, sha := range shas {
+		if err := ReclaimIfOrphaned(ctx, refCounter, store, sha); err != nil {
+			logutil.FromContext(ctx).WithError(err).WithField("sha256", sha).Error("Failed to reclaim orphaned note image blob/thumbnail")
+		}
+	}
+}
+
 // reclaimIfOrphaned is ReclaimIfOrphaned, additionally reporting whether it
 // deleted anything, so Sweep can count what it reclaimed.
 func reclaimIfOrphaned(ctx context.Context, refCounter RefCounter, store *ImageStore, sha string) (bool, error) {

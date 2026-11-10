@@ -6,10 +6,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hanzei/jot/server/internal/blobstore"
-	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
-	"github.com/hanzei/jot/server/internal/sse"
+	"github.com/hanzei/jot/server/internal/notesvc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -123,68 +121,25 @@ type createNoteInput struct {
 
 func (h *Handler) handleCreateNote(userID string) mcp.ToolHandlerFor[createNoteInput, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in createNoteInput) (*mcp.CallToolResult, any, error) {
-		noteType, color, err := resolveCreateNote(in)
-		if err != nil {
-			return toolError("%w", err)
+		// Slice order is the display order, and every item is top-level.
+		items := make([]notesvc.NewItem, len(in.Items))
+		for i, spec := range in.Items {
+			items[i] = notesvc.NewItem{Text: spec.Text, Position: i, Completed: spec.Completed}
 		}
-
-		items, err := buildCreateNoteItems(in.Items)
-		if err != nil {
-			return toolError("%w", err)
-		}
-
-		labels := models.NormalizeLabelNames(in.Labels)
-		if err = h.checkNewLabelNames(ctx, userID, labels); err != nil {
-			return toolError("%w", err)
-		}
-
-		note, err := h.noteStore.CreateWithItems(ctx, userID, models.NewNote{
+		note, err := h.notes.Create(ctx, userID, notesvc.NewNote{
 			Title:   in.Title,
 			Content: in.Content,
-			Type:    noteType,
-			Color:   color,
+			Type:    in.NoteType,
+			Color:   in.Color,
+			Items:   items,
+			Labels:  in.Labels,
 			Pinned:  in.Pinned,
-		}, items)
+		})
 		if err != nil {
-			return toolError("create note: %w", itemCapError(err))
+			return toolError("create note: %w", err)
 		}
-
-		if err = h.attachLabels(ctx, note.ID, userID, labels); err != nil {
-			return toolError("%w", err)
-		}
-
-		// CreateWithItems does not read items or labels back; refetch.
-		if len(items) > 0 || len(labels) > 0 {
-			note, err = h.noteStore.GetByID(ctx, note.ID, userID)
-			if err != nil {
-				return toolError("get created note: %w", err)
-			}
-		}
-
-		h.events.NoteToAudience(ctx, note.ID, sse.EventNoteCreated, models.SanitizeNote(*note), userID)
 		return toolNoteResult(note)
 	}
-}
-
-// checkNewLabelNames rejects, without writing anything, a name over the length
-// limit that does not match an existing label — the one name create_note would
-// otherwise fail on after the note and earlier labels already exist. Mirrors
-// the REST API's check.
-func (h *Handler) checkNewLabelNames(ctx context.Context, userID string, names []string) error {
-	for _, name := range names {
-		lengthErr := models.ValidateLabelName(name)
-		if lengthErr == nil {
-			continue
-		}
-		_, err := h.labelStore.GetLabelByName(ctx, userID, name)
-		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
-			return lengthErr
-		}
-		if err != nil {
-			return fmt.Errorf("check label name: %w", err)
-		}
-	}
-	return nil
 }
 
 // attachLabels attaches the caller's labels with the given names to noteID,
@@ -199,61 +154,6 @@ func (h *Handler) attachLabels(ctx context.Context, noteID, userID string, names
 		if err = h.noteStore.AddLabelToNote(ctx, noteID, label.ID, userID); err != nil {
 			return fmt.Errorf("add label to note: %w", err)
 		}
-	}
-	return nil
-}
-
-// resolveCreateNote fills in create_note's defaults (type, color) and applies
-// the field rules shared with the REST API.
-func resolveCreateNote(in createNoteInput) (models.NoteType, string, error) {
-	// Items only exist on list notes, so they imply the type — matching the
-	// REST API, which defaults note_type to list when items are supplied.
-	noteType := in.NoteType
-	switch {
-	case len(in.Items) > 0 && noteType == "":
-		noteType = models.NoteTypeList
-	case len(in.Items) > 0 && noteType != models.NoteTypeList:
-		return "", "", fmt.Errorf("note_type must be %q when items are provided", models.NoteTypeList)
-	case noteType == "":
-		noteType = models.NoteTypeText
-	}
-	if !noteType.Valid() {
-		return "", "", fmt.Errorf("note_type must be %q or %q", models.NoteTypeText, models.NoteTypeList)
-	}
-
-	color := in.Color
-	if color == "" {
-		color = models.DefaultNoteColor
-	}
-	if err := validateNoteFields(&in.Title, &in.Content, &color); err != nil {
-		return "", "", err
-	}
-	if err := models.ValidateNoteTypeFields(noteType, &in.Title, &in.Content, nil); err != nil {
-		return "", "", err
-	}
-	return noteType, color, nil
-}
-
-// validateNoteFields applies the note field limits shared with the REST API,
-// rewriting *color to its canonical form. A nil pointer is a field the caller
-// is not setting.
-func validateNoteFields(title, content, color *string) error {
-	if title != nil {
-		if err := models.ValidateNoteTitle(*title); err != nil {
-			return err
-		}
-	}
-	if content != nil {
-		if err := models.ValidateNoteContent(*content); err != nil {
-			return err
-		}
-	}
-	if color != nil {
-		normalized, err := models.NormalizeNoteColor(*color)
-		if err != nil {
-			return err
-		}
-		*color = normalized
 	}
 	return nil
 }
@@ -276,15 +176,7 @@ func (h *Handler) handleUpdateNote(userID string) mcp.ToolHandlerFor[updateNoteI
 		if in.ID == "" {
 			return toolError("id is required")
 		}
-		// An empty color resets to the default, as in the REST API.
-		if in.Color != nil && *in.Color == "" {
-			def := models.DefaultNoteColor
-			in.Color = &def
-		}
-		if err := validateNoteFields(in.Title, in.Content, in.Color); err != nil {
-			return toolError("%w", err)
-		}
-		note, err := h.noteStore.Update(ctx, in.ID, userID, models.NoteUpdate{
+		note, err := h.notes.Update(ctx, in.ID, userID, models.NoteUpdate{
 			Title:                 in.Title,
 			Content:               in.Content,
 			Color:                 in.Color,
@@ -299,10 +191,6 @@ func (h *Handler) handleUpdateNote(userID string) mcp.ToolHandlerFor[updateNoteI
 		if err != nil {
 			return toolError("update note: %w", err)
 		}
-
-		// Title and content are shared with collaborators; the other fields
-		// are per-user, so only the caller's own sessions need to hear of them.
-		h.events.NoteUpdated(ctx, in.ID, note, userID, in.Title != nil || in.Content != nil)
 		return toolNoteResult(note)
 	}
 }
@@ -319,39 +207,9 @@ func (h *Handler) handleDeleteNote(userID string) mcp.ToolHandlerFor[deleteNoteI
 		if in.ID == "" {
 			return toolError("id is required")
 		}
-		// Resolve the audience before deleting, while the shares still exist.
-		audienceIDs, audienceErr := h.noteStore.GetNoteAudienceIDs(ctx, in.ID)
-
-		if in.Permanent {
-			shas, err := h.noteStore.DeleteFromTrash(ctx, in.ID, userID)
-			if err != nil {
-				return toolError("delete note: %w", err)
-			}
-			h.reclaimNoteImageBlobs(ctx, shas)
-		} else {
-			if err := h.noteStore.MoveToTrash(ctx, in.ID, userID); err != nil {
-				return toolError("delete note: %w", err)
-			}
-		}
-		if audienceErr == nil {
-			h.events.NoteDeleted(ctx, in.ID, audienceIDs, userID)
+		if err := h.notes.Delete(ctx, in.ID, userID, in.Permanent); err != nil {
+			return toolError("delete note: %w", err)
 		}
 		return toolDeletedResult(in.ID, map[string]any{"permanent": in.Permanent})
-	}
-}
-
-// reclaimNoteImageBlobs reclaims the on-disk blob (and derived thumbnail) for
-// each sha whose note_images refcount has hit zero, mirroring the HTTP
-// delete_note handler's blob cleanup.
-// Errors are logged but never fail the tool call — the note delete already
-// succeeded. Uses context.WithoutCancel since the row delete already
-// committed: an MCP client disconnecting must not abort this cleanup and
-// leak the blob, as there's no retry path for it afterward.
-func (h *Handler) reclaimNoteImageBlobs(ctx context.Context, shas []string) {
-	ctx = context.WithoutCancel(ctx)
-	for _, sha := range shas {
-		if err := blobstore.ReclaimIfOrphaned(ctx, h.noteStore, h.imageStore, sha); err != nil {
-			logutil.FromContext(ctx).WithError(err).WithField("sha256", sha).Error("Failed to reclaim orphaned note image blob/thumbnail")
-		}
 	}
 }
