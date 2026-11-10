@@ -1,6 +1,7 @@
 package main
 
 import (
+	"maps"
 	"net/http"
 	"testing"
 
@@ -161,9 +162,9 @@ func TestSessionUserAgentStored(t *testing.T) {
 
 	// Login with a custom User-Agent to create a session with a known UA
 	c := ts.newClient()
-	transport := &uaRoundTripper{
-		ua:   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-		base: c.HTTPClient().Transport,
+	transport := &headerRoundTripper{
+		header: http.Header{"User-Agent": {"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}},
+		base:   c.HTTPClient().Transport,
 	}
 	c.HTTPClient().Transport = transport
 
@@ -185,14 +186,17 @@ func TestSessionUserAgentStored(t *testing.T) {
 	assert.Equal(t, "Windows", chromeSession.OS)
 }
 
-type uaRoundTripper struct {
-	ua   string
-	base http.RoundTripper
+// headerRoundTripper sets header on every request before passing it to base
+// (http.DefaultTransport when nil).
+type headerRoundTripper struct {
+	header http.Header
+	base   http.RoundTripper
 }
 
-func (u *uaRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	req.Header.Set("User-Agent", u.ua)
-	base := u.base
+func (h *headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	maps.Copy(req.Header, h.header)
+	base := h.base
 	if base == nil {
 		base = http.DefaultTransport
 	}

@@ -135,22 +135,21 @@ func (s *patStore) GetByTokenHash(ctx context.Context, rawToken string) (*Person
 	return &pat, nil
 }
 
-// RecordUse sets the token's last_used_at to now, unless it is already within
-// PATLastUsedInterval of now. The condition lives in the UPDATE so concurrent
-// requests on a stale token write once between them. It reports whether a row
-// was written.
-func (s *patStore) RecordUse(ctx context.Context, id string, now time.Time) (bool, error) {
+// RecordUse sets pat's last_used_at to now, unless it is already within
+// PATLastUsedInterval of now. pat is the token as loaded for authentication:
+// when its value is fresh there is no write at all, so a busy token costs
+// nothing. The UPDATE repeats the condition so that concurrent requests which
+// all loaded a stale value write once between them.
+func (s *patStore) RecordUse(ctx context.Context, pat *PersonalAccessToken, now time.Time) error {
+	if pat.LastUsedAt != nil && now.Sub(*pat.LastUsedAt) < PATLastUsedInterval {
+		return nil
+	}
 	query := `UPDATE personal_access_tokens SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at <= ?)`
-	result, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query),
-		Timestamp(now), id, Timestamp(now.Add(-PATLastUsedInterval)))
-	if err != nil {
-		return false, fmt.Errorf("record personal access token use: %w", err)
+	if _, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query),
+		Timestamp(now), pat.ID, Timestamp(now.Add(-PATLastUsedInterval))); err != nil {
+		return fmt.Errorf("record personal access token use: %w", err)
 	}
-	n, err := result.RowsAffected()
-	if err != nil {
-		return false, fmt.Errorf("record personal access token use: rows affected: %w", err)
-	}
-	return n > 0, nil
+	return nil
 }
 
 // Delete removes a personal access token by ID, but only if it belongs to the given user.

@@ -11,7 +11,7 @@ import SettingsSectionCard, { SETTINGS_BTN_CLASSES } from '@/pages/settings/Sett
 import { passwordFormKeys } from '@/pages/settings/passwordFormKeys';
 import { SUPPORTED_LANGUAGES, type LanguagePreference } from '@/utils/language';
 import type { ThemePreference } from '@/utils/theme';
-import { VALIDATION, PAT_DATE_FORMAT, patLastUsedMessage } from '@jot/shared';
+import { VALIDATION, MEDIUM_DATE_FORMAT, patLastUsedMessage } from '@jot/shared';
 import type { ActiveSession, ExportFormat, PersonalAccessToken, User } from '@jot/shared';
 
 type Translate = TFunction;
@@ -383,7 +383,7 @@ export const IdentitySecurityColumn = ({
                   {pat.name}
                 </span>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  {t('settings.patsCreatedOn', { date: new Date(pat.created_at).toLocaleDateString(i18n.resolvedLanguage, PAT_DATE_FORMAT) })}
+                  {t('settings.patsCreatedOn', { date: new Date(pat.created_at).toLocaleDateString(i18n.resolvedLanguage, MEDIUM_DATE_FORMAT) })}
                   {' · '}
                   <span data-testid="pat-last-used">{patLastUsed(pat.last_used_at)}</span>
                 </p>

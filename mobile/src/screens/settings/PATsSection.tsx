@@ -13,7 +13,7 @@ import { subscribeToClientActiveServerChanges } from '../../api/client';
 import { getActiveServer } from '../../store/serverAccounts';
 import { displayMessage, getCurrentLocale } from '../../i18n/utils';
 import { useConfirm } from '../../hooks/useConfirm';
-import { VALIDATION, PAT_DATE_FORMAT, patLastUsedMessage } from '@jot/shared';
+import { VALIDATION, MEDIUM_DATE_FORMAT, patLastUsedMessage } from '@jot/shared';
 import type { PersonalAccessToken } from '@jot/shared';
 import { styles } from './styles';
 import { jot } from '../../api/jot';
@@ -185,7 +185,7 @@ export default function PATsSection() {
                 <Text style={[styles.sessionBrowser, { color: colors.text }]}>{pat.name}</Text>
                 <Text style={[styles.sessionDate, { color: colors.textMuted }]}>
                   {t('settings.patsCreatedOn', {
-                    date: new Date(pat.created_at).toLocaleDateString(currentLocale, PAT_DATE_FORMAT),
+                    date: new Date(pat.created_at).toLocaleDateString(currentLocale, MEDIUM_DATE_FORMAT),
                   })}
                 </Text>
                 <Text

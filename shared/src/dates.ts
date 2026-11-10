@@ -15,8 +15,8 @@ export function calendarDaysAgo(date: Date, now: Date = new Date()): number {
   return Math.round((startOfLocalDay(now) - startOfLocalDay(date)) / MS_PER_DAY);
 }
 
-/** How Settings formats a personal access token's dates. */
-export const PAT_DATE_FORMAT: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' };
+/** A medium date without the time, e.g. "Mar 4, 2025" in English. */
+export const MEDIUM_DATE_FORMAT: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' };
 
 /**
  * The i18n key and interpolation values describing when a personal access
@@ -42,5 +42,5 @@ export function patLastUsedMessage(
   if (days < 30) {
     return { key: 'settings.patsLastUsedDaysAgo', values: { days } };
   }
-  return { key: 'settings.patsLastUsedOn', values: { date: date.toLocaleDateString(locale, PAT_DATE_FORMAT) } };
+  return { key: 'settings.patsLastUsedOn', values: { date: date.toLocaleDateString(locale, MEDIUM_DATE_FORMAT) } };
 }

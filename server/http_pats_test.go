@@ -183,13 +183,9 @@ func TestPATs(t *testing.T) {
 		createPAT(t, ts, u, "unused")
 
 		before := time.Now().UTC().Add(-time.Second)
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/users/me", nil)
-		require.NoError(t, err)
-		req.Header.Set("Authorization", "Bearer "+used.Token)
-		resp, err := ts.HTTPServer.Client().Do(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-		require.Equal(t, http.StatusOK, resp.StatusCode)
+		status, _, _ := rawRequest(t, ts.HTTPServer.Client(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/users/me", nil,
+			http.Header{"Authorization": {"Bearer " + used.Token}})
+		require.Equal(t, http.StatusOK, status)
 
 		lastUsed := map[string]*time.Time{}
 		for _, p := range listPATs(t, ts, u) {

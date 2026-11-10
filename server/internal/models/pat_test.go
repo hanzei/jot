@@ -24,32 +24,33 @@ func TestPATRecordUse(t *testing.T) {
 		pat, rawToken, err := pats.Create(ctx, user.ID, "script")
 		require.NoError(t, err)
 
-		lastUsed := func() *time.Time {
+		// load returns the token as authentication sees it.
+		load := func() *PersonalAccessToken {
 			t.Helper()
 			got, getErr := pats.GetByTokenHash(ctx, rawToken)
 			require.NoError(t, getErr)
-			return got.LastUsedAt
+			return got
 		}
 
-		require.Nil(t, lastUsed(), "a new token has no recorded use")
+		require.Nil(t, load().LastUsedAt, "a new token has no recorded use")
 
 		first := Now()
-		written, err := pats.RecordUse(ctx, pat.ID, first)
-		require.NoError(t, err)
-		assert.True(t, written, "the first use writes")
-		require.NotNil(t, lastUsed())
-		assert.True(t, first.Equal(*lastUsed()))
+		require.NoError(t, pats.RecordUse(ctx, load(), first))
+		require.NotNil(t, load().LastUsedAt, "the first use writes")
+		assert.True(t, first.Equal(*load().LastUsedAt))
 
-		written, err = pats.RecordUse(ctx, pat.ID, first.Add(PATLastUsedInterval-time.Minute))
-		require.NoError(t, err)
-		assert.False(t, written, "a use inside the interval does not write")
-		assert.True(t, first.Equal(*lastUsed()))
+		inside := first.Add(PATLastUsedInterval - time.Minute)
+		require.NoError(t, pats.RecordUse(ctx, load(), inside))
+		assert.True(t, first.Equal(*load().LastUsedAt), "a use inside the interval does not write")
+
+		// pat was loaded before the first use, like a concurrent request that
+		// saw the token stale: the UPDATE's own condition stops the write.
+		require.NoError(t, pats.RecordUse(ctx, pat, inside))
+		assert.True(t, first.Equal(*load().LastUsedAt), "a stale copy does not write inside the interval")
 
 		later := first.Add(PATLastUsedInterval + time.Minute)
-		written, err = pats.RecordUse(ctx, pat.ID, later)
-		require.NoError(t, err)
-		assert.True(t, written, "a use after the interval writes again")
-		assert.True(t, later.Equal(*lastUsed()))
+		require.NoError(t, pats.RecordUse(ctx, load(), later))
+		assert.True(t, later.Equal(*load().LastUsedAt), "a use after the interval writes again")
 
 		listed, err := pats.GetByUserID(ctx, user.ID)
 		require.NoError(t, err)

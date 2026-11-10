@@ -18,10 +18,17 @@ import (
 // setupMCPSession connects an MCP client to the test server, authenticated as tu.
 func setupMCPSession(t *testing.T, ts *TestServer, tu *TestUser) *mcp.ClientSession {
 	t.Helper()
+	return connectMCP(t, ts, tu.Client.HTTPClient())
+}
+
+// connectMCP connects an MCP client to the test server through httpClient,
+// which carries whatever authentication the test needs.
+func connectMCP(t *testing.T, ts *TestServer, httpClient *http.Client) *mcp.ClientSession {
+	t.Helper()
 	c := mcp.NewClient(&mcp.Implementation{Name: "test-client"}, nil)
 	transport := &mcp.StreamableClientTransport{
 		Endpoint:             ts.HTTPServer.URL + "/api/v1/mcp",
-		HTTPClient:           tu.Client.HTTPClient(),
+		HTTPClient:           httpClient,
 		DisableStandaloneSSE: true,
 	}
 	sess, err := c.Connect(t.Context(), transport, nil)
@@ -475,18 +482,10 @@ func TestMCPRecordsPATUse(t *testing.T) {
 	tu := ts.createTestUser(t, "mcpuser", "password123", false)
 	pat := createPAT(t, ts, tu, "assistant")
 
-	c := mcp.NewClient(&mcp.Implementation{Name: "pat-client"}, nil)
-	transport := &mcp.StreamableClientTransport{
-		Endpoint: ts.HTTPServer.URL + "/api/v1/mcp",
-		HTTPClient: &http.Client{Transport: &bearerRoundTripper{
-			token: pat.Token,
-			base:  ts.HTTPServer.Client().Transport,
-		}},
-		DisableStandaloneSSE: true,
-	}
-	sess, err := c.Connect(t.Context(), transport, nil)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = sess.Close() })
+	sess := connectMCP(t, ts, &http.Client{Transport: &headerRoundTripper{
+		header: http.Header{"Authorization": {"Bearer " + pat.Token}},
+		base:   ts.HTTPServer.Client().Transport,
+	}})
 
 	var notes []client.Note
 	callTool(t, sess, "list_notes", map[string]any{}, &notes)
@@ -494,17 +493,6 @@ func TestMCPRecordsPATUse(t *testing.T) {
 	pats := listPATs(t, ts, tu)
 	require.Len(t, pats, 1)
 	assert.NotNil(t, pats[0].LastUsedAt, "an MCP request authenticated with the token records its use")
-}
-
-type bearerRoundTripper struct {
-	token string
-	base  http.RoundTripper
-}
-
-func (b *bearerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	req = req.Clone(req.Context())
-	req.Header.Set("Authorization", "Bearer "+b.token)
-	return b.base.RoundTrip(req)
 }
 
 // TestMCPNoteValidation verifies that the MCP note tools apply the same field
