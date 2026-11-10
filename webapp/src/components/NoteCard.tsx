@@ -24,7 +24,8 @@ import { renderMarkdown } from '@/utils/markdown';
 
 interface NoteCardProps {
   note: Note;
-  onEdit: (note: Note) => void;
+  // originRect is the card's on-screen rect, which the note modal zooms from.
+  onEdit: (note: Note, originRect?: DOMRect) => void;
   onDelete: (noteId: string) => void;
   onDuplicate?: ((noteId: string) => Promise<void> | void) | undefined;
   onShare?: ((note: Note) => void) | undefined;
@@ -225,8 +226,10 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
   return (
     <div
       data-testid="note-card"
+      // What the note modal looks the card up by to zoom back onto it.
+      data-note-id={note.id}
       className={`note-card ${getColorClass(note.color)} p-4 relative group ${isUpdating ? 'opacity-50' : ''}`}
-      onClick={() => {
+      onClick={(e) => {
         // Hand focus to the card's own control before opening. A click used to
         // focus the card itself, because the card div carried tabIndex={0};
         // now it is a plain container and the button over it takes no pointer
@@ -239,7 +242,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         // chips stop propagation, so this handler only ever sees a click on the
         // card itself.
         openButtonRef.current?.focus();
-        onEdit(note);
+        onEdit(note, e.currentTarget.getBoundingClientRect());
       }}
       // Roving tabindex (#950): React's onFocus is backed by the bubbling
       // native `focusin` event, so this one handler sees focus land on the

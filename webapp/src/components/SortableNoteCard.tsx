@@ -7,7 +7,7 @@ import NoteCard from './NoteCard';
 
 interface SortableNoteCardProps {
   note: Note;
-  onEdit: (note: Note) => void;
+  onEdit: (note: Note, originRect?: DOMRect) => void;
   onDelete: (noteId: string) => void;
   onDuplicate?: ((noteId: string) => Promise<void> | void) | undefined;
   onShare: (note: Note) => void;

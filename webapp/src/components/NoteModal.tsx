@@ -1,4 +1,4 @@
-import { useState, useEffect, useEffectEvent, useMemo, useRef, useCallback, useId, type ReactElement, type ReactNode } from 'react';
+import { useState, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useCallback, useId, type ReactElement, type ReactNode } from 'react';
 import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Users, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, Pin, EllipsisVertical, Square, Undo2, DropletOff } from 'lucide-react';
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
@@ -25,6 +25,8 @@ import { getCaretLine, getOffsetAtLine } from '@/utils/textareaCaret';
 import { buildShareAvatars } from '@/utils/shareAvatars';
 import { buildMobileDeepLink } from '@/utils/deepLink';
 import { isEditableElementFocused } from '@/utils/keyboardShortcuts';
+import { canAnimate } from '@/utils/motion';
+import { findNoteCardRect, playNoteModalExit, playNoteModalOpen } from '@/utils/noteZoom';
 import {
   applyCompletedCascade,
   changeItemIndent,
@@ -154,6 +156,10 @@ interface NoteModalProps {
   // link (PWA shortcut or share target). Ignored once a note is being edited.
   initialType?: NoteType | undefined;
   initialContent?: string | undefined;
+  // The on-screen rect of the note card that was clicked to open the modal.
+  // When set, the modal zooms open from that card and back onto it on close
+  // (utils/noteZoom.ts); without it, it fades in and out in place.
+  zoomOrigin?: DOMRect | null;
 }
 
 /** A task checkbox in the rendered preview (`renderInteractiveMarkdown`). */
@@ -173,7 +179,7 @@ function isPreviewControl(target: EventTarget, preview: Element): boolean {
   return control !== null && preview.contains(control);
 }
 
-export default function NoteModal({ note = null, onClose, onSave, onCreated, onRefresh, onShare, onDelete, onDuplicate, onConvert, onRestore, onPermanentlyDelete, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent }: NoteModalProps) {
+export default function NoteModal({ note = null, onClose, onSave, onCreated, onRefresh, onShare, onDelete, onDuplicate, onConvert, onRestore, onPermanentlyDelete, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent, zoomOrigin = null }: NoteModalProps) {
   const { t } = useTranslation();
   const { showToast, showErrorToast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -392,6 +398,38 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
   const sizeTransitionKey =
     `${uncompletedItems.length}:${completedItems.length}:${checkedItemsCollapsed}:${noteType}:${isEditingContent}`;
   const panelRef = useSizeTransition<HTMLDivElement>(sizeTransitionKey);
+
+  // Zoom transition (utils/noteZoom.ts). The origin is fixed at mount: a note
+  // created or switched to while the modal stays open does not re-zoom.
+  const [zoomFrom] = useState(() => (canAnimate(document.body) ? zoomOrigin : null));
+  // The note the modal shows now, which is what the close zooms back onto — it
+  // can differ from the one it opened with (an unsaved note gets created).
+  const zoomNoteIdRef = useRef(note?.id ?? null);
+  useEffect(() => {
+    zoomNoteIdRef.current = note?.id ?? null;
+  }, [note?.id]);
+  const cancelExitRef = useRef<(() => void) | null>(null);
+  useLayoutEffect(() => {
+    // A StrictMode simulated unmount queued an exit below; this re-run means
+    // the modal is still here, so drop it before it reaches the document.
+    cancelExitRef.current?.();
+    cancelExitRef.current = null;
+    const panel = panelRef.current;
+    const openAnimation = panel && zoomFrom ? playNoteModalOpen(panel, zoomFrom) : null;
+    return () => {
+      openAnimation?.cancel();
+      if (!panel) return;
+      // Layout-effect cleanups run before React removes the DOM, so the panel
+      // can still be measured and snapshotted here. Only a modal that zoomed
+      // open zooms closed; the live card is preferred over the click-time
+      // rect, which goes stale if the grid reflowed while the modal was open.
+      // When the card is gone (deleted, archived away) it shrinks onto the
+      // click-time rect, as on mobile.
+      const noteId = zoomNoteIdRef.current;
+      const target = zoomFrom ? (noteId ? findNoteCardRect(noteId, zoomFrom) : null) ?? zoomFrom : null;
+      cancelExitRef.current = playNoteModalExit(panel, target);
+    };
+  }, [panelRef, zoomFrom]);
 
   const colorClasses: Record<string, string> = {
     '#ffffff': 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600',
@@ -1805,7 +1843,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
         }}
         className="relative z-50"
       >
-        <DialogBackdrop transition aria-hidden="true" className="fixed inset-0 bg-black/30 dark:bg-black/50 transition duration-200 ease-out data-[closed]:opacity-0 motion-reduce:transition-none" />
+        <DialogBackdrop transition aria-hidden="true" className={`fixed inset-0 bg-black/30 dark:bg-black/50 transition ${zoomFrom ? 'duration-250' : 'duration-200'} ease-out data-[closed]:opacity-0 motion-reduce:transition-none`} />
 
         {/* Backdrop mousedown: two-step dismiss matching Dialog.onClose.
             Using onMouseDown (not onClick) so both this handler and HeadlessUI's
@@ -1828,7 +1866,10 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
         >
         <DialogPanel
           ref={panelRef}
-          transition
+          data-note-modal-panel
+          // The zoom animates the panel itself; HeadlessUI's fade/scale
+          // transition would run on top of it.
+          transition={!zoomFrom}
           className={`mx-auto w-full max-w-lg max-h-[90vh] overflow-hidden rounded-lg shadow-xl relative transition duration-200 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none ${
             colors.find(c => c.value === color)?.class || 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600'
           }`}
