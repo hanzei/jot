@@ -77,11 +77,12 @@ func TestSharePreviewCard(t *testing.T) {
 		assert.Contains(t, page, "<title>"+escaped+"</title>")
 		assert.Contains(t, page, `<meta property="og:title" content="`+escaped+`" />`)
 		assert.NotContains(t, page, "<script>alert(1)")
-		assert.Contains(t, page, `<meta property="og:url" content="/share/`+link.Token+`" />`)
+		assert.NotContains(t, page, `property="og:url"`, "no og:url without JOT_PUBLIC_URL: the spec requires it absolute")
 		requireShareDescription(t, page)
 		assert.NotContains(t, page, "secret item text")
-		// No images: the app icon card stays.
+		// No images: the app icon and its small card stay.
 		assert.Contains(t, page, `<meta property="og:image" content="/pwa-512x512.png" />`)
+		assert.Contains(t, page, `<meta name="twitter:card" content="summary" />`)
 		assert.Contains(t, page, `<meta property="og:image:alt" content="The Jot app icon" />`)
 		// The page is still the SPA, so the viewer loads.
 		assert.Contains(t, page, `<div id="root"></div>`)
@@ -131,6 +132,8 @@ func TestSharePreviewCard(t *testing.T) {
 		assert.Contains(t, page, `<meta property="og:image:width" content="512" />`)
 		assert.Contains(t, page, `<meta property="og:image:height" content="320" />`)
 		assert.Contains(t, page, `<meta property="og:image:alt" content="Trip" />`)
+		assert.Contains(t, page, `<meta name="twitter:card" content="summary_large_image" />`)
+		assert.Equal(t, 1, strings.Count(page, `name="twitter:card"`), "the large card replaces the small one")
 
 		// The tags describe the thumbnail the preview service then fetches.
 		status, header, _ := rawRequest(t, ts.httpClient, http.MethodGet, ts.HTTPServer.URL+thumbnail, nil, nil)
@@ -236,7 +239,7 @@ func TestSharePreviewPublicURL(t *testing.T) {
 		name      string
 		publicURL string
 	}{
-		{name: "relative without JOT_PUBLIC_URL", publicURL: ""},
+		{name: "relative image and no og:url without JOT_PUBLIC_URL", publicURL: ""},
 		{name: "absolute with JOT_PUBLIC_URL", publicURL: "https://jot.example.com"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -250,7 +253,11 @@ func TestSharePreviewPublicURL(t *testing.T) {
 			link, err := owner.Client.SetPublicLink(t.Context(), note.ID, nil)
 			require.NoError(t, err)
 
+			// og:url must be absolute, so it is only there with JOT_PUBLIC_URL.
 			wantURL := `<meta property="og:url" content="` + tt.publicURL + "/share/" + link.Token + `" />`
+			if tt.publicURL == "" {
+				wantURL = ""
+			}
 			wantImage := `<meta property="og:image" content="` + tt.publicURL + "/api/v1/public/notes/" + link.Token + "/images/" + img.ID + `/thumbnail" />`
 
 			for _, host := range []string{"", "evil.example.org"} {
@@ -268,7 +275,11 @@ func TestSharePreviewPublicURL(t *testing.T) {
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 
 				page := string(body)
-				assert.Contains(t, page, wantURL, "host %q", host)
+				if wantURL == "" {
+					assert.NotContains(t, page, `property="og:url"`, "host %q", host)
+				} else {
+					assert.Contains(t, page, wantURL, "host %q", host)
+				}
 				assert.Contains(t, page, wantImage, "host %q", host)
 				assert.NotContains(t, page, "evil.example.org")
 				assert.Contains(t, page, `<meta property="og:image:width" content="4" />`)

@@ -151,7 +151,11 @@ test.describe('link preview metadata', () => {
 
     expect(titleText(html)).toBe('Weekend trip');
     expect(metaContent(html, 'property', 'og:title')).toBe('Weekend trip');
-    expect(metaContent(html, 'property', 'og:url')).toMatch(new RegExp(`/share/${token}$`));
+    // og:url must be absolute, so it is left out while the server has no
+    // JOT_PUBLIC_URL (as in this suite); clients use the pasted URL instead.
+    expect(metaContent(html, 'property', 'og:url')).toBeNull();
+    // The note's image asks for the large card layout.
+    expect(metaContent(html, 'name', 'twitter:card')).toBe('summary_large_image');
     expect(html).not.toContain('Passport hidden item');
     // A fixed description of what the link is, never anything from the note,
     // in place of the generic one.
@@ -187,6 +191,7 @@ test.describe('link preview metadata', () => {
     expect(metaContent(html, 'property', 'og:title')).toBe('Shared note');
     expect(metaContent(html, 'property', 'og:description')).toBe(SHARE_DESCRIPTION);
     expect(metaContent(html, 'property', 'og:image')).toBe(IMAGE_PATH);
+    expect(metaContent(html, 'name', 'twitter:card')).toBe('summary');
     expect(html).not.toContain('Text that must stay out of the card');
   });
 

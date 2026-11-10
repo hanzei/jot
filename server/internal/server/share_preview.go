@@ -67,8 +67,10 @@ func (s *Server) sharePreview(r *http.Request, index []byte) []byte {
 }
 
 // renderSharePreview replaces index's preview blocks with the card of
-// preview. publicURL is JOT_PUBLIC_URL, or "" to keep URLs relative. It
-// reports false when index lacks a marker.
+// preview. publicURL is JOT_PUBLIC_URL, or "" when unset: og:image is then
+// relative and og:url left out, since the spec requires it to be absolute and
+// clients fall back to the URL that was pasted. It reports false when index
+// lacks a marker.
 func renderSharePreview(index []byte, preview *models.PublicNotePreview, publicURL, token string) ([]byte, bool) {
 	title := strings.TrimSpace(preview.Title)
 	if title == "" {
@@ -80,14 +82,16 @@ func renderSharePreview(index []byte, preview *models.PublicNotePreview, publicU
 	textBlock.WriteString("<title>" + esc(title) + "</title>\n")
 	textBlock.WriteString(`    <meta name="description" content="` + shareDescription + `" />` + "\n")
 	textBlock.WriteString(`    <meta property="og:title" content="` + esc(title) + `" />` + "\n")
-	textBlock.WriteString(`    <meta property="og:description" content="` + shareDescription + `" />` + "\n")
-	textBlock.WriteString(`    <meta property="og:url" content="` + esc(publicURL+sharePathPrefix+token) + `" />`)
+	textBlock.WriteString(`    <meta property="og:description" content="` + shareDescription + `" />`)
+	if publicURL != "" {
+		textBlock.WriteString("\n" + `    <meta property="og:url" content="` + esc(publicURL+sharePathPrefix+token) + `" />`)
+	}
 
 	out, ok := replaceBlock(index, previewTextStart, previewTextEnd, textBlock.String())
 	if !ok {
 		return nil, false
 	}
-	// A note without images keeps the app icon.
+	// A note without images keeps the app icon and its small "summary" card.
 	img := preview.FirstImage
 	if img == nil {
 		return out, true
@@ -101,7 +105,10 @@ func renderSharePreview(index []byte, preview *models.PublicNotePreview, publicU
 		imageBlock.WriteString(`    <meta property="og:image:width" content="` + strconv.Itoa(w) + `" />` + "\n")
 		imageBlock.WriteString(`    <meta property="og:image:height" content="` + strconv.Itoa(h) + `" />` + "\n")
 	}
-	imageBlock.WriteString(`    <meta property="og:image:alt" content="` + esc(title) + `" />`)
+	imageBlock.WriteString(`    <meta property="og:image:alt" content="` + esc(title) + `" />` + "\n")
+	// The note's own image is the point of the card, so ask for the large
+	// layout (Discord, Telegram, X, Mastodon; Slack and Signal ignore it).
+	imageBlock.WriteString(`    <meta name="twitter:card" content="summary_large_image" />`)
 
 	return replaceBlock(out, previewImageStart, previewImageEnd, imageBlock.String())
 }

@@ -61,6 +61,8 @@ func TestRenderSharePreview(t *testing.T) {
 		assert.Contains(t, html, `<meta property="og:image:width" content="512" />`)
 		assert.Contains(t, html, `<meta property="og:image:height" content="256" />`)
 		assert.Contains(t, html, `<meta property="og:image:alt" content="Groceries" />`)
+		assert.Contains(t, html, `<meta name="twitter:card" content="summary_large_image" />`)
+		assert.NotContains(t, html, `content="summary" />`)
 		assert.NotContains(t, html, "Jot - Your Notes")
 		assert.NotContains(t, html, "pwa-512x512.png")
 		assert.NotContains(t, html, "jot-preview:", "the markers go with the blocks they mark")
@@ -69,12 +71,12 @@ func TestRenderSharePreview(t *testing.T) {
 		assert.NotContains(t, html, "self-hosted app", "the generic description is replaced, not duplicated")
 	})
 
-	t.Run("no image keeps the app icon", func(t *testing.T) {
+	t.Run("no image keeps the app icon and the small card", func(t *testing.T) {
 		t.Parallel()
 		out, ok := renderSharePreview(index, &models.PublicNotePreview{Title: "List"}, "", token)
 		require.True(t, ok)
 		html := string(out)
-		assert.Contains(t, html, `<meta property="og:url" content="/share/`+token+`" />`)
+		assert.NotContains(t, html, `property="og:url"`, "og:url must be absolute, so it needs JOT_PUBLIC_URL")
 		img := string(index[strings.Index(string(index), previewImageStart):])
 		img = img[:strings.Index(img, previewImageEnd)+len(previewImageEnd)]
 		assert.Contains(t, html, img, "the image block is untouched")
