@@ -141,6 +141,26 @@ func TestSharePreviewCard(t *testing.T) {
 		assert.Equal(t, "image/jpeg", header.Get("Content-Type"))
 	})
 
+	t.Run("images with the same created_at: the card shows the viewer's first", func(t *testing.T) {
+		note, err := owner.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{Title: "Imported"})
+		require.NoError(t, err)
+		for _, name := range []string{"a.png", "b.png", "c.png"} {
+			_, err = owner.Client.UploadNoteImage(t.Context(), note.ID, name, bytes.NewReader(testPNG(t, 4, 4)))
+			require.NoError(t, err)
+		}
+		// An import stamps every image with one timestamp; id breaks the tie.
+		ts.exec(t, `UPDATE note_images SET created_at = ? WHERE note_id = ?`,
+			models.Timestamp(models.Now().Add(-time.Hour)), note.ID)
+		link, err := owner.Client.SetPublicLink(t.Context(), note.ID, nil)
+		require.NoError(t, err)
+
+		pub, err := ts.newClient().GetPublicNote(t.Context(), link.Token)
+		require.NoError(t, err)
+		require.Len(t, pub.Images, 3)
+		page := ts.sharePage(t, "/share/"+link.Token)
+		assert.Contains(t, page, "/images/"+pub.Images[0].ID+"/thumbnail", "the card's image is the first one the viewer shows")
+	})
+
 	t.Run("share page keeps its headers and is gzipped", func(t *testing.T) {
 		note, err := owner.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{Title: "Zipped"})
 		require.NoError(t, err)

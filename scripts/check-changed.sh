@@ -10,6 +10,7 @@
 #
 #   shared/**                           -> shared + webapp + mobile (clients compile it)
 #   shared/src/listToMarkdownCases.json -> also server (the Go export is pinned to it)
+#   webapp/index.html                   -> also server (share-page preview tests render it)
 #   server/**, .golangci.yml            -> server
 #   webapp/**, mobile/**                -> that workspace
 #   README.md, CLAUDE.md, docs/**, .claude/** -> nothing
@@ -84,6 +85,7 @@ while IFS= read -r f; do
   case "$f" in
     README.md|CLAUDE.md|*/CLAUDE.md|docs/*|.claude/*) ;;
     shared/src/listToMarkdownCases.json) shared=1 server=1 ;;
+    webapp/index.html) webapp=1 server=1 ;;
     shared/*) shared=1 ;;
     server/*|.golangci.yml) server=1 ;;
     webapp/*) webapp=1

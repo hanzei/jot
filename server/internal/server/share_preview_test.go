@@ -49,7 +49,7 @@ func TestRenderSharePreview(t *testing.T) {
 		t.Parallel()
 		out, ok := renderSharePreview(index, &models.PublicNotePreview{
 			Title:      "Groceries",
-			FirstImage: &models.NoteImage{ID: "img1", Width: 2048, Height: 1024},
+			FirstImage: &models.PublicNoteImage{ID: "img1", Width: 2048, Height: 1024},
 		}, "https://jot.example.com", token)
 		require.True(t, ok)
 		html := string(out)
@@ -84,12 +84,12 @@ func TestRenderSharePreview(t *testing.T) {
 
 	t.Run("small image keeps its size; unknown size has no size tags", func(t *testing.T) {
 		t.Parallel()
-		out, ok := renderSharePreview(index, &models.PublicNotePreview{FirstImage: &models.NoteImage{ID: "a", Width: 300, Height: 200}}, "", token)
+		out, ok := renderSharePreview(index, &models.PublicNotePreview{FirstImage: &models.PublicNoteImage{ID: "a", Width: 300, Height: 200}}, "", token)
 		require.True(t, ok)
 		assert.Contains(t, string(out), `<meta property="og:image:width" content="300" />`)
 		assert.Contains(t, string(out), `<meta property="og:image:height" content="200" />`)
 
-		out, ok = renderSharePreview(index, &models.PublicNotePreview{FirstImage: &models.NoteImage{ID: "a"}}, "", token)
+		out, ok = renderSharePreview(index, &models.PublicNotePreview{FirstImage: &models.PublicNoteImage{ID: "a"}}, "", token)
 		require.True(t, ok)
 		assert.NotContains(t, string(out), "og:image:width")
 		assert.NotContains(t, string(out), "og:image:height")
@@ -100,7 +100,7 @@ func TestRenderSharePreview(t *testing.T) {
 		_, ok := renderSharePreview([]byte("<html></html>"), &models.PublicNotePreview{}, "", token)
 		assert.False(t, ok)
 		noImageEnd := strings.Replace(string(index), previewImageEnd, "", 1)
-		_, ok = renderSharePreview([]byte(noImageEnd), &models.PublicNotePreview{FirstImage: &models.NoteImage{ID: "a"}}, "", token)
+		_, ok = renderSharePreview([]byte(noImageEnd), &models.PublicNotePreview{FirstImage: &models.PublicNoteImage{ID: "a"}}, "", token)
 		assert.False(t, ok)
 	})
 }
