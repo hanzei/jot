@@ -6,6 +6,7 @@ import {
   isPublicLinkActive,
   publicLinkExpiresAt,
   publicLinkUrl,
+  shortPublicNoteUrl,
   userDisplayName,
   type Note,
   type PublicLink,
@@ -16,7 +17,7 @@ import { notes } from '@/utils/api';
 import { apiErrorMessage } from '@/utils/apiError';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import { shortPublicLinkUrl, type PublicLinksConfig } from '@/utils/publicLink';
+import type { PublicLinksConfig } from '@/utils/publicLink';
 
 interface PublicLinkSectionProps {
   note: Note;
@@ -41,7 +42,7 @@ const EXPIRY_LABEL_KEYS = {
  * (same URL), or revoke it for everyone. It renders `note.public_link` as the
  * caller holds it, so a change made elsewhere (arriving over SSE) shows here too.
  *
- * The link is shown shortened (`shortPublicLinkUrl`): its token is the only key
+ * The link is shown shortened (`shortPublicNoteUrl`): its token is the only key
  * to the note, so the full one stays out of screenshots and screen shares. Copy
  * link copies it in full.
  */
@@ -189,7 +190,7 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
               className="truncate rounded-md border border-gray-300 dark:border-slate-600 bg-gray-50 dark:bg-slate-700 text-gray-900 dark:text-gray-100 px-3 py-1.5 text-sm"
             >
               <span className="sr-only">{t('publicLink.urlLabel')}: </span>
-              {shortPublicLinkUrl(baseUrl, link.token)}
+              {shortPublicNoteUrl(baseUrl, link.token)}
             </p>
             <button type="button" onClick={() => void copy(url)} className={`${buttonClassName} flex items-center justify-center`}>
               {copied

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isPublicLinkActive, publicLinkExpiresAt, publicLinkUrl, publicNoteUrl } from '../publicLink';
+import { isPublicLinkActive, publicLinkExpiresAt, publicLinkUrl, publicNoteUrl, shortPublicNoteUrl } from '../publicLink';
 
 const token = 'q3XvT0b9Lr2Kp8WmZcE1yN4hUa7sDfGj6oBtYiR5lMw';
 
@@ -19,6 +19,25 @@ describe('publicNoteUrl', () => {
 
   it('keeps base64url tokens as they are', () => {
     expect(publicNoteUrl('https://jot.example.com', 'a-b_c')).toBe('https://jot.example.com/share/a-b_c');
+  });
+});
+
+describe('shortPublicNoteUrl', () => {
+  it('drops the scheme and cuts the token on public_url', () => {
+    expect(shortPublicNoteUrl('https://jot.example.com', token)).toBe('jot.example.com/share/q3Xv…');
+  });
+
+  it('shortens a link on the client\'s own address, keeping a port', () => {
+    expect(shortPublicNoteUrl('http://192.168.1.10:8080', token)).toBe('192.168.1.10:8080/share/q3Xv…');
+    expect(shortPublicNoteUrl('http://localhost:5173/', token)).toBe('localhost:5173/share/q3Xv…');
+  });
+
+  it('never shows the token in full', () => {
+    for (const base of ['https://jot.example.com', 'http://localhost:8080']) {
+      const shortened = shortPublicNoteUrl(base, token);
+      expect(shortened).not.toContain(token);
+      expect(shortened).not.toContain(token.slice(0, 5));
+    }
   });
 });
 
