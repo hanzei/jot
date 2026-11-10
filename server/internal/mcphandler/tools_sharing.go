@@ -3,10 +3,11 @@ package mcphandler
 import (
 	"cmp"
 	"context"
-	"encoding/json/v2"
 	"errors"
+	"fmt"
 
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/notesvc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -14,8 +15,9 @@ import (
 // scoped to userID.
 func (h *Handler) registerSharingTools(srv *mcp.Server, userID string) {
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "list_users",
-		Description: "List the other users on this server, to find the user ID that share_note, unshare_note and a list item's assigned_to need. Pass search to filter by username, first name or last name; a search returns at most 50 matches and sets truncated when there were more.",
+		Name: "list_users",
+		Description: fmt.Sprintf("List the other users on this server, to find the user ID that share_note, unshare_note and a list item's assigned_to need. "+
+			"Pass search to filter by username, first name or last name; a search returns at most %d matches and sets truncated when there were more.", notesvc.UserSearchLimit),
 	}, h.handleListUsers(userID))
 
 	mcp.AddTool(srv, &mcp.Tool{
@@ -59,11 +61,7 @@ func (h *Handler) handleListUsers(userID string) mcp.ToolHandlerFor[listUsersInp
 		for _, u := range users {
 			result.Users = append(result.Users, userResult{ID: u.ID, Username: u.Username, FirstName: u.FirstName, LastName: u.LastName})
 		}
-		data, err := json.Marshal(result)
-		if err != nil {
-			return toolError("marshal users: %w", err)
-		}
-		return toolTextResult(data), nil, nil
+		return toolJSONResult(result)
 	}
 }
 
@@ -114,9 +112,5 @@ func (h *Handler) handleUnshareNote(userID string) mcp.ToolHandlerFor[unshareNot
 // toolShareResult confirms a share change: the note, the user, and whether
 // they now have access.
 func toolShareResult(noteID, userID string, shared bool) (*mcp.CallToolResult, any, error) {
-	data, err := json.Marshal(map[string]any{"note_id": noteID, "user_id": userID, "shared": shared})
-	if err != nil {
-		return toolError("marshal response: %w", err)
-	}
-	return toolTextResult(data), nil, nil
+	return toolJSONResult(map[string]any{"note_id": noteID, "user_id": userID, "shared": shared})
 }

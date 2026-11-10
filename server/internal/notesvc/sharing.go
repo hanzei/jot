@@ -69,12 +69,7 @@ func (s *Service) Share(ctx context.Context, noteID, userID, targetUserID string
 		return err
 	}
 
-	// Personalized, so each recipient sees only their own labels.
-	if audienceIDs, err := s.noteStore.GetNoteAudienceIDs(ctx, noteID); err == nil {
-		s.events.NoteShared(ctx, noteID, audienceIDs, userID, targetUserID)
-	} else {
-		logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).Error("Failed to get note audience for SSE publish")
-	}
+	s.events.NoteShared(ctx, noteID, userID, targetUserID)
 	return nil
 }
 
@@ -83,6 +78,9 @@ func (s *Service) Share(ctx context.Context, noteID, userID, targetUserID string
 // shared with them. Leaving reduces only your own access, so it never needs
 // ownership.
 func (s *Service) Unshare(ctx context.Context, noteID, userID, targetUserID string) error {
+	if !models.IsValidID(targetUserID) {
+		return apierr.Invalid(errors.New("invalid user_id"))
+	}
 	if targetUserID != userID {
 		if err := s.requireOwner(ctx, noteID, userID); err != nil {
 			return err

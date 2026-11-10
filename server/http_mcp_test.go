@@ -918,16 +918,8 @@ func TestMCPListUsers(t *testing.T) {
 	bob := ts.createTestUser(t, "mcplistbob", "password123", false)
 	sess := setupMCPSession(t, ts, caller)
 
-	type listUsersResult struct {
-		Users []struct {
-			ID       string `json:"id"`
-			Username string `json:"username"`
-		} `json:"users"`
-		Truncated bool `json:"truncated"`
-	}
-
 	t.Run("without search lists everyone but the caller", func(t *testing.T) {
-		var result listUsersResult
+		var result client.UserSearchPage
 		callTool(t, sess, "list_users", map[string]any{}, &result)
 		got := make([]string, 0, len(result.Users))
 		for _, u := range result.Users {
@@ -940,7 +932,7 @@ func TestMCPListUsers(t *testing.T) {
 	})
 
 	t.Run("search filters", func(t *testing.T) {
-		var result listUsersResult
+		var result client.UserSearchPage
 		callTool(t, sess, "list_users", map[string]any{"search": "ana"}, &result)
 		require.Len(t, result.Users, 1)
 		assert.Equal(t, ana.User.ID, result.Users[0].ID)
@@ -1013,6 +1005,11 @@ func TestMCPShareNote(t *testing.T) {
 				assert.Contains(t, msg, tt.want)
 			})
 		}
+	})
+
+	t.Run("unshare_note rejects a malformed user_id", func(t *testing.T) {
+		msg := callToolExpectError(t, ownerSess, "unshare_note", map[string]any{"note_id": note.ID, "user_id": "mcpsharecollab"})
+		assert.Contains(t, msg, "invalid user_id")
 	})
 
 	t.Run("the owner cannot leave their own note", func(t *testing.T) {
