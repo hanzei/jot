@@ -485,6 +485,7 @@ func (s *Server) setupRoutes() error {
 			// draw from one shared, stricter per-user limit rather than separate ones
 			// (onlyWhenQueryParamSet gates GET /notes so plain listing is
 			// unaffected — it still counts against the baseline limit above).
+			// The MCP list_notes tool's search draws from the same bucket.
 			expensiveLimit := s.rateLimiter.limit(bucketExpensive, s.cfg.RateLimitExpensivePerMinute, keyByUserID)
 
 			r.With(onlyWhenQueryParamSet(handlers.SearchQueryParam, expensiveLimit)).Get("/notes", s.wrapHandler(s.notesHandler.GetNotes))
@@ -547,7 +548,8 @@ func (s *Server) setupRoutes() error {
 				r.With(auth.SessionRequired).Post("/auth/oidc/native/link", s.wrapHandler(s.oidcHandler.NativeLink))
 			}
 
-			r.Handle("/mcp", mcphandler.New(s.noteStore, s.labelStore, s.imageStore, s.hub).NewStreamableHTTPHandler())
+			allowExpensive := s.rateLimiter.allowUser(bucketExpensive, s.cfg.RateLimitExpensivePerMinute)
+			r.Handle("/mcp", mcphandler.New(s.noteStore, s.labelStore, s.imageStore, s.hub, allowExpensive).NewStreamableHTTPHandler())
 		})
 
 		r.Group(func(r chi.Router) {

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -133,4 +134,74 @@ func TestRateLimiterLimitIsMemoizedByBucket(t *testing.T) {
 	// Same bucket name from a second call site must draw from the same
 	// counter, not a fresh independent one.
 	assert.Equal(t, http.StatusTooManyRequests, doRequest(t.Context(), second).Code)
+}
+
+// requireAllowed calls allow and returns whether it allowed the request,
+// failing the test if the check itself errored.
+func requireAllowed(t *testing.T, allow func(context.Context, string) (bool, error), key string) bool {
+	t.Helper()
+	allowed, err := allow(t.Context(), key)
+	require.NoError(t, err)
+	return allowed
+}
+
+// failingCounter is an httprate.LimitCounter whose reads always fail.
+type failingCounter struct{}
+
+func (failingCounter) Config(int, time.Duration)         {}
+func (failingCounter) Increment(string, time.Time) error { return errors.New("counter down") }
+
+func (failingCounter) IncrementBy(string, time.Time, int) error { return errors.New("counter down") }
+
+func (failingCounter) Get(string, time.Time, time.Time) (int, int, error) {
+	return 0, 0, errors.New("counter down")
+}
+
+func TestRateLimiterAllowUser(t *testing.T) {
+	t.Run("draws from the same counters as limit for the same key", func(t *testing.T) {
+		rl := newTestRateLimiter(t)
+		mw := rl.limit("shared", 2, httprate.Key("u1"))
+		allow := rl.allowUser("shared", 2)
+
+		assert.Equal(t, http.StatusOK, doRequest(t.Context(), mw).Code)
+		assert.True(t, requireAllowed(t, allow, "u1"))
+		assert.False(t, requireAllowed(t, allow, "u1"))
+		assert.Equal(t, http.StatusTooManyRequests, doRequest(t.Context(), mw).Code)
+	})
+
+	t.Run("keys are independent", func(t *testing.T) {
+		rl := newTestRateLimiter(t)
+		allow := rl.allowUser("test", 1)
+
+		assert.True(t, requireAllowed(t, allow, "u1"))
+		assert.False(t, requireAllowed(t, allow, "u1"))
+		assert.True(t, requireAllowed(t, allow, "u2"))
+	})
+
+	t.Run("a failing counter is an error, not a throttle", func(t *testing.T) {
+		rl := newTestRateLimiter(t)
+		// Plant a limiter whose counter fails under the bucket name allowUser
+		// looks up, wired to the same handlers limiter() installs. httprate
+		// calls both on a counter failure: the error handler, then the limit
+		// handler.
+		rl.limiters["test"] = httprate.NewRateLimiter(1, time.Minute,
+			httprate.WithLimitCounter(failingCounter{}),
+			httprate.WithLimitHandler(rl.onLimitExceeded("test")),
+			httprate.WithErrorHandler(rl.onCheckError("test")),
+		)
+		allow := rl.allowUser("test", 1)
+
+		allowed, err := allow(t.Context(), "u1")
+		require.Error(t, err)
+		assert.False(t, allowed)
+	})
+
+	t.Run("always allows when rate limiting is disabled", func(t *testing.T) {
+		rl, err := newRateLimiter(&config.Config{RateLimitEnabled: false})
+		require.NoError(t, err)
+		allow := rl.allowUser("test", 1)
+
+		assert.True(t, requireAllowed(t, allow, "u1"))
+		assert.True(t, requireAllowed(t, allow, "u1"))
+	})
 }
