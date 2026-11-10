@@ -318,3 +318,65 @@ func (s *noteStore) GetPublicNoteImage(ctx context.Context, token, imageID strin
 	}
 	return &img, nil
 }
+
+// PublicNotePreview is all of a public note that its link-preview card shows
+// (#1209): the title and the first image. Never the note's text — a card
+// outlives the link in chat histories.
+type PublicNotePreview struct {
+	// Title is always empty for a text note, as in PublicNote.
+	Title string
+	// FirstImage is the note's earliest image, or nil when it has none.
+	FirstImage *NoteImage
+}
+
+// GetPublicNotePreview returns the preview of the note token publishes, under
+// the same rules as GetPublicNote: every dead token is ErrPublicLinkNotFound.
+func (s *noteStore) GetPublicNotePreview(ctx context.Context, token string) (*PublicNotePreview, error) {
+	if !IsValidPublicLinkToken(token) {
+		return nil, ErrPublicLinkNotFound
+	}
+
+	var noteID string
+	var noteType NoteType
+	var preview PublicNotePreview
+	err := s.db.QueryRowContext(ctx,
+		s.d.RewritePlaceholders(`SELECT n.id, n.note_type, n.title
+		 FROM note_public_links l
+		 INNER JOIN active_notes n ON n.id = l.note_id
+		 WHERE l.token = ? AND `+activePublicLinkCond),
+		token, Timestamp(Now()),
+	).Scan(&noteID, &noteType, &preview.Title)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrPublicLinkNotFound
+		}
+		return nil, fmt.Errorf("failed to get public note preview: %w", err)
+	}
+	if noteType == NoteTypeText {
+		// Mirrors SanitizeNote: a text note has no title.
+		preview.Title = ""
+	}
+
+	// The order the app shows images in (GetNoteImagesByNoteID); id breaks
+	// ties so the card is stable.
+	var img NoteImage
+	err = s.db.QueryRowContext(ctx,
+		s.d.RewritePlaceholders(`SELECT id, note_id, uploader_id, filename, content_type, size_bytes, sha256, width, height, created_at
+		 FROM note_images
+		 WHERE note_id = ?
+		 ORDER BY created_at, id
+		 LIMIT 1`),
+		noteID,
+	).Scan(
+		&img.ID, &img.NoteID, &img.UploaderID, &img.Filename, &img.ContentType,
+		&img.SizeBytes, &img.SHA256, &img.Width, &img.Height, &img.CreatedAt,
+	)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+	case err != nil:
+		return nil, fmt.Errorf("failed to get public note preview image: %w", err)
+	default:
+		preview.FirstImage = &img
+	}
+	return &preview, nil
+}

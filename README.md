@@ -31,8 +31,11 @@ compiled web app, while SQLite keeps the default deployment small and portable.
   boundaries.
 - **Public links**: Publish a read-only copy of a note at a `/share/…` link that
   works without an account, with an optional expiry; the owner and
-  collaborators can copy, re-time or revoke it from the share dialog. Operators
-  can switch the feature off with `JOT_PUBLIC_LINKS_ENABLED`.
+  collaborators can copy, re-time or revoke it from the share dialog. Pasted
+  into a chat app, the link previews with the note's title and the thumbnail of
+  its first image — never its text. Chat apps keep that card, so revoking a
+  link does not remove its title and image from messages already sent.
+  Operators can switch the feature off with `JOT_PUBLIC_LINKS_ENABLED`.
 - **Unread badges**: Note cards mark a note shared with you as "New" until you
   open it, and as "Updated" when a collaborator changed it since you last
   looked.
@@ -367,7 +370,7 @@ another client, expect timestamp columns to hold UTC wall-clock values.
 | `JOT_REGISTRATION_ENABLED` | `true` | Set to `false` to disable public registration; admins can still create users. |
 | `JOT_PASSWORD_MIN_LENGTH` | `10` | Minimum password length, from 1 to 72 characters. |
 | `JOT_PUBLIC_LINKS_ENABLED` | `true` | Set to `false` to switch public note links off: the unauthenticated `/api/v1/public/notes/…` endpoints return 404 (so `/share/{token}` pages show "not found") and no link can be created (`PUT /notes/{id}/public-link` returns 403). Revoking still works, and existing links are kept: turning the switch back on brings them back. Exposed as `public_links_enabled` in `GET /api/v1/config`. |
-| `JOT_PUBLIC_URL` | empty | The address people outside use to reach this instance, such as `https://jot.example.com`: an `http`/`https` origin (scheme, host, optional port) with no path, query or fragment; a single trailing `/` is stripped. Clients build public links from it. Set it when users reach Jot on an address outsiders cannot use — a LAN IP, an internal host name, a VPN or Tailscale name — or their copied links will not work for the recipient. Unset, each client uses its own address. Exposed as `public_url` in `GET /api/v1/config`. |
+| `JOT_PUBLIC_URL` | empty | The address people outside use to reach this instance, such as `https://jot.example.com`: an `http`/`https` origin (scheme, host, optional port) with no path, query or fragment; a single trailing `/` is stripped. Clients build public links from it. Set it when users reach Jot on an address outsiders cannot use — a LAN IP, an internal host name, a VPN or Tailscale name — or their copied links will not work for the recipient. Unset, each client uses its own address. Also makes a public link's preview card use absolute URLs: unset, the card's image URL stays relative and it carries no `og:url`, so chat apps that require absolute URLs (WhatsApp, iMessage) show the note's title without its image. Never derived from the `Host` header. Exposed as `public_url` in `GET /api/v1/config`. |
 
 ### Single sign-on (OIDC / SSO)
 
@@ -438,7 +441,7 @@ reverse-proxy caveat below.)
 | `JOT_RATE_LIMIT_ENABLED` | `true` | Set to `false` to disable rate limiting entirely. |
 | `JOT_RATE_LIMIT_PER_MINUTE` | `300` | Baseline requests/min per authenticated user, across all `/api/v1` routes. |
 | `JOT_RATE_LIMIT_AUTH_PER_MINUTE` | `20` | Requests/min per client IP, shared by `/register`, `/login`, and `/logout` (none of which have an authenticated user to key on yet). |
-| `JOT_RATE_LIMIT_PUBLIC_PER_MINUTE` | `120` | Requests/min per client IP, shared by the unauthenticated public link endpoints: a public note and its images and thumbnails (`/api/v1/public/notes/…`). Dead links count too, so guessing tokens is throttled. Subject to the reverse-proxy caveat below. |
+| `JOT_RATE_LIMIT_PUBLIC_PER_MINUTE` | `120` | Requests/min per client IP, shared by the unauthenticated public link endpoints: a public note and its images and thumbnails (`/api/v1/public/notes/…`), and the `/share/…` viewer page, which looks the link up for its preview card. Dead links count too, so guessing tokens is throttled. Subject to the reverse-proxy caveat below. |
 | `JOT_RATE_LIMIT_EXPENSIVE_PER_MINUTE` | `20` | Requests/min per user, shared by note search (a full-text index query), import, export (streams every image), and image upload (decode/resize/thumbnail) — the costliest operations per request. These also count against the baseline limit above; the expensive limit is an additional, stricter cap on top of it. Plain note listing (no `search` query) is unaffected by this limit and only counts against the baseline. |
 
 **Reverse-proxy caveat:** `JOT_RATE_LIMIT_AUTH_PER_MINUTE` is keyed by the direct

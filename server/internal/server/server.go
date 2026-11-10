@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -566,19 +567,26 @@ func (s *Server) setupRoutes() error {
 		return fmt.Errorf("open static directory %s: %w", safeStaticDir, err)
 	}
 	s.staticRoot = staticRoot
-	FileServer(s.router, "/", staticRoot)
+	static := FileServer(staticRoot, s.sharePreview)
+	// The public link viewer page looks its link up for the preview card
+	// (share_preview.go), so it draws from the public API's per-IP bucket.
+	s.router.With(
+		middleware.ClientIPFromRemoteAddr,
+		s.rateLimiter.limit(bucketPublic, s.cfg.RateLimitPublicPerMinute, keyByClientIP),
+	).Get(sharePathPrefix+"*", static)
+	s.router.Get("/*", static)
 	return nil
 }
 
-// FileServer registers a catch-all GET route that serves files from root
-// using os.Root for traversal-resistant filesystem access.
-func FileServer(r chi.Router, path string, root *os.Root) {
-	if path != "/" && path[len(path)-1] != '/' {
-		r.Get(path, http.RedirectHandler(path+"/", http.StatusMovedPermanently).ServeHTTP)
-		path += "/"
-	}
-	path += "*"
+// indexRewriter may replace the index.html served for an SPA path: it returns
+// the body to serve instead, or nil to serve index unchanged.
+type indexRewriter func(r *http.Request, index []byte) []byte
 
+// FileServer returns a GET handler, mounted at the router root, that serves
+// files from root using os.Root for traversal-resistant filesystem access, and
+// index.html for every path that is not a file (SPA routing). rewriteIndex,
+// when non-nil, may replace that index.html per request.
+func FileServer(root *os.Root, rewriteIndex indexRewriter) http.HandlerFunc {
 	fsys := root.FS()
 	fileServer := http.FileServerFS(fsys)
 
@@ -590,16 +598,8 @@ func FileServer(r chi.Router, path string, root *os.Root) {
 		"image/svg+xml",
 	)
 	serveStatic := func(w http.ResponseWriter, req *http.Request) {
-		rctx := chi.RouteContext(req.Context())
-		pathPrefix := strings.TrimSuffix(rctx.RoutePattern(), "/*")
-
-		requestedFile := strings.TrimPrefix(req.URL.Path, pathPrefix)
-		if requestedFile == "" {
-			requestedFile = "/"
-		}
-
 		// Use os.Root for traversal-resistant file existence check.
-		cleanPath := strings.TrimPrefix(requestedFile, "/")
+		cleanPath := strings.TrimPrefix(req.URL.Path, "/")
 		if cleanPath == "" {
 			cleanPath = "index.html"
 		}
@@ -609,29 +609,28 @@ func FileServer(r chi.Router, path string, root *os.Root) {
 		info, err := root.Stat(cleanPath)
 		if err != nil || info.IsDir() {
 			// Not a file: serve index.html for SPA routing
-			indexFile, err := root.Open("index.html")
+			index, err := root.ReadFile("index.html")
 			if err != nil {
 				http.NotFound(w, req)
 				return
 			}
-			defer func(ctx context.Context) {
-				if err := indexFile.Close(); err != nil {
-					logutil.FromContext(ctx).WithError(err).Error("Failed to close index file")
+			if rewriteIndex != nil {
+				if rewritten := rewriteIndex(req, index); rewritten != nil {
+					index = rewritten
 				}
-			}(req.Context())
+			}
 
 			w.Header().Set("Content-Type", "text/html")
-			http.ServeContent(w, req, "index.html", time.Time{}, indexFile)
+			http.ServeContent(w, req, "index.html", time.Time{}, bytes.NewReader(index))
 			return
 		}
 
 		// File exists, serve it via the traversal-safe FS
-		fs := http.StripPrefix(pathPrefix, fileServer)
-		fs.ServeHTTP(w, req)
+		fileServer.ServeHTTP(w, req)
 	}
 	compressed := compressor.Handler(http.HandlerFunc(serveStatic))
 
-	r.Get(path, func(w http.ResponseWriter, req *http.Request) {
+	return func(w http.ResponseWriter, req *http.Request) {
 		// A range answer's Content-Range counts uncompressed bytes, so gzipping
 		// it would hand the client a body that does not match its headers.
 		if req.Header.Get("Range") != "" {
@@ -639,7 +638,7 @@ func FileServer(r chi.Router, path string, root *os.Root) {
 			return
 		}
 		compressed.ServeHTTP(encodedRangeStripper{w}, req)
-	})
+	}
 }
 
 // encodedRangeStripper drops the "Accept-Ranges: bytes" http.ServeContent sets

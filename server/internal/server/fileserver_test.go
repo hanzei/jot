@@ -17,6 +17,10 @@ import (
 
 const testIndex = "<!doctype html>spa index"
 
+// testRewrittenIndex is what the test rewriter serves for /rewritten, standing
+// in for a share page's preview card.
+var testRewrittenIndex = strings.Repeat("<!doctype html>rewritten index ", 50)
+
 // testBundle is long enough that gzip visibly shrinks it.
 var testBundle = strings.Repeat("const jot = 'app bundle';\n", 200)
 
@@ -36,7 +40,15 @@ func newTestFileServer(t *testing.T) func(t *testing.T, path string, headers map
 	t.Cleanup(func() { _ = root.Close() })
 
 	r := chi.NewRouter()
-	FileServer(r, "/", root)
+	r.Get("/*", FileServer(root, func(req *http.Request, index []byte) []byte {
+		if req.URL.Path != "/rewritten" {
+			return nil
+		}
+		if string(index) != testIndex {
+			t.Errorf("rewriter got index %q", index)
+		}
+		return []byte(testRewrittenIndex)
+	}))
 
 	return func(t *testing.T, path string, headers map[string]string) *httptest.ResponseRecorder {
 		t.Helper()
@@ -64,6 +76,7 @@ func TestFileServer(t *testing.T) {
 		{name: "existing file is served", path: "/assets/app.js", body: testBundle},
 		{name: "unknown path falls back to index.html", path: "/notes/abc", body: testIndex},
 		{name: "directory falls back to index.html instead of listing it", path: "/assets/", body: testIndex},
+		{name: "rewriter replaces the SPA fallback", path: "/rewritten", body: testRewrittenIndex},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -91,6 +104,7 @@ func TestFileServerCompression(t *testing.T) {
 	}{
 		{name: "script is gzipped when the client accepts it", path: "/assets/app.js", headers: acceptGzip, wantGzip: true, wantBody: testBundle},
 		{name: "SPA fallback is gzipped", path: "/notes/abc", headers: acceptGzip, wantGzip: true, wantBody: testIndex},
+		{name: "rewritten SPA fallback is gzipped", path: "/rewritten", headers: acceptGzip, wantGzip: true, wantBody: testRewrittenIndex},
 		{name: "served plain without Accept-Encoding", path: "/assets/app.js", wantBody: testBundle},
 		{name: "image is not recompressed", path: "/assets/icon.png", headers: acceptGzip},
 	}
@@ -128,6 +142,14 @@ func TestFileServerCompression(t *testing.T) {
 		assert.Equal(t, http.StatusPartialContent, rec.Code)
 		assert.Empty(t, rec.Header().Get("Content-Encoding"))
 		assert.Equal(t, testBundle[:5], rec.Body.String())
+	})
+
+	t.Run("range request on a rewritten index counts the rewritten bytes", func(t *testing.T) {
+		t.Parallel()
+		rec := get(t, "/rewritten", map[string]string{"Accept-Encoding": "gzip", "Range": "bytes=20-40"})
+		assert.Equal(t, http.StatusPartialContent, rec.Code)
+		assert.Empty(t, rec.Header().Get("Content-Encoding"))
+		assert.Equal(t, testRewrittenIndex[20:41], rec.Body.String())
 	})
 
 	t.Run("not modified has no body", func(t *testing.T) {

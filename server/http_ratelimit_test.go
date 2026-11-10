@@ -153,13 +153,13 @@ func TestRateLimiting(t *testing.T) {
 		assert.Equal(t, http.StatusOK, plainStatus)
 	})
 
-	t.Run("public bucket covers a public note and its images, per IP", func(t *testing.T) {
+	t.Run("public bucket covers a public note, its images and its share page, per IP", func(t *testing.T) {
 		ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
 			cfg.RateLimitEnabled = true
 			cfg.RateLimitPerMinute = 100
 			cfg.RateLimitAuthPerMinute = 100
 			cfg.RateLimitExpensivePerMinute = 100
-			cfg.RateLimitPublicPerMinute = 3
+			cfg.RateLimitPublicPerMinute = 4
 		})
 		u := ts.createTestUser(t, "publicrateuser", "password123", false)
 		note, err := u.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "x"})
@@ -174,12 +174,20 @@ func TestRateLimiting(t *testing.T) {
 			status, _ := doGet(t, ts.httpClient, base+path)
 			assert.Equal(t, http.StatusOK, status, path)
 		}
+		// The share page looks the link up for its preview card, so it counts too.
+		status, _ := doGet(t, ts.httpClient, ts.HTTPServer.URL+"/share/"+link.Token)
+		assert.Equal(t, http.StatusOK, status)
 
 		// Dead links draw from the same bucket, so guessing tokens is throttled too.
 		status, header, body := rawRequest(t, ts.httpClient, http.MethodGet, ts.HTTPServer.URL+"/api/v1/public/notes/"+strings.Repeat("A", 43), nil, nil)
 		requireEnvelope(t, http.StatusTooManyRequests, "rate_limited", status, header, body)
 		assert.NotEmpty(t, header.Get("Retry-After"))
 		assert.Equal(t, "no-referrer", header.Get("Referrer-Policy"))
+		shareStatus, _ := doGet(t, ts.httpClient, ts.HTTPServer.URL+"/share/"+link.Token)
+		assert.Equal(t, http.StatusTooManyRequests, shareStatus, "the share page is throttled with the rest of the bucket")
+		// The rest of the SPA is not rate-limited.
+		spaStatus, _ := doGet(t, ts.httpClient, ts.HTTPServer.URL+"/notes/abc")
+		assert.Equal(t, http.StatusOK, spaStatus)
 
 		// The authenticated API has its own buckets.
 		meStatus, _ := doGet(t, u.Client.HTTPClient(), ts.HTTPServer.URL+"/api/v1/users/me")

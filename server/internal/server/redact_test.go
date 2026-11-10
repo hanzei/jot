@@ -52,7 +52,8 @@ func TestPublicLinkTokenNotLoggedOrTraced(t *testing.T) {
 
 	cfg := newTestConfig(t)
 	cfg.PublicLinksEnabled = true
-	require.NoError(t, os.WriteFile(cfg.StaticDir+"/index.html", []byte("<html></html>"), 0o600))
+	// The real index.html, so /share/{token} runs the preview lookup too.
+	require.NoError(t, os.WriteFile(cfg.StaticDir+"/index.html", readWebappIndex(t), 0o600))
 	log, hook := newCapturingLogger()
 	recorder := tracetest.NewSpanRecorder()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
@@ -78,16 +79,20 @@ func TestPublicLinkTokenNotLoggedOrTraced(t *testing.T) {
 	for _, tt := range []struct {
 		path   string
 		status int
+		// wantInBody is checked with Contains; "" matches any body.
+		wantInBody string
 	}{
-		{"/api/v1/public/notes/" + token, http.StatusOK},
-		{"/api/v1/public/notes/" + token + "?utm=x", http.StatusOK},
-		{"/api/v1/public/notes/" + token + "/images/" + imageID, http.StatusNotFound},
-		{"/api/v1/public/notes/" + token + "/images/" + imageID + "/thumbnail", http.StatusNotFound},
-		{"/share/" + token, http.StatusOK},
+		{"/api/v1/public/notes/" + token, http.StatusOK, ""},
+		{"/api/v1/public/notes/" + token + "?utm=x", http.StatusOK, ""},
+		{"/api/v1/public/notes/" + token + "/images/" + imageID, http.StatusNotFound, ""},
+		{"/api/v1/public/notes/" + token + "/images/" + imageID + "/thumbnail", http.StatusNotFound, ""},
+		// The share page runs the preview card lookup too.
+		{"/share/" + token, http.StatusOK, "<title>Shared note</title>"},
 	} {
 		rec := httptest.NewRecorder()
 		s.GetRouter().ServeHTTP(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, tt.path, nil))
 		require.Equal(t, tt.status, rec.Code, "%s: %s", tt.path, rec.Body.String())
+		assert.Contains(t, rec.Body.String(), tt.wantInBody, tt.path)
 	}
 
 	entries := hook.AllEntries()

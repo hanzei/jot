@@ -1,5 +1,5 @@
 /// <reference types="vitest" />
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -18,6 +18,34 @@ function gitCommit(): string | null {
   }
 }
 
+// The server swaps these blocks of index.html for a public link's preview card
+// (server/internal/server/share_preview.go, #1209), finding them by their
+// marker comments. Fail the build if the emitted index.html lost one, rather
+// than letting every share link silently fall back to the generic card.
+const PREVIEW_MARKERS = [
+  '<!-- jot-preview:text -->', '<!-- /jot-preview:text -->',
+  '<!-- jot-preview:image -->', '<!-- /jot-preview:image -->',
+];
+
+function requirePreviewMarkers(): Plugin {
+  return {
+    name: 'jot:require-preview-markers',
+    apply: 'build',
+    enforce: 'post',
+    generateBundle(_options, bundle) {
+      const index = bundle['index.html'];
+      if (!index || index.type !== 'asset') {
+        return;
+      }
+      const html = typeof index.source === 'string' ? index.source : new TextDecoder().decode(index.source);
+      const missing = PREVIEW_MARKERS.filter((marker) => !html.includes(marker));
+      if (missing.length > 0) {
+        this.error(`index.html lost its link-preview markers: ${missing.join(', ')}`);
+      }
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => ({
   define: {
     __JOT_WEBAPP_VERSION__: JSON.stringify(process.env.JOT_BUILD_VERSION || 'dev'),
@@ -26,6 +54,7 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     tailwindcss(),
     react(),
+    requirePreviewMarkers(),
     VitePWA({
       registerType: 'prompt',
       injectRegister: false,
