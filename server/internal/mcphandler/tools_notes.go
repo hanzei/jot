@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
-	"fmt"
 
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/notesvc"
@@ -140,22 +139,6 @@ func (h *Handler) handleCreateNote(userID string) mcp.ToolHandlerFor[createNoteI
 		}
 		return toolNoteResult(note)
 	}
-}
-
-// attachLabels attaches the caller's labels with the given names to noteID,
-// creating the ones that do not exist yet. Names that differ only in case
-// resolve to the same label, and attaching it twice is a no-op.
-func (h *Handler) attachLabels(ctx context.Context, noteID, userID string, names []string) error {
-	for _, name := range names {
-		label, _, err := h.labelStore.GetOrCreateLabel(ctx, userID, name)
-		if err != nil {
-			return fmt.Errorf("get or create label %q: %w", name, err)
-		}
-		if err = h.noteStore.AddLabelToNote(ctx, noteID, label.ID, userID); err != nil {
-			return fmt.Errorf("add label to note: %w", err)
-		}
-	}
-	return nil
 }
 
 // -- update_note --------------------------------------------------------------
