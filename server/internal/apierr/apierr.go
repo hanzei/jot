@@ -117,13 +117,6 @@ func Invalid(err error) error {
 	return WithCode(CodeValidationFailed, err)
 }
 
-// codeStatuses gives the status of an error carrying one of these codes: the
-// codes attached by code that does not pick a status itself (see [Invalid]).
-var codeStatuses = map[Code]int{
-	CodeValidationFailed: http.StatusBadRequest,
-	CodeItemLimitReached: http.StatusUnprocessableEntity,
-}
-
 // sentinels maps store sentinels to the status they produce and, for those a
 // client needs to tell apart, a specific code. A handler that returns one of
 // these (wrapped or not) gets the code without having to attach it, and can
@@ -165,14 +158,11 @@ var sentinels = []struct {
 }
 
 // SentinelStatus returns the status for err when it is (or wraps) a store
-// sentinel with a fixed status or an error coded as in [codeStatuses], and
-// false otherwise. The code is checked first, so [Invalid] wrapping a
-// sentinel is a 400.
+// sentinel with a fixed status or an error marked with [Invalid], and false
+// otherwise.
 func SentinelStatus(err error) (int, bool) {
-	if ce, ok := errors.AsType[*codedError](err); ok {
-		if status, ok := codeStatuses[ce.code]; ok {
-			return status, true
-		}
+	if ce, ok := errors.AsType[*codedError](err); ok && ce.code == CodeValidationFailed {
+		return http.StatusBadRequest, true
 	}
 	for _, s := range sentinels {
 		if s.status != 0 && errors.Is(err, s.err) {

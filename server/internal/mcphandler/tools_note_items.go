@@ -8,7 +8,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/hanzei/jot/server/internal/models"
-	"github.com/hanzei/jot/server/internal/notesvc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -58,15 +57,6 @@ func validateItemText(text string) error {
 		return fmt.Errorf("item text must be %d characters or fewer", models.NoteItemTextMaxLength)
 	}
 	return nil
-}
-
-// itemCapError translates the store's cap sentinel into the notes service's
-// message, which the REST API returns too.
-func itemCapError(err error) error {
-	if errors.Is(err, models.ErrNoteItemCapExceeded) {
-		return notesvc.ErrItemLimitReached
-	}
-	return err
 }
 
 // nextItemPosition returns the position that appends an item to the end of the
@@ -121,7 +111,7 @@ func (h *Handler) handleCreateNoteItem(userID string) mcp.ToolHandlerFor[createN
 		// pre-check here would only race.
 		item, err := h.noteStore.CreateItemWithID(ctx, in.NoteID, userID, itemID, in.Text, position, in.Completed, in.ParentID, in.AssignedTo, models.NoteItemsMaxCount)
 		if err != nil {
-			return toolError("create note item: %w", itemCapError(err))
+			return toolError("create note item: %w", err)
 		}
 		h.events.NoteUpdated(ctx, in.NoteID, nil, userID, true)
 		data, err := json.Marshal(item)

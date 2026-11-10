@@ -4,14 +4,10 @@
 // the result and errors for its client, so a rule changed here applies to both.
 //
 // Errors are store sentinels (models.Err*), errors marked with apierr.Invalid
-// for invalid input, ErrItemLimitReached, or internal errors. The REST
-// handlers map them to statuses with apierr.SentinelStatus.
-//
-// Store errors are returned unwrapped: each transport already names the
-// operation (REST in its 500 log, MCP in the tool error), and a sentinel's
-// message is what a REST client sees, so a prefix added here would show up
-// twice or change the API's error messages. The exception is a read-back
-// after a committed write (see refetchError).
+// for invalid input, or internal errors. The REST handlers map them to
+// statuses with apierr.SentinelStatus. Store errors are returned unwrapped,
+// since the callers name the operation (see server/CLAUDE.md); refetchError
+// is the one exception.
 package notesvc
 
 import (
@@ -29,10 +25,6 @@ import (
 	"github.com/hanzei/jot/server/internal/sse"
 	"go.opentelemetry.io/otel/metric"
 )
-
-// ErrItemLimitReached is returned wherever an operation would give a note more
-// than models.NoteItemsMaxCount items.
-var ErrItemLimitReached = apierr.New(apierr.CodeItemLimitReached, fmt.Sprintf("note cannot have more than %d items", models.NoteItemsMaxCount))
 
 // Service performs note write operations on behalf of a user.
 type Service struct {
@@ -156,7 +148,7 @@ func normalizeNewNote(in *NewNote) error {
 		return apierr.Invalid(err)
 	}
 	if len(in.Items) > models.NoteItemsMaxCount {
-		return ErrItemLimitReached
+		return models.ErrNoteItemCapExceeded
 	}
 
 	// Items only exist on list notes, so they imply the type.
@@ -389,7 +381,8 @@ func (s *Service) Restore(ctx context.Context, noteID, userID string) (*models.N
 // refetchError reports a failure to read back a note the operation already
 // changed. It deliberately does not wrap err: a sentinel such as "not found"
 // here would tell the client its committed write failed, so the transports
-// must see an internal error instead.
+// must see an internal error instead. (err.Error() rather than %v, which
+// errorlint rejects for an error.)
 func refetchError(op string, err error) error {
 	return fmt.Errorf("%s: %s", op, err.Error())
 }
@@ -498,7 +491,7 @@ func resolveConversion(c Conversion) (title, content string, items []models.NewN
 			return "", "", nil, apierr.Invalid(err)
 		}
 		if len(c.Items) > models.NoteItemsMaxCount {
-			return "", "", nil, ErrItemLimitReached
+			return "", "", nil, models.ErrNoteItemCapExceeded
 		}
 		items, err = buildItems(c.Items)
 		if err != nil {

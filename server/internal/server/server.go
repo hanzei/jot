@@ -132,7 +132,8 @@ func newServer(cfg *config.Config, log *logrus.Logger, tracerProvider trace.Trac
 	}
 	undo.push(func() { _ = db.Close() })
 
-	dbPoolMetrics, err := database.RegisterPoolMetrics(otel.GetMeterProvider().Meter("github.com/hanzei/jot/server"), db, cfg.DBDriver)
+	meter := otel.GetMeterProvider().Meter("github.com/hanzei/jot/server")
+	dbPoolMetrics, err := database.RegisterPoolMetrics(meter, db, cfg.DBDriver)
 	if err != nil {
 		return nil, fmt.Errorf("initialize database pool metrics: %w", err)
 	}
@@ -171,7 +172,7 @@ func newServer(cfg *config.Config, log *logrus.Logger, tracerProvider trace.Trac
 	undo.push(func() { _ = imageStore.Close() })
 
 	authHandler := handlers.NewAuthHandler(userStore, noteStore, sessionService, userSettingsStore, hub, cfg.RegistrationEnabled, cfg.LocalLoginEnabled, cfg.PasswordMinLength)
-	notes, err := notesvc.New(noteStore, labelStore, imageStore, notify.New(hub, noteStore), otel.GetMeterProvider().Meter("github.com/hanzei/jot/server"))
+	notes, err := notesvc.New(noteStore, labelStore, imageStore, notify.New(hub, noteStore), meter)
 	if err != nil {
 		return nil, fmt.Errorf("initialize notes service: %w", err)
 	}

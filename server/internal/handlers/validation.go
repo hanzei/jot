@@ -10,7 +10,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/hanzei/jot/server/internal/models"
-	"github.com/hanzei/jot/server/internal/notesvc"
 )
 
 // decodeJSONBody limits the request body to maxJSONBodySize and decodes it
@@ -52,10 +51,6 @@ const (
 	// rejects anything longer, so surface a clear 400 instead of a 500.
 	passwordMaxBytes = 72
 )
-
-// errItemLimitReached is returned wherever a request would give a note more
-// than noteItemsMaxCount items.
-var errItemLimitReached = notesvc.ErrItemLimitReached
 
 func validateUsername(username string) error {
 	n := utf8.RuneCountInString(username)

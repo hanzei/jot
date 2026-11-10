@@ -133,9 +133,6 @@ func (h *NotesHandler) CreateNoteItem(w http.ResponseWriter, r *http.Request) (i
 	// The item-count cap is enforced atomically inside the create transaction.
 	item, err := h.noteStore.CreateItemWithID(r.Context(), noteID, user.ID, itemID, req.Text, req.Position, req.Completed, req.ParentID, req.AssignedTo, noteItemsMaxCount)
 	if err != nil {
-		if errors.Is(err, models.ErrNoteItemCapExceeded) {
-			return http.StatusUnprocessableEntity, nil, errItemLimitReached
-		}
 		return storeError(err, "create item")
 	}
 
