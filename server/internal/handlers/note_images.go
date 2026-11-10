@@ -97,32 +97,10 @@ func (h *NotesHandler) publishNoteImageEvent(ctx context.Context, noteID string,
 	h.events.PersonalizedNote(ctx, noteID, audienceIDs, sourceUserID, sse.EventNoteUpdated)
 }
 
-// reclaimOrphanedImageBlobs reclaims the on-disk blob (and derived thumbnail)
-// for each sha in shas whose note_images refcount has hit zero (dedup means
-// another row may still share a given content hash). Errors are logged but
-// never fail the caller's request — by the time this runs, the row delete
-// that made shas candidates has already succeeded. Shared by every path that
-// hard-deletes notes or images: single-image delete, upload rollback, and
-// note/user hard-delete cascades (issue #608), plus the periodic orphan
-// sweep as a safety net for any path that misses this.
-func reclaimOrphanedImageBlobs(ctx context.Context, noteStore *models.NoteStore, imageStore *blobstore.ImageStore, shas []string) {
-	// The row delete already committed by the time this runs, so a client
-	// disconnect (which cancels an HTTP/MCP request's context) must not abort
-	// the on-disk cleanup — there's no retry path, so an aborted reclaim here
-	// leaks the blob permanently. context.WithoutCancel keeps request-scoped
-	// values (e.g. the logger below) while detaching from that cancellation.
-	ctx = context.WithoutCancel(ctx)
-	for _, sha := range shas {
-		if err := blobstore.ReclaimIfOrphaned(ctx, noteStore, imageStore, sha); err != nil {
-			logutil.FromContext(ctx).WithError(err).WithField("sha256", sha).Error("Failed to reclaim orphaned note image blob/thumbnail")
-		}
-	}
-}
-
 // reclaimNoteImageBlob is the single-hash convenience form of
-// reclaimOrphanedImageBlobs for NotesHandler's own image endpoints.
+// blobstore.ReclaimOrphaned for NotesHandler's own image endpoints.
 func (h *NotesHandler) reclaimNoteImageBlob(ctx context.Context, sha string) {
-	reclaimOrphanedImageBlobs(ctx, h.noteStore, h.imageStore, []string{sha})
+	blobstore.ReclaimOrphaned(ctx, h.noteStore, h.imageStore, []string{sha})
 }
 
 // inspectedNoteImage is an uploaded image that passed inspectNoteImage,

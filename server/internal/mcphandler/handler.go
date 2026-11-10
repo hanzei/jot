@@ -11,9 +11,9 @@ import (
 	"net/http"
 
 	"github.com/hanzei/jot/server/internal/auth"
-	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/notesvc"
 	"github.com/hanzei/jot/server/internal/notify"
 	"github.com/hanzei/jot/server/internal/sse"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -23,7 +23,8 @@ import (
 type Handler struct {
 	noteStore  *models.NoteStore
 	labelStore *models.LabelStore
-	imageStore *blobstore.ImageStore
+	// notes performs the note writes shared with the REST API.
+	notes *notesvc.Service
 	// events publishes the same SSE events the REST handlers do, so a change
 	// made over MCP reaches open webapp and mobile clients.
 	events *notify.Publisher
@@ -33,13 +34,13 @@ type Handler struct {
 	allowExpensive func(ctx context.Context, userID string) (bool, error)
 }
 
-// New creates a new Handler backed by the provided stores, publishing change
-// events to hub.
-func New(noteStore *models.NoteStore, labelStore *models.LabelStore, imageStore *blobstore.ImageStore, hub *sse.Hub, allowExpensive func(ctx context.Context, userID string) (bool, error)) *Handler {
+// New creates a new Handler backed by the provided stores and notes service,
+// publishing change events to hub.
+func New(noteStore *models.NoteStore, labelStore *models.LabelStore, notes *notesvc.Service, hub *sse.Hub, allowExpensive func(ctx context.Context, userID string) (bool, error)) *Handler {
 	return &Handler{
 		noteStore:      noteStore,
 		labelStore:     labelStore,
-		imageStore:     imageStore,
+		notes:          notes,
 		events:         notify.New(hub, noteStore),
 		allowExpensive: allowExpensive,
 	}

@@ -59,6 +59,10 @@ func TestSentinelStatus(t *testing.T) {
 		{"wrapped sentinel", fmt.Errorf("update note: %w", models.ErrNoteVersionConflict), http.StatusConflict, true},
 		{"sentinel with a code", models.ErrLastAdmin, http.StatusConflict, true},
 		{"status depends on endpoint", models.ErrLabelNameConflict, 0, false},
+		{"invalid input", fmt.Errorf("create note: %w", Invalid(errors.New("bad"))), http.StatusBadRequest, true},
+		{"invalid wins over a wrapped sentinel", Invalid(models.ErrNoteNotFound), http.StatusBadRequest, true},
+		{"item cap code", New(CodeItemLimitReached, "too many"), http.StatusUnprocessableEntity, true},
+		{"code without a status of its own", New(CodeCannotShareWithSelf, "no"), 0, false},
 		{"not a sentinel", errors.New("boom"), 0, false},
 		{"nil", nil, 0, false},
 	}

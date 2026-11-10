@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/notesvc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -59,18 +60,11 @@ func validateItemText(text string) error {
 	return nil
 }
 
-// errItemCapExceeded is the message both cap paths report — the pre-check in
-// buildCreateNoteItems and the store's atomic check — kept in one place so they
-// cannot drift. It matches the wording the REST API returns.
-func errItemCapExceeded() error {
-	return fmt.Errorf("note cannot have more than %d items", models.NoteItemsMaxCount)
-}
-
-// itemCapError translates the store's cap sentinel into that message, so both
-// surfaces describe the limit identically.
+// itemCapError translates the store's cap sentinel into the notes service's
+// message, which the REST API returns too.
 func itemCapError(err error) error {
 	if errors.Is(err, models.ErrNoteItemCapExceeded) {
-		return errItemCapExceeded()
+		return notesvc.ErrItemLimitReached
 	}
 	return err
 }
@@ -85,30 +79,6 @@ func nextItemPosition(note *models.Note) int {
 		}
 	}
 	return next
-}
-
-// buildCreateNoteItems validates the items supplied to create_note and resolves
-// them into store items. Slice order is the display order, so positions are
-// assigned by index; every item is top-level.
-func buildCreateNoteItems(specs []createNoteItemSpec) ([]models.NewNoteItem, error) {
-	if len(specs) == 0 {
-		return nil, nil
-	}
-	if len(specs) > models.NoteItemsMaxCount {
-		return nil, errItemCapExceeded()
-	}
-	items := make([]models.NewNoteItem, 0, len(specs))
-	for i, spec := range specs {
-		if err := validateItemText(spec.Text); err != nil {
-			return nil, fmt.Errorf("item %d: %w", i, err)
-		}
-		items = append(items, models.NewNoteItem{
-			Text:      spec.Text,
-			Position:  i,
-			Completed: spec.Completed,
-		})
-	}
-	return items, nil
 }
 
 // -- create_note_item ---------------------------------------------------------

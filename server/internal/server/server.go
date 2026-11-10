@@ -33,6 +33,8 @@ import (
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/mcphandler"
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/notesvc"
+	"github.com/hanzei/jot/server/internal/notify"
 	"github.com/hanzei/jot/server/internal/oidc"
 	"github.com/hanzei/jot/server/internal/sse"
 	"github.com/sirupsen/logrus"
@@ -85,6 +87,7 @@ type Server struct {
 	oidcHandler     *handlers.OIDCHandler
 	noteStore       *models.NoteStore
 	labelStore      *models.LabelStore
+	notes           *notesvc.Service
 	rateLimiter     *rateLimiter
 	tracerProvider  trace.TracerProvider
 }
@@ -168,10 +171,11 @@ func newServer(cfg *config.Config, log *logrus.Logger, tracerProvider trace.Trac
 	undo.push(func() { _ = imageStore.Close() })
 
 	authHandler := handlers.NewAuthHandler(userStore, noteStore, sessionService, userSettingsStore, hub, cfg.RegistrationEnabled, cfg.LocalLoginEnabled, cfg.PasswordMinLength)
-	notesHandler, err := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub, imageStore, int64(cfg.UploadMaxBytes), cfg.PublicLinksEnabled)
+	notes, err := notesvc.New(noteStore, labelStore, imageStore, notify.New(hub, noteStore), otel.GetMeterProvider().Meter("github.com/hanzei/jot/server"))
 	if err != nil {
-		return nil, fmt.Errorf("initialize notes handler: %w", err)
+		return nil, fmt.Errorf("initialize notes service: %w", err)
 	}
+	notesHandler := handlers.NewNotesHandler(noteStore, userStore, notes, hub, imageStore, int64(cfg.UploadMaxBytes), cfg.PublicLinksEnabled)
 	labelsHandler := handlers.NewLabelsHandler(noteStore, labelStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
 	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, imageStore, sessionService, hub,
@@ -213,6 +217,7 @@ func newServer(cfg *config.Config, log *logrus.Logger, tracerProvider trace.Trac
 		patsHandler:     patsHandler,
 		oidcHandler:     oidcHandler,
 		noteStore:       noteStore,
+		notes:           notes,
 		labelStore:      labelStore,
 		imageStore:      imageStore,
 		rateLimiter:     rl,
@@ -549,7 +554,7 @@ func (s *Server) setupRoutes() error {
 			}
 
 			allowExpensive := s.rateLimiter.allowUser(bucketExpensive, s.cfg.RateLimitExpensivePerMinute)
-			r.Handle("/mcp", mcphandler.New(s.noteStore, s.labelStore, s.imageStore, s.hub, allowExpensive).NewStreamableHTTPHandler())
+			r.Handle("/mcp", mcphandler.New(s.noteStore, s.labelStore, s.notes, s.hub, allowExpensive).NewStreamableHTTPHandler())
 		})
 
 		r.Group(func(r chi.Router) {

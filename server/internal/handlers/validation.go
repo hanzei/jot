@@ -9,8 +9,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/notesvc"
 )
 
 // decodeJSONBody limits the request body to maxJSONBodySize and decodes it
@@ -55,7 +55,7 @@ const (
 
 // errItemLimitReached is returned wherever a request would give a note more
 // than noteItemsMaxCount items.
-var errItemLimitReached = apierr.New(apierr.CodeItemLimitReached, fmt.Sprintf("note cannot have more than %d items", noteItemsMaxCount))
+var errItemLimitReached = notesvc.ErrItemLimitReached
 
 func validateUsername(username string) error {
 	n := utf8.RuneCountInString(username)
