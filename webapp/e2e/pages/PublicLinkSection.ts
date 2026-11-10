@@ -52,10 +52,15 @@ export class PublicLinkSection {
     return readClipboard(this.page);
   }
 
-  /** The section shows `url` only shortened: never its full token, in text or in a field. */
+  /**
+   * The section shows `url` only shortened, after its label for screen
+   * readers: host, path and the token's first 4 characters. Never the full
+   * token, in text or in a field.
+   */
   async expectTokenHidden(url: string) {
-    const token = new URL(url).pathname.split('/').pop()!;
-    await expect(this.urlField()).toHaveText(new RegExp(`/share/${token.slice(0, 4)}…$`));
+    const { host, pathname } = new URL(url);
+    const token = pathname.slice('/share/'.length);
+    await expect(this.urlField()).toHaveText(`Public link URL: ${host}/share/${token.slice(0, 4)}…`);
     await expect(this.section()).not.toContainText(token);
     await expect(this.section().locator('input')).toHaveCount(0);
   }

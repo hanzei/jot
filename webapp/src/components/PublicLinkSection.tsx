@@ -61,7 +61,6 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
   const { copied, copy } = useCopyToClipboard();
   const changeRef = useRef<HTMLButtonElement>(null);
   const createRef = useRef<HTMLButtonElement>(null);
-  const editorSelectRef = useRef<HTMLSelectElement>(null);
   const wasEditing = useRef(false);
 
   const link = isPublicLinkActive(note.public_link) ? note.public_link : null;
@@ -80,13 +79,11 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
   }
 
   const isEditing = editing !== null;
-  // Opening the editor moves focus to its select; closing it returns focus to
-  // Change when it went nowhere (the focused control was removed), or to
-  // Create link when the link itself is gone.
+  // Opening the editor focuses its select (autoFocus); closing it returns
+  // focus to Change when it went nowhere (the focused control was removed), or
+  // to Create link when the link itself is gone.
   useEffect(() => {
-    if (isEditing && !wasEditing.current) {
-      editorSelectRef.current?.focus();
-    } else if (!isEditing && wasEditing.current) {
+    if (!isEditing && wasEditing.current) {
       const active = document.activeElement;
       if (!active || active === document.body) (changeRef.current ?? createRef.current)?.focus();
     }
@@ -145,6 +142,7 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
     return creator ? t('publicLink.createdBy', { name: userDisplayName(creator) }) : null;
   };
 
+  const baseUrl = config.publicUrl ?? window.location.origin;
   const url = link ? publicLinkUrl(link, config.publicUrl, window.location.origin) : '';
   const createdBy = link ? creatorLabel(link.created_by) : null;
 
@@ -191,7 +189,7 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
               className="truncate rounded-md border border-gray-300 dark:border-slate-600 bg-gray-50 dark:bg-slate-700 text-gray-900 dark:text-gray-100 px-3 py-1.5 text-sm"
             >
               <span className="sr-only">{t('publicLink.urlLabel')}: </span>
-              {shortPublicLinkUrl(url)}
+              {shortPublicLinkUrl(baseUrl, link.token)}
             </p>
             <button type="button" onClick={() => void copy(url)} className={`${buttonClassName} flex items-center justify-center`}>
               {copied
@@ -251,7 +249,6 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
             // default was prevented. Like Cancel, it waits out a Save in
             // flight, which would apply the new expiry anyway.
             e.preventDefault();
-            e.stopPropagation();
             if (!busy) setEditing(null);
           }}
         >
@@ -259,7 +256,7 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
             {t('publicLink.newExpiry')}
           </label>
           <select
-            ref={editorSelectRef}
+            autoFocus
             id={expiryId}
             value={editing.choice}
             onChange={(e) => setEditing({ ...editing, choice: e.target.value as PublicLinkExpiryChoice })}
