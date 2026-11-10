@@ -147,6 +147,8 @@ var sentinels = []struct {
 	{models.ErrNoteFieldNotAllowed, http.StatusBadRequest, ""},
 	{models.ErrUsernameTaken, http.StatusConflict, CodeUsernameTaken},
 	{models.ErrNoteAlreadyShared, http.StatusConflict, CodeAlreadyShared},
+	{models.ErrCannotShareWithSelf, http.StatusBadRequest, CodeCannotShareWithSelf},
+	{models.ErrNotNoteOwner, http.StatusForbidden, ""},
 	{models.ErrLabelNameConflict, 0, CodeLabelNameTaken},
 	{models.ErrLastAdmin, http.StatusConflict, CodeLastAdmin},
 	{models.ErrCannotDeleteSelf, http.StatusForbidden, CodeCannotDeleteSelf},

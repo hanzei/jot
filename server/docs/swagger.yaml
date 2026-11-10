@@ -597,9 +597,8 @@ definitions:
     properties:
       truncated:
         description: |-
-          Truncated is true when a search matched more than userSearchLimit users
-          and only the first userSearchLimit are returned. Always false without a
-          search term.
+          Truncated is true when a search matched more than 50 users and only the
+          first 50 are returned. Always false without a search term.
         type: boolean
       users:
         items:

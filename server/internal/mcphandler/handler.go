@@ -74,6 +74,7 @@ func (h *Handler) buildServer(req *http.Request) *mcp.Server {
 	h.registerNoteTools(srv, user.ID)
 	h.registerNoteItemTools(srv, user.ID)
 	h.registerLabelTools(srv, user.ID)
+	h.registerSharingTools(srv, user.ID)
 	return srv
 }
 
@@ -96,14 +97,20 @@ func toolTextResult(data []byte) *mcp.CallToolResult {
 	}
 }
 
+// toolJSONResult marshals v as a single text MCP result. Its return signature
+// matches [mcp.ToolHandlerFor] so callers can return it directly.
+func toolJSONResult(v any) (*mcp.CallToolResult, any, error) {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return toolError("marshal response: %w", err)
+	}
+	return toolTextResult(data), nil, nil
+}
+
 // toolNoteResult marshals a note for a tool result, stripping the fields that
 // do not belong to its type exactly as the REST API does.
 func toolNoteResult(note *models.Note) (*mcp.CallToolResult, any, error) {
-	data, err := json.Marshal(models.SanitizeNote(*note))
-	if err != nil {
-		return toolError("marshal note: %w", err)
-	}
-	return toolTextResult(data), nil, nil
+	return toolJSONResult(models.SanitizeNote(*note))
 }
 
 // toolDeletedResult builds the confirmation the delete tools return: the ID of
@@ -114,12 +121,7 @@ func toolDeletedResult(id string, extra map[string]any) (*mcp.CallToolResult, an
 	maps.Copy(payload, extra)
 	payload["id"] = id
 	payload["deleted"] = true
-
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return toolError("marshal response: %w", err)
-	}
-	return toolTextResult(data), nil, nil
+	return toolJSONResult(payload)
 }
 
 // toolError returns a tool-level error from a [mcp.ToolHandlerFor] handler.

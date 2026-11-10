@@ -23,7 +23,6 @@ const SearchQueryParam = "search"
 
 type NotesHandler struct {
 	noteStore *models.NoteStore
-	userStore *models.UserStore
 	// notes performs the note writes shared with the MCP tools.
 	notes          *notesvc.Service
 	hub            *sse.Hub
@@ -35,10 +34,9 @@ type NotesHandler struct {
 }
 
 // NewNotesHandler creates a NotesHandler.
-func NewNotesHandler(noteStore *models.NoteStore, userStore *models.UserStore, notes *notesvc.Service, hub *sse.Hub, imageStore *blobstore.ImageStore, uploadMaxBytes int64, publicLinksEnabled bool) *NotesHandler {
+func NewNotesHandler(noteStore *models.NoteStore, notes *notesvc.Service, hub *sse.Hub, imageStore *blobstore.ImageStore, uploadMaxBytes int64, publicLinksEnabled bool) *NotesHandler {
 	return &NotesHandler{
 		noteStore:          noteStore,
-		userStore:          userStore,
 		notes:              notes,
 		hub:                hub,
 		events:             notify.New(hub, noteStore),

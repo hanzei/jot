@@ -577,10 +577,20 @@ Use a Personal Access Token for machine-to-machine access:
 Authorization: Bearer <personal-access-token>
 ```
 
-The MCP server exposes note and label tools. They apply the same validation as
-the REST API (field limits, colors, which fields each note type has), and their
-changes are pushed to open web and mobile clients over server-sent events like
-any other edit. PATs are created from Settings in the web app and are only shown
+The MCP server exposes these tools:
+
+- **Notes:** `list_notes`, `get_note`, `create_note`, `update_note`,
+  `delete_note`, `restore_note`
+- **List items:** `create_note_item`, `update_note_item`, `delete_note_item`
+- **Labels:** `list_labels`, `update_label`, `delete_label`,
+  `add_label_to_note`, `remove_label_from_note`
+- **Sharing:** `list_users` (finds the user ID that sharing and item assignment
+  take), `share_note`, `unshare_note`
+
+They apply the same validation and permission rules as the REST API (field
+limits, colors, which fields each note type has, only the owner shares), and
+their changes are pushed to open web and mobile clients over server-sent events
+like any other edit. PATs are created from Settings in the web app and are only shown
 once. Settings shows when each token was last used (to the day; a use is
 recorded at most once an hour), so tokens no client uses any more are easy to
 find and revoke.

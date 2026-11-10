@@ -36,6 +36,11 @@ func (h *Handler) registerNoteTools(srv *mcp.Server, userID string) {
 		Name:        "delete_note",
 		Description: "Move a note to the trash. Set permanent to true to permanently delete a note that is already in the trash.",
 	}, h.handleDeleteNote(userID))
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "restore_note",
+		Description: "Restore a note from the trash, undoing delete_note without permanent. Only the note's owner can restore it.",
+	}, h.handleRestoreNote(userID))
 }
 
 // -- list_notes ---------------------------------------------------------------
@@ -197,5 +202,24 @@ func (h *Handler) handleDeleteNote(userID string) mcp.ToolHandlerFor[deleteNoteI
 			return toolError("delete note: %w", err)
 		}
 		return toolDeletedResult(in.ID, map[string]any{"permanent": in.Permanent})
+	}
+}
+
+// -- restore_note -------------------------------------------------------------
+
+type restoreNoteInput struct {
+	ID string `json:"id" jsonschema:"required,Note ID"`
+}
+
+func (h *Handler) handleRestoreNote(userID string) mcp.ToolHandlerFor[restoreNoteInput, any] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in restoreNoteInput) (*mcp.CallToolResult, any, error) {
+		if in.ID == "" {
+			return toolError("id is required")
+		}
+		note, err := h.notes.Restore(ctx, in.ID, userID)
+		if err != nil {
+			return toolError("restore note: %w", err)
+		}
+		return toolNoteResult(note)
 	}
 }

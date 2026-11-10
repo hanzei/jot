@@ -66,8 +66,26 @@ func (p *Publisher) PersonalizedNote(ctx context.Context, noteID string, audienc
 // PersonalizedNote. targetUserID names the user the note was just shared with,
 // so their clients can tell the share is news to them (and notify) while the
 // owner and existing collaborators only refresh shared_with.
-func (p *Publisher) NoteShared(ctx context.Context, noteID string, audienceIDs []string, sourceUserID, targetUserID string) {
+func (p *Publisher) NoteShared(ctx context.Context, noteID, sourceUserID, targetUserID string) {
+	if p.hub == nil {
+		return
+	}
+	audienceIDs, err := p.noteStore.GetNoteAudienceIDs(ctx, noteID)
+	if err != nil {
+		logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).Error("Failed to get note audience for SSE publish")
+		return
+	}
 	p.personalizedNote(ctx, noteID, audienceIDs, sourceUserID, targetUserID, sse.EventNoteShared)
+}
+
+// NoteUnshared sends note_unshared to audienceIDs, which the caller must
+// resolve before the unshare so targetUserID, who just lost access, still
+// hears of it.
+func (p *Publisher) NoteUnshared(ctx context.Context, noteID string, audienceIDs []string, sourceUserID, targetUserID string) {
+	if p.hub == nil {
+		return
+	}
+	p.publishTargeted(ctx, audienceIDs, sse.EventNoteUnshared, sourceUserID, targetUserID, sse.NoteEventData{NoteID: noteID})
 }
 
 func (p *Publisher) personalizedNote(ctx context.Context, noteID string, audienceIDs []string, sourceUserID, targetUserID string, eventType sse.EventType) {
