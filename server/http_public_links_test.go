@@ -340,10 +340,10 @@ func TestPublicNoteShape(t *testing.T) {
 
 		var raw map[string]any
 		require.NoError(t, json.Unmarshal(body, &raw))
-		assert.ElementsMatch(t, []string{"note_type", "title", "updated_at", "image_ids", "content"}, keysOf(raw))
+		assert.ElementsMatch(t, []string{"note_type", "title", "updated_at", "images", "content"}, keysOf(raw))
 		assert.Equal(t, "text", raw["note_type"])
 		assert.Equal(t, "hello", raw["content"])
-		assert.Equal(t, []any{}, raw["image_ids"])
+		assert.Equal(t, []any{}, raw["images"])
 		for _, leak := range []string{owner.User.ID, collaborator.User.ID, "plshapeowner", "plshapecollab", "secret-label", "#ff0000", note.ID} {
 			assert.NotContains(t, string(body), leak)
 		}
@@ -388,7 +388,7 @@ func TestPublicNoteShape(t *testing.T) {
 		require.Equal(t, http.StatusOK, status, "body: %s", body)
 		var raw map[string]any
 		require.NoError(t, json.Unmarshal(body, &raw))
-		assert.ElementsMatch(t, []string{"note_type", "title", "updated_at", "image_ids", "items", "checked_items_collapsed"}, keysOf(raw))
+		assert.ElementsMatch(t, []string{"note_type", "title", "updated_at", "images", "items", "checked_items_collapsed"}, keysOf(raw))
 		items, ok := raw["items"].([]any)
 		require.True(t, ok)
 		require.Len(t, items, 3)
@@ -435,7 +435,7 @@ func TestPublicLinkImages(t *testing.T) {
 	other, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "private"})
 	require.NoError(t, err)
 
-	img, err := owner.Client.UploadNoteImage(t.Context(), note.ID, "cat.png", bytes.NewReader(testPNG(t, 8, 8)))
+	img, err := owner.Client.UploadNoteImage(t.Context(), note.ID, "cat.png", bytes.NewReader(testPNG(t, 12, 8)))
 	require.NoError(t, err)
 	otherImg, err := owner.Client.UploadNoteImage(t.Context(), other.ID, "dog.png", bytes.NewReader(testPNG(t, 9, 9)))
 	require.NoError(t, err)
@@ -445,7 +445,18 @@ func TestPublicLinkImages(t *testing.T) {
 
 	pub, err := anon.GetPublicNote(t.Context(), link.Token)
 	require.NoError(t, err)
-	assert.Equal(t, []string{img.ID}, pub.ImageIDs)
+	assert.Equal(t, []client.PublicNoteImage{{ID: img.ID, Width: 12, Height: 8}}, pub.Images)
+
+	t.Run("an image carries only its id and size", func(t *testing.T) {
+		_, _, body := ts.publicGet(t, link.Token)
+		var raw struct {
+			Images []map[string]any `json:"images"`
+		}
+		require.NoError(t, json.Unmarshal(body, &raw))
+		require.Len(t, raw.Images, 1)
+		assert.ElementsMatch(t, []string{"id", "width", "height"}, keysOf(raw.Images[0]))
+		assert.NotContains(t, string(body), "cat.png")
+	})
 
 	t.Run("the note's image and thumbnail are served, uncached", func(t *testing.T) {
 		for _, suffix := range []string{"", "/thumbnail"} {
@@ -461,7 +472,7 @@ func TestPublicLinkImages(t *testing.T) {
 		data, contentType, err := anon.GetPublicNoteImage(t.Context(), link.Token, img.ID)
 		require.NoError(t, err)
 		assert.Equal(t, "image/png", contentType)
-		assert.Equal(t, testPNG(t, 8, 8), data)
+		assert.Equal(t, testPNG(t, 12, 8), data)
 		_, contentType, err = anon.GetPublicNoteImageThumbnail(t.Context(), link.Token, img.ID)
 		require.NoError(t, err)
 		assert.Equal(t, "image/jpeg", contentType)
