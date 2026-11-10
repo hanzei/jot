@@ -98,6 +98,8 @@ func (s *Service) Unshare(ctx context.Context, noteID, userID, targetUserID stri
 
 	if audienceErr == nil {
 		s.events.NoteUnshared(ctx, noteID, audienceIDs, userID, targetUserID)
+	} else {
+		logutil.FromContext(ctx).WithError(audienceErr).WithField("note_id", noteID).Error("Failed to get note audience for SSE publish")
 	}
 	return nil
 }

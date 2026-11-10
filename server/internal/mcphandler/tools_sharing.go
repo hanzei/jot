@@ -4,7 +4,9 @@ import (
 	"cmp"
 	"context"
 	"encoding/json/v2"
+	"errors"
 
+	"github.com/hanzei/jot/server/internal/models"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -98,7 +100,11 @@ func (h *Handler) handleUnshareNote(userID string) mcp.ToolHandlerFor[unshareNot
 		}
 		// No tool tells an agent the user's own ID, so leaving is the default.
 		target := cmp.Or(in.UserID, userID)
-		if err := h.notes.Unshare(ctx, in.NoteID, userID, target); err != nil {
+		err := h.notes.Unshare(ctx, in.NoteID, userID, target)
+		if in.UserID == "" && errors.Is(err, models.ErrNoteShareNotFound) {
+			return toolError("unshare note: this note is not shared with you, so there is nothing to leave. To remove a collaborator from a note you own, pass their user_id")
+		}
+		if err != nil {
 			return toolError("unshare note: %w", err)
 		}
 		return toolShareResult(in.NoteID, target, false)

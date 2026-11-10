@@ -176,7 +176,7 @@ func newServer(cfg *config.Config, log *logrus.Logger, tracerProvider trace.Trac
 	if err != nil {
 		return nil, fmt.Errorf("initialize notes service: %w", err)
 	}
-	notesHandler := handlers.NewNotesHandler(noteStore, userStore, notes, hub, imageStore, int64(cfg.UploadMaxBytes), cfg.PublicLinksEnabled)
+	notesHandler := handlers.NewNotesHandler(noteStore, notes, hub, imageStore, int64(cfg.UploadMaxBytes), cfg.PublicLinksEnabled)
 	labelsHandler := handlers.NewLabelsHandler(labelStore, notes)
 	eventsHandler := handlers.NewEventsHandler(hub)
 	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, imageStore, sessionService, hub,

@@ -880,7 +880,8 @@ func TestMCPRestoreNote(t *testing.T) {
 
 	t.Run("a collaborator cannot restore", func(t *testing.T) {
 		collabSess := setupMCPSession(t, ts, collaborator)
-		callToolExpectError(t, collabSess, "restore_note", map[string]any{"id": note.ID})
+		msg := callToolExpectError(t, collabSess, "restore_note", map[string]any{"id": note.ID})
+		assert.Contains(t, msg, "not owned by user")
 	})
 
 	sseCtx, sseCancel := context.WithCancel(t.Context())
@@ -1012,6 +1013,11 @@ func TestMCPShareNote(t *testing.T) {
 				assert.Contains(t, msg, tt.want)
 			})
 		}
+	})
+
+	t.Run("the owner cannot leave their own note", func(t *testing.T) {
+		msg := callToolExpectError(t, ownerSess, "unshare_note", map[string]any{"note_id": note.ID})
+		assert.Contains(t, msg, "pass their user_id")
 	})
 
 	t.Run("only the owner can remove someone else", func(t *testing.T) {
