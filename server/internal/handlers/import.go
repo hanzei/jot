@@ -434,7 +434,7 @@ func validateJotImportNote(idx int, n jotImportNote) (models.JotImportNote, erro
 		Position:              n.Position,
 		UnpinnedPosition:      n.UnpinnedPosition,
 		CheckedItemsCollapsed: n.CheckedItemsCollapsed,
-		Labels:                normalizeLabels(n.Labels),
+		Labels:                models.NormalizeLabelNames(n.Labels),
 		Items:                 importItems,
 		CreatedAt:             n.CreatedAt,
 		UpdatedAt:             n.UpdatedAt,

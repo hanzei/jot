@@ -795,7 +795,7 @@ func TestMCPItemAssignment(t *testing.T) {
 		assert.Empty(t, tasks)
 	})
 
-	t.Run("an assignee without access is rejected", func(t *testing.T) {
+	t.Run("invalid assignees are rejected", func(t *testing.T) {
 		msg := callToolExpectError(t, ownerSess, "create_note_item", map[string]any{
 			"note_id":     note.ID,
 			"text":        "Groceries",

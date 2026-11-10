@@ -5,8 +5,6 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
-	"slices"
-	"strings"
 
 	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/logutil"
@@ -125,9 +123,7 @@ func (h *Handler) handleCreateNote(userID string) mcp.ToolHandlerFor[createNoteI
 			return toolError("%w", err)
 		}
 
-		// Check the label names before writing anything, so a name that is too
-		// long fails the call without leaving a note or other new labels behind.
-		labels := normalizeLabelNames(in.Labels)
+		labels := models.NormalizeLabelNames(in.Labels)
 		if err = h.checkNewLabelNames(ctx, userID, labels); err != nil {
 			return toolError("%w", err)
 		}
@@ -147,10 +143,7 @@ func (h *Handler) handleCreateNote(userID string) mcp.ToolHandlerFor[createNoteI
 			return toolError("%w", err)
 		}
 
-		// CreateWithItems builds its return value from the arguments and does
-		// not read the inserted items or labels back, so refetch to return the
-		// note with them (and their generated IDs) — the same thing the REST API
-		// does.
+		// CreateWithItems does not read items or labels back; refetch.
 		if len(items) > 0 || len(labels) > 0 {
 			note, err = h.noteStore.GetByID(ctx, note.ID, userID)
 			if err != nil {
@@ -161,19 +154,6 @@ func (h *Handler) handleCreateNote(userID string) mcp.ToolHandlerFor[createNoteI
 		h.events.NoteToAudience(ctx, note.ID, sse.EventNoteCreated, models.SanitizeNote(*note), userID)
 		return toolNoteResult(note)
 	}
-}
-
-// normalizeLabelNames trims names and drops blank names and exact repeats, as
-// the REST API does.
-func normalizeLabelNames(names []string) []string {
-	var result []string
-	for _, name := range names {
-		name = strings.TrimSpace(name)
-		if name != "" && !slices.Contains(result, name) {
-			result = append(result, name)
-		}
-	}
-	return result
 }
 
 // checkNewLabelNames rejects, without writing anything, a name over the length

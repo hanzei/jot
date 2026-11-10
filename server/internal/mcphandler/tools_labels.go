@@ -140,12 +140,8 @@ func (h *Handler) handleAddLabelToNote(userID string) mcp.ToolHandlerFor[addLabe
 		if err != nil {
 			return toolError("%w", err)
 		}
-		label, _, err := h.labelStore.GetOrCreateLabel(ctx, userID, name)
-		if err != nil {
-			return toolError("get or create label: %w", err)
-		}
-		if err = h.noteStore.AddLabelToNote(ctx, in.NoteID, label.ID, userID); err != nil {
-			return toolError("add label to note: %w", err)
+		if err = h.attachLabels(ctx, in.NoteID, userID, []string{name}); err != nil {
+			return toolError("%w", err)
 		}
 		note, err := h.noteStore.GetByID(ctx, in.NoteID, userID)
 		if err != nil {

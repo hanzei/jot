@@ -195,7 +195,7 @@ func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 // is over the length limit and does not match an existing label — the one case
 // createNoteLabels would otherwise fail on after the note already exists.
 func (h *NotesHandler) checkNewLabelNames(ctx context.Context, userID string, rawLabels []string) (int, error) {
-	for _, name := range normalizeLabels(rawLabels) {
+	for _, name := range models.NormalizeLabelNames(rawLabels) {
 		lengthErr := models.ValidateLabelName(name)
 		if lengthErr == nil {
 			continue
@@ -212,7 +212,7 @@ func (h *NotesHandler) checkNewLabelNames(ctx context.Context, userID string, ra
 }
 
 func (h *NotesHandler) createNoteLabels(ctx context.Context, noteID, userID string, rawLabels []string) (int, error) {
-	for _, name := range normalizeLabels(rawLabels) {
+	for _, name := range models.NormalizeLabelNames(rawLabels) {
 		label, _, err := h.labelStore.GetOrCreateLabel(ctx, userID, name)
 		if err != nil {
 			return storeStatus(err, "get or create label")

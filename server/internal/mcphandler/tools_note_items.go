@@ -5,7 +5,6 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
-	"slices"
 	"unicode/utf8"
 
 	"github.com/hanzei/jot/server/internal/models"
@@ -56,32 +55,6 @@ func (h *Handler) loadListNote(ctx context.Context, noteID, userID string) (*mod
 func validateItemText(text string) error {
 	if utf8.RuneCountInString(text) > models.NoteItemTextMaxLength {
 		return fmt.Errorf("item text must be %d characters or fewer", models.NoteItemTextMaxLength)
-	}
-	return nil
-}
-
-// validateItemAssignee applies the REST API's rules for assigned_to: items can
-// only be assigned on a shared note, and only to its owner or a collaborator.
-// An empty assignedTo unassigns and is always allowed. note is the one
-// loadListNote returned, which already carries the owner and the shares.
-func validateItemAssignee(note *models.Note, assignedTo string) error {
-	if assignedTo == "" {
-		return nil
-	}
-	if !models.IsValidID(assignedTo) {
-		return errors.New("invalid assigned_to format")
-	}
-	if len(note.SharedWith) == 0 {
-		return errors.New("cannot assign items on an unshared note")
-	}
-	if assignedTo == note.UserID {
-		return nil
-	}
-	isCollaborator := slices.ContainsFunc(note.SharedWith, func(s models.NoteShare) bool {
-		return s.SharedWithUserID == assignedTo
-	})
-	if !isCollaborator {
-		return errors.New("assigned user does not have access to this note")
 	}
 	return nil
 }
@@ -158,7 +131,7 @@ func (h *Handler) handleCreateNoteItem(userID string) mcp.ToolHandlerFor[createN
 		if err = validateItemText(in.Text); err != nil {
 			return toolError("%w", err)
 		}
-		if err = validateItemAssignee(note, in.AssignedTo); err != nil {
+		if err = note.ValidateAssignee(in.AssignedTo); err != nil {
 			return toolError("%w", err)
 		}
 
@@ -216,7 +189,7 @@ func (h *Handler) handleUpdateNoteItem(userID string) mcp.ToolHandlerFor[updateN
 			}
 		}
 		if in.AssignedTo != nil {
-			if err = validateItemAssignee(note, *in.AssignedTo); err != nil {
+			if err = note.ValidateAssignee(*in.AssignedTo); err != nil {
 				return toolError("%w", err)
 			}
 		}
