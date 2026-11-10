@@ -134,3 +134,34 @@ func TestRateLimiterLimitIsMemoizedByBucket(t *testing.T) {
 	// counter, not a fresh independent one.
 	assert.Equal(t, http.StatusTooManyRequests, doRequest(t.Context(), second).Code)
 }
+
+func TestRateLimiterAllowUser(t *testing.T) {
+	t.Run("draws from the same counters as limit for the same key", func(t *testing.T) {
+		rl := newTestRateLimiter(t)
+		mw := rl.limit("shared", 2, httprate.Key("u1"))
+		allow := rl.allowUser("shared", 2)
+
+		assert.Equal(t, http.StatusOK, doRequest(t.Context(), mw).Code)
+		assert.True(t, allow(t.Context(), "u1"))
+		assert.False(t, allow(t.Context(), "u1"))
+		assert.Equal(t, http.StatusTooManyRequests, doRequest(t.Context(), mw).Code)
+	})
+
+	t.Run("keys are independent", func(t *testing.T) {
+		rl := newTestRateLimiter(t)
+		allow := rl.allowUser("test", 1)
+
+		assert.True(t, allow(t.Context(), "u1"))
+		assert.False(t, allow(t.Context(), "u1"))
+		assert.True(t, allow(t.Context(), "u2"))
+	})
+
+	t.Run("always allows when rate limiting is disabled", func(t *testing.T) {
+		rl, err := newRateLimiter(&config.Config{RateLimitEnabled: false})
+		require.NoError(t, err)
+		allow := rl.allowUser("test", 1)
+
+		assert.True(t, allow(t.Context(), "u1"))
+		assert.True(t, allow(t.Context(), "u1"))
+	})
+}

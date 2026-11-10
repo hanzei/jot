@@ -53,6 +53,10 @@ type listNotesInput struct {
 
 func (h *Handler) handleListNotes(userID string) mcp.ToolHandlerFor[listNotesInput, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in listNotesInput) (*mcp.CallToolResult, any, error) {
+		// Search is a full-text scan, rate-limited like GET /notes?search=.
+		if in.Search != "" && !h.allowExpensive(ctx, userID) {
+			return toolError("list notes: too many searches; wait a minute before searching again")
+		}
 		notes, err := h.noteStore.GetByUserID(ctx, userID, models.NoteFilter{
 			Archived: in.Archived,
 			Trashed:  in.Trashed,

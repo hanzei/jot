@@ -4,6 +4,7 @@
 package mcphandler
 
 import (
+	"context"
 	"encoding/json/v2"
 	"fmt"
 	"maps"
@@ -25,16 +26,24 @@ type Handler struct {
 	// events publishes the same SSE events the REST handlers do, so a change
 	// made over MCP reaches open webapp and mobile clients.
 	events *notify.Publisher
+	// allowExpensive draws one request from the user's expensive-operation
+	// rate-limit bucket, the one GET /notes?search= uses, and reports whether
+	// it was within the limit. Rate limiting is HTTP middleware, and one /mcp
+	// request can carry any tool, so tools that cost what their REST
+	// counterpart does check the bucket themselves.
+	allowExpensive func(ctx context.Context, userID string) bool
 }
 
 // New creates a new Handler backed by the provided stores, publishing change
-// events to hub.
-func New(noteStore *models.NoteStore, labelStore *models.LabelStore, imageStore *blobstore.ImageStore, hub *sse.Hub) *Handler {
+// events to hub. allowExpensive is the expensive-operation rate-limit check
+// described on [Handler].
+func New(noteStore *models.NoteStore, labelStore *models.LabelStore, imageStore *blobstore.ImageStore, hub *sse.Hub, allowExpensive func(ctx context.Context, userID string) bool) *Handler {
 	return &Handler{
-		noteStore:  noteStore,
-		labelStore: labelStore,
-		imageStore: imageStore,
-		events:     notify.New(hub, noteStore),
+		noteStore:      noteStore,
+		labelStore:     labelStore,
+		imageStore:     imageStore,
+		events:         notify.New(hub, noteStore),
+		allowExpensive: allowExpensive,
 	}
 }
 

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"sync"
@@ -32,16 +33,17 @@ const (
 // so throttled traffic is observable from one metric regardless of which
 // limit rejected it.
 //
-// limit is memoized per bucket name: calling it twice for the same bucket
-// (e.g. from two different route groups) always returns the same underlying
-// limiter/counters, so buckets stay shared by name alone rather than by
-// callers having to thread through and reuse the same Go variable.
+// Limiters are memoized per bucket name: calling limit or allowUser twice for
+// the same bucket (e.g. from two route groups, or from a route and the MCP
+// handler) always uses the same underlying limiter/counters, so buckets stay
+// shared by name alone rather than by callers having to thread through and
+// reuse the same Go variable.
 type rateLimiter struct {
 	cfg       *config.Config
 	throttled metric.Int64Counter
 
 	mu       sync.Mutex
-	limiters map[string]func(http.Handler) http.Handler
+	limiters map[string]*httprate.RateLimiter
 }
 
 // newRateLimiter creates a rateLimiter with its OTel instrument initialized
@@ -58,7 +60,7 @@ func newRateLimiter(cfg *config.Config) (*rateLimiter, error) {
 		return nil, fmt.Errorf("create ratelimit.throttled instrument: %w", err)
 	}
 
-	return &rateLimiter{cfg: cfg, throttled: throttled, limiters: make(map[string]func(http.Handler) http.Handler)}, nil
+	return &rateLimiter{cfg: cfg, throttled: throttled, limiters: make(map[string]*httprate.RateLimiter)}, nil
 }
 
 // limit returns middleware that responds 429 (with a Retry-After header, set
@@ -70,20 +72,75 @@ func (rl *rateLimiter) limit(bucket string, requestsPerMinute int, keyFn httprat
 	if !rl.cfg.RateLimitEnabled {
 		return func(next http.Handler) http.Handler { return next }
 	}
+	l := rl.limiter(bucket, requestsPerMinute)
+	onKeyError := rl.onKeyError(bucket)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// The key is passed to httprate as is rather than through its
+			// WithKeyFuncs, which appends a separator, so that allowUser's
+			// keys land in the same counters.
+			key, err := keyFn(r)
+			if err != nil {
+				onKeyError(w, r, err)
+				return
+			}
+			if l.RespondOnLimit(w, r, key) {
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
 
+// allowUser is the non-middleware form of limit for a bucket keyed by user
+// ID, for operations that are not routes of their own: one /mcp request can
+// carry any tool, so the MCP handler checks a bucket per tool call. The
+// returned function draws one request from userID's bucket and reports whether
+// it was within the limit, counting and logging a rejection as limit does. It
+// always allows when rate limiting is disabled.
+func (rl *rateLimiter) allowUser(bucket string, requestsPerMinute int) func(ctx context.Context, userID string) bool {
+	if !rl.cfg.RateLimitEnabled {
+		return func(context.Context, string) bool { return true }
+	}
+	l := rl.limiter(bucket, requestsPerMinute)
+	return func(ctx context.Context, userID string) bool {
+		// OnLimit only reads the request's context, and the rate-limit headers
+		// it sets have no HTTP response to go to.
+		r := (&http.Request{}).WithContext(ctx)
+		if !l.OnLimit(discardResponseWriter{}, r, userID) {
+			return true
+		}
+		rl.throttled.Add(ctx, 1, metric.WithAttributes(attribute.String("bucket", bucket)))
+		logutil.FromContext(ctx).WithField("ratelimit_bucket", bucket).Warn("Rate limit exceeded")
+		return false
+	}
+}
+
+// limiter returns the memoized limiter for bucket, creating it on first use.
+// Callers supply the key on every check, so the limiter has no key function.
+func (rl *rateLimiter) limiter(bucket string, requestsPerMinute int) *httprate.RateLimiter {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
-	if mw, ok := rl.limiters[bucket]; ok {
-		return mw
+	if l, ok := rl.limiters[bucket]; ok {
+		return l
 	}
 
-	mw := httprate.LimitBy(requestsPerMinute, time.Minute, keyFn,
+	l := httprate.NewRateLimiter(requestsPerMinute, time.Minute,
 		httprate.WithLimitHandler(rl.onLimitExceeded(bucket)),
+		// Only reached if the counter fails, which the in-memory one never does.
 		httprate.WithErrorHandler(rl.onKeyError(bucket)),
 	)
-	rl.limiters[bucket] = mw
-	return mw
+	rl.limiters[bucket] = l
+	return l
 }
+
+// discardResponseWriter is what allowUser hands httprate, which sets
+// rate-limit headers on it that nothing reads.
+type discardResponseWriter struct{}
+
+func (discardResponseWriter) Header() http.Header         { return http.Header{} }
+func (discardResponseWriter) Write(b []byte) (int, error) { return len(b), nil }
+func (discardResponseWriter) WriteHeader(int)             {}
 
 // onLimitExceeded logs and counts a throttled request, then responds 429.
 // httprate has already set the Retry-After/X-RateLimit-* headers by the time
