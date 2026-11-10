@@ -3,11 +3,9 @@ package mcphandler
 import (
 	"context"
 	"encoding/json/v2"
-	"errors"
-	"fmt"
-	"unicode/utf8"
 
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/notesvc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -34,43 +32,6 @@ func (h *Handler) registerNoteItemTools(srv *mcp.Server, userID string) {
 	}, h.handleDeleteNoteItem(userID))
 }
 
-// loadListNote resolves a note for an item operation. GetByID only returns
-// notes the user owns or that are shared with them, so it doubles as the
-// access check; the note must also be a list.
-func (h *Handler) loadListNote(ctx context.Context, noteID, userID string) (*models.Note, error) {
-	if noteID == "" {
-		return nil, errors.New("note_id is required")
-	}
-	note, err := h.noteStore.GetByID(ctx, noteID, userID)
-	if err != nil {
-		return nil, fmt.Errorf("get note: %w", err)
-	}
-	if note.NoteType != models.NoteTypeList {
-		return nil, errors.New("items can only be modified on list notes")
-	}
-	return note, nil
-}
-
-// validateItemText enforces the per-item text limit shared with the REST API.
-func validateItemText(text string) error {
-	if utf8.RuneCountInString(text) > models.NoteItemTextMaxLength {
-		return fmt.Errorf("item text must be %d characters or fewer", models.NoteItemTextMaxLength)
-	}
-	return nil
-}
-
-// nextItemPosition returns the position that appends an item to the end of the
-// note's current list.
-func nextItemPosition(note *models.Note) int {
-	next := 0
-	for _, item := range note.Items {
-		if item.Position >= next {
-			next = item.Position + 1
-		}
-	}
-	return next
-}
-
 // -- create_note_item ---------------------------------------------------------
 
 type createNoteItemInput struct {
@@ -84,41 +45,21 @@ type createNoteItemInput struct {
 
 func (h *Handler) handleCreateNoteItem(userID string) mcp.ToolHandlerFor[createNoteItemInput, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in createNoteItemInput) (*mcp.CallToolResult, any, error) {
-		note, err := h.loadListNote(ctx, in.NoteID, userID)
-		if err != nil {
-			return toolError("%w", err)
+		if in.NoteID == "" {
+			return toolError("note_id is required")
 		}
-		if err = validateItemText(in.Text); err != nil {
-			return toolError("%w", err)
-		}
-		if err = note.ValidateAssignee(in.AssignedTo); err != nil {
-			return toolError("%w", err)
-		}
-
-		position := nextItemPosition(note)
-		if in.Position != nil {
-			position = *in.Position
-		}
-
-		// CreateItemWithID does not generate an ID for an empty string, so the
-		// caller must supply one.
-		itemID, err := models.GenerateID()
-		if err != nil {
-			return toolError("generate item ID: %w", err)
-		}
-
-		// The cap is enforced atomically inside the create transaction, so a
-		// pre-check here would only race.
-		item, err := h.noteStore.CreateItemWithID(ctx, in.NoteID, userID, itemID, in.Text, position, in.Completed, in.ParentID, in.AssignedTo, models.NoteItemsMaxCount)
+		// An omitted position appends to the end of the list.
+		item, err := h.notes.CreateItem(ctx, in.NoteID, userID, notesvc.NewListItem{
+			Text:       in.Text,
+			Position:   in.Position,
+			Completed:  in.Completed,
+			ParentID:   in.ParentID,
+			AssignedTo: in.AssignedTo,
+		})
 		if err != nil {
 			return toolError("create note item: %w", err)
 		}
-		h.events.NoteUpdated(ctx, in.NoteID, nil, userID, true)
-		data, err := json.Marshal(item)
-		if err != nil {
-			return toolError("marshal note item: %w", err)
-		}
-		return toolTextResult(data), nil, nil
+		return toolItemResult(item)
 	}
 }
 
@@ -136,25 +77,13 @@ type updateNoteItemInput struct {
 
 func (h *Handler) handleUpdateNoteItem(userID string) mcp.ToolHandlerFor[updateNoteItemInput, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in updateNoteItemInput) (*mcp.CallToolResult, any, error) {
-		note, err := h.loadListNote(ctx, in.NoteID, userID)
-		if err != nil {
-			return toolError("%w", err)
+		if in.NoteID == "" {
+			return toolError("note_id is required")
 		}
 		if in.ItemID == "" {
 			return toolError("item_id is required")
 		}
-		if in.Text != nil {
-			if err = validateItemText(*in.Text); err != nil {
-				return toolError("%w", err)
-			}
-		}
-		if in.AssignedTo != nil {
-			if err = note.ValidateAssignee(*in.AssignedTo); err != nil {
-				return toolError("%w", err)
-			}
-		}
-
-		item, err := h.noteStore.PatchItem(ctx, in.NoteID, userID, in.ItemID, models.NoteItemPatch{
+		item, err := h.notes.PatchItem(ctx, in.NoteID, userID, in.ItemID, models.NoteItemPatch{
 			Text:       in.Text,
 			Completed:  in.Completed,
 			Position:   in.Position,
@@ -164,13 +93,17 @@ func (h *Handler) handleUpdateNoteItem(userID string) mcp.ToolHandlerFor[updateN
 		if err != nil {
 			return toolError("update note item: %w", err)
 		}
-		h.events.NoteUpdated(ctx, in.NoteID, nil, userID, true)
-		data, err := json.Marshal(item)
-		if err != nil {
-			return toolError("marshal note item: %w", err)
-		}
-		return toolTextResult(data), nil, nil
+		return toolItemResult(item)
 	}
+}
+
+// toolItemResult marshals a list item for a tool result.
+func toolItemResult(item *models.NoteItem) (*mcp.CallToolResult, any, error) {
+	data, err := json.Marshal(item)
+	if err != nil {
+		return toolError("marshal note item: %w", err)
+	}
+	return toolTextResult(data), nil, nil
 }
 
 // -- delete_note_item ---------------------------------------------------------
@@ -182,20 +115,15 @@ type deleteNoteItemInput struct {
 
 func (h *Handler) handleDeleteNoteItem(userID string) mcp.ToolHandlerFor[deleteNoteItemInput, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in deleteNoteItemInput) (*mcp.CallToolResult, any, error) {
-		if _, err := h.loadListNote(ctx, in.NoteID, userID); err != nil {
-			return toolError("%w", err)
+		if in.NoteID == "" {
+			return toolError("note_id is required")
 		}
 		if in.ItemID == "" {
 			return toolError("item_id is required")
 		}
-		_, deleted, err := h.noteStore.DeleteItems(ctx, in.NoteID, userID, []string{in.ItemID})
-		if err != nil {
+		if err := h.notes.DeleteItem(ctx, in.NoteID, userID, in.ItemID); err != nil {
 			return toolError("delete note item: %w", err)
 		}
-		if deleted == 0 {
-			return toolError("delete note item: %w", models.ErrNoteItemNotFound)
-		}
-		h.events.NoteUpdated(ctx, in.NoteID, nil, userID, true)
 		return toolDeletedResult(in.ItemID, map[string]any{"note_id": in.NoteID})
 	}
 }
