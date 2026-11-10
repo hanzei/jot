@@ -76,6 +76,9 @@ func TestItemErrors(t *testing.T) {
 			{"reorder without IDs", func() error {
 				return svc.ReorderItems(ctx, list.ID, testUserID, nil)
 			}, http.StatusBadRequest, "empty item IDs list"},
+			{"reorder over the cap", func() error {
+				return svc.ReorderItems(ctx, list.ID, testUserID, tooManyIDs)
+			}, http.StatusBadRequest, "cannot operate on more than 500 items at once"},
 			{"bulk over the cap", func() error {
 				_, err := svc.SetItemsCompleted(ctx, list.ID, testUserID, tooManyIDs, true)
 				return err

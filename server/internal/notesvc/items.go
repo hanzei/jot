@@ -10,6 +10,9 @@ import (
 	"github.com/hanzei/jot/server/internal/models"
 )
 
+// errInvalidItemID rejects a malformed item ID.
+var errInvalidItemID = apierr.Invalid(errors.New("invalid item ID format"))
+
 // NewListItem is the input to CreateItem.
 type NewListItem struct {
 	// ID is optional; one is generated when empty. A client supplies it so
@@ -33,7 +36,7 @@ func (s *Service) CreateItem(ctx context.Context, noteID, userID string, in NewL
 		return nil, err
 	}
 	if in.ID != "" && !models.IsValidID(in.ID) {
-		return nil, apierr.Invalid(errors.New("invalid item ID format"))
+		return nil, errInvalidItemID
 	}
 	if err = validateItemText(in.Text); err != nil {
 		return nil, err
@@ -52,9 +55,11 @@ func (s *Service) CreateItem(ctx context.Context, noteID, userID string, in NewL
 			return nil, fmt.Errorf("generate item ID: %w", err)
 		}
 	}
-	position := nextItemPosition(note)
+	var position int
 	if in.Position != nil {
 		position = *in.Position
+	} else {
+		position = nextItemPosition(note)
 	}
 
 	// The item cap is enforced atomically inside the create transaction, so a
@@ -134,13 +139,8 @@ func (s *Service) ReorderItems(ctx context.Context, noteID, userID string, itemI
 	if _, err := s.loadListNote(ctx, noteID, userID); err != nil {
 		return err
 	}
-	if len(itemIDs) == 0 {
-		return apierr.Invalid(errors.New("empty item IDs list"))
-	}
-	for _, id := range itemIDs {
-		if !models.IsValidID(id) {
-			return apierr.Invalid(errors.New("invalid item ID format"))
-		}
+	if err := validateBulkItemIDs(itemIDs); err != nil {
+		return err
 	}
 
 	if err := s.noteStore.ReorderItems(ctx, noteID, userID, itemIDs); err != nil {
@@ -243,7 +243,7 @@ func validateBulkItemIDs(itemIDs []string) error {
 	}
 	for _, id := range itemIDs {
 		if !models.IsValidID(id) {
-			return apierr.Invalid(errors.New("invalid item ID format"))
+			return errInvalidItemID
 		}
 	}
 	return nil

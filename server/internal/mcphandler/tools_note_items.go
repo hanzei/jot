@@ -48,7 +48,6 @@ func (h *Handler) handleCreateNoteItem(userID string) mcp.ToolHandlerFor[createN
 		if in.NoteID == "" {
 			return toolError("note_id is required")
 		}
-		// An omitted position appends to the end of the list.
 		item, err := h.notes.CreateItem(ctx, in.NoteID, userID, notesvc.NewListItem{
 			Text:       in.Text,
 			Position:   in.Position,
