@@ -190,10 +190,7 @@ export class DashboardPage {
   }
 
   async openNote(title: string) {
-    const card = this.page.locator('[data-testid="note-card"]').filter({
-      has: this.page.locator('h3').getByText(title, { exact: true }),
-    });
-    await this.activateNoteCard(card);
+    await this.activateNoteCard(this.noteCardByExactTitle(title));
   }
 
   /** Opens a text note, which has no h3 title, by its content. */
@@ -228,7 +225,8 @@ export class DashboardPage {
     await this.closeActiveDialog();
   }
 
-  private noteCardByExactTitle(title: string): Locator {
+  /** A titled (list) note's card, matched on its exact h3 title. */
+  noteCardByExactTitle(title: string): Locator {
     return this.page.locator('[data-testid="note-card"]').filter({
       has: this.page.locator('h3').getByText(title, { exact: true }),
     });

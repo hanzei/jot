@@ -113,6 +113,9 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
     setLoadedNotes(prev => ({ ...prev, notes: update(prev.notes) }));
   }, []);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  // The rect of the card a note was opened from, which NoteModal zooms out of.
+  // Every other way in (deep link, toast, new note) leaves it null.
+  const [noteZoomOrigin, setNoteZoomOrigin] = useState<DOMRect | null>(null);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   // Prefill for a note created via the /new deep link (PWA shortcut or share
   // target) — undefined fields fall back to NoteModal's own defaults.
@@ -423,6 +426,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
     lastFocusedElementRef.current = document.activeElement;
     setEditingNote(null);
     setNewNoteDraft({ type, content });
+    setNoteZoomOrigin(null);
     setIsModalOpen(true);
   }, [isNewNoteRoute, searchParams]);
 
@@ -446,6 +450,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
       .then(note => {
         if (isMountedRef.current && openNoteIdRef.current === noteId) {
           setEditingNote(note);
+          setNoteZoomOrigin(null);
           setIsModalOpen(true);
         }
       })
@@ -650,6 +655,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
     lastFocusedElementRef.current = document.activeElement;
     setEditingNote(null);
     setNewNoteDraft(null);
+    setNoteZoomOrigin(null);
     setIsModalOpen(true);
   }, []);
 
@@ -830,9 +836,11 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
     window.history.pushState({ returnTo: returnPathRef.current }, '', `/notes/${note.id}`);
   };
 
-  const handleEditNote = (note: Note) => {
+  const handleEditNote = (note: Note, originRect?: DOMRect) => {
     if (openNoteIdRef.current === note.id) return;
     lastFocusedElementRef.current = document.activeElement;
+    // Only takes effect on a fresh open: NoteModal reads it once, at mount.
+    setNoteZoomOrigin(originRect ?? null);
     showNoteInModal(note);
   };
 
@@ -1569,6 +1577,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
             uploadMaxBytes={uploadMaxBytes}
             initialType={newNoteDraft?.type}
             initialContent={newNoteDraft?.content}
+            zoomOrigin={noteZoomOrigin}
           />
         )}
 

@@ -753,7 +753,7 @@ describe('NoteCard', () => {
 
       await user.click(screen.getByText('Test Note'));
 
-      expect(onEdit).toHaveBeenCalledWith(defaultProps.note);
+      expect(onEdit).toHaveBeenCalledWith(defaultProps.note, expect.anything());
     });
 
     it('opens the note when Enter is pressed on a binned card', async () => {
@@ -767,7 +767,7 @@ describe('NoteCard', () => {
       screen.getByTestId('note-card-open').focus();
       await user.keyboard('{Enter}');
 
-      expect(onEdit).toHaveBeenCalledWith(defaultProps.note);
+      expect(onEdit).toHaveBeenCalledWith(defaultProps.note, expect.anything());
     });
   });
 
