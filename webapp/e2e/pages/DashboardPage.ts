@@ -190,10 +190,7 @@ export class DashboardPage {
   }
 
   async openNote(title: string) {
-    const card = this.page.locator('[data-testid="note-card"]').filter({
-      has: this.page.locator('h3').getByText(title, { exact: true }),
-    });
-    await this.activateNoteCard(card);
+    await this.activateNoteCard(this.noteCardByExactTitle(title));
   }
 
   /** Opens a text note, which has no h3 title, by its content. */
@@ -214,8 +211,6 @@ export class DashboardPage {
   // scaled to 95% (data-closed), even under reduced motion, so a forced click
   // inside it aims at a point that moves when the scale lifts. The settled
   // check passes vacuously before the dialog exists, hence the attached wait.
-  // Opened from a card, the panel instead zooms out of it (a Web Animation,
-  // not a HeadlessUI transition), so that has to finish too.
   private async activateNoteCard(card: Locator) {
     await expect(card).toBeVisible();
     const openButton = card.locator('[data-note-card="true"]');
@@ -224,16 +219,14 @@ export class DashboardPage {
     const dialog = this.page.getByRole('dialog').last();
     await expect(dialog).toBeAttached();
     await expectDialogSettled(dialog);
-    await expect.poll(() => this.page.getByRole('dialog').last().locator('[data-note-modal-panel]').evaluate(
-      (panel) => panel.getAnimations().filter((a) => a.playState === 'running').length,
-    )).toBe(0);
   }
 
   async closeNoteModal() {
     await this.closeActiveDialog();
   }
 
-  private noteCardByExactTitle(title: string): Locator {
+  /** A titled (list) note's card, matched on its exact h3 title. */
+  noteCardByExactTitle(title: string): Locator {
     return this.page.locator('[data-testid="note-card"]').filter({
       has: this.page.locator('h3').getByText(title, { exact: true }),
     });

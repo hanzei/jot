@@ -2,7 +2,9 @@ import type { Locator, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 
 /**
- * Waits for a Headless UI dialog to finish its enter transition.
+ * Waits for a Headless UI dialog to finish its enter transition, and for any
+ * Web Animation inside it to finish too (the note modal's zoom out of a card,
+ * src/utils/noteZoom.ts, runs instead of HeadlessUI's transition).
  *
  * A dialog closed within the first frames of that transition can get stuck
  * mid-enter: invisible, but still in the DOM and the accessibility tree
@@ -13,6 +15,10 @@ import { expect } from '@playwright/test';
  */
 export async function expectDialogSettled(dialog: Locator) {
   await expect(dialog.locator('[data-transition]')).toHaveCount(0);
+  // Infinite animations (loading spinners) never finish, so they don't count.
+  await expect.poll(() => dialog.evaluate((el) => el.getAnimations({ subtree: true }).filter(
+    (a) => a.playState === 'running' && a.effect?.getComputedTiming().iterations !== Infinity,
+  ).length)).toBe(0);
 }
 
 /** Clicks `buttonName` in the topmost dialog once it has finished opening. */

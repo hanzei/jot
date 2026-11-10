@@ -419,9 +419,9 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     const panel = panelRef.current;
     const openAnimation = panel && zoomFrom ? playNoteModalOpen(panel, zoomFrom) : null;
     return () => {
-      // A close during the open zoom carries on from where it had got to.
-      const interrupted = panel ? stopNoteModalOpen(panel, openAnimation) : null;
       if (!panel) return;
+      // A close during the open zoom carries on from where it had got to.
+      const interrupted = stopNoteModalOpen(panel, openAnimation);
       // Layout-effect cleanups run before React removes the DOM, so the panel
       // can still be measured and snapshotted here. Only a modal that zoomed
       // open zooms closed; the live card is preferred over the click-time
@@ -431,7 +431,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
       // clicked; a note swapped in since has no card there, so it fades.
       const noteId = zoomNoteIdRef.current;
       const liveCard = zoomFrom && noteId ? findNoteCardRect(noteId, zoomFrom) : null;
-      const target = liveCard ?? (noteId === zoomOpenedNoteId ? zoomFrom : null);
+      const target = liveCard ?? (noteId !== null && noteId === zoomOpenedNoteId ? zoomFrom : null);
       cancelExitRef.current = playNoteModalExit(panel, target, interrupted);
     };
   }, [panelRef, zoomFrom, zoomOpenedNoteId]);

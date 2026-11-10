@@ -19,7 +19,7 @@ import { canAnimate } from '@/utils/motion';
  * its effects, listeners, or autosave keep running through the animation.
  */
 
-export const NOTE_ZOOM_MS = 250;
+const NOTE_ZOOM_MS = 250;
 // Matches the fade/scale the modal used before the zoom, kept for opens that
 // have no card to grow from (deep links, new notes, the shared-note toast).
 const FALLBACK_MS = 200;
@@ -49,16 +49,14 @@ function cardTransform(from: DOMRect, to: DOMRect): string {
  * reflows under the open modal (a pin, a longer note, a re-sort). When more
  * than one card matches, the one closest to `near` (the click-time rect) wins.
  */
-export function findNoteCardRect(noteId: string, near: DOMRect | null): DOMRect | null {
+export function findNoteCardRect(noteId: string, near: DOMRect): DOMRect | null {
   const cards = document.querySelectorAll(`[data-note-id="${CSS.escape(noteId)}"]`);
   let best: DOMRect | null = null;
   let bestDistance = Infinity;
   for (const card of cards) {
     const rect = card.getBoundingClientRect();
     if (!isOnScreen(rect)) continue;
-    const distance = near
-      ? (rect.left - near.left) ** 2 + (rect.top - near.top) ** 2
-      : 0;
+    const distance = (rect.left - near.left) ** 2 + (rect.top - near.top) ** 2;
     if (distance < bestDistance) {
       best = rect;
       bestDistance = distance;
@@ -68,14 +66,16 @@ export function findNoteCardRect(noteId: string, near: DOMRect | null): DOMRect 
 }
 
 /** Marks the close's snapshot and its backdrop (they are not the real modal). */
-export const NOTE_ZOOM_GHOST_ATTR = 'data-note-zoom-ghost';
+const NOTE_ZOOM_GHOST_ATTR = 'data-note-zoom-ghost';
 
 /** Where an animated element visually is right now, as a keyframe. */
 export type ZoomFrame = { transform: string; opacity: number };
 
-/** Zoom the freshly mounted panel open from `origin` (the clicked card's rect). */
-export function playNoteModalOpen(panel: HTMLElement, origin: DOMRect): Animation | null {
-  if (!canAnimate(panel)) return null;
+/**
+ * Zoom the freshly mounted panel open from `origin` (the clicked card's rect).
+ * The caller only has an origin when canAnimate allowed one.
+ */
+export function playNoteModalOpen(panel: HTMLElement, origin: DOMRect): Animation {
   return panel.animate(
     [
       { transform: cardTransform(panel.getBoundingClientRect(), origin), opacity: 0 },
@@ -128,8 +128,10 @@ export function playNoteModalExit(panel: HTMLElement, target: DOMRect | null, fr
     copy.value = field.value;
     if (field instanceof HTMLInputElement && copy instanceof HTMLInputElement) copy.checked = field.checked;
   });
+  // Only these can be scrolled: the modal's overflow regions and textareas.
+  const SCROLLABLE = 'textarea, [class*="overflow-"]';
   const scrolled: Array<[number, number, number]> = [];
-  panel.querySelectorAll('*').forEach((el, i) => {
+  panel.querySelectorAll(SCROLLABLE).forEach((el, i) => {
     if (el.scrollTop || el.scrollLeft) scrolled.push([i, el.scrollTop, el.scrollLeft]);
   });
 
@@ -164,7 +166,7 @@ export function playNoteModalExit(panel: HTMLElement, target: DOMRect | null, fr
   queueMicrotask(() => {
     if (cancelled) return;
     document.body.append(backdrop, ghost);
-    const ghostDescendants = ghost.querySelectorAll('*');
+    const ghostDescendants = ghost.querySelectorAll(SCROLLABLE);
     for (const [i, top, left] of scrolled) {
       const el = ghostDescendants[i];
       if (el) {

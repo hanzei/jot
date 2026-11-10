@@ -241,8 +241,10 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         // Safe to do unconditionally here — the overflow menu and the label
         // chips stop propagation, so this handler only ever sees a click on the
         // card itself.
+        // Measured before the focus change can dirty layout, so it's free.
+        const rect = e.currentTarget.getBoundingClientRect();
         openButtonRef.current?.focus();
-        onEdit(note, e.currentTarget.getBoundingClientRect());
+        onEdit(note, rect);
       }}
       // Roving tabindex (#950): React's onFocus is backed by the bubbling
       // native `focusin` event, so this one handler sees focus land on the

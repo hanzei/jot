@@ -59,6 +59,12 @@ const ghostClosings = async (page: Page) =>
   (await recorded(page)).filter(a => a.isGhost && transforms(a));
 const ghosts = (page: Page) => page.locator('[data-note-zoom-ghost]');
 
+/** Waits for the one close the test triggered and returns it. */
+async function onlyGhostClosing(page: Page): Promise<RecordedAnimation> {
+  await expect.poll(async () => (await ghostClosings(page)).length).toBe(1);
+  return (await ghostClosings(page))[0]!;
+}
+
 const lastFrame = (animation: RecordedAnimation) => animation.frames[animation.frames.length - 1]!;
 
 /** Where `frame`'s translate carries the centre of `rect`. */
@@ -81,9 +87,6 @@ function expectSamePoint(actual: { x: number; y: number }, expected: { x: number
   expect(actual.y).toBeCloseTo(expected.y, 0);
 }
 
-const noteCard = (page: Page, title: string) =>
-  page.getByTestId('note-card').filter({ has: page.locator('h3').getByText(title, { exact: true }) });
-
 test.describe('Note modal zoom', () => {
   // The suite runs with reduced motion by default (playwright.config.ts).
   test.use({ reducedMotion: 'no-preference' });
@@ -91,7 +94,7 @@ test.describe('Note modal zoom', () => {
   test('opens out of the clicked card and closes back onto it', async ({ page, dashboardPage, authenticatedUser }) => {
     void authenticatedUser;
     await dashboardPage.createNote('Zoom note');
-    const card = noteCard(page, 'Zoom note');
+    const card = dashboardPage.noteCardByExactTitle('Zoom note');
     const cardCentre = await centreOf(card);
     await recordAnimations(page);
 
@@ -104,13 +107,12 @@ test.describe('Note modal zoom', () => {
     expect(lastFrame(open!).transform).toBe('none');
 
     await dashboardPage.closeNoteModal();
-    await expect.poll(async () => (await ghostClosings(page)).length).toBe(1);
-    const [close] = await ghostClosings(page);
-    expect(close!.ariaHidden).toBe('true');
-    expect(close!.duration).toBe(250);
-    const last = lastFrame(close!);
+    const close = await onlyGhostClosing(page);
+    expect(close.ariaHidden).toBe('true');
+    expect(close.duration).toBe(250);
+    const last = lastFrame(close);
     expect(last.opacity).toBe(0);
-    expectSamePoint(translatedCentre(close!.rect, last.transform!), cardCentre);
+    expectSamePoint(translatedCentre(close.rect, last.transform!), cardCentre);
 
     // The snapshot and its backdrop are removed once the close finishes.
     await expect(ghosts(page)).toHaveCount(0);
@@ -120,7 +122,7 @@ test.describe('Note modal zoom', () => {
     void authenticatedUser;
     await dashboardPage.createNote('Stays put');
     await dashboardPage.createNote('Gets pinned');
-    const card = noteCard(page, 'Gets pinned');
+    const card = dashboardPage.noteCardByExactTitle('Gets pinned');
     const clickedCentre = await centreOf(card);
     await recordAnimations(page);
 
@@ -142,9 +144,8 @@ test.describe('Note modal zoom', () => {
     }).toBe(true);
 
     await dashboardPage.closeNoteModal();
-    await expect.poll(async () => (await ghostClosings(page)).length).toBe(1);
-    const [close] = await ghostClosings(page);
-    expectSamePoint(translatedCentre(close!.rect, lastFrame(close!).transform!), currentCentre);
+    const close = await onlyGhostClosing(page);
+    expectSamePoint(translatedCentre(close.rect, lastFrame(close).transform!), currentCentre);
   });
 
   test('closing mid-open shrinks back from where the open had got to', async ({ page, dashboardPage, authenticatedUser }) => {
@@ -157,19 +158,17 @@ test.describe('Note modal zoom', () => {
     await cdp.send('Animation.enable');
     await cdp.send('Animation.setPlaybackRate', { playbackRate: 0.01 });
 
-    const card = noteCard(page, 'Quick close');
-    await card.locator('[data-note-card="true"]').focus();
+    await dashboardPage.noteCardButton('Quick close').focus();
     await page.keyboard.press('Enter');
     await expect.poll(async () => (await panelOpenings(page)).length).toBe(1);
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).toBeHidden();
 
-    await expect.poll(async () => (await ghostClosings(page)).length).toBe(1);
-    const [close] = await ghostClosings(page);
+    const close = await onlyGhostClosing(page);
     // Starts part-way through the open (scaled down, part-transparent), not
     // from the panel's full size.
-    expect(close!.frames[0]!.transform).toMatch(/^matrix/);
-    expect(close!.frames[0]!.opacity).toBeLessThan(1);
+    expect(close.frames[0]!.transform).toMatch(/^matrix/);
+    expect(close.frames[0]!.opacity).toBeLessThan(1);
   });
 
   test('a note opened without a card fades in and out in place', async ({ page, dashboardPage, authenticatedUser }) => {
@@ -180,11 +179,8 @@ test.describe('Note modal zoom', () => {
     await expect(page.locator('[data-note-modal-panel]')).toBeVisible();
     expect(await panelOpenings(page)).toHaveLength(0);
 
-    await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click();
-    await expect(page.getByRole('dialog')).toBeHidden();
-    await expect.poll(async () => (await ghostClosings(page)).length).toBe(1);
-    const [close] = await ghostClosings(page);
-    expect(lastFrame(close!)).toEqual({ transform: 'scale(0.95)', opacity: 0 });
+    await dashboardPage.closeNoteModal();
+    expect(lastFrame(await onlyGhostClosing(page))).toEqual({ transform: 'scale(0.95)', opacity: 0 });
   });
 
   test.describe('with reduced motion', () => {
@@ -199,7 +195,7 @@ test.describe('Note modal zoom', () => {
       expect(await panelOpenings(page)).toHaveLength(0);
 
       await dashboardPage.closeNoteModal();
-      await expect(noteCard(page, 'Still note')).toBeVisible();
+      await expect(dashboardPage.noteCardByExactTitle('Still note')).toBeVisible();
       expect(await ghostClosings(page)).toHaveLength(0);
       await expect(ghosts(page)).toHaveCount(0);
     });

@@ -498,7 +498,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
 
   // The toast's Open action runs long after the SSE handler, so it reads the
   // current open path through a ref rather than closing over a stale one.
-  const handleEditNoteRef = useRef<(note: Note, originRect?: DOMRect) => void>(() => {});
+  const handleEditNoteRef = useRef<(note: Note) => void>(() => {});
 
   const handleSSEEvent = useCallback((event: SSEEvent) => {
     if (isNoteSharedWithUser(event, user?.id) && event.data.note) {
