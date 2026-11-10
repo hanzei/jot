@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Checks that all locale translation files have the same keys as en.json,
-// that every plural key defines each form its locale's plural rules use,
+// Checks that all locale translation files have the same keys as en.json (plural
+// keys by base key), that each plural key has exactly the forms its locale uses,
 // that every key in en.json is actually referenced from source, and that
 // every literal key referenced from source actually exists in en.json.
 // Exits with code 1 if any keys are missing, extra, unused, or undefined.
@@ -25,6 +25,13 @@ const DYNAMIC_KEY_PREFIXES = ['settings.language_', 'dashboard.sortOption.'];
 // i18next appends the suffix for the resolved plural form.
 const PLURAL_SUFFIX = /_(zero|one|two|few|many|other)$/;
 
+// The CLDR plural categories. Languages differ in which they have (en: one/other, pl:
+// one/few/many/other), so plural keys are compared across locales by base key, and each
+// locale defines exactly its own forms. `_zero` is not one: i18next uses it for a count of
+// 0 in any language, so it is compared like an ordinary key.
+const CLDR_PLURAL_SUFFIX = /_(one|two|few|many|other)$/;
+const parityKey = (key) => key.replace(CLDR_PLURAL_SUFFIX, '_*');
+
 // Intl.PluralRules silently uses the default locale's rules for a locale it has no data
 // for (e.g. a Node built with small-icu), which would check Polish as if it were English.
 function pluralRulesFor(locale) {
@@ -46,6 +53,15 @@ function findMissingPluralForms(keys, rules) {
   return [...pluralBases(keys)].flatMap((base) =>
     categories.map((category) => `${base}_${category}`).filter((k) => !keys.has(k)),
   );
+}
+
+// A form the locale never uses (`_few` in German) is dead text that i18next never shows.
+function findUnusedPluralForms(keys, rules) {
+  const categories = new Set(rules.resolvedOptions().pluralCategories);
+  return [...keys].filter((k) => {
+    const match = k.match(CLDR_PLURAL_SUFFIX);
+    return match && !categories.has(match[1]);
+  });
 }
 
 // Where `one` also covers 0 (fr, pt), a `_one` text that hard-codes "1" is wrong for 0.
@@ -204,44 +220,34 @@ for (const localesDir of localeDirs) {
     hasErrors = true;
   }
 
+  const referenceParityKeys = new Set([...referenceKeys].map(parityKey));
+
   for (const file of files) {
     const locale = file.replace('.json', '');
     const json = parseJsonFile(join(localesDir, file));
     const keys = new Set(flattenKeys(json));
     const rules = pluralRulesFor(locale);
 
-    const missingPluralForms = findMissingPluralForms(keys, rules);
-    if (missingPluralForms.length > 0) {
-      console.error(`[${localesDir}:${locale}] Plural keys missing a form ${locale} uses (${missingPluralForms.length}):`);
-      for (const k of missingPluralForms) console.error(`  - ${k}`);
-      hasErrors = true;
+    const problems = [
+      [`Plural keys missing a form ${locale} uses`, findMissingPluralForms(keys, rules)],
+      [`Plural forms ${locale} never uses`, findUnusedPluralForms(keys, rules)],
+      [`\`_one\` forms without {{count}}; ${locale} also uses them for 0`, findHardCodedOneForms(json, keys, rules)],
+    ];
+    if (file !== reference) {
+      const parityKeys = new Set([...keys].map(parityKey));
+      problems.push(
+        ['Missing keys', [...referenceParityKeys].filter((k) => !parityKeys.has(k))],
+        [`Extra keys not in ${reference}`, [...parityKeys].filter((k) => !referenceParityKeys.has(k))],
+      );
     }
 
-    const hardCodedOneForms = findHardCodedOneForms(json, keys, rules);
-    if (hardCodedOneForms.length > 0) {
-      console.error(`[${localesDir}:${locale}] \`_one\` forms without {{count}}; ${locale} also uses them for 0 (${hardCodedOneForms.length}):`);
-      for (const k of hardCodedOneForms) console.error(`  - ${k}`);
+    for (const [label, list] of problems) {
+      if (list.length === 0) continue;
+      console.error(`[${localesDir}:${locale}] ${label} (${list.length}):`);
+      for (const k of list) console.error(`  - ${k}`);
       hasErrors = true;
     }
-
-    if (file === reference) continue;
-
-    const missing = [...referenceKeys].filter((k) => !keys.has(k));
-    const extra = [...keys].filter((k) => !referenceKeys.has(k));
-
-    if (missing.length > 0) {
-      console.error(`[${localesDir}:${locale}] Missing keys (${missing.length}):`);
-      for (const k of missing) console.error(`  - ${k}`);
-      hasErrors = true;
-    }
-
-    if (extra.length > 0) {
-      console.error(`[${localesDir}:${locale}] Extra keys not in ${reference} (${extra.length}):`);
-      for (const k of extra) console.error(`  + ${k}`);
-      hasErrors = true;
-    }
-
-    if (missing.length === 0 && extra.length === 0 && missingPluralForms.length === 0 && hardCodedOneForms.length === 0) {
+    if (problems.every(([, list]) => list.length === 0)) {
       console.log(`[${localesDir}:${locale}] OK`);
     }
   }
