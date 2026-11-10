@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { confirmDialog } from './dialogs';
+import { readClipboard } from '../fixtures/clipboard';
 
 export type ExpiryLabel = 'Never' | 'In 7 days' | 'In 30 days' | 'In 3 months';
 
@@ -15,16 +16,19 @@ export class PublicLinkSection {
     return this.section().getByRole('button', { name: 'Create link' });
   }
 
+  /** The link as shown: shortened, never with the full token. */
   urlField() {
-    return this.section().getByLabel('Public link URL');
+    return this.section().getByTestId('public-link-url');
   }
 
   details() {
     return this.section().getByTestId('public-link-details');
   }
 
-  async url(): Promise<string> {
-    return this.urlField().inputValue();
+  /** The full URL, as Copy link puts it on the clipboard. */
+  async copiedUrl(): Promise<string> {
+    await this.copy();
+    return readClipboard(this.page);
   }
 
   async create(expiry: ExpiryLabel = 'Never') {

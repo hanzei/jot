@@ -16,7 +16,7 @@ import { notes } from '@/utils/api';
 import { apiErrorMessage } from '@/utils/apiError';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import type { PublicLinksConfig } from '@/utils/publicLink';
+import { shortPublicLinkUrl, type PublicLinksConfig } from '@/utils/publicLink';
 
 interface PublicLinkSectionProps {
   note: Note;
@@ -44,7 +44,6 @@ const EXPIRY_LABEL_KEYS = {
 export default function PublicLinkSection({ note, config, currentUserId, users, onChange }: PublicLinkSectionProps) {
   const { t, i18n } = useTranslation();
   const expiryId = useId();
-  const urlId = useId();
   // '' is "not chosen yet"; see `selectedExpiry` below.
   const [expiry, setExpiry] = useState<PublicLinkExpiryChoice | ''>('');
   const [busy, setBusy] = useState(false);
@@ -130,16 +129,16 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
 
       {link && (
         <div className="mb-3">
-          <label htmlFor={urlId} className="sr-only">{t('publicLink.urlLabel')}</label>
           <div className="flex gap-2">
-            <input
-              id={urlId}
-              type="text"
-              readOnly
-              value={url}
-              onFocus={(e) => e.currentTarget.select()}
-              className="min-w-0 flex-1 rounded-md border border-gray-300 dark:border-slate-600 bg-gray-50 dark:bg-slate-700 text-gray-900 dark:text-gray-100 px-3 py-1.5 text-sm"
-            />
+            {/* Shortened so the token, the only key to the note, stays out of
+                screenshots and screen shares; Copy link copies the full URL. */}
+            <p
+              data-testid="public-link-url"
+              className="min-w-0 flex-1 truncate rounded-md border border-gray-300 dark:border-slate-600 bg-gray-50 dark:bg-slate-700 text-gray-900 dark:text-gray-100 px-3 py-1.5 text-sm"
+            >
+              <span className="sr-only">{t('publicLink.urlLabel')}: </span>
+              {shortPublicLinkUrl(url)}
+            </p>
             <button type="button" onClick={() => void copy(url)} className={`${buttonClassName} flex items-center`}>
               {copied
                 ? <Check aria-hidden="true" className="h-4 w-4 mr-1" />

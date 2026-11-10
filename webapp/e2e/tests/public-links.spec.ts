@@ -3,7 +3,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import type { Page, Request } from '@playwright/test';
 import { test, expect } from '../fixtures';
-import { readClipboard } from '../fixtures/clipboard';
 import { failRequests } from '../fixtures/apiErrors';
 import {
   createListNote,
@@ -167,15 +166,18 @@ test.describe('Public link section of the share dialog', () => {
 
     await expect(publicLinkSection.urlField()).toHaveCount(0);
     await publicLinkSection.create('In 7 days');
-    const url = await publicLinkSection.url();
+    const url = await publicLinkSection.copiedUrl();
+    await expect(publicLinkSection.section().getByRole('button', { name: 'Copied!' })).toBeVisible();
     // Built on this page's origin: the e2e server sets no JOT_PUBLIC_URL.
-    expect(url).toMatch(new RegExp(`^${new URL(page.url()).origin}/share/[A-Za-z0-9_-]{43}$`));
+    const origin = new URL(page.url()).origin;
+    expect(url).toMatch(new RegExp(`^${origin}/share/[A-Za-z0-9_-]{43}$`));
+    const token = new URL(url).pathname.slice('/share/'.length);
+    // Shown without the scheme and with the token cut short, so it stays out
+    // of screenshots; the screen-reader label comes first.
+    await expect(publicLinkSection.urlField()).toHaveText(`Public link URL: ${new URL(url).host}/share/${token.slice(0, 4)}…`);
+    await expect(publicLinkSection.section()).not.toContainText(token);
     await expect(publicLinkSection.details()).toContainText('Expires');
     await expect(publicLinkSection.details()).toContainText('Created by you');
-
-    await publicLinkSection.copy();
-    await expect(publicLinkSection.section().getByRole('button', { name: 'Copied!' })).toBeVisible();
-    expect(await readClipboard(page)).toBe(url);
 
     // Nothing is preselected for a change, so the current expiry is never
     // replaced by whatever the select happened to show.
@@ -183,7 +185,7 @@ test.describe('Public link section of the share dialog', () => {
     // A new expiry keeps the URL, so links already sent keep working.
     await publicLinkSection.changeExpiry('Never');
     await expect(publicLinkSection.details()).toContainText('Never expires');
-    expect(await publicLinkSection.url()).toBe(url);
+    expect(await publicLinkSection.copiedUrl()).toBe(url);
 
     await publicLinkSection.revoke();
     await expect(publicLinkSection.createButton()).toBeVisible();
@@ -205,8 +207,8 @@ test.describe('Public link section of the share dialog', () => {
     await dashboardPage.openShareModalFromModal();
 
     await publicLinkSection.create();
-    await publicLinkSection.copy();
-    expect(await readClipboard(page)).toMatch(/^https:\/\/jot\.example\.com\/share\/[A-Za-z0-9_-]{43}$/);
+    await expect(publicLinkSection.urlField()).toHaveText(/^Public link URL: jot\.example\.com\/share\/[A-Za-z0-9_-]{4}…$/);
+    expect(await publicLinkSection.copiedUrl()).toMatch(/^https:\/\/jot\.example\.com\/share\/[A-Za-z0-9_-]{43}$/);
   });
 
   test('is hidden when the server has public links switched off', async ({ page, authenticatedUser, dashboardPage, publicLinkSection }) => {
