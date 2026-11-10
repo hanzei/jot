@@ -3,6 +3,7 @@ package mcphandler
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 
 	"github.com/hanzei/jot/server/internal/blobstore"
@@ -26,12 +27,12 @@ func (h *Handler) registerNoteTools(srv *mcp.Server, userID string) {
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "create_note",
-		Description: "Create a new note. Omit optional fields to use their defaults (empty text note, white background, not pinned). Text notes have content but no title; list notes have a title and items but no content. Supplying items creates a list note; use the note item tools to change them afterwards.",
+		Description: "Create a new note. Omit optional fields to use their defaults (empty text note, white background, not pinned, no labels). Text notes have content but no title; list notes have a title and items but no content. Supplying items creates a list note; use the note item tools to change them afterwards.",
 	}, h.handleCreateNote(userID))
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "update_note",
-		Description: "Update an existing note. Only the provided fields are changed; omitted fields keep their current values.",
+		Description: "Update an existing note. Only the provided fields are changed; omitted fields keep their current values. When changing title or content, pass the note's version as base_version so a newer edit by a collaborator is not overwritten.",
 	}, h.handleUpdateNote(userID))
 
 	mcp.AddTool(srv, &mcp.Tool{
@@ -47,6 +48,7 @@ type listNotesInput struct {
 	Label    string `json:"label,omitempty"    jsonschema:"Filter by label ID"`
 	Archived bool   `json:"archived,omitempty" jsonschema:"Include archived notes instead of active notes"`
 	Trashed  bool   `json:"trashed,omitempty"  jsonschema:"List notes in the trash instead of active notes"`
+	MyTasks  bool   `json:"my_tasks,omitempty" jsonschema:"List only notes with list items assigned to the authenticated user, archived or not (archived is ignored; trashed takes precedence)"`
 }
 
 func (h *Handler) handleListNotes(userID string) mcp.ToolHandlerFor[listNotesInput, any] {
@@ -54,6 +56,7 @@ func (h *Handler) handleListNotes(userID string) mcp.ToolHandlerFor[listNotesInp
 		notes, err := h.noteStore.GetByUserID(ctx, userID, models.NoteFilter{
 			Archived: in.Archived,
 			Trashed:  in.Trashed,
+			MyTasks:  in.MyTasks,
 			Search:   in.Search,
 			LabelID:  in.Label,
 		})
@@ -103,7 +106,9 @@ type createNoteInput struct {
 	NoteType models.NoteType `json:"note_type,omitempty" jsonschema:"Note type: text (default) or list"`
 	Color    string          `json:"color,omitempty"     jsonschema:"Background color as a hex string, e.g. #ffffff"`
 	// Items is ordered: the first entry becomes the first list item.
-	Items []createNoteItemSpec `json:"items,omitempty" jsonschema:"List items in display order. Implies note_type list."`
+	Items  []createNoteItemSpec `json:"items,omitempty"  jsonschema:"List items in display order. Implies note_type list."`
+	Labels []string             `json:"labels,omitempty" jsonschema:"Label names to attach. Labels that do not exist yet are created."`
+	Pinned bool                 `json:"pinned,omitempty" jsonschema:"Create the note pinned (default false)"`
 }
 
 func (h *Handler) handleCreateNote(userID string) mcp.ToolHandlerFor[createNoteInput, any] {
@@ -118,20 +123,28 @@ func (h *Handler) handleCreateNote(userID string) mcp.ToolHandlerFor[createNoteI
 			return toolError("%w", err)
 		}
 
+		labels := models.NormalizeLabelNames(in.Labels)
+		if err = h.checkNewLabelNames(ctx, userID, labels); err != nil {
+			return toolError("%w", err)
+		}
+
 		note, err := h.noteStore.CreateWithItems(ctx, userID, models.NewNote{
 			Title:   in.Title,
 			Content: in.Content,
 			Type:    noteType,
 			Color:   color,
+			Pinned:  in.Pinned,
 		}, items)
 		if err != nil {
 			return toolError("create note: %w", itemCapError(err))
 		}
 
-		// CreateWithItems builds its return value from the arguments and does
-		// not read the inserted items back, so refetch to return the note with
-		// its items (and their generated IDs) — the same thing the REST API does.
-		if len(items) > 0 {
+		if err = h.attachLabels(ctx, note.ID, userID, labels); err != nil {
+			return toolError("%w", err)
+		}
+
+		// CreateWithItems does not read items or labels back; refetch.
+		if len(items) > 0 || len(labels) > 0 {
 			note, err = h.noteStore.GetByID(ctx, note.ID, userID)
 			if err != nil {
 				return toolError("get created note: %w", err)
@@ -141,6 +154,43 @@ func (h *Handler) handleCreateNote(userID string) mcp.ToolHandlerFor[createNoteI
 		h.events.NoteToAudience(ctx, note.ID, sse.EventNoteCreated, models.SanitizeNote(*note), userID)
 		return toolNoteResult(note)
 	}
+}
+
+// checkNewLabelNames rejects, without writing anything, a name over the length
+// limit that does not match an existing label — the one name create_note would
+// otherwise fail on after the note and earlier labels already exist. Mirrors
+// the REST API's check.
+func (h *Handler) checkNewLabelNames(ctx context.Context, userID string, names []string) error {
+	for _, name := range names {
+		lengthErr := models.ValidateLabelName(name)
+		if lengthErr == nil {
+			continue
+		}
+		_, err := h.labelStore.GetLabelByName(ctx, userID, name)
+		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
+			return lengthErr
+		}
+		if err != nil {
+			return fmt.Errorf("check label name: %w", err)
+		}
+	}
+	return nil
+}
+
+// attachLabels attaches the caller's labels with the given names to noteID,
+// creating the ones that do not exist yet. Names that differ only in case
+// resolve to the same label, and attaching it twice is a no-op.
+func (h *Handler) attachLabels(ctx context.Context, noteID, userID string, names []string) error {
+	for _, name := range names {
+		label, _, err := h.labelStore.GetOrCreateLabel(ctx, userID, name)
+		if err != nil {
+			return fmt.Errorf("get or create label %q: %w", name, err)
+		}
+		if err = h.noteStore.AddLabelToNote(ctx, noteID, label.ID, userID); err != nil {
+			return fmt.Errorf("add label to note: %w", err)
+		}
+	}
+	return nil
 }
 
 // resolveCreateNote fills in create_note's defaults (type, color) and applies
@@ -208,6 +258,7 @@ type updateNoteInput struct {
 	Archived              *bool   `json:"archived,omitempty"               jsonschema:"Archive or unarchive the note (omit to keep current)"`
 	Color                 *string `json:"color,omitempty"                  jsonschema:"Background color as a hex string (omit to keep current)"`
 	CheckedItemsCollapsed *bool   `json:"checked_items_collapsed,omitempty" jsonschema:"Collapse completed list items (omit to keep current)"`
+	BaseVersion           *int    `json:"base_version,omitempty"           jsonschema:"The note's version when you read it. A title or content change is rejected if the note has changed since. Omit to overwrite unconditionally."`
 }
 
 func (h *Handler) handleUpdateNote(userID string) mcp.ToolHandlerFor[updateNoteInput, any] {
@@ -230,7 +281,11 @@ func (h *Handler) handleUpdateNote(userID string) mcp.ToolHandlerFor[updateNoteI
 			Pinned:                in.Pinned,
 			Archived:              in.Archived,
 			CheckedItemsCollapsed: in.CheckedItemsCollapsed,
+			BaseVersion:           in.BaseVersion,
 		})
+		if errors.Is(err, models.ErrNoteVersionConflict) {
+			return toolError("update note: the note has changed since version %d; nothing was updated. Call get_note to read the current version, then reapply your change", *in.BaseVersion)
+		}
 		if err != nil {
 			return toolError("update note: %w", err)
 		}

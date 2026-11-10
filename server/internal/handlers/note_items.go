@@ -63,41 +63,6 @@ func (h *NotesHandler) loadListNoteForItemOp(ctx context.Context, noteID, userID
 	return note, http.StatusOK, nil
 }
 
-// validateItemAssignee checks that assignedTo (when non-empty) is a valid user
-// with access to the note. Mirrors the rules in validateItemAssignments for the
-// single-item case.
-func (h *NotesHandler) validateItemAssignee(ctx context.Context, noteID, assignedTo string) (int, error) {
-	if assignedTo == "" {
-		return http.StatusOK, nil
-	}
-	if !models.IsValidID(assignedTo) {
-		return http.StatusBadRequest, errors.New("invalid assigned_to format")
-	}
-
-	shares, err := h.noteStore.GetNoteShares(ctx, noteID)
-	if err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("failed to check note shares: %w", err)
-	}
-	if len(shares) == 0 {
-		return http.StatusBadRequest, errors.New("cannot assign items on an unshared note")
-	}
-
-	ownerID, err := h.noteStore.GetOwnerID(ctx, noteID)
-	if err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("failed to get note owner: %w", err)
-	}
-
-	if assignedTo == ownerID {
-		return http.StatusOK, nil
-	}
-	for _, share := range shares {
-		if share.SharedWithUserID == assignedTo {
-			return http.StatusOK, nil
-		}
-	}
-	return http.StatusBadRequest, errors.New("assigned user does not have access to this note")
-}
-
 // validateItemText enforces the per-item text length constraint.
 func validateItemText(text string) (int, error) {
 	if utf8.RuneCountInString(text) > noteItemTextMaxLength {
@@ -134,8 +99,9 @@ func (h *NotesHandler) CreateNoteItem(w http.ResponseWriter, r *http.Request) (i
 		return http.StatusBadRequest, nil, idErr
 	}
 
-	if _, status, err := h.loadListNoteForItemOp(r.Context(), noteID, user.ID); err != nil {
-		return status, nil, err
+	note, status, loadErr := h.loadListNoteForItemOp(r.Context(), noteID, user.ID)
+	if loadErr != nil {
+		return status, nil, loadErr
 	}
 
 	var req CreateNoteItemRequest
@@ -160,8 +126,8 @@ func (h *NotesHandler) CreateNoteItem(w http.ResponseWriter, r *http.Request) (i
 	if req.ParentID != "" && !models.IsValidID(req.ParentID) {
 		return http.StatusBadRequest, nil, errors.New("invalid parent_id format")
 	}
-	if status, err := h.validateItemAssignee(r.Context(), noteID, req.AssignedTo); err != nil {
-		return status, nil, err
+	if err := note.ValidateAssignee(req.AssignedTo); err != nil {
+		return http.StatusBadRequest, nil, err
 	}
 
 	// The item-count cap is enforced atomically inside the create transaction.
@@ -208,8 +174,9 @@ func (h *NotesHandler) UpdateNoteItem(w http.ResponseWriter, r *http.Request) (i
 		return http.StatusBadRequest, nil, idErr
 	}
 
-	if _, status, err := h.loadListNoteForItemOp(r.Context(), noteID, user.ID); err != nil {
-		return status, nil, err
+	note, status, loadErr := h.loadListNoteForItemOp(r.Context(), noteID, user.ID)
+	if loadErr != nil {
+		return status, nil, loadErr
 	}
 
 	var req PatchNoteItemRequest
@@ -224,8 +191,8 @@ func (h *NotesHandler) UpdateNoteItem(w http.ResponseWriter, r *http.Request) (i
 		return http.StatusBadRequest, nil, errors.New("invalid parent_id format")
 	}
 	if req.AssignedTo != nil {
-		if status, err := h.validateItemAssignee(r.Context(), noteID, *req.AssignedTo); err != nil {
-			return status, nil, err
+		if err := note.ValidateAssignee(*req.AssignedTo); err != nil {
+			return http.StatusBadRequest, nil, err
 		}
 	}
 

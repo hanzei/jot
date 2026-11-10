@@ -114,11 +114,12 @@ func buildCreateNoteItems(specs []createNoteItemSpec) ([]models.NewNoteItem, err
 // -- create_note_item ---------------------------------------------------------
 
 type createNoteItemInput struct {
-	NoteID    string `json:"note_id"             jsonschema:"required,Note ID (must be a list note)"`
-	Text      string `json:"text"                jsonschema:"required,Item text"`
-	Completed bool   `json:"completed,omitempty" jsonschema:"Whether the item starts out checked off (default false)"`
-	Position  *int   `json:"position,omitempty"  jsonschema:"Sort position within the list (omit to append to the end)"`
-	ParentID  string `json:"parent_id,omitempty" jsonschema:"Nest this item under a top-level item of the same note (omit for a top-level item)"`
+	NoteID     string `json:"note_id"               jsonschema:"required,Note ID (must be a list note)"`
+	Text       string `json:"text"                  jsonschema:"required,Item text"`
+	Completed  bool   `json:"completed,omitempty"   jsonschema:"Whether the item starts out checked off (default false)"`
+	Position   *int   `json:"position,omitempty"    jsonschema:"Sort position within the list (omit to append to the end)"`
+	ParentID   string `json:"parent_id,omitempty"   jsonschema:"Nest this item under a top-level item of the same note (omit for a top-level item)"`
+	AssignedTo string `json:"assigned_to,omitempty" jsonschema:"Assign the item to a user: the note owner (user_id) or a collaborator (shared_with[].shared_with_user_id). Only shared notes have assignable items. Omit to leave it unassigned."`
 }
 
 func (h *Handler) handleCreateNoteItem(userID string) mcp.ToolHandlerFor[createNoteItemInput, any] {
@@ -128,6 +129,9 @@ func (h *Handler) handleCreateNoteItem(userID string) mcp.ToolHandlerFor[createN
 			return toolError("%w", err)
 		}
 		if err = validateItemText(in.Text); err != nil {
+			return toolError("%w", err)
+		}
+		if err = note.ValidateAssignee(in.AssignedTo); err != nil {
 			return toolError("%w", err)
 		}
 
@@ -145,7 +149,7 @@ func (h *Handler) handleCreateNoteItem(userID string) mcp.ToolHandlerFor[createN
 
 		// The cap is enforced atomically inside the create transaction, so a
 		// pre-check here would only race.
-		item, err := h.noteStore.CreateItemWithID(ctx, in.NoteID, userID, itemID, in.Text, position, in.Completed, in.ParentID, "", models.NoteItemsMaxCount)
+		item, err := h.noteStore.CreateItemWithID(ctx, in.NoteID, userID, itemID, in.Text, position, in.Completed, in.ParentID, in.AssignedTo, models.NoteItemsMaxCount)
 		if err != nil {
 			return toolError("create note item: %w", itemCapError(err))
 		}
@@ -161,33 +165,41 @@ func (h *Handler) handleCreateNoteItem(userID string) mcp.ToolHandlerFor[createN
 // -- update_note_item ---------------------------------------------------------
 
 type updateNoteItemInput struct {
-	NoteID    string  `json:"note_id"             jsonschema:"required,Note ID (must be a list note)"`
-	ItemID    string  `json:"item_id"             jsonschema:"required,Item ID"`
-	Text      *string `json:"text,omitempty"      jsonschema:"New item text (omit to keep current)"`
-	Completed *bool   `json:"completed,omitempty" jsonschema:"Check or uncheck the item (omit to keep current)"`
-	Position  *int    `json:"position,omitempty"  jsonschema:"New sort position within the list (omit to keep current)"`
-	ParentID  *string `json:"parent_id,omitempty" jsonschema:"Re-parent the item; an empty string makes it top-level (omit to keep current)"`
+	NoteID     string  `json:"note_id"               jsonschema:"required,Note ID (must be a list note)"`
+	ItemID     string  `json:"item_id"               jsonschema:"required,Item ID"`
+	Text       *string `json:"text,omitempty"        jsonschema:"New item text (omit to keep current)"`
+	Completed  *bool   `json:"completed,omitempty"   jsonschema:"Check or uncheck the item (omit to keep current)"`
+	Position   *int    `json:"position,omitempty"    jsonschema:"New sort position within the list (omit to keep current)"`
+	ParentID   *string `json:"parent_id,omitempty"   jsonschema:"Re-parent the item; an empty string makes it top-level (omit to keep current)"`
+	AssignedTo *string `json:"assigned_to,omitempty" jsonschema:"Assign the item to the note owner or a collaborator by user ID; an empty string unassigns it (omit to keep current)"`
 }
 
 func (h *Handler) handleUpdateNoteItem(userID string) mcp.ToolHandlerFor[updateNoteItemInput, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in updateNoteItemInput) (*mcp.CallToolResult, any, error) {
-		if _, err := h.loadListNote(ctx, in.NoteID, userID); err != nil {
+		note, err := h.loadListNote(ctx, in.NoteID, userID)
+		if err != nil {
 			return toolError("%w", err)
 		}
 		if in.ItemID == "" {
 			return toolError("item_id is required")
 		}
 		if in.Text != nil {
-			if err := validateItemText(*in.Text); err != nil {
+			if err = validateItemText(*in.Text); err != nil {
+				return toolError("%w", err)
+			}
+		}
+		if in.AssignedTo != nil {
+			if err = note.ValidateAssignee(*in.AssignedTo); err != nil {
 				return toolError("%w", err)
 			}
 		}
 
 		item, err := h.noteStore.PatchItem(ctx, in.NoteID, userID, in.ItemID, models.NoteItemPatch{
-			Text:      in.Text,
-			Completed: in.Completed,
-			Position:  in.Position,
-			ParentID:  in.ParentID,
+			Text:       in.Text,
+			Completed:  in.Completed,
+			Position:   in.Position,
+			ParentID:   in.ParentID,
+			AssignedTo: in.AssignedTo,
 		})
 		if err != nil {
 			return toolError("update note item: %w", err)
