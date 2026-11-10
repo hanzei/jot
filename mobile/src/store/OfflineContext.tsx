@@ -165,8 +165,8 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const rerunRequestedRef = useRef(false);
   // Set when performDrain skipped because the server was unreachable; that
   // early return ends the drain's backoff chain, so the next flip back to
-  // reachable resumes it (#1217, spec §3.1). Cleared by anything that
-  // schedules or runs a drain itself, and by the failure cap.
+  // reachable resumes it (#1217, spec §3.1). Only set while no drain is
+  // running; cleared by anything that schedules or runs a drain itself.
   const drainParkedRef = useRef(false);
   // Holds the latest performDrain so timers always call the current closure.
   const performDrainRef = useRef<() => void>(() => {});
@@ -205,7 +205,6 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
         `Queue drain failed ${failureCountRef.current} times in a row; pausing automatic retries.`,
       );
       clearDrainTimer();
-      drainParkedRef.current = false;
       setSyncError(true);
       return;
     }
@@ -228,6 +227,13 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     // only stall and reschedule. A timer scheduled while online can fire after we
     // go offline; the offline NetInfo handler also clears it, this is a backstop.
     if (!isConnectedRef.current) return;
+    if (isDrainingRef.current) {
+      // A drain is already running; remember to run again once it finishes so
+      // operations enqueued mid-drain are not stranded. Checked before the park
+      // below, so a park never overlaps a running drain.
+      rerunRequestedRef.current = true;
+      return;
+    }
     // The device may be online while the Jot server itself is known-unreachable
     // (see serverReachability.ts). Without this check a scheduled backoff drain
     // would still fire the head entry's request and eat the full write timeout
@@ -244,12 +250,6 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     // otherwise untouched.
     if (isLocalModeActive()) return;
     if (isSyncDrainPaused()) return;
-    if (isDrainingRef.current) {
-      // A drain is already running; remember to run again once it finishes so
-      // operations enqueued mid-drain are not stranded.
-      rerunRequestedRef.current = true;
-      return;
-    }
     isDrainingRef.current = true;
     let stalled = false;
     try {

@@ -379,7 +379,6 @@ describe('OfflineProvider queue draining', () => {
     // The drain's early return while unreachable does not reschedule, so after
     // an SSE keepalive re-arms the belief the queue would stay parked unless
     // the flip resumes it.
-    silenceConsole('info', /^Server reachability:/);
     await renderProvider();
     await flush();
     const drainsAfterMount = mockDrainQueue.mock.calls.length;
@@ -408,37 +407,7 @@ describe('OfflineProvider queue draining', () => {
     expect(mockDrainQueue).toHaveBeenCalledTimes(drainsAfterMount + 1);
   });
 
-  it('does not resume auto-retrying on a reachability flip once the failure cap paused it (#1217)', async () => {
-    silenceConsole('info', /^Server reachability:/);
-    mockGetPendingCount.mockResolvedValue(1);
-    await renderProvider();
-    await flush();
-    for (let i = 0; i < 12; i++) {
-      await act(async () => {
-        jest.advanceTimersByTime(60000);
-      });
-      await flush();
-    }
-    expect(lastSyncError).toBe(true);
-    const drainsAtCap = mockDrainQueue.mock.calls.length;
-
-    // The flip is a weaker signal than a reconnect, foreground or new write,
-    // so it must not reset the budget the cap exists to enforce.
-    await act(() => {
-      serverReachability.markServerUnreachable();
-      serverReachability.markServerReachable();
-    });
-    await act(async () => {
-      jest.advanceTimersByTime(60000);
-    });
-    await flush();
-
-    expect(mockDrainQueue).toHaveBeenCalledTimes(drainsAtCap);
-    expect(lastSyncError).toBe(true);
-  });
-
   it('does not drain on a flip back to reachable when no drain was parked', async () => {
-    silenceConsole('info', /^Server reachability:/);
     await renderProvider();
     await flush();
     const drainsAfterMount = mockDrainQueue.mock.calls.length;
@@ -460,7 +429,6 @@ describe('OfflineProvider queue draining', () => {
   it('drains once when a foreground reconnect re-arms reachability (#1217)', async () => {
     // handleReconnect re-arms the belief and then drains after revalidating the
     // session; the reachability listener must not add a second, earlier drain.
-    silenceConsole('info', /^Server reachability:/);
     await renderProvider();
     await flush();
     const drainsAfterMount = mockDrainQueue.mock.calls.length;

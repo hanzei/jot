@@ -162,35 +162,21 @@ describe('SSEConnectionManager', () => {
     manager.disconnect();
   });
 
-  it('does not re-arm server reachability from a stream opened before a server switch', async () => {
+  it.each([
+    ['a message', 'message', (handler: (event?: { data?: string }) => void) => handler({ data: '' })],
+    ['the stream opening', 'open', (handler: (event?: { data?: string }) => void) => handler()],
+  ])('does not re-arm server reachability on %s from a stream opened before a server switch', async (_name, type, fire) => {
     const manager = new SSEConnectionManager();
     await manager.connect(jest.fn());
 
-    const messageHandler = mockAddEventListener.mock.calls.find(
-      (call: [string, unknown]) => call[0] === 'message',
-    )?.[1] as (event: { data?: string }) => void;
+    const handler = mockAddEventListener.mock.calls.find(
+      (call: [string, unknown]) => call[0] === type,
+    )?.[1] as (event?: { data?: string }) => void;
 
     // The previous server's stream says nothing about the new server.
     mockGetCurrentSwitchGenerationId.mockReturnValue(2);
     markServerUnreachable();
-    messageHandler({ data: '' });
-
-    expect(isServerReachable()).toBe(false);
-
-    manager.disconnect();
-  });
-
-  it('does not re-arm server reachability when a stream opened before a server switch connects', async () => {
-    const manager = new SSEConnectionManager();
-    await manager.connect(jest.fn());
-
-    const openHandler = mockAddEventListener.mock.calls.find(
-      (call: [string, unknown]) => call[0] === 'open',
-    )?.[1] as () => void;
-
-    mockGetCurrentSwitchGenerationId.mockReturnValue(2);
-    markServerUnreachable();
-    openHandler();
+    fire(handler);
 
     expect(isServerReachable()).toBe(false);
 
