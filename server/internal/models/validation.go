@@ -100,15 +100,24 @@ func (e noteTypeFieldError) Error() string { return string(e) }
 
 func (noteTypeFieldError) Is(target error) bool { return target == ErrNoteFieldNotAllowed }
 
+// visibleTitle is title as clients see it: a text note has no title, so
+// whatever is stored for one is dropped.
+func (t NoteType) visibleTitle(title string) string {
+	if t == NoteTypeText {
+		return ""
+	}
+	return title
+}
+
 // SanitizeNote strips fields that do not belong to the note's type. The Note
 // struct is unified (a single DB table), so a row can carry, say, a title on a
 // text note — written before the rule was enforced everywhere, or left behind
 // by a type conversion. Every surface that returns or publishes a note passes
 // it through here so clients never see such a field.
 func SanitizeNote(n Note) Note {
+	n.Title = n.NoteType.visibleTitle(n.Title)
 	switch n.NoteType {
 	case NoteTypeText:
-		n.Title = ""
 		n.Items = nil
 		n.CheckedItemsCollapsed = false
 	case NoteTypeList:

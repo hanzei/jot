@@ -16,6 +16,9 @@ import (
 // sharePathPrefix is the webapp's public link viewer, /share/{token}.
 const sharePathPrefix = "/share/"
 
+// publicNotesPathPrefix is the public note API, /api/v1/public/notes/{token}.
+const publicNotesPathPrefix = "/api/v1/public/notes/"
+
 // shareFallbackTitle titles the card of a note without a title (every text
 // note). Static English, like the rest of index.html's preview tags: preview
 // services do not run JS, so there is no locale to pick.
@@ -36,18 +39,16 @@ const (
 	previewImageEnd   = "<!-- /jot-preview:image -->"
 )
 
-// sharePreview is the SPA fallback's index rewriter (#1209). For an active
-// public link at /share/{token} it returns index.html with the note's title
-// and first image, and the fixed shareDescription, in the link-preview tags; for every other request, and every
-// dead link, it returns nil so index.html is served byte for byte. The token
-// never reaches a log line: it is a credential.
+// sharePreview is the index rewriter of the /share/* route (#1209). For an
+// active public link at /share/{token} it returns index.html with the note's
+// title and first image, and the fixed shareDescription, in the link-preview
+// tags; for every other request, and every dead link (GetPublicNotePreview
+// rejects a malformed token before querying), it returns index unchanged. The
+// token never reaches a log line: it is a credential.
 func (s *Server) sharePreview(r *http.Request, index []byte) []byte {
-	if !s.cfg.PublicLinksEnabled {
-		return nil
-	}
 	token, ok := strings.CutPrefix(r.URL.Path, sharePathPrefix)
-	if !ok || !models.IsValidPublicLinkToken(token) {
-		return nil
+	if !s.cfg.PublicLinksEnabled || !ok {
+		return index
 	}
 
 	preview, err := s.noteStore.GetPublicNotePreview(r.Context(), token)
@@ -55,13 +56,13 @@ func (s *Server) sharePreview(r *http.Request, index []byte) []byte {
 		if !errors.Is(err, models.ErrPublicLinkNotFound) {
 			logutil.FromContext(r.Context()).WithError(err).Error("Failed to look up public link preview")
 		}
-		return nil
+		return index
 	}
 
 	out, ok := renderSharePreview(index, preview, s.cfg.PublicURL, token)
 	if !ok {
 		logutil.FromContext(r.Context()).Error("Served index.html has no link-preview markers; falling back to the generic card")
-		return nil
+		return index
 	}
 	return out
 }
@@ -76,18 +77,18 @@ func renderSharePreview(index []byte, preview *models.PublicNotePreview, publicU
 	if title == "" {
 		title = shareFallbackTitle
 	}
-	esc := html.EscapeString
+	title = html.EscapeString(title)
 
-	var textBlock strings.Builder
-	textBlock.WriteString("<title>" + esc(title) + "</title>\n")
-	textBlock.WriteString(`    <meta name="description" content="` + shareDescription + `" />` + "\n")
-	textBlock.WriteString(`    <meta property="og:title" content="` + esc(title) + `" />` + "\n")
-	textBlock.WriteString(`    <meta property="og:description" content="` + shareDescription + `" />`)
-	if publicURL != "" {
-		textBlock.WriteString("\n" + `    <meta property="og:url" content="` + esc(publicURL+sharePathPrefix+token) + `" />`)
+	text := []string{
+		"<title>" + title + "</title>",
+		metaTag("name", "description", shareDescription),
+		metaTag("property", "og:title", title),
+		metaTag("property", "og:description", shareDescription),
 	}
-
-	out, ok := replaceBlock(index, previewTextStart, previewTextEnd, textBlock.String())
+	if publicURL != "" {
+		text = append(text, metaTag("property", "og:url", html.EscapeString(publicURL+sharePathPrefix+token)))
+	}
+	out, ok := replaceBlock(index, previewTextStart, previewTextEnd, text)
 	if !ok {
 		return nil, false
 	}
@@ -97,25 +98,35 @@ func renderSharePreview(index []byte, preview *models.PublicNotePreview, publicU
 		return out, true
 	}
 
-	thumbnailURL := publicURL + "/api/v1/public/notes/" + token + "/images/" + img.ID + "/thumbnail"
-	var imageBlock strings.Builder
-	imageBlock.WriteString(`<meta property="og:image" content="` + esc(thumbnailURL) + `" />` + "\n")
-	imageBlock.WriteString(`    <meta property="og:image:type" content="image/jpeg" />` + "\n")
-	if w, h := handlers.NoteImageThumbnailSize(img.Width, img.Height); w > 0 {
-		imageBlock.WriteString(`    <meta property="og:image:width" content="` + strconv.Itoa(w) + `" />` + "\n")
-		imageBlock.WriteString(`    <meta property="og:image:height" content="` + strconv.Itoa(h) + `" />` + "\n")
+	thumbnailURL := publicURL + publicNotesPathPrefix + token + "/images/" + img.ID + "/thumbnail"
+	image := []string{
+		metaTag("property", "og:image", html.EscapeString(thumbnailURL)),
+		metaTag("property", "og:image:type", "image/jpeg"),
 	}
-	imageBlock.WriteString(`    <meta property="og:image:alt" content="` + esc(title) + `" />` + "\n")
-	// The note's own image is the point of the card, so ask for the large
-	// layout (Discord, Telegram, X, Mastodon; Slack and Signal ignore it).
-	imageBlock.WriteString(`    <meta name="twitter:card" content="summary_large_image" />`)
+	if w, h := handlers.NoteImageThumbnailSize(img.Width, img.Height); w > 0 {
+		image = append(image,
+			metaTag("property", "og:image:width", strconv.Itoa(w)),
+			metaTag("property", "og:image:height", strconv.Itoa(h)))
+	}
+	image = append(image,
+		metaTag("property", "og:image:alt", title),
+		// The note's own image is the point of the card, so ask for the large
+		// layout (Discord, Telegram, X, Mastodon; Slack and Signal ignore it).
+		metaTag("name", "twitter:card", "summary_large_image"))
 
-	return replaceBlock(out, previewImageStart, previewImageEnd, imageBlock.String())
+	return replaceBlock(out, previewImageStart, previewImageEnd, image)
+}
+
+// metaTag renders a <meta> tag; content must already be HTML-escaped.
+func metaTag(attr, key, content string) string {
+	return `<meta ` + attr + `="` + key + `" content="` + content + `" />`
 }
 
 // replaceBlock returns src with everything from start through end, markers
-// included, replaced by repl. It reports false when either marker is missing.
-func replaceBlock(src []byte, start, end, repl string) ([]byte, bool) {
+// included, replaced by lines, indented like index.html's head. It reports
+// false when either marker is missing.
+func replaceBlock(src []byte, start, end string, lines []string) ([]byte, bool) {
+	repl := strings.Join(lines, "\n    ")
 	before, rest, ok := bytes.Cut(src, []byte(start))
 	if !ok {
 		return nil, false

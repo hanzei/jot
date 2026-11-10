@@ -357,8 +357,9 @@ func (s *NoteStore) DeletePublicLink(ctx context.Context, noteID string) (_ bool
 	return s.inner.DeletePublicLink(ctx, noteID)
 }
 
-// GetPublicNote and GetPublicNoteImage deliberately record no token attribute:
-// a public link token is a credential and must never reach traces.
+// GetPublicNote, GetPublicNoteImage and GetPublicNotePreview deliberately
+// record no token attribute: a public link token is a credential and must
+// never reach traces.
 
 func (s *NoteStore) GetPublicNote(ctx context.Context, token string) (_ *PublicNote, err error) {
 	ctx, end := startSpan(ctx, s.instr, "NoteStore.GetPublicNote", &err)

@@ -259,6 +259,7 @@ func (s *noteStore) GetPublicNote(ctx context.Context, token string) (*PublicNot
 		return nil, fmt.Errorf("failed to get public note: %w", err)
 	}
 
+	note.Title = note.NoteType.visibleTitle(note.Title)
 	if note.NoteType == NoteTypeList {
 		items, itemsErr := s.getItemsByNoteID(ctx, noteID)
 		if itemsErr != nil {
@@ -272,8 +273,6 @@ func (s *noteStore) GetPublicNote(ctx context.Context, token string) (*PublicNot
 		}
 		note.CheckedItemsCollapsed = &collapsed
 	} else {
-		// Mirrors SanitizeNote: a text note has no title.
-		note.Title = ""
 		note.Content = &content
 	}
 
@@ -326,57 +325,47 @@ type PublicNotePreview struct {
 	// Title is always empty for a text note, as in PublicNote.
 	Title string
 	// FirstImage is the note's earliest image, or nil when it has none.
-	FirstImage *NoteImage
+	FirstImage *PublicNoteImage
 }
 
 // GetPublicNotePreview returns the preview of the note token publishes, under
-// the same rules as GetPublicNote: every dead token is ErrPublicLinkNotFound.
+// the same rules as GetPublicNote (including its join on the owner's
+// note_user_state): every dead token is ErrPublicLinkNotFound. One query, as
+// it runs on every /share/{token} page load.
 func (s *noteStore) GetPublicNotePreview(ctx context.Context, token string) (*PublicNotePreview, error) {
 	if !IsValidPublicLinkToken(token) {
 		return nil, ErrPublicLinkNotFound
 	}
 
-	var noteID string
+	// The first image in the order the app shows them (GetNoteImagesByNoteID:
+	// created_at, then id).
 	var noteType NoteType
 	var preview PublicNotePreview
+	var imageID sql.NullString
+	var width, height sql.NullInt64
 	err := s.db.QueryRowContext(ctx,
-		s.d.RewritePlaceholders(`SELECT n.id, n.note_type, n.title
+		s.d.RewritePlaceholders(`SELECT n.note_type, n.title, i.id, i.width, i.height
 		 FROM note_public_links l
 		 INNER JOIN active_notes n ON n.id = l.note_id
+		 INNER JOIN note_user_state nus ON nus.note_id = n.id AND nus.user_id = n.user_id
+		 LEFT JOIN note_images i ON i.id = (
+		     SELECT fi.id FROM note_images fi
+		     WHERE fi.note_id = n.id
+		     ORDER BY fi.created_at, fi.id
+		     LIMIT 1
+		 )
 		 WHERE l.token = ? AND `+activePublicLinkCond),
 		token, Timestamp(Now()),
-	).Scan(&noteID, &noteType, &preview.Title)
+	).Scan(&noteType, &preview.Title, &imageID, &width, &height)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrPublicLinkNotFound
 		}
 		return nil, fmt.Errorf("failed to get public note preview: %w", err)
 	}
-	if noteType == NoteTypeText {
-		// Mirrors SanitizeNote: a text note has no title.
-		preview.Title = ""
-	}
-
-	// The order the app shows images in (GetNoteImagesByNoteID); id breaks
-	// ties so the card is stable.
-	var img NoteImage
-	err = s.db.QueryRowContext(ctx,
-		s.d.RewritePlaceholders(`SELECT id, note_id, uploader_id, filename, content_type, size_bytes, sha256, width, height, created_at
-		 FROM note_images
-		 WHERE note_id = ?
-		 ORDER BY created_at, id
-		 LIMIT 1`),
-		noteID,
-	).Scan(
-		&img.ID, &img.NoteID, &img.UploaderID, &img.Filename, &img.ContentType,
-		&img.SizeBytes, &img.SHA256, &img.Width, &img.Height, &img.CreatedAt,
-	)
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-	case err != nil:
-		return nil, fmt.Errorf("failed to get public note preview image: %w", err)
-	default:
-		preview.FirstImage = &img
+	preview.Title = noteType.visibleTitle(preview.Title)
+	if imageID.Valid {
+		preview.FirstImage = &PublicNoteImage{ID: imageID.String, Width: int(width.Int64), Height: int(height.Int64)}
 	}
 	return &preview, nil
 }

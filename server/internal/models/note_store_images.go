@@ -113,7 +113,7 @@ func (s *noteStore) GetNoteImagesByNoteID(ctx context.Context, noteID string) ([
 	query := `SELECT id, note_id, uploader_id, filename, content_type, size_bytes, sha256, width, height, created_at
 			  FROM note_images
 			  WHERE note_id = ?
-			  ORDER BY created_at`
+			  ORDER BY created_at, id`
 
 	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), noteID)
 	if err != nil {
@@ -169,7 +169,7 @@ func (s *noteStore) getNoteImagesByNoteIDs(ctx context.Context, noteIDs []string
 		query := `SELECT id, note_id, uploader_id, filename, content_type, size_bytes, sha256, width, height, created_at
 				  FROM note_images
 				  WHERE note_id IN (` + placeholders + `)
-				  ORDER BY note_id, created_at` // #nosec G202 -- only "?" placeholders are joined, no user input
+				  ORDER BY note_id, created_at, id` // #nosec G202 -- only "?" placeholders are joined, no user input
 
 		rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), args...)
 		if err != nil {
