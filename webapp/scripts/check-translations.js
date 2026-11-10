@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Checks that all locale translation files have the same keys as en.json,
+// that every plural key defines each form its locale's plural rules use,
 // that every key in en.json is actually referenced from source, and that
 // every literal key referenced from source actually exists in en.json.
 // Exits with code 1 if any keys are missing, extra, unused, or undefined.
@@ -23,6 +24,21 @@ const DYNAMIC_KEY_PREFIXES = ['settings.language_', 'dashboard.sortOption.'];
 // suffix in source — callers pass the base key (`t('note.itemsPasted', { count })`) and
 // i18next appends the suffix for the resolved plural form.
 const PLURAL_SUFFIX = /_(zero|one|two|few|many|other)$/;
+
+// i18next resolves a plural key with Intl.PluralRules and asks for every form the language
+// has: Polish needs `_few` (2-4) and `_many` (5+), and es/fr/it/pt need `_many` (1,000,000).
+// A locale without the form it asks for falls back to English, which key parity cannot
+// catch. So every plural key must define, in every locale, each suffix the locale's plural
+// rules can produce. en.json repeats `_other` for forms English never uses, which keeps
+// the key sets identical.
+function findMissingPluralForms(keys, locale) {
+  const categories = new Intl.PluralRules(locale).resolvedOptions().pluralCategories;
+  const pluralBases = new Set(keys.filter((k) => PLURAL_SUFFIX.test(k)).map((k) => k.replace(PLURAL_SUFFIX, '')));
+  const keySet = new Set(keys);
+  return [...pluralBases].flatMap((base) =>
+    categories.map((category) => `${base}_${category}`).filter((k) => !keySet.has(k)),
+  );
+}
 
 // Source root each locale directory's keys are referenced from, for the unused-key scan.
 const sourceRootFor = (localesDir) => join(localesDir, '../../..');
@@ -173,12 +189,19 @@ for (const localesDir of localeDirs) {
   }
 
   for (const file of files) {
-    if (file === reference) continue;
-
     const locale = file.replace('.json', '');
     const keys = new Set(
       flattenKeys(parseJsonFile(join(localesDir, file)))
     );
+
+    const missingPluralForms = findMissingPluralForms([...keys], locale);
+    if (missingPluralForms.length > 0) {
+      console.error(`[${localesDir}:${locale}] Plural keys missing a form ${locale} uses (${missingPluralForms.length}):`);
+      for (const k of missingPluralForms) console.error(`  - ${k}`);
+      hasErrors = true;
+    }
+
+    if (file === reference) continue;
 
     const missing = [...referenceKeys].filter((k) => !keys.has(k));
     const extra = [...keys].filter((k) => !referenceKeys.has(k));
@@ -195,7 +218,7 @@ for (const localesDir of localeDirs) {
       hasErrors = true;
     }
 
-    if (missing.length === 0 && extra.length === 0) {
+    if (missing.length === 0 && extra.length === 0 && missingPluralForms.length === 0) {
       console.log(`[${localesDir}:${locale}] OK`);
     }
   }

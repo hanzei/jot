@@ -1,3 +1,17 @@
+// i18next picks a plural form (`_one`, `_few`, `_many`, ...) with Intl.PluralRules. Hermes
+// may not provide it, and i18next then falls back to `count === 1 ? 'one' : 'other'`, which
+// gives Polish the wrong word form for 2-4. The forced polyfill makes every device (and
+// Jest) use the same CLDR rules. It must load before i18next first resolves a plural, and
+// each locale's data must be imported after it.
+import '@formatjs/intl-pluralrules/polyfill-force.js';
+import '@formatjs/intl-pluralrules/locale-data/en.js';
+import '@formatjs/intl-pluralrules/locale-data/de.js';
+import '@formatjs/intl-pluralrules/locale-data/es.js';
+import '@formatjs/intl-pluralrules/locale-data/fr.js';
+import '@formatjs/intl-pluralrules/locale-data/it.js';
+import '@formatjs/intl-pluralrules/locale-data/nl.js';
+import '@formatjs/intl-pluralrules/locale-data/pl.js';
+import '@formatjs/intl-pluralrules/locale-data/pt.js';
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import en from './locales/en.json';

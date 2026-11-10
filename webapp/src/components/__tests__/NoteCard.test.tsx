@@ -536,7 +536,7 @@ describe('NoteCard', () => {
       renderNoteCard({ ...defaultProps, note: listNote });
 
       expect(screen.getByText('Uncompleted item')).toBeInTheDocument();
-      expect(screen.getByText('+1 completed items')).toBeInTheDocument();
+      expect(screen.getByText('+1 completed item')).toBeInTheDocument();
     });
 
     it('renders a child under its parent even when its position sorts first', () => {
@@ -593,7 +593,7 @@ describe('NoteCard', () => {
 
       renderNoteCard({ ...defaultProps, note: completedOnlyNote });
 
-      expect(screen.getByText('+1 completed items')).toBeInTheDocument();
+      expect(screen.getByText('+1 completed item')).toBeInTheDocument();
     });
 
     it('handles list items with extremely long text', () => {

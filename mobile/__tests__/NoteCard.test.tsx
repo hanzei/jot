@@ -244,7 +244,7 @@ describe('NoteCard', () => {
     const { getByText } = await render(<NoteCard note={listNote} onPress={jest.fn()} />);
 
     expect(getByText('Buy groceries')).toBeTruthy();
-    expect(getByText('+1 completed items')).toBeTruthy();
+    expect(getByText('+1 completed item')).toBeTruthy();
   });
 
   it('indents list preview rows using parent_id', async () => {

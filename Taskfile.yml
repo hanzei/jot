@@ -164,7 +164,7 @@ tasks:
   # against en.json), but not a stale extra one, and it does not see the mobile
   # locales at all. Hence a separate gate rather than leaning on lint-webapp.
   check-translations:
-    desc: Check that all locale translation files have the same keys as en.json
+    desc: Check locale files for key parity with en.json and complete plural forms
     dir: webapp
     cmd: npm run check-translations
 
