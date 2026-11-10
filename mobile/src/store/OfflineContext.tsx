@@ -222,7 +222,9 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     scheduleDrain(delay);
   }, [clearDrainTimer, scheduleDrain]);
 
-  const performDrain = useCallback(async () => {
+  // `fromReconnect` marks handleReconnect's own drain; any other drain waits
+  // for it (see below).
+  const performDrain = useCallback(async (fromReconnect = false) => {
     // Don't attempt to drain while offline — the network call is doomed and would
     // only stall and reschedule. A timer scheduled while online can fire after we
     // go offline; the offline NetInfo handler also clears it, this is a backstop.
@@ -234,6 +236,11 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       rerunRequestedRef.current = true;
       return;
     }
+    // A reconnect in progress drains right after revalidating the session, so
+    // any other drain (a timer, a rerun, a resume) defers to it rather than
+    // racing ahead of the revalidation. Checked before the park below, so a
+    // deferred drain never parks.
+    if (isReconnectingRef.current && !fromReconnect) return;
     // The device may be online while the Jot server itself is known-unreachable
     // (see serverReachability.ts). Without this check a scheduled backoff drain
     // would still fire the head entry's request and eat the full write timeout
@@ -371,10 +378,8 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     isReconnectingRef.current = true;
-    // This reconnect drains below, after revalidating the session, so no pending
-    // timer (a resume, a write's debounce, a backoff) and no flip the next line
-    // may cause may drain ahead of it.
-    clearDrainTimer();
+    // This reconnect drains below, after revalidating the session, so the flip
+    // the next line may cause has no parked drain to resume.
     drainParkedRef.current = false;
     // The device just regained connectivity: re-arm the server-reachable belief
     // so the next write probes the network again instead of staying parked on the
@@ -393,12 +398,12 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
         failureCountRef.current = 0;
         setConsecutiveFailureCount(0);
         setSyncError(false);
-        await performDrain();
+        await performDrain(true);
       } while (reconnectRerunRequestedRef.current);
     } finally {
       isReconnectingRef.current = false;
     }
-  }, [revalidateSession, performDrain, clearDrainTimer]);
+  }, [revalidateSession, performDrain]);
 
   useEffect(() => {
     // Seed the initial state from the real network status before subscribing to changes,

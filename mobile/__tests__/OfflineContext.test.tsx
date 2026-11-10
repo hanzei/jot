@@ -466,7 +466,7 @@ describe('OfflineProvider queue draining', () => {
     expect(mockDrainQueue).toHaveBeenCalledTimes(drainsAfterMount + 1);
   });
 
-  it('cancels a pending resume when a foreground reconnect takes over', async () => {
+  it('holds a pending resume until a foreground reconnect has revalidated the session', async () => {
     // A keepalive flip schedules the parked drain's resume; a foreground inside
     // that debounce must not let it drain ahead of session revalidation.
     await renderProvider();
@@ -503,6 +503,94 @@ describe('OfflineProvider queue draining', () => {
 
     await act(async () => {
       jest.advanceTimersByTime(4000);
+    });
+    await flush();
+    expect(mockDrainQueue).toHaveBeenCalledTimes(drainsAfterMount + 1);
+  });
+
+  it('does not run a finishing drain\'s rerun ahead of a reconnect\'s session revalidation', async () => {
+    await renderProvider();
+    await flush();
+    const drainsAfterMount = mockDrainQueue.mock.calls.length;
+
+    // A slow drain is in flight and a write queued during it requests a rerun.
+    mockDrainQueue.mockImplementationOnce(() => new Promise((resolve) => {
+      setTimeout(() => resolve({ idMappings: [], discardedOperations: [], syncedSettings: false }), 5000);
+    }));
+    await act(() => {
+      enqueueListener?.();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    await flush();
+    await act(() => {
+      enqueueListener?.();
+    });
+
+    // A foreground arrives mid-drain; its revalidation outlasts the drain.
+    mockRevalidate.mockImplementationOnce(() => new Promise((resolve) => {
+      setTimeout(() => resolve(true), 10000);
+    }));
+    const handler = getAppStateHandler();
+    await act(async () => {
+      handler('active');
+    });
+    await flush();
+    await act(async () => {
+      jest.advanceTimersByTime(5000);
+    });
+    await flush();
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    await flush();
+    expect(mockDrainQueue).toHaveBeenCalledTimes(drainsAfterMount + 1);
+
+    await act(async () => {
+      jest.advanceTimersByTime(5000);
+    });
+    await flush();
+    expect(mockDrainQueue).toHaveBeenCalledTimes(drainsAfterMount + 2);
+  });
+
+  it('does not resume a drain parked during a reconnect\'s session revalidation ahead of it', async () => {
+    await renderProvider();
+    await flush();
+    const drainsAfterMount = mockDrainQueue.mock.calls.length;
+
+    mockRevalidate.mockImplementationOnce(() => new Promise((resolve) => {
+      setTimeout(() => resolve(true), 10000);
+    }));
+    const handler = getAppStateHandler();
+    await act(async () => {
+      handler('active');
+    });
+    await flush();
+
+    // During revalidation a request times out, a write queues, and its
+    // debounced drain fires; then a keepalive flips reachability back.
+    await act(() => {
+      serverReachability.markServerUnreachable();
+    });
+    await act(() => {
+      enqueueListener?.();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    await flush();
+    await act(() => {
+      serverReachability.markServerReachable();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(2000);
+    });
+    await flush();
+    expect(mockDrainQueue).toHaveBeenCalledTimes(drainsAfterMount);
+
+    await act(async () => {
+      jest.advanceTimersByTime(7000);
     });
     await flush();
     expect(mockDrainQueue).toHaveBeenCalledTimes(drainsAfterMount + 1);

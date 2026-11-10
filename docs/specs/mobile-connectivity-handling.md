@@ -101,12 +101,16 @@ switch, the old server's stream says nothing about the new one.
 parks: its backoff chain ends there. A flip from `false` to `true` resumes a
 parked drain, and does nothing when no drain parked. Anything that schedules or
 runs a drain itself clears the park, so the flip never shortcuts a pending
-backoff timer, never runs ahead of `handleReconnect` (which re-arms the flag
-itself, cancels any pending drain timer, and drains after revalidating the
-session), and never drains past the failure cap. A write queued while a drain
-runs requests a rerun, so the finishing drain cannot strand it by clearing that
-write's pending timer. It also keeps the failure count, so a write that keeps failing
-still reaches the cap.
+backoff timer and never drains past the failure cap. The flip also keeps the
+failure count, so a write that keeps failing still reaches the cap. A write
+queued while a drain runs requests a rerun, so the finishing drain cannot strand
+it by clearing that write's pending timer.
+
+**Reconnect owns the drain while it runs.** `handleReconnect` re-arms the flag
+itself and drains after revalidating the session. While it is in progress, any
+other drain (a pending timer, a finishing drain's rerun, a resume) returns
+without draining or parking, so nothing reaches the server ahead of the
+revalidation; the reconnect's own drain covers them.
 
 **Known cost.** If the API times out while the SSE stream stays healthy (an
 overloaded server, a proxy timing out only API routes), each keepalive re-arms
