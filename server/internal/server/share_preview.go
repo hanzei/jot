@@ -60,7 +60,7 @@ func (s *Server) sharePreview(r *http.Request, index []byte) []byte {
 
 	out, ok := renderSharePreview(index, preview, s.cfg.PublicURL, token)
 	if !ok {
-		logutil.FromContext(r.Context()).Error("index.html has no link-preview markers; serving the generic card")
+		logutil.FromContext(r.Context()).Error("Served index.html has no link-preview markers; falling back to the generic card")
 		return nil
 	}
 	return out
