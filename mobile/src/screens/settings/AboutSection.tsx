@@ -6,18 +6,13 @@ import { useAuth } from '../../store/AuthContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { subscribeToClientActiveServerChanges } from '../../api/client';
 import { getActiveServer } from '../../store/serverAccounts';
-import { displayMessage, getCurrentLocale } from '../../i18n/utils';
+import { displayMessage, formatDate } from '../../i18n/utils';
 import { getAppBuildInfo } from '../../utils/appInfo';
 import type { AboutInfo } from '@jot/shared';
 import { styles } from './styles';
 import { jot } from '../../api/jot';
 
 const appBuildInfo = getAppBuildInfo();
-
-function formatDate(iso: string, locale?: string): string {
-  const dt = new Date(iso);
-  return isNaN(dt.getTime()) ? '—' : dt.toLocaleString(locale);
-}
 
 function AboutRow({ label, value }: { label: string; value: string }) {
   const { colors } = useTheme();
@@ -104,8 +99,6 @@ export default function AboutSection() {
     return undefined;
   }, [aboutExpanded, aboutInfo, aboutError]);
 
-  const currentLocale = getCurrentLocale();
-
   return (
     <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('settings.aboutSection')}</Text>
@@ -136,7 +129,7 @@ export default function AboutSection() {
               <AboutRow label={t('about.role')} value={user.role} />
               <AboutRow
                 label={t('about.accountCreated')}
-                value={new Date(user.created_at).toLocaleDateString(currentLocale)}
+                value={formatDate(user.created_at, 'date')}
               />
             </View>
           )}
@@ -146,7 +139,7 @@ export default function AboutSection() {
             <AboutRow label={t('about.appVersion')} value={appBuildInfo.version} />
             {appBuildInfo.commit && <AboutRow label={t('about.commit')} value={appBuildInfo.commit} />}
             {appBuildInfo.buildTime && (
-              <AboutRow label={t('about.buildTime')} value={formatDate(appBuildInfo.buildTime, currentLocale)} />
+              <AboutRow label={t('about.buildTime')} value={formatDate(appBuildInfo.buildTime, 'dateTime')} />
             )}
           </View>
           <View style={[styles.aboutDivider, { backgroundColor: colors.divider }]} />
@@ -167,7 +160,7 @@ export default function AboutSection() {
                 {aboutInfo.build_time && (
                   <AboutRow
                     label={t('about.buildTime')}
-                    value={formatDate(aboutInfo.build_time, currentLocale)}
+                    value={formatDate(aboutInfo.build_time, 'dateTime')}
                   />
                 )}
                 {aboutInfo.go_version && (

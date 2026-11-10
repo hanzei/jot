@@ -63,6 +63,16 @@ export default [
       // on those. This mirrors @typescript-eslint's own eslint-recommended
       // preset, which disables the same rule for the same reason.
       'no-undef': 'off',
+      // Dates go through formatDate() in src/i18n/utils.ts, which supplies the
+      // app language. A direct call picks its locale at the call site, and one
+      // that leaves it out follows the device instead (#1236).
+      'no-restricted-syntax': ['error', {
+        selector: 'CallExpression[callee.property.name=/^toLocale(Date|Time)?String$/]',
+        message: 'Format dates with formatDate() from src/i18n/utils, which uses the app language (#1236).',
+      }, {
+        selector: ":matches(NewExpression, CallExpression)[callee.object.name='Intl'][callee.property.name='DateTimeFormat']",
+        message: 'Format dates with formatDate() from src/i18n/utils, which uses the app language (#1236).',
+      }],
     },
     settings: {
       react: { version: 'detect' },

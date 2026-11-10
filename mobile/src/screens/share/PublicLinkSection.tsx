@@ -19,7 +19,7 @@ import { useServerConfig } from '../../hooks/useServerConfig';
 import { useActiveServerBaseUrl } from '../../hooks/useActiveServerBaseUrl';
 import { usePublicLinkActions } from '../../hooks/usePublicLink';
 import { isOnlineWriteAllowed, isServerReachable, subscribeToServerReachability } from '../../api/serverReachability';
-import { displayMessage, errorMessageKey, getCurrentLocale } from '../../i18n/utils';
+import { displayMessage, errorMessageKey, formatDate } from '../../i18n/utils';
 import FormatRadioGroup, { type FormatOption } from '../settings/FormatRadioGroup';
 
 interface PublicLinkSectionProps {
@@ -114,9 +114,6 @@ export default function PublicLinkSection({ noteId, publicLink, currentUserId, u
 
   const url = link ? publicLinkUrl(link, config.public_url, serverUrl) : '';
 
-  const formatDate = (iso: string) =>
-    new Date(iso).toLocaleDateString(getCurrentLocale(), { year: 'numeric', month: 'short', day: 'numeric' });
-
   const creatorLabel = (createdBy: string | null) => {
     if (createdBy === null) return t('publicLink.createdByFormer');
     if (createdBy === currentUserId) return t('publicLink.createdByYou');
@@ -140,7 +137,7 @@ export default function PublicLinkSection({ noteId, publicLink, currentUserId, u
           </View>
           <Text style={[styles.details, { color: colors.textMuted }]} testID="public-link-details">
             {link.expires_at
-              ? t('publicLink.expiresOn', { date: formatDate(link.expires_at) })
+              ? t('publicLink.expiresOn', { date: formatDate(link.expires_at, 'date') })
               : t('publicLink.neverExpires')}
             {createdBy && ` · ${createdBy}`}
           </Text>
