@@ -12,7 +12,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useQueryClient } from '@tanstack/react-query';
 import { drainQueue, getPendingCount, getDeadLetterCount, subscribeToEnqueue } from '../db/syncQueue';
-import { isServerReachable, markServerReachable } from '../api/serverReachability';
+import { isServerReachable, markServerReachable, subscribeToServerReachability } from '../api/serverReachability';
 import { drainImageUploadQueue, getQueuedImageUploadCount } from '../db/imageUploadQueue';
 import { getPendingCreateNoteIds, getFailedNoteIds } from '../db/noteQueries';
 import { isClosedDatabaseError } from '../db/errors';
@@ -163,6 +163,11 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   // Set when a drain is requested while one is already in flight, so we run one
   // more pass afterward to pick up anything enqueued during the drain.
   const rerunRequestedRef = useRef(false);
+  // Set when performDrain skipped because the server was unreachable; that
+  // early return ends the drain's backoff chain, so the next flip back to
+  // reachable resumes it (#1217, spec §3.1). Only set while no drain is
+  // running; cleared by anything that schedules or runs a drain itself.
+  const drainParkedRef = useRef(false);
   // Holds the latest performDrain so timers always call the current closure.
   const performDrainRef = useRef<() => void>(() => {});
   // Guard so near-simultaneous reconnect signals collapse into a single resync.
@@ -180,6 +185,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
 
   const scheduleDrain = useCallback((delayMs: number) => {
     clearDrainTimer();
+    drainParkedRef.current = false;
     drainTimerRef.current = setTimeout(() => {
       drainTimerRef.current = null;
       performDrainRef.current();
@@ -216,31 +222,41 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     scheduleDrain(delay);
   }, [clearDrainTimer, scheduleDrain]);
 
-  const performDrain = useCallback(async () => {
+  // `fromReconnect` marks handleReconnect's own drain; any other drain waits
+  // for it (see below).
+  const performDrain = useCallback(async (fromReconnect = false) => {
     // Don't attempt to drain while offline — the network call is doomed and would
     // only stall and reschedule. A timer scheduled while online can fire after we
     // go offline; the offline NetInfo handler also clears it, this is a backstop.
     if (!isConnectedRef.current) return;
+    if (isDrainingRef.current) {
+      // A drain is already running; remember to run again once it finishes so
+      // operations enqueued mid-drain are not stranded. Checked before the park
+      // below, so a park never overlaps a running drain.
+      rerunRequestedRef.current = true;
+      return;
+    }
+    // A reconnect in progress drains right after revalidating the session, so
+    // any other drain (a timer, a rerun, a resume) defers to it rather than
+    // racing ahead of the revalidation. Checked before the park below, so a
+    // deferred drain never parks.
+    if (isReconnectingRef.current && !fromReconnect) return;
     // The device may be online while the Jot server itself is known-unreachable
     // (see serverReachability.ts). Without this check a scheduled backoff drain
     // would still fire the head entry's request and eat the full write timeout
     // before bailing (#718) — mirrors the read path's `retrySync`, which already
-    // fast-fails on `!isServerReachable()`. Skip the network drain and wait for an
-    // existing re-arm trigger (reconnect, foreground, or a new write) to schedule
-    // a fresh one once the server is reachable again.
-    if (!isServerReachable()) return;
+    // fast-fails on `!isServerReachable()`. Park instead; the reachability
+    // subscription below resumes the drain once the server is reachable again.
+    if (!isServerReachable()) {
+      drainParkedRef.current = true;
+      return;
+    }
     // Local mode has no server and never enqueues server ops, so the drain loop
     // stays parked (issue #514). This single guard covers every drain trigger
     // (mount, reconnect, foreground, post-enqueue), keeping the online sync engine
     // otherwise untouched.
     if (isLocalModeActive()) return;
     if (isSyncDrainPaused()) return;
-    if (isDrainingRef.current) {
-      // A drain is already running; remember to run again once it finishes so
-      // operations enqueued mid-drain are not stranded.
-      rerunRequestedRef.current = true;
-      return;
-    }
     isDrainingRef.current = true;
     let stalled = false;
     try {
@@ -362,6 +378,9 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     isReconnectingRef.current = true;
+    // This reconnect drains below, after revalidating the session, so the flip
+    // the next line may cause has no parked drain to resume.
+    drainParkedRef.current = false;
     // The device just regained connectivity: re-arm the server-reachable belief
     // so the next write probes the network again instead of staying parked on the
     // queue from a prior outage. A still-down server flips it back on the first
@@ -379,7 +398,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
         failureCountRef.current = 0;
         setConsecutiveFailureCount(0);
         setSyncError(false);
-        await performDrain();
+        await performDrain(true);
       } while (reconnectRerunRequestedRef.current);
     } finally {
       isReconnectingRef.current = false;
@@ -446,10 +465,22 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       failureCountRef.current = 0;
       setConsecutiveFailureCount(0);
       setSyncError(false);
+      // A drain in flight may finish before this debounce fires and clear it on
+      // success; request its rerun so the write is not stranded.
+      if (isDrainingRef.current) rerunRequestedRef.current = true;
       scheduleDrain(ENQUEUE_DRAIN_DEBOUNCE_MS);
     });
     return unsubscribe;
   }, [scheduleDrain, refreshPendingNoteIds]);
+
+  // Resume a parked drain when the server becomes reachable again. Unlike a
+  // reconnect, foreground or new write, this keeps the failure count, so the
+  // cap still bounds a write that keeps failing (#1217, spec §3.1).
+  useEffect(() => {
+    return subscribeToServerReachability((reachable) => {
+      if (reachable && drainParkedRef.current) scheduleDrain(ENQUEUE_DRAIN_DEBOUNCE_MS);
+    });
+  }, [scheduleDrain]);
 
   // Seed the pending-create set on mount so notes created in a previous session
   // that never drained are gated correctly from first render (#475).

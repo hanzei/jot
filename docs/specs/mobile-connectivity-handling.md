@@ -54,9 +54,73 @@ The classic mistake is treating "device online" as "server usable." A device can
 have full WiFi while the Jot server is down, restarting, or unroutable. That gap
 is exactly what `serverReachability` exists to cover; NetInfo alone cannot.
 
-`serverReachability` defaults to `true` and is re-armed on any successful
-response, an SSE stream (re)open, and a device reconnect — so recovery is
-detected from several angles even with no user writes in flight.
+### 3.1 The server-reachability belief
+
+`isServerReachable()` is one process-global flag, defaulting to `true`. Because
+writes, queue drains and read syncs all stop while it is `false`, a wrong
+`false` stops all syncing, and the flag must never depend on one of those paths
+to turn back on.
+
+**What sets it to `false`:** only an axios request that gets no response:
+connection refused, DNS failure, or a timeout, including the client's own
+(`WRITE_REQUEST_TIMEOUT_MS` is 5 s). Any HTTP status, 5xx included, proves the
+server answered and does not set it to `false`.
+
+**What sets it back to `true`:**
+
+| Source | Where |
+|---|---|
+| Any axios response, of any status | response interceptor, `src/api/client.ts` |
+| SSE stream opens | `open` handler, `src/api/events.ts` |
+| SSE message, keepalives included | `message` handler, `src/api/events.ts` |
+| Device reconnect or app foreground | `handleReconnect`, `src/store/OfflineContext.tsx` |
+| Server switch (the flag is not per server) | `src/api/client.ts` |
+
+**What reads it, and what each does while it is `false`:**
+
+| Reader | While `false` |
+|---|---|
+| Writes (`isOnlineWriteAllowed`) | Commit locally and enqueue without trying the network. |
+| Queue drain (`performDrain`) | Returns without sending and without rescheduling. |
+| Read sync (`retrySync`) | Aborts with `SyncAbortedError('unreachable')`. |
+| Note editor exit, share-sheet user search, pending-action indicator, export and public-link sections | Leave without awaiting the save, search cached users, skip the pending bar, disable the online-only action. |
+
+**Re-arm guarantee.** While the flag is `false` and the device is online, it
+turns back on within one SSE keepalive interval (30 s) if the stream is open.
+If the stream is down, its own reconnect backoff (capped at 60 s) acts as the
+probe, and the reconnect's `open` re-arms the flag. Neither path depends on a
+write, drain or read getting through. Before #1217, keepalives did not re-arm the
+flag, so one write timing out on a slow link while the stream stayed healthy
+parked all syncing until the app was backgrounded (the same failure #1206 hit
+with 502s).
+
+SSE re-arms only from a stream opened for the current server: after a server
+switch, the old server's stream says nothing about the new one.
+
+**Drain on re-arm.** A drain that returns early because the flag is `false`
+parks: its backoff chain ends there. A flip from `false` to `true` resumes a
+parked drain, and does nothing when no drain parked. Anything that schedules or
+runs a drain itself clears the park, so the flip never shortcuts a pending
+backoff timer and never drains past the failure cap. The flip also keeps the
+failure count, so a write that keeps failing still reaches the cap. A write
+queued while a drain runs requests a rerun, so the finishing drain cannot strand
+it by clearing that write's pending timer.
+
+**Reconnect owns the drain while it runs.** `handleReconnect` re-arms the flag
+itself and drains after revalidating the session. While it is in progress, any
+other drain (a pending timer, a finishing drain's rerun, a resume) returns
+without draining or parking, so nothing reaches the server ahead of the
+revalidation; the reconnect's own drain covers them.
+
+**Known cost.** If the API times out while the SSE stream stays healthy (an
+overloaded server, a proxy timing out only API routes), each keepalive re-arms
+the flag and the next write pays one `WRITE_REQUEST_TIMEOUT_MS` before falling
+back to the queue: at most one stalled write per keepalive interval, against
+syncing stopping outright. The drain's failure cap still bounds the replays.
+Read syncs that aborted while the flag was `false` are not re-run on the flip;
+the open stream kept delivering live events meanwhile, and a full resync on
+every flip would repeat an expensive pull every keepalive in exactly that
+degraded case.
 
 ---
 
@@ -188,8 +252,9 @@ Rules of thumb:
 
 ## 7. Recovery & loop safety
 
-- **Re-arm reachability** on any successful response, an SSE (re)open, and a
-  device offline→online transition, then drain the queue.
+- **Re-arm reachability** on any response, an SSE (re)open or message, a
+  device offline→online transition, and an app foreground, then drain the queue
+  (§3.1).
 - **Catch up reads on SSE (re)open.** In addition to re-arming reachability and
   draining the (outgoing) queue, an SSE reconnect publishes a one-shot resync
   (`resyncEvents`) that re-pulls the read caches (notes, labels, users), since any

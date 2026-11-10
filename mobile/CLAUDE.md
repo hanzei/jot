@@ -103,8 +103,9 @@ truth, and the network is a background reconciler. Rationale and code map:
   reads/auth `DEFAULT_REQUEST_TIMEOUT_MS`.
 - **Feedback is ambient** (banners, failed-note badge), not spinners or dialogs
   per action. Distinguish transient (queued) from permanent failures.
-- **Recovery:** re-arm reachability on any success / SSE reopen / reconnect, then
-  drain. On SSE reopen also publish the catch-up resync
+- **Recovery:** nothing that stops while the reachability flag is `false` may
+  be what re-arms it, and a flip back resumes a parked drain (spec §3.1). On SSE
+  reopen also publish the catch-up resync
   (`src/store/resyncEvents.ts`) — a bare foreground does not flip `isConnected`,
   so the `isConnected`-keyed refresh alone misses events.
 

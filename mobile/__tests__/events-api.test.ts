@@ -17,6 +17,9 @@ jest.mock('../src/store/serverSwitchLifecycle', () => ({
 }));
 
 import { getStoredSession, handleUnauthorizedSession } from '../src/api/client';
+import { getCurrentSwitchGenerationId } from '../src/store/serverSwitchLifecycle';
+import { isServerReachable, markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
+const mockGetCurrentSwitchGenerationId = getCurrentSwitchGenerationId as jest.MockedFunction<typeof getCurrentSwitchGenerationId>;
 const mockGetStoredSession = getStoredSession as jest.MockedFunction<typeof getStoredSession>;
 const mockHandleUnauthorizedSession = handleUnauthorizedSession as jest.MockedFunction<typeof handleUnauthorizedSession>;
 
@@ -39,6 +42,10 @@ describe('SSEConnectionManager', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetStoredSession.mockResolvedValue('test-token');
+    // clearAllMocks keeps implementations, so a test that moved the generation
+    // must not leak it into the next one.
+    mockGetCurrentSwitchGenerationId.mockReturnValue(1);
+    markServerReachable();
   });
 
   it('connects with session cookie when token is available', async () => {
@@ -128,6 +135,50 @@ describe('SSEConnectionManager', () => {
     messageHandler({ data: 'not-json' });
 
     expect(callback).not.toHaveBeenCalled();
+
+    manager.disconnect();
+  });
+
+  it.each([
+    ['a keepalive', ''],
+    ['a data event', JSON.stringify({ type: 'note_updated', note_id: 'n1', note: null, source_user_id: 'u1' })],
+  ])('re-arms server reachability on %s while the stream stays open', async (_name, data) => {
+    // A single write that timed out client-side marks the server unreachable,
+    // which parks writes, drains and read syncs, so no axios response arrives to
+    // clear it. On an already-open stream, SSE traffic is then the only signal
+    // that the server still answers (#1217).
+    const manager = new SSEConnectionManager();
+    await manager.connect(jest.fn());
+
+    const messageHandler = mockAddEventListener.mock.calls.find(
+      (call: [string, unknown]) => call[0] === 'message',
+    )?.[1] as (event: { data?: string }) => void;
+
+    markServerUnreachable();
+    messageHandler({ data });
+
+    expect(isServerReachable()).toBe(true);
+
+    manager.disconnect();
+  });
+
+  it.each([
+    ['a message', 'message', (handler: (event?: { data?: string }) => void) => handler({ data: '' })],
+    ['the stream opening', 'open', (handler: (event?: { data?: string }) => void) => handler()],
+  ])('does not re-arm server reachability on %s from a stream opened before a server switch', async (_name, type, fire) => {
+    const manager = new SSEConnectionManager();
+    await manager.connect(jest.fn());
+
+    const handler = mockAddEventListener.mock.calls.find(
+      (call: [string, unknown]) => call[0] === type,
+    )?.[1] as (event?: { data?: string }) => void;
+
+    // The previous server's stream says nothing about the new server.
+    mockGetCurrentSwitchGenerationId.mockReturnValue(2);
+    markServerUnreachable();
+    fire(handler);
+
+    expect(isServerReachable()).toBe(false);
 
     manager.disconnect();
   });
