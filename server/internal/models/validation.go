@@ -73,6 +73,50 @@ func ValidateLabelName(name string) error {
 	return nil
 }
 
+// NormalizeLabelNames trims each label name, drops empty names, and removes
+// exact duplicates while preserving first-occurrence order.
+func NormalizeLabelNames(rawLabels []string) []string {
+	seen := make(map[string]struct{})
+	result := make([]string, 0, len(rawLabels))
+	for _, raw := range rawLabels {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			continue
+		}
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
+		result = append(result, name)
+	}
+	return result
+}
+
+// ValidateAssignee checks that assignedTo may be assigned an item of n: items
+// can only be assigned on a shared note, and only to its owner or a
+// collaborator. An empty assignedTo unassigns and is always allowed. n must
+// carry its shares, as GetByID returns it.
+func (n *Note) ValidateAssignee(assignedTo string) error {
+	if assignedTo == "" {
+		return nil
+	}
+	if !IsValidID(assignedTo) {
+		return errors.New("invalid assigned_to format")
+	}
+	if len(n.SharedWith) == 0 {
+		return errors.New("cannot assign items on an unshared note")
+	}
+	if assignedTo == n.UserID {
+		return nil
+	}
+	for _, share := range n.SharedWith {
+		if share.SharedWithUserID == assignedTo {
+			return nil
+		}
+	}
+	return errors.New("assigned user does not have access to this note")
+}
+
 // ValidateNoteTypeFields rejects values for fields that do not belong to
 // noteType: a title on a text note, content on a list note, and the
 // checked-items toggle on a text note. A nil pointer means the field is not

@@ -1,13 +1,27 @@
 import type { TFunction } from 'i18next';
-import { apiErrorParams, parseApiError, type ApiErrorCode } from '@jot/shared';
+import { getLocales } from 'expo-localization';
+import {
+  apiErrorParams,
+  dateLocale,
+  formatDateInLocale,
+  parseApiError,
+  type ApiErrorCode,
+  type DateStyle,
+} from '@jot/shared';
 import i18n from './index';
 
 export function displayMessage(t: TFunction, message: string): string {
   return i18n.exists(message) ? t(message, API_ERROR_KEY_PARAMS[message] ?? {}) : message;
 }
 
-export function getCurrentLocale(): string | undefined {
-  return i18n.resolvedLanguage || i18n.language || undefined;
+/**
+ * Formats a timestamp in the app language, with the device's regional
+ * conventions (12h or 24h clock, field order). See `DateStyle` for which style
+ * to use. Every date the app shows goes through here; ESLint rejects
+ * `toLocale*String` and `Intl.DateTimeFormat` elsewhere.
+ */
+export function formatDate(value: string, style: DateStyle): string {
+  return formatDateInLocale(value, dateLocale(i18n.resolvedLanguage || i18n.language, getLocales()[0]?.regionCode), style);
 }
 
 /**

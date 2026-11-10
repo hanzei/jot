@@ -26,7 +26,15 @@ type PersonalAccessToken struct {
 	UserID    string    `json:"user_id"`
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"created_at"`
+	// LastUsedAt is when the token last authenticated a request, accurate to
+	// PATLastUsedInterval. Nil until the first recorded use.
+	LastUsedAt *time.Time `json:"last_used_at"`
 }
+
+// PATLastUsedInterval is how stale last_used_at must be before a use writes it
+// again. An MCP session or sync script authenticates many requests in a row,
+// and a row update on each of them is exactly the load worth avoiding.
+const PATLastUsedInterval = time.Hour
 
 type patStore struct {
 	db *sql.DB
@@ -83,7 +91,7 @@ func (s *patStore) Create(ctx context.Context, userID, name string) (*PersonalAc
 
 // GetByUserID returns all personal access tokens for the given user, ordered by creation date descending.
 func (s *patStore) GetByUserID(ctx context.Context, userID string) (pats []*PersonalAccessToken, err error) {
-	query := `SELECT id, user_id, name, created_at FROM personal_access_tokens WHERE user_id = ? ORDER BY created_at DESC, id DESC`
+	query := `SELECT id, user_id, name, created_at, last_used_at FROM personal_access_tokens WHERE user_id = ? ORDER BY created_at DESC, id DESC`
 
 	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), userID)
 	if err != nil {
@@ -97,7 +105,7 @@ func (s *patStore) GetByUserID(ctx context.Context, userID string) (pats []*Pers
 
 	for rows.Next() {
 		var pat PersonalAccessToken
-		if err := rows.Scan(&pat.ID, &pat.UserID, &pat.Name, &pat.CreatedAt); err != nil {
+		if err := rows.Scan(&pat.ID, &pat.UserID, &pat.Name, &pat.CreatedAt, &pat.LastUsedAt); err != nil {
 			return nil, fmt.Errorf("scan personal access token: %w", err)
 		}
 		pats = append(pats, &pat)
@@ -115,8 +123,8 @@ func (s *patStore) GetByTokenHash(ctx context.Context, rawToken string) (*Person
 	tokenHash := hashPATToken(rawToken)
 
 	var pat PersonalAccessToken
-	query := `SELECT id, user_id, name, created_at FROM personal_access_tokens WHERE token_hash = ?`
-	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), tokenHash).Scan(&pat.ID, &pat.UserID, &pat.Name, &pat.CreatedAt)
+	query := `SELECT id, user_id, name, created_at, last_used_at FROM personal_access_tokens WHERE token_hash = ?`
+	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), tokenHash).Scan(&pat.ID, &pat.UserID, &pat.Name, &pat.CreatedAt, &pat.LastUsedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrPATNotFound
@@ -125,6 +133,23 @@ func (s *patStore) GetByTokenHash(ctx context.Context, rawToken string) (*Person
 	}
 
 	return &pat, nil
+}
+
+// RecordUse sets pat's last_used_at to now, unless it is already within
+// PATLastUsedInterval of now. pat is the token as loaded for authentication:
+// when its value is fresh there is no write at all, so a busy token costs
+// nothing. The UPDATE repeats the condition so that concurrent requests which
+// all loaded a stale value write once between them.
+func (s *patStore) RecordUse(ctx context.Context, pat *PersonalAccessToken, now time.Time) error {
+	if pat.LastUsedAt != nil && now.Sub(*pat.LastUsedAt) < PATLastUsedInterval {
+		return nil
+	}
+	query := `UPDATE personal_access_tokens SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at <= ?)`
+	if _, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query),
+		Timestamp(now), pat.ID, Timestamp(now.Add(-PATLastUsedInterval))); err != nil {
+		return fmt.Errorf("record personal access token use: %w", err)
+	}
+	return nil
 }
 
 // Delete removes a personal access token by ID, but only if it belongs to the given user.

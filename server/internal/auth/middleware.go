@@ -104,6 +104,11 @@ func (s *SessionService) authenticateWithPAT(ctx context.Context, rawToken strin
 	if err != nil {
 		return nil, fmt.Errorf("get user for PAT: %w", err)
 	}
+	// Failing to record the use never fails the request. The write ignores
+	// cancellation: the use happened even if the client has since hung up.
+	if err := s.patStore.RecordUse(context.WithoutCancel(ctx), pat, models.Now()); err != nil {
+		logutil.FromContext(ctx).WithError(err).Warn("Failed to record personal access token use")
+	}
 	return user, nil
 }
 

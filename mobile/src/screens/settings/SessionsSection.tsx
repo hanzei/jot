@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../theme/ThemeContext';
 import { subscribeToClientActiveServerChanges } from '../../api/client';
 import { getActiveServer } from '../../store/serverAccounts';
-import { displayMessage, getCurrentLocale } from '../../i18n/utils';
+import { displayMessage, formatDate } from '../../i18n/utils';
 import { useConfirm } from '../../hooks/useConfirm';
 import type { ActiveSession } from '@jot/shared';
 import { styles } from './styles';
@@ -102,8 +102,6 @@ export default function SessionsSection() {
     void revokeSessionById(id);
   }, [confirm, revokeSessionById, t]);
 
-  const currentLocale = getCurrentLocale();
-
   return (
     <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('settings.sessionsSection')}</Text>
@@ -139,10 +137,7 @@ export default function SessionsSection() {
                   )}
                 </View>
                 <Text style={[styles.sessionDate, { color: colors.textMuted }]}>
-                  {new Date(session.created_at).toLocaleDateString(currentLocale, {
-                    year: 'numeric', month: 'short', day: 'numeric',
-                    hour: '2-digit', minute: '2-digit',
-                  })}
+                  {formatDate(session.created_at, 'dateTime')}
                 </Text>
               </View>
               {!session.is_current && (

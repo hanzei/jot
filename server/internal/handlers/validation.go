@@ -9,7 +9,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/models"
 )
 
@@ -52,10 +51,6 @@ const (
 	// rejects anything longer, so surface a clear 400 instead of a 500.
 	passwordMaxBytes = 72
 )
-
-// errItemLimitReached is returned wherever a request would give a note more
-// than noteItemsMaxCount items.
-var errItemLimitReached = apierr.New(apierr.CodeItemLimitReached, fmt.Sprintf("note cannot have more than %d items", noteItemsMaxCount))
 
 func validateUsername(username string) error {
 	n := utf8.RuneCountInString(username)
@@ -106,25 +101,6 @@ func validatePATName(name string) error {
 		return fmt.Errorf("token name must be %d characters or fewer", patNameMaxLength)
 	}
 	return nil
-}
-
-// normalizeLabels trims whitespace from each label name, drops empty names, and
-// removes duplicates while preserving first-occurrence order.
-func normalizeLabels(rawLabels []string) []string {
-	seen := make(map[string]struct{})
-	result := make([]string, 0, len(rawLabels))
-	for _, raw := range rawLabels {
-		name := strings.TrimSpace(raw)
-		if name == "" {
-			continue
-		}
-		if _, dup := seen[name]; dup {
-			continue
-		}
-		seen[name] = struct{}{}
-		result = append(result, name)
-	}
-	return result
 }
 
 // truncateRunes returns s truncated to at most max Unicode code points.

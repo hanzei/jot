@@ -15,6 +15,7 @@ import { useNavigation } from '@react-navigation/native';
 import { ArrowLeft, Expand } from 'lucide-react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useTranslation } from 'react-i18next';
+import { formatDate } from '../i18n/utils';
 import { useTheme } from '../theme/ThemeContext';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
@@ -58,7 +59,7 @@ interface DiagnosticsSnapshot {
 /** Formats an ISO timestamp for display, or a placeholder if never set. */
 function formatTimestamp(iso: string | null, never: string): string {
   if (!iso) return never;
-  return new Date(iso).toLocaleString();
+  return formatDate(iso, 'dateTime');
 }
 
 /** Compact "how long has the head entry been waiting" string, for spotting a wedge. */

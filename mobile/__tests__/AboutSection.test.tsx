@@ -2,7 +2,7 @@ import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import AboutSection from '../src/screens/settings/AboutSection';
 import { useAuth } from '../src/store/AuthContext';
 import { getActiveServer } from '../src/store/serverAccounts';
-import { getCurrentLocale } from '../src/i18n/utils';
+import { formatDate } from '../src/i18n/utils';
 import type { User, AboutInfo } from '@jot/shared';
 import { jot } from '../src/api/jot';
 
@@ -87,9 +87,9 @@ describe('AboutSection', () => {
     expect(getByText('App Info')).toBeTruthy();
     expect(getByText(APP_VERSION)).toBeTruthy();
     expect(getByText(APP_COMMIT)).toBeTruthy();
-    // Build time is rendered via the component's own formatDate/locale, so
-    // compute the expected string the same way to stay timezone-independent.
-    const expectedBuildTime = new Date(APP_BUILD_TIME).toLocaleString(getCurrentLocale());
+    // Build time is rendered through formatDate, so compute the expected
+    // string the same way to stay independent of the time zone.
+    const expectedBuildTime = formatDate(APP_BUILD_TIME, 'dateTime');
     expect(getByText(expectedBuildTime)).toBeTruthy();
 
     // Server Info section shows the fetched server version, once loaded.

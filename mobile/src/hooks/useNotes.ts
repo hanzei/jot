@@ -597,7 +597,7 @@ function applyConvertedNoteLocally(note: Note, data: ConvertNoteTypeRequest, now
   if (data.note_type === 'text') {
     return { ...note, note_type: 'text', content: data.content ?? '', updated_at: now };
   }
-  // Mirrors the server's buildCreateNoteItems: an item sent with indent_level 1
+  // Mirrors the server's buildItems (server/internal/notesvc): an item sent with indent_level 1
   // hangs off the nearest preceding top-level item, and off nothing when there is
   // no such item yet. buildConvertNoteTypeRequest emits items in position order,
   // which is the order the server sorts into before doing the same walk.

@@ -10,7 +10,8 @@ import SettingsSectionCard, { SETTINGS_BTN_CLASSES } from '@/pages/settings/Sett
 import { passwordFormKeys } from '@/pages/settings/passwordFormKeys';
 import { SUPPORTED_LANGUAGES, type LanguagePreference } from '@/utils/language';
 import type { ThemePreference } from '@/utils/theme';
-import { VALIDATION } from '@jot/shared';
+import { formatDate } from '@/utils/formatDate';
+import { VALIDATION, patLastUsedMessage } from '@jot/shared';
 import type { ActiveSession, ExportFormat, PersonalAccessToken, User } from '@jot/shared';
 
 type Translate = TFunction;
@@ -136,6 +137,10 @@ export const IdentitySecurityColumn = ({
   displayMsg,
 }: IdentitySecurityColumnProps) => {
   const [newPATName, setNewPATName] = useState('');
+  const patLastUsed = (lastUsedAt: string | null) => {
+    const { key, values } = patLastUsedMessage(lastUsedAt, formatDate);
+    return t(key, values);
+  };
   const [patPendingRevoke, setPATpendingRevoke] = useState<PersonalAccessToken | null>(null);
 
   const handleCreateSubmit = (e: FormEvent) => {
@@ -377,7 +382,9 @@ export const IdentitySecurityColumn = ({
                   {pat.name}
                 </span>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  {new Date(pat.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                  {t('settings.patsCreatedOn', { date: formatDate(pat.created_at, 'date') })}
+                  {' · '}
+                  <span data-testid="pat-last-used">{patLastUsed(pat.last_used_at)}</span>
                 </p>
               </div>
               <button
@@ -482,7 +489,7 @@ export const PreferencesInfoColumn = ({
                   )}
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  {new Date(session.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  {formatDate(session.created_at, 'dateTime')}
                 </p>
               </div>
               {!session.is_current && (

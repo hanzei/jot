@@ -153,6 +153,29 @@ func TestRateLimiting(t *testing.T) {
 		assert.Equal(t, http.StatusOK, plainStatus)
 	})
 
+	t.Run("MCP list_notes search shares the expensive bucket with REST search", func(t *testing.T) {
+		ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
+			cfg.RateLimitEnabled = true
+			cfg.RateLimitPerMinute = 100
+			cfg.RateLimitAuthPerMinute = 100
+			cfg.RateLimitExpensivePerMinute = 2
+		})
+		u := ts.createTestUser(t, "mcpsearchuser", "password123", false)
+		sess := setupMCPSession(t, ts, u)
+
+		status, _ := doGet(t, u.Client.HTTPClient(), ts.HTTPServer.URL+"/api/v1/notes?search=foo")
+		assert.Equal(t, http.StatusOK, status)
+		callTool(t, sess, "list_notes", map[string]any{"search": "foo"}, nil)
+
+		msg := callToolExpectError(t, sess, "list_notes", map[string]any{"search": "foo"})
+		assert.Contains(t, msg, "too many searches")
+		status, _ = doGet(t, u.Client.HTTPClient(), ts.HTTPServer.URL+"/api/v1/notes?search=foo")
+		assert.Equal(t, http.StatusTooManyRequests, status, "MCP searches count against REST search")
+
+		// Listing without search is not an expensive operation.
+		callTool(t, sess, "list_notes", map[string]any{}, nil)
+	})
+
 	t.Run("public bucket covers a public note, its images and its share page, per IP", func(t *testing.T) {
 		ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
 			cfg.RateLimitEnabled = true

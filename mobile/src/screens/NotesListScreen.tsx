@@ -34,6 +34,7 @@ import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { styles } from './notesList/styles';
 import { buildNoteSections, type LocalReorderState } from './notesList/noteListUtils';
 import NotesListHeader from './notesList/NotesListHeader';
+import TrashBinInfo from './notesList/TrashBinInfo';
 import MasonryGrid from './notesList/MasonryGrid';
 import DraggableMasonry from './notesList/DraggableMasonry';
 import FadeInView from '../components/FadeInView';
@@ -634,9 +635,7 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
         {variant === 'trash' && (
           <View style={[styles.trashBanner, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}>
             <Info size={16} color={colors.warningText} style={styles.trashBannerIcon} />
-            <Text style={[styles.trashBannerText, { color: colors.warningText }]}>
-              {t('dashboard.binInfo')}
-            </Text>
+            <TrashBinInfo style={[styles.trashBannerText, { color: colors.warningText }]} />
           </View>
         )}
         <ScrollView
@@ -690,9 +689,7 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
         <View style={[styles.trashBanner, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}>
           <View style={styles.trashBannerMessage}>
             <Info size={16} color={colors.warningText} style={styles.trashBannerIcon} />
-            <Text style={[styles.trashBannerText, { color: colors.warningText }]}>
-              {t('dashboard.binInfo')}
-            </Text>
+            <TrashBinInfo style={[styles.trashBannerText, { color: colors.warningText }]} />
           </View>
           {trashCount > 0 && (
             <TouchableOpacity

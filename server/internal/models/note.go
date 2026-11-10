@@ -2,6 +2,7 @@ package models
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -57,7 +58,7 @@ var (
 	ErrNoteFieldNotAllowed  = errors.New("field not allowed for this note type")
 	ErrNoteItemNotFound     = errors.New("note item not found")
 	ErrNoteItemExists       = errors.New("note item already exists")
-	ErrNoteItemCapExceeded  = errors.New("note item limit reached")
+	ErrNoteItemCapExceeded  = fmt.Errorf("note cannot have more than %d items", NoteItemsMaxCount)
 	ErrInvalidParentRef     = errors.New("invalid parent reference")
 	ErrNoteImageNotFound    = errors.New("note image not found")
 	ErrNoteImageCapExceeded = errors.New("note image limit reached")

@@ -144,7 +144,7 @@ func keepNoteToImport(kn keepNote) (models.JotImportNote, error) {
 		Color:     keepColorToHex(kn.Color),
 		Pinned:    kn.IsPinned,
 		Archived:  kn.IsArchived,
-		Labels:    normalizeLabels(labelNames),
+		Labels:    models.NormalizeLabelNames(labelNames),
 		Items:     items,
 		CreatedAt: keepTimestamp(kn.CreatedUsec),
 		UpdatedAt: keepTimestamp(kn.EditedUsec),

@@ -6,6 +6,7 @@ import { httpStatus } from '@/utils/apiError';
 import { getUser, getSettings, setSettings } from '@/utils/auth';
 import {
   UPLOAD_MAX_BYTES,
+  DEFAULT_TRASH_RETENTION_DAYS,
   NOTE_SORT_OPTIONS,
   normalizeNoteSort,
   sortNotesForDisplay,
@@ -62,9 +63,11 @@ interface DashboardProps {
   uploadMaxBytes?: number;
   /** `/config`'s public link fields, for the share dialog. */
   publicLinks?: PublicLinksConfig;
+  /** `/config`'s `trash_retention_days`, for the bin banner. 0 means no automatic purge. */
+  trashRetentionDays?: number;
 }
 
-export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLinks }: DashboardProps) {
+export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLinks, trashRetentionDays = DEFAULT_TRASH_RETENTION_DAYS }: DashboardProps) {
   const { t } = useTranslation();
   const { showToast, showErrorToast } = useToast();
   const { noteId: noteIdParam } = useParams<{ noteId?: string }>();
@@ -1362,7 +1365,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
         {/* Bin info banner */}
         {showBin && (
           <div className="mb-6 px-4 py-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-sm text-yellow-800 dark:text-yellow-300">
-            {t('dashboard.binInfo')}
+            {t('dashboard.binInfo', { count: trashRetentionDays })}
           </div>
         )}
 

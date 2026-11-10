@@ -33,6 +33,8 @@ import (
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/mcphandler"
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/notesvc"
+	"github.com/hanzei/jot/server/internal/notify"
 	"github.com/hanzei/jot/server/internal/oidc"
 	"github.com/hanzei/jot/server/internal/sse"
 	"github.com/sirupsen/logrus"
@@ -85,6 +87,7 @@ type Server struct {
 	oidcHandler     *handlers.OIDCHandler
 	noteStore       *models.NoteStore
 	labelStore      *models.LabelStore
+	notes           *notesvc.Service
 	rateLimiter     *rateLimiter
 	tracerProvider  trace.TracerProvider
 }
@@ -129,7 +132,8 @@ func newServer(cfg *config.Config, log *logrus.Logger, tracerProvider trace.Trac
 	}
 	undo.push(func() { _ = db.Close() })
 
-	dbPoolMetrics, err := database.RegisterPoolMetrics(otel.GetMeterProvider().Meter("github.com/hanzei/jot/server"), db, cfg.DBDriver)
+	meter := otel.GetMeterProvider().Meter("github.com/hanzei/jot/server")
+	dbPoolMetrics, err := database.RegisterPoolMetrics(meter, db, cfg.DBDriver)
 	if err != nil {
 		return nil, fmt.Errorf("initialize database pool metrics: %w", err)
 	}
@@ -168,10 +172,11 @@ func newServer(cfg *config.Config, log *logrus.Logger, tracerProvider trace.Trac
 	undo.push(func() { _ = imageStore.Close() })
 
 	authHandler := handlers.NewAuthHandler(userStore, noteStore, sessionService, userSettingsStore, hub, cfg.RegistrationEnabled, cfg.LocalLoginEnabled, cfg.PasswordMinLength)
-	notesHandler, err := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub, imageStore, int64(cfg.UploadMaxBytes), cfg.PublicLinksEnabled)
+	notes, err := notesvc.New(noteStore, labelStore, imageStore, notify.New(hub, noteStore), meter)
 	if err != nil {
-		return nil, fmt.Errorf("initialize notes handler: %w", err)
+		return nil, fmt.Errorf("initialize notes service: %w", err)
 	}
+	notesHandler := handlers.NewNotesHandler(noteStore, userStore, notes, hub, imageStore, int64(cfg.UploadMaxBytes), cfg.PublicLinksEnabled)
 	labelsHandler := handlers.NewLabelsHandler(noteStore, labelStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
 	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, imageStore, sessionService, hub,
@@ -213,6 +218,7 @@ func newServer(cfg *config.Config, log *logrus.Logger, tracerProvider trace.Trac
 		patsHandler:     patsHandler,
 		oidcHandler:     oidcHandler,
 		noteStore:       noteStore,
+		notes:           notes,
 		labelStore:      labelStore,
 		imageStore:      imageStore,
 		rateLimiter:     rl,
@@ -222,18 +228,7 @@ func newServer(cfg *config.Config, log *logrus.Logger, tracerProvider trace.Trac
 	s.startPeriodicTask(ctx, "session-cleanup", time.Hour, false, func(ctx context.Context) error {
 		return sessionStore.DeleteExpired(ctx)
 	}, "delete expired sessions")
-	s.startPeriodicTask(ctx, "trash-purge", time.Hour, true, func(ctx context.Context) error {
-		shas, err := noteStore.PurgeOldTrashedNotes(ctx, 7*24*time.Hour)
-		if err != nil {
-			return err
-		}
-		for _, sha := range shas {
-			if err := blobstore.ReclaimIfOrphaned(ctx, noteStore, imageStore, sha); err != nil {
-				log.WithError(err).WithField("sha256", sha).Error("Failed to reclaim orphaned note image blob/thumbnail")
-			}
-		}
-		return nil
-	}, "purge old trashed notes")
+	s.startTrashPurge(ctx, cfg.TrashRetentionDays)
 	s.startPeriodicTask(ctx, "image-orphan-sweep", 24*time.Hour, true, func(ctx context.Context) error {
 		report, err := blobstore.Sweep(ctx, noteStore, imageStore, imageOrphanSweepGrace)
 		logImageSweepReport(log, report)
@@ -265,6 +260,28 @@ func (c *cleanupStack) run() {
 	for _, f := range slices.Backward(*c) {
 		f()
 	}
+}
+
+// startTrashPurge starts the task that permanently deletes notes trashed more
+// than retentionDays ago. A retention of 0 starts nothing: trashed notes stay
+// until the user empties the trash.
+func (s *Server) startTrashPurge(ctx context.Context, retentionDays int) {
+	if retentionDays == 0 {
+		return
+	}
+	retention := time.Duration(retentionDays) * 24 * time.Hour
+	s.startPeriodicTask(ctx, "trash-purge", time.Hour, true, func(ctx context.Context) error {
+		shas, err := s.noteStore.PurgeOldTrashedNotes(ctx, retention)
+		if err != nil {
+			return err
+		}
+		for _, sha := range shas {
+			if err := blobstore.ReclaimIfOrphaned(ctx, s.noteStore, s.imageStore, sha); err != nil {
+				s.log.WithError(err).WithField("sha256", sha).Error("Failed to reclaim orphaned note image blob/thumbnail")
+			}
+		}
+		return nil
+	}, "purge old trashed notes")
 }
 
 // imageOrphanSweepGrace is how old a blob must be before the orphan sweep may
@@ -474,6 +491,7 @@ func (s *Server) setupRoutes() error {
 			// draw from one shared, stricter per-user limit rather than separate ones
 			// (onlyWhenQueryParamSet gates GET /notes so plain listing is
 			// unaffected — it still counts against the baseline limit above).
+			// The MCP list_notes tool's search draws from the same bucket.
 			expensiveLimit := s.rateLimiter.limit(bucketExpensive, s.cfg.RateLimitExpensivePerMinute, keyByUserID)
 
 			r.With(onlyWhenQueryParamSet(handlers.SearchQueryParam, expensiveLimit)).Get("/notes", s.wrapHandler(s.notesHandler.GetNotes))
@@ -536,7 +554,8 @@ func (s *Server) setupRoutes() error {
 				r.With(auth.SessionRequired).Post("/auth/oidc/native/link", s.wrapHandler(s.oidcHandler.NativeLink))
 			}
 
-			r.Handle("/mcp", mcphandler.New(s.noteStore, s.labelStore, s.imageStore, s.hub).NewStreamableHTTPHandler())
+			allowExpensive := s.rateLimiter.allowUser(bucketExpensive, s.cfg.RateLimitExpensivePerMinute)
+			r.Handle("/mcp", mcphandler.New(s.noteStore, s.labelStore, s.notes, s.hub, allowExpensive).NewStreamableHTTPHandler())
 		})
 
 		r.Group(func(r chi.Router) {
@@ -739,6 +758,10 @@ type configResponse struct {
 	// ("https://jot.example.com"), or null when unset. Clients build public
 	// links from it, falling back to their own address.
 	PublicURL *string `json:"public_url" extensions:"x-nullable"`
+	// TrashRetentionDays is JOT_TRASH_RETENTION_DAYS: how many days a trashed
+	// note is kept before it is deleted for good. 0 means it is kept until
+	// the trash is emptied.
+	TrashRetentionDays int `json:"trash_retention_days"`
 }
 
 // ssoConfig is the public, login-UI-facing slice of the OIDC configuration.
@@ -775,6 +798,7 @@ func (s *Server) handleConfig(_ http.ResponseWriter, _ *http.Request) (int, any,
 		},
 		PublicLinksEnabled: s.cfg.PublicLinksEnabled,
 		PublicURL:          publicURL,
+		TrashRetentionDays: s.cfg.TrashRetentionDays,
 	}, nil
 }
 

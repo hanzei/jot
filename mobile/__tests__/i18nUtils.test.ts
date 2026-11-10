@@ -1,6 +1,7 @@
+import { getLocales, type Locale } from 'expo-localization';
 import { VALIDATION } from '@jot/shared';
 import i18n from '../src/i18n';
-import { LocalizedError, displayMessage, errorMessageKey, extractApiError } from '../src/i18n/utils';
+import { LocalizedError, displayMessage, errorMessageKey, extractApiError, formatDate } from '../src/i18n/utils';
 import { apiErrorBody } from './helpers/apiError';
 
 const apiError = (status: number, ...body: Parameters<typeof apiErrorBody>) =>
@@ -57,5 +58,25 @@ describe('displayMessage', () => {
 
   it('returns text that is not a key unchanged', () => {
     expect(displayMessage(i18n.t, 'title must be 200 characters or fewer')).toBe('title must be 200 characters or fewer');
+  });
+});
+
+describe('formatDate', () => {
+  const evening = new Date(2026, 10, 10, 21, 34).toISOString();
+
+  afterEach(async () => {
+    await i18n.changeLanguage('en');
+  });
+
+  it('formats in the app language, not the device language', async () => {
+    await i18n.changeLanguage('de');
+    expect(formatDate(evening, 'dateTime')).toBe('10. Nov. 2026, 21:34');
+  });
+
+  it('takes the clock and field order from the device region', () => {
+    // Once, so jest.setup.js's default device locale is back for the next test.
+    (getLocales as jest.MockedFunction<typeof getLocales>)
+      .mockReturnValueOnce([{ languageTag: 'en-GB', regionCode: 'GB' } as Locale]);
+    expect(formatDate(evening, 'dateTime')).toBe('10 Nov 2026, 21:34');
   });
 });

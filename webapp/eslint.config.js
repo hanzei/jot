@@ -61,9 +61,16 @@ export default [
       // in the DOM at opacity 0, still catching clicks and still matched by
       // role queries. Animate the open with `starting:` (CSS @starting-style)
       // instead, so a closed menu unmounts at once.
+      //
+      // Dates go through formatDate() in utils/formatDate.ts, which supplies
+      // the app language. A direct call picks its locale at the call site, and
+      // one that leaves it out follows the browser instead (#1236).
       'no-restricted-syntax': ['error', {
         selector: "JSXOpeningElement[name.name='MenuItems'] > JSXAttribute[name.name='transition']",
         message: 'Do not use the `transition` prop on MenuItems (#1013); animate the open with `starting:` classes instead.',
+      }, {
+        selector: "CallExpression[callee.property.name=/^toLocale(Date|Time)?String$/], :matches(NewExpression, CallExpression)[callee.object.name='Intl'][callee.property.name='DateTimeFormat']",
+        message: 'Format dates with formatDate() from @/utils/formatDate, which uses the app language (#1236).',
       }],
     },
     settings: {

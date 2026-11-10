@@ -19,7 +19,8 @@ compiled web app, while SQLite keeps the default deployment small and portable.
 - **Search and shortcuts**: Search across notes quickly, with keyboard
   shortcuts for common navigation and creation actions.
 - **Pin, archive, duplicate, trash**: Keep active notes focused while retaining
-  archived notes and automatically purging trashed notes after seven days.
+  archived notes and automatically purging trashed notes after a
+  configurable retention period (seven days by default).
 - **Import and export**: Import from a Jot export, Google Keep, or usememos,
   keeping each note's creation and last-modified dates, and export your Jot
   notes, with their images, as a `.zip` bundle — either a Jot backup that
@@ -191,7 +192,7 @@ task lint-mobile     # Run mobile app linting
 task lint-shared     # Run shared package linting
 task check-docs      # Check server/docs/ matches the handler annotations
 task check-migrations   # Check the sqlite and postgres migration trees match
-task check-translations # Check locale files for missing/extra keys
+task check-translations # Check locale files for missing/extra keys and plural forms
 task check-mobile-flows # Validate the Maestro flow syntax (no emulator needed)
 task check-mobile-expo  # expo-doctor: Expo SDK/native alignment (run by the dep sweep, not by check)
 task gen-docs        # Regenerate Swagger API docs
@@ -355,6 +356,7 @@ App-specific variables use a `JOT_` prefix.
 | `JOT_DB_DSN` | `./jot.db` | SQLite file path or Postgres connection string. |
 | `JOT_UPLOAD_DIR` | `./uploads` | Filesystem root for uploaded image blobs and thumbnails. |
 | `JOT_UPLOAD_MAX_BYTES` | `26214400` | Maximum upload size per note image, from 1 MiB to 500 MiB. |
+| `JOT_TRASH_RETENTION_DAYS` | `7` | Days a trashed note is kept before it is deleted for good, from 0 to 36500. `0` turns the automatic purge off: trashed notes stay until the user empties the trash or deletes them. The purge runs at startup and then hourly, so lowering the value deletes every note already trashed for longer than the new window at the next start. Exposed as `trash_retention_days` in `GET /api/v1/config`. |
 
 Timestamps are always stored as UTC, whichever driver you use. Jot pins every
 Postgres session it opens to `SET TIME ZONE 'UTC'`, so a server or database
@@ -442,7 +444,7 @@ reverse-proxy caveat below.)
 | `JOT_RATE_LIMIT_PER_MINUTE` | `300` | Baseline requests/min per authenticated user, across all `/api/v1` routes. |
 | `JOT_RATE_LIMIT_AUTH_PER_MINUTE` | `20` | Requests/min per client IP, shared by `/register`, `/login`, and `/logout` (none of which have an authenticated user to key on yet). |
 | `JOT_RATE_LIMIT_PUBLIC_PER_MINUTE` | `120` | Requests/min per client IP, shared by the unauthenticated public link endpoints: a public note and its images and thumbnails (`/api/v1/public/notes/…`), and the `/share/…` viewer page, which looks the link up for its preview card. Dead links count too, so guessing tokens is throttled. Subject to the reverse-proxy caveat below. |
-| `JOT_RATE_LIMIT_EXPENSIVE_PER_MINUTE` | `20` | Requests/min per user, shared by note search (a full-text index query), import, export (streams every image), and image upload (decode/resize/thumbnail) — the costliest operations per request. These also count against the baseline limit above; the expensive limit is an additional, stricter cap on top of it. Plain note listing (no `search` query) is unaffected by this limit and only counts against the baseline. |
+| `JOT_RATE_LIMIT_EXPENSIVE_PER_MINUTE` | `20` | Requests/min per user, shared by note search (a full-text index query, from `GET /notes?search=` or the MCP `list_notes` tool), import, export (streams every image), and image upload (decode/resize/thumbnail) — the costliest operations per request. These also count against the baseline limit above; the expensive limit is an additional, stricter cap on top of it. Plain note listing (no `search` query) is unaffected by this limit and only counts against the baseline. |
 
 **Reverse-proxy caveat:** `JOT_RATE_LIMIT_AUTH_PER_MINUTE` is keyed by the direct
 TCP peer address, not a client-supplied header (which would be trivially
@@ -579,7 +581,9 @@ The MCP server exposes note and label tools. They apply the same validation as
 the REST API (field limits, colors, which fields each note type has), and their
 changes are pushed to open web and mobile clients over server-sent events like
 any other edit. PATs are created from Settings in the web app and are only shown
-once.
+once. Settings shows when each token was last used (to the day; a use is
+recorded at most once an hour), so tokens no client uses any more are easy to
+find and revoke.
 
 ## jotctl admin CLI
 

@@ -98,8 +98,9 @@ removes.
 ### Server code paths
 
 - **Transports.** REST handlers (`server/internal/handlers/`) and MCP tools
-  (`server/internal/mcphandler/`) both call `models` and `notify` directly. Compare each
-  MCP tool with its REST counterpart for copied orchestration: validation, store calls,
+  (`server/internal/mcphandler/`) share note writes through `server/internal/notesvc/`;
+  the item and label operations still call `models` and `notify` directly from both
+  (#1181). Compare each such MCP tool with its REST counterpart for copied orchestration: validation, store calls,
   events, blob cleanup, metrics, and rate limiting. **Drift between the copies is the
   strongest evidence**: a metric one side records and the other doesn't, or a rate-limit
   bucket one side bypasses (`/mcp` sits behind a single route, so per-endpoint limits in

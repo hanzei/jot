@@ -14,7 +14,7 @@ import { auth, serverConfig } from '@/utils/api';
 import { applyTheme, followThemePreference } from '@/utils/theme';
 import { LoginRedirect, PostAuthRedirect } from '@/components/AuthRedirect';
 import PublicNote from '@/pages/PublicNote';
-import { VALIDATION, UPLOAD_MAX_BYTES, PUBLIC_NOTE_PATH_PREFIX, type SSOConfig } from '@jot/shared';
+import { VALIDATION, UPLOAD_MAX_BYTES, DEFAULT_TRASH_RETENTION_DAYS, PUBLIC_NOTE_PATH_PREFIX, type SSOConfig } from '@jot/shared';
 import { PUBLIC_LINKS_DISABLED, type PublicLinksConfig } from '@/utils/publicLink';
 
 // Default when the server omits `sso` (a pre-SSO server) or the config fetch
@@ -63,6 +63,7 @@ function SignedInApp() {
   const [uploadMaxBytes, setUploadMaxBytes] = useState<number>(UPLOAD_MAX_BYTES);
   const [sso, setSso] = useState<SSOConfig>(SSO_DISABLED);
   const [publicLinks, setPublicLinks] = useState<PublicLinksConfig>(PUBLIC_LINKS_DISABLED);
+  const [trashRetentionDays, setTrashRetentionDays] = useState<number>(DEFAULT_TRASH_RETENTION_DAYS);
 
   useEffect(() => {
     const stopFollowingTheme = followThemePreference();
@@ -74,6 +75,7 @@ function SignedInApp() {
         setUploadMaxBytes(cfg.upload_max_bytes);
         setSso(cfg.sso ?? SSO_DISABLED);
         setPublicLinks({ enabled: cfg.public_links_enabled ?? false, publicUrl: cfg.public_url ?? null });
+        setTrashRetentionDays(cfg.trash_retention_days ?? DEFAULT_TRASH_RETENTION_DAYS);
       })
       .catch(() => { /* keep defaults if config fetch fails */ });
 
@@ -130,11 +132,11 @@ function SignedInApp() {
           <Route
             element={
               isAuth
-                ? <AuthenticatedLayout onLogout={() => { setIsAuth(false); setSignedOut(true); }} />
+                ? <AuthenticatedLayout onLogout={() => { setIsAuth(false); setSignedOut(true); }} trashRetentionDays={trashRetentionDays} />
                 : (signedOut ? <Navigate to="/login" replace /> : <LoginRedirect />)
             }
           >
-            <Route element={<Dashboard uploadMaxBytes={uploadMaxBytes} publicLinks={publicLinks} />}>
+            <Route element={<Dashboard uploadMaxBytes={uploadMaxBytes} publicLinks={publicLinks} trashRetentionDays={trashRetentionDays} />}>
               <Route index element={null} />
               <Route path="notes/:noteId" element={null} />
               <Route path="new" element={null} />

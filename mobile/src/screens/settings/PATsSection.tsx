@@ -11,9 +11,9 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../theme/ThemeContext';
 import { subscribeToClientActiveServerChanges } from '../../api/client';
 import { getActiveServer } from '../../store/serverAccounts';
-import { displayMessage, getCurrentLocale } from '../../i18n/utils';
+import { displayMessage, formatDate } from '../../i18n/utils';
 import { useConfirm } from '../../hooks/useConfirm';
-import { VALIDATION } from '@jot/shared';
+import { VALIDATION, patLastUsedMessage } from '@jot/shared';
 import type { PersonalAccessToken } from '@jot/shared';
 import { styles } from './styles';
 import { jot } from '../../api/jot';
@@ -129,7 +129,10 @@ export default function PATsSection() {
     }
   }, [confirm, t]);
 
-  const currentLocale = getCurrentLocale();
+  const patLastUsed = (lastUsedAt: string | null) => {
+    const { key, values } = patLastUsedMessage(lastUsedAt, formatDate);
+    return t(key, values);
+  };
 
   return (
     <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -180,9 +183,15 @@ export default function PATsSection() {
               <View style={styles.sessionInfo}>
                 <Text style={[styles.sessionBrowser, { color: colors.text }]}>{pat.name}</Text>
                 <Text style={[styles.sessionDate, { color: colors.textMuted }]}>
-                  {new Date(pat.created_at).toLocaleDateString(currentLocale, {
-                    year: 'numeric', month: 'short', day: 'numeric',
+                  {t('settings.patsCreatedOn', {
+                    date: formatDate(pat.created_at, 'date'),
                   })}
+                </Text>
+                <Text
+                  testID={`pat-last-used-${pat.id}`}
+                  style={[styles.sessionDate, { color: colors.textMuted }]}
+                >
+                  {patLastUsed(pat.last_used_at)}
                 </Text>
               </View>
               <TouchableOpacity

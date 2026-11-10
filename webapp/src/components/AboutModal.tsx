@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { about } from '@/utils/api';
 import { getUser } from '@/utils/auth';
 import { WEBAPP_BUILD } from '@/utils/buildInfo';
+import { formatDate } from '@/utils/formatDate';
 import { InfoRow, InfoSubheading } from '@/components/InfoList';
 import type { AboutInfo } from '@jot/shared';
 
@@ -13,14 +14,8 @@ interface AboutModalProps {
   onClose: () => void;
 }
 
-/** A server build time for display, or '—' when it does not parse. */
-function formatBuildTime(iso: string, locale: string | undefined): string {
-  const dt = new Date(iso);
-  return isNaN(dt.getTime()) ? '—' : dt.toLocaleString(locale);
-}
-
 export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const user = useMemo(() => getUser(), []);
   const [serverInfo, setServerInfo] = useState<AboutInfo | null>(null);
   const [error, setError] = useState('');
@@ -72,7 +67,7 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
                   <InfoRow label={t('about.role')} value={user?.role ?? '—'} />
                   <InfoRow
                     label={t('about.accountCreated')}
-                    value={user?.created_at ? new Date(user.created_at).toLocaleDateString(i18n.resolvedLanguage) : '—'}
+                    value={user?.created_at ? formatDate(user.created_at, 'date') : '—'}
                   />
                   {/* This bundle's own build. It can trail the server's below
                       while the service worker still serves a cached bundle. */}
@@ -94,7 +89,7 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
                     <InfoRow label={t('about.appVersion')} value={serverInfo.version} />
                     <InfoRow label={t('about.commit')} value={serverInfo.commit} />
                     {serverInfo.build_time && (
-                      <InfoRow label={t('about.buildTime')} value={formatBuildTime(serverInfo.build_time, i18n.resolvedLanguage)} />
+                      <InfoRow label={t('about.buildTime')} value={formatDate(serverInfo.build_time, 'dateTime')} />
                     )}
                     {serverInfo.go_version && (
                       <InfoRow label={t('about.goVersion')} value={serverInfo.go_version} />

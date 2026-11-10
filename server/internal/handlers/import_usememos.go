@@ -452,7 +452,7 @@ func (h *NotesHandler) importSingleMemo(ctx context.Context, userID string, idx 
 		Color:     models.DefaultNoteColor,
 		Pinned:    memo.Pinned,
 		Archived:  state == usememosStateArchived,
-		Labels:    normalizeLabels(tags),
+		Labels:    models.NormalizeLabelNames(tags),
 		Items:     items,
 		CreatedAt: memoTimestamp(memo.CreateTime, memo.CreatedTs),
 		UpdatedAt: memoTimestamp(memo.UpdateTime, memo.UpdatedTs),

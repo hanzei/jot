@@ -78,6 +78,10 @@ jest.mock('../src/hooks/useToast', () => ({
   useToast: jest.fn(),
 }));
 
+jest.mock('../src/hooks/useServerConfig', () => ({
+  useServerConfig: jest.fn(() => ({})),
+}));
+
 
 
 jest.mock('../src/db/noteQueries', () => ({
@@ -141,6 +145,7 @@ const mockUseUsers = jest.requireMock('../src/store/UsersContext').useUsers as j
 const mockUseAuth = jest.requireMock('../src/store/AuthContext').useAuth as jest.Mock;
 const mockUseTheme = jest.requireMock('../src/theme/ThemeContext').useTheme as jest.Mock;
 const mockUseToast = jest.requireMock('../src/hooks/useToast').useToast as jest.Mock;
+const mockUseServerConfig = jest.requireMock('../src/hooks/useServerConfig').useServerConfig as jest.Mock;
 const mockUpdateMe = jest.requireMock('../src/api/jot').jot.users.updateMe as jest.Mock;
 const mockEmptyTrash = jest.requireMock('../src/api/jot').jot.notes.emptyTrash as jest.Mock;
 const mockGetLocalNotes = jest.requireMock('../src/db/noteQueries').getLocalNotes as jest.Mock;
@@ -692,6 +697,30 @@ describe('NotesListScreen empty trash', () => {
 
   afterEach(() => {
     markServerReachable();
+  });
+
+  it('shows the default retention when the server does not report one', async () => {
+    mockUseServerConfig.mockReturnValue({});
+
+    await renderTrashScreen();
+
+    expect(await screen.findByText('Items in Trash are automatically deleted after 7 days')).toBeTruthy();
+  });
+
+  it('shows the retention the server reports', async () => {
+    mockUseServerConfig.mockReturnValue({ trash_retention_days: 1 });
+
+    await renderTrashScreen();
+
+    expect(await screen.findByText('Items in Trash are automatically deleted after 1 day')).toBeTruthy();
+  });
+
+  it('says items are kept when the server has the automatic purge off', async () => {
+    mockUseServerConfig.mockReturnValue({ trash_retention_days: 0 });
+
+    await renderTrashScreen();
+
+    expect(await screen.findByText('Items in Trash are kept until Trash is emptied')).toBeTruthy();
   });
 
   it('skips the network call and shows a bounded error when the server is known-unreachable', async () => {

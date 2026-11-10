@@ -28,7 +28,7 @@ function makeItem(overrides: Partial<NoteItem> & { id: string; text: string }): 
   };
 }
 
-/** Mirrors the server's buildCreateNoteItems, for the round-trip assertions. */
+/** Mirrors the server's buildItems (server/internal/notesvc), for the round-trip assertions. */
 function attachParents(
   items: { text: string; completed: boolean; indentLevel: 0 | 1 }[],
 ): NoteItem[] {

@@ -33,6 +33,13 @@ export interface ServerConfig {
    * address. Optional for the same reason as `public_links_enabled`.
    */
   public_url?: string | null;
+  /**
+   * `JOT_TRASH_RETENTION_DAYS`: how many days a trashed note is kept before it
+   * is deleted for good. `0` means it is kept until the trash is emptied.
+   * Optional for the same reason as `public_links_enabled`; treat a missing
+   * value as `DEFAULT_TRASH_RETENTION_DAYS`.
+   */
+  trash_retention_days?: number;
 }
 
 export interface AboutInfo {
@@ -597,6 +604,12 @@ export interface PersonalAccessToken {
   id: string;
   name: string;
   created_at: string;
+  /**
+   * When the token last authenticated a request, accurate to about an hour.
+   * Null until its first recorded use; for a token older than the feature,
+   * that means no use since the upgrade rather than never used.
+   */
+  last_used_at: string | null;
   /** Only present in the create response; never returned by list. */
   token?: string;
 }
