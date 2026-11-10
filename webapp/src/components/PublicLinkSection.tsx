@@ -94,7 +94,6 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
     }
   };
 
-
   const creatorLabel = (createdBy: string | null) => {
     if (createdBy === null) return t('publicLink.createdByFormer');
     if (createdBy === currentUserId) return t('publicLink.createdByYou');

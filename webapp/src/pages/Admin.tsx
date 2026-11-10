@@ -115,7 +115,6 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
     return t('admin.stats.runtime.uptimeMinutes', { minutes });
   }, [t]);
 
-
   // fetchUsers / fetchStats never flip their loading flags on synchronously:
   // the mount effect below calls them, and a synchronous setState there is a
   // cascading render (react-hooks/set-state-in-effect). The initial

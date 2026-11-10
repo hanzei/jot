@@ -8,6 +8,15 @@ import i18n from '@/i18n';
  * `toLocale*String` and `Intl.DateTimeFormat` elsewhere.
  */
 export function formatDate(value: string | Date, style: DateStyle): string {
-  const region = new Intl.Locale(navigator.language).region;
-  return formatDateInLocale(value, dateLocale(i18n.resolvedLanguage, region), style);
+  return formatDateInLocale(value, dateLocale(i18n.resolvedLanguage, browserRegion()), style);
+}
+
+// Intl.Locale throws on an empty or malformed tag; a date is still worth
+// showing in the bare app language then.
+function browserRegion(): string | undefined {
+  try {
+    return new Intl.Locale(navigator.language).region;
+  } catch {
+    return undefined;
+  }
 }
