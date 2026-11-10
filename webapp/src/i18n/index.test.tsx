@@ -30,7 +30,7 @@ describe('i18n locale resources', () => {
   }
 
   // Polish uses `few` for 2-4 and 22-24 and `many` for 5-21. A plural key missing either
-  // form falls back to English, which `task check-translations` now rejects.
+  // form falls back to English, which `task check-translations` rejects.
   test.each([
     [1, 'Trwale usunąć 1 notatkę z kosza? Tej operacji nie można cofnąć.'],
     [3, 'Trwale usunąć wszystkie 3 notatki z kosza? Tej operacji nie można cofnąć.'],
