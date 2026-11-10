@@ -6,6 +6,11 @@
 // Errors are store sentinels (models.Err*), errors marked with apierr.Invalid
 // for invalid input, ErrItemLimitReached, or internal errors. The REST
 // handlers map them to statuses with apierr.SentinelStatus.
+//
+// Errors from a method's main store call are returned unwrapped: each
+// transport already names the operation (REST in its 500 log, MCP in the tool
+// error), and a sentinel's message is what a REST client sees, so a prefix
+// added here would show up twice or change the API's error messages.
 package notesvc
 
 import (
@@ -17,7 +22,6 @@ import (
 
 	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/blobstore"
-	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/notify"
 	"github.com/hanzei/jot/server/internal/sse"
@@ -118,7 +122,7 @@ func (s *Service) Create(ctx context.Context, userID string, in NewNote) (*model
 		Pinned:  in.Pinned,
 	}, items)
 	if err != nil {
-		return nil, fmt.Errorf("create note: %w", err)
+		return nil, err
 	}
 
 	if err = s.attachLabels(ctx, note.ID, userID, labels); err != nil {
@@ -129,7 +133,7 @@ func (s *Service) Create(ctx context.Context, userID string, in NewNote) (*model
 	if len(items) > 0 || len(labels) > 0 {
 		note, err = s.noteStore.GetByID(ctx, note.ID, userID)
 		if err != nil {
-			return nil, fmt.Errorf("get created note: %w", err)
+			return nil, refetchError("get created note", err)
 		}
 	}
 
@@ -220,42 +224,35 @@ func (s *Service) attachLabels(ctx context.Context, noteID, userID string, names
 // reconstructed from IndentLevel the way the migration backfill and Jot import
 // do it: each indented item attaches to the most recent top-level item by
 // position. Items are sorted by position so a parent always precedes its
-// children. An empty ID is generated here so children can reference their
-// parent's.
+// children. A parent without an ID gets a generated one here so its children
+// can reference it; other items without one are left for the store to fill
+// in, which skips the collision check it runs on a supplied ID.
 func buildItems(items []NewItem) ([]models.NewNoteItem, error) {
 	ordered := slices.Clone(items)
 	slices.SortStableFunc(ordered, func(a, b NewItem) int { return a.Position - b.Position })
 
 	built := make([]models.NewNoteItem, 0, len(ordered))
-	var lastTopLevelID string
+	lastTopLevel := -1 // index into built; -1 when no top-level item precedes
 	for _, item := range ordered {
-		if item.IndentLevel < 0 || item.IndentLevel > 1 {
-			return nil, apierr.Invalid(errors.New("indent_level must be 0 or 1"))
-		}
-		if utf8.RuneCountInString(item.Text) > models.NoteItemTextMaxLength {
-			return nil, apierr.Invalid(fmt.Errorf("item text must be %d characters or fewer", models.NoteItemTextMaxLength))
-		}
-
-		itemID := item.ID
-		if itemID != "" {
-			if !models.IsValidID(itemID) {
-				return nil, apierr.Invalid(errors.New("invalid item ID format"))
-			}
-		} else {
-			generated, err := models.GenerateID()
-			if err != nil {
-				return nil, fmt.Errorf("generate item ID: %w", err)
-			}
-			itemID = generated
+		if err := validateItem(item); err != nil {
+			return nil, err
 		}
 
 		parentID := ""
-		if item.IndentLevel == 1 {
-			parentID = lastTopLevelID // "" when no preceding top-level item exists
+		if item.IndentLevel == 1 && lastTopLevel >= 0 {
+			parent := &built[lastTopLevel]
+			if parent.ID == "" {
+				generated, err := models.GenerateID()
+				if err != nil {
+					return nil, fmt.Errorf("generate item ID: %w", err)
+				}
+				parent.ID = generated
+			}
+			parentID = parent.ID
 		}
 
 		built = append(built, models.NewNoteItem{
-			ID:        itemID,
+			ID:        item.ID,
 			Text:      item.Text,
 			Position:  item.Position,
 			Completed: item.Completed,
@@ -263,10 +260,24 @@ func buildItems(items []NewItem) ([]models.NewNoteItem, error) {
 		})
 
 		if item.IndentLevel == 0 {
-			lastTopLevelID = itemID
+			lastTopLevel = len(built) - 1
 		}
 	}
 	return built, nil
+}
+
+// validateItem checks one item's fields.
+func validateItem(item NewItem) error {
+	if item.IndentLevel < 0 || item.IndentLevel > 1 {
+		return apierr.Invalid(errors.New("indent_level must be 0 or 1"))
+	}
+	if utf8.RuneCountInString(item.Text) > models.NoteItemTextMaxLength {
+		return apierr.Invalid(fmt.Errorf("item text must be %d characters or fewer", models.NoteItemTextMaxLength))
+	}
+	if item.ID != "" && !models.IsValidID(item.ID) {
+		return apierr.Invalid(errors.New("invalid item ID format"))
+	}
+	return nil
 }
 
 // normalizeColor returns color's canonical form, the default for "".
@@ -304,7 +315,7 @@ func (s *Service) Update(ctx context.Context, noteID, userID string, u models.No
 
 	note, err := s.noteStore.Update(ctx, noteID, userID, u)
 	if err != nil {
-		return nil, fmt.Errorf("update note: %w", err)
+		return nil, err
 	}
 
 	// Title and content are shared with collaborators, who each get their own
@@ -325,11 +336,11 @@ func (s *Service) Delete(ctx context.Context, noteID, userID string, permanent b
 	if permanent {
 		shas, err := s.noteStore.DeleteFromTrash(ctx, noteID, userID)
 		if err != nil {
-			return fmt.Errorf("delete note from trash: %w", err)
+			return err
 		}
 		blobstore.ReclaimOrphaned(ctx, s.noteStore, s.imageStore, shas)
 	} else if err := s.noteStore.MoveToTrash(ctx, noteID, userID); err != nil {
-		return fmt.Errorf("move note to trash: %w", err)
+		return err
 	}
 
 	if audienceErr == nil {
@@ -344,35 +355,41 @@ func (s *Service) Delete(ctx context.Context, noteID, userID string, permanent b
 func (s *Service) EmptyTrash(ctx context.Context, userID string) (int, error) {
 	deleted, shas, err := s.noteStore.EmptyTrash(ctx, userID)
 	if err != nil {
-		return 0, fmt.Errorf("empty trash: %w", err)
+		return 0, err
 	}
 	blobstore.ReclaimOrphaned(ctx, s.noteStore, s.imageStore, shas)
 
 	for _, note := range deleted {
 		s.events.NoteDeleted(ctx, note.NoteID, note.AudienceIDs, userID)
 	}
-	s.notesDeleted.Add(ctx, int64(len(deleted)))
+	if len(deleted) > 0 {
+		s.notesDeleted.Add(ctx, int64(len(deleted)))
+	}
 	return len(deleted), nil
 }
 
 // Restore moves a note out of the trash and returns it.
 func (s *Service) Restore(ctx context.Context, noteID, userID string) (*models.Note, error) {
 	if err := s.noteStore.RestoreFromTrash(ctx, noteID, userID); err != nil {
-		return nil, fmt.Errorf("restore note: %w", err)
+		return nil, err
 	}
 	note, err := s.noteStore.GetByID(ctx, noteID, userID)
 	if err != nil {
-		return nil, fmt.Errorf("get restored note: %w", err)
+		return nil, refetchError("get restored note", err)
 	}
 
 	s.notesRestored.Add(ctx, 1)
-	audienceIDs, err := s.noteStore.GetNoteAudienceIDs(ctx, noteID)
-	if err != nil {
-		logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).Error("Failed to get note audience for SSE publish")
-		return note, nil
-	}
-	s.events.PersonalizedNote(ctx, noteID, audienceIDs, userID, sse.EventNoteUpdated)
+	// Every collaborator's copy of the note comes back, so each needs its own.
+	s.events.NoteUpdated(ctx, noteID, note, userID, true)
 	return note, nil
+}
+
+// refetchError reports a failure to read back a note the operation already
+// changed. It deliberately does not wrap err: a sentinel such as "not found"
+// here would tell the client its committed write failed, so the transports
+// must see an internal error instead.
+func refetchError(op string, err error) error {
+	return fmt.Errorf("%s: %s", op, err.Error())
 }
 
 // Duplicate copies a note the user can see into a new note they own. newID
@@ -388,11 +405,11 @@ func (s *Service) Duplicate(ctx context.Context, noteID, userID, newID string, i
 
 	source, err := s.noteStore.GetByID(ctx, noteID, userID)
 	if err != nil {
-		return nil, fmt.Errorf("get note: %w", err)
+		return nil, err
 	}
 	note, err := s.noteStore.Duplicate(ctx, source, userID, newID, itemIDs)
 	if err != nil {
-		return nil, fmt.Errorf("duplicate note: %w", err)
+		return nil, err
 	}
 
 	s.events.NoteToAudience(ctx, note.ID, sse.EventNoteCreated, models.SanitizeNote(*note), userID)
@@ -436,7 +453,7 @@ func (s *Service) Convert(ctx context.Context, noteID, userID string, c Conversi
 
 	current, err := s.noteStore.GetByID(ctx, noteID, userID)
 	if err != nil {
-		return nil, fmt.Errorf("get note: %w", err)
+		return nil, err
 	}
 	// Only reject a same-type request outright when the caller gave no
 	// base_version to check a replay against: a request that arrives after its
@@ -451,7 +468,7 @@ func (s *Service) Convert(ctx context.Context, noteID, userID string, c Conversi
 
 	note, err := s.noteStore.ConvertType(ctx, noteID, userID, c.Type, title, content, items, c.BaseVersion)
 	if err != nil {
-		return nil, fmt.Errorf("convert note: %w", err)
+		return nil, err
 	}
 
 	s.events.NoteUpdated(ctx, noteID, note, userID, true)

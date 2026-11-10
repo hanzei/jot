@@ -67,6 +67,40 @@ func counterValue(t *testing.T, reader *sdkmetric.ManualReader, name string) int
 	return total
 }
 
+func TestBuildItems(t *testing.T) {
+	t.Parallel()
+	keptID, err := models.GenerateID()
+	require.NoError(t, err)
+
+	built, err := buildItems([]NewItem{
+		{Text: "child", Position: 2, IndentLevel: 1},
+		{Text: "parent", Position: 1},
+		{Text: "orphan child", Position: 0, IndentLevel: 1},
+		{ID: keptID, Text: "second parent", Position: 3},
+		{Text: "second child", Position: 4, IndentLevel: 1},
+		{Text: "plain", Position: 5},
+	})
+	require.NoError(t, err)
+	require.Len(t, built, 6)
+
+	texts := make([]string, len(built))
+	for i, item := range built {
+		texts[i] = item.Text
+	}
+	assert.Equal(t, []string{"orphan child", "parent", "child", "second parent", "second child", "plain"}, texts, "sorted by position")
+
+	assert.Empty(t, built[0].ParentID, "an indented item with no top-level item before it stays top-level")
+	assert.NotEmpty(t, built[1].ID, "a parent gets an ID for its children to reference")
+	assert.Equal(t, built[1].ID, built[2].ParentID)
+	assert.Equal(t, keptID, built[3].ID)
+	assert.Equal(t, keptID, built[4].ParentID)
+	// The store generates the rest, without the collision check it runs on a
+	// supplied ID.
+	for _, i := range []int{0, 2, 4, 5} {
+		assert.Empty(t, built[i].ID, built[i].Text)
+	}
+}
+
 // TestServiceMetrics pins the counters every write records. Both the REST
 // handlers and the MCP tools go through these methods, so neither surface can
 // skip them.

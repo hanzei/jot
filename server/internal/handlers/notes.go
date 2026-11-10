@@ -104,13 +104,7 @@ type EmptyTrashResponse struct {
 func serviceItems(items []CreateNoteItem) []notesvc.NewItem {
 	out := make([]notesvc.NewItem, len(items))
 	for i, item := range items {
-		out[i] = notesvc.NewItem{
-			ID:          item.ID,
-			Text:        item.Text,
-			Position:    item.Position,
-			IndentLevel: item.IndentLevel,
-			Completed:   item.Completed,
-		}
+		out[i] = notesvc.NewItem(item)
 	}
 	return out
 }
