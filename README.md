@@ -575,24 +575,11 @@ Use a Personal Access Token for machine-to-machine access:
 Authorization: Bearer <personal-access-token>
 ```
 
-The MCP server exposes these tools:
-
-- **Notes:** `list_notes` (active, archived, trashed, or My Tasks, with search
-  and a label filter), `get_note`, `create_note` (with list items, labels, and
-  pinned), `update_note`, and `delete_note` (move to trash, or permanently
-  delete from the trash). `update_note` takes an optional `base_version`; a
-  title or content change based on an older version is rejected instead of
-  overwriting a collaborator's edit.
-- **List items:** `create_note_item`, `update_note_item`, and
-  `delete_note_item`, including nesting (`parent_id`) and assignment
-  (`assigned_to`) on shared notes.
-- **Labels:** `list_labels`, `update_label`, `delete_label`,
-  `add_label_to_note`, and `remove_label_from_note`.
-
-They apply the same validation as the REST API (field limits, colors, which
-fields each note type has), and their changes are pushed to open web and mobile
-clients over server-sent events like any other edit. PATs are created from
-Settings in the web app and are only shown once.
+The MCP server exposes note and label tools. They apply the same validation as
+the REST API (field limits, colors, which fields each note type has), and their
+changes are pushed to open web and mobile clients over server-sent events like
+any other edit. PATs are created from Settings in the web app and are only shown
+once.
 
 ## jotctl admin CLI
 
