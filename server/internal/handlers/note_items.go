@@ -1,13 +1,11 @@
 package handlers
 
 import (
-	"context"
 	"errors"
-	"fmt"
 	"net/http"
-	"unicode/utf8"
 
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/notesvc"
 )
 
 // CreateNoteItemRequest is the body for POST /notes/{id}/items. The client
@@ -48,29 +46,6 @@ type ReorderNoteItemsRequest struct {
 	ItemIDs []string `json:"item_ids"`
 }
 
-// loadListNoteForItemOp resolves the note for an item operation, enforcing
-// access (GetByID only returns notes the user owns or has shared with them) and
-// that the note is a list. It returns the appropriate HTTP status on failure.
-func (h *NotesHandler) loadListNoteForItemOp(ctx context.Context, noteID, userID string) (*models.Note, int, error) {
-	note, err := h.noteStore.GetByID(ctx, noteID, userID)
-	if err != nil {
-		status, mapped := storeStatus(err, "get note")
-		return nil, status, mapped
-	}
-	if note.NoteType != models.NoteTypeList {
-		return nil, http.StatusBadRequest, errors.New("items can only be modified on list notes")
-	}
-	return note, http.StatusOK, nil
-}
-
-// validateItemText enforces the per-item text length constraint.
-func validateItemText(text string) (int, error) {
-	if utf8.RuneCountInString(text) > noteItemTextMaxLength {
-		return http.StatusBadRequest, fmt.Errorf("item text must be %d characters or fewer", noteItemTextMaxLength)
-	}
-	return http.StatusOK, nil
-}
-
 // CreateNoteItem godoc
 //
 //	@Summary	Add a single item to a list note
@@ -99,44 +74,22 @@ func (h *NotesHandler) CreateNoteItem(w http.ResponseWriter, r *http.Request) (i
 		return http.StatusBadRequest, nil, idErr
 	}
 
-	note, status, loadErr := h.loadListNoteForItemOp(r.Context(), noteID, user.ID)
-	if loadErr != nil {
-		return status, nil, loadErr
-	}
-
 	var req CreateNoteItemRequest
 	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 
-	itemID := req.ID
-	if itemID == "" {
-		generated, err := models.GenerateID()
-		if err != nil {
-			return http.StatusInternalServerError, nil, fmt.Errorf("generate item ID: %w", err)
-		}
-		itemID = generated
-	} else if !models.IsValidID(itemID) {
-		return http.StatusBadRequest, nil, errors.New("invalid item ID format")
-	}
-
-	if status, err := validateItemText(req.Text); err != nil {
-		return status, nil, err
-	}
-	if req.ParentID != "" && !models.IsValidID(req.ParentID) {
-		return http.StatusBadRequest, nil, errors.New("invalid parent_id format")
-	}
-	if err := note.ValidateAssignee(req.AssignedTo); err != nil {
-		return http.StatusBadRequest, nil, err
-	}
-
-	// The item-count cap is enforced atomically inside the create transaction.
-	item, err := h.noteStore.CreateItemWithID(r.Context(), noteID, user.ID, itemID, req.Text, req.Position, req.Completed, req.ParentID, req.AssignedTo, noteItemsMaxCount)
+	item, err := h.notes.CreateItem(r.Context(), noteID, user.ID, notesvc.NewListItem{
+		ID:         req.ID,
+		Text:       req.Text,
+		Position:   &req.Position,
+		Completed:  req.Completed,
+		ParentID:   req.ParentID,
+		AssignedTo: req.AssignedTo,
+	})
 	if err != nil {
 		return storeError(err, "create item")
 	}
-
-	h.publishItemChangeEvent(r.Context(), noteID, user.ID)
 	return http.StatusCreated, item, nil
 }
 
@@ -171,29 +124,12 @@ func (h *NotesHandler) UpdateNoteItem(w http.ResponseWriter, r *http.Request) (i
 		return http.StatusBadRequest, nil, idErr
 	}
 
-	note, status, loadErr := h.loadListNoteForItemOp(r.Context(), noteID, user.ID)
-	if loadErr != nil {
-		return status, nil, loadErr
-	}
-
 	var req PatchNoteItemRequest
 	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 
-	if req.Text != nil && utf8.RuneCountInString(*req.Text) > noteItemTextMaxLength {
-		return http.StatusBadRequest, nil, fmt.Errorf("item text must be %d characters or fewer", noteItemTextMaxLength)
-	}
-	if req.ParentID != nil && *req.ParentID != "" && !models.IsValidID(*req.ParentID) {
-		return http.StatusBadRequest, nil, errors.New("invalid parent_id format")
-	}
-	if req.AssignedTo != nil {
-		if err := note.ValidateAssignee(*req.AssignedTo); err != nil {
-			return http.StatusBadRequest, nil, err
-		}
-	}
-
-	item, err := h.noteStore.PatchItem(r.Context(), noteID, user.ID, itemID, models.NoteItemPatch{
+	item, err := h.notes.PatchItem(r.Context(), noteID, user.ID, itemID, models.NoteItemPatch{
 		Text:       req.Text,
 		Completed:  req.Completed,
 		Position:   req.Position,
@@ -203,8 +139,6 @@ func (h *NotesHandler) UpdateNoteItem(w http.ResponseWriter, r *http.Request) (i
 	if err != nil {
 		return storeError(err, "update item")
 	}
-
-	h.publishItemChangeEvent(r.Context(), noteID, user.ID)
 	return http.StatusOK, item, nil
 }
 
@@ -221,7 +155,7 @@ func (h *NotesHandler) UpdateNoteItem(w http.ResponseWriter, r *http.Request) (i
 //	@Failure	404		{object}	apierr.ErrorResponse	"not found"
 //	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/items/{item_id} [delete]
-func (h *NotesHandler) DeleteNoteItem(w http.ResponseWriter, r *http.Request) (int, any, error) {
+func (h *NotesHandler) DeleteNoteItem(_ http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, authErr := requireUser(r)
 	if authErr != nil {
 		return http.StatusUnauthorized, nil, authErr
@@ -236,19 +170,9 @@ func (h *NotesHandler) DeleteNoteItem(w http.ResponseWriter, r *http.Request) (i
 		return http.StatusBadRequest, nil, idErr
 	}
 
-	if _, status, err := h.loadListNoteForItemOp(r.Context(), noteID, user.ID); err != nil {
-		return status, nil, err
-	}
-
-	_, deleted, err := h.noteStore.DeleteItems(r.Context(), noteID, user.ID, []string{itemID})
-	if err != nil {
+	if err := h.notes.DeleteItem(r.Context(), noteID, user.ID, itemID); err != nil {
 		return storeError(err, "delete item")
 	}
-	if deleted == 0 {
-		return storeError(models.ErrNoteItemNotFound, "delete item")
-	}
-
-	h.publishItemChangeEvent(r.Context(), noteID, user.ID)
 	return http.StatusNoContent, nil, nil
 }
 
@@ -278,49 +202,15 @@ func (h *NotesHandler) ReorderNoteItems(w http.ResponseWriter, r *http.Request) 
 		return http.StatusBadRequest, nil, idErr
 	}
 
-	if _, status, err := h.loadListNoteForItemOp(r.Context(), noteID, user.ID); err != nil {
-		return status, nil, err
-	}
-
 	var req ReorderNoteItemsRequest
 	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
-	if len(req.ItemIDs) == 0 {
-		return http.StatusBadRequest, nil, errors.New("empty item IDs list")
-	}
-	for _, id := range req.ItemIDs {
-		if !models.IsValidID(id) {
-			return http.StatusBadRequest, nil, errors.New("invalid item ID format")
-		}
-	}
 
-	if err := h.noteStore.ReorderItems(r.Context(), noteID, user.ID, req.ItemIDs); err != nil {
+	if err := h.notes.ReorderItems(r.Context(), noteID, user.ID, req.ItemIDs); err != nil {
 		return storeError(err, "reorder items")
 	}
-
-	h.publishItemChangeEvent(r.Context(), noteID, user.ID)
 	return http.StatusNoContent, nil, nil
-}
-
-// validateItemIDs checks that a bulk item-ID list is present, well-formed, and
-// not larger than a note can hold. The cap bounds how many per-item queries a
-// single bulk request can run (a practical guard against accidental overload,
-// per the project threat model); noteItemsMaxCount is the natural ceiling since
-// a note can never contain more items than that.
-func validateItemIDs(itemIDs []string) (int, error) {
-	if len(itemIDs) == 0 {
-		return http.StatusBadRequest, errors.New("empty item IDs list")
-	}
-	if len(itemIDs) > noteItemsMaxCount {
-		return http.StatusBadRequest, fmt.Errorf("cannot operate on more than %d items at once", noteItemsMaxCount)
-	}
-	for _, id := range itemIDs {
-		if !models.IsValidID(id) {
-			return http.StatusBadRequest, errors.New("invalid item ID format")
-		}
-	}
-	return http.StatusOK, nil
 }
 
 // SetNoteItemsCompletedRequest is the body for POST /notes/{id}/items/set-completed.
@@ -363,10 +253,6 @@ func (h *NotesHandler) SetNoteItemsCompleted(w http.ResponseWriter, r *http.Requ
 		return http.StatusBadRequest, nil, idErr
 	}
 
-	if _, status, err := h.loadListNoteForItemOp(r.Context(), noteID, user.ID); err != nil {
-		return status, nil, err
-	}
-
 	var req SetNoteItemsCompletedRequest
 	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, err
@@ -374,16 +260,11 @@ func (h *NotesHandler) SetNoteItemsCompleted(w http.ResponseWriter, r *http.Requ
 	if req.Completed == nil {
 		return http.StatusBadRequest, nil, errors.New("completed is required")
 	}
-	if status, err := validateItemIDs(req.ItemIDs); err != nil {
-		return status, nil, err
-	}
 
-	items, err := h.noteStore.SetItemsCompleted(r.Context(), noteID, user.ID, req.ItemIDs, *req.Completed)
+	items, err := h.notes.SetItemsCompleted(r.Context(), noteID, user.ID, req.ItemIDs, *req.Completed)
 	if err != nil {
 		return storeError(err, "set items completed")
 	}
-
-	h.publishItemChangeEvent(r.Context(), noteID, user.ID)
 	return http.StatusOK, items, nil
 }
 
@@ -414,35 +295,14 @@ func (h *NotesHandler) DeleteNoteItems(w http.ResponseWriter, r *http.Request) (
 		return http.StatusBadRequest, nil, idErr
 	}
 
-	if _, status, err := h.loadListNoteForItemOp(r.Context(), noteID, user.ID); err != nil {
-		return status, nil, err
-	}
-
 	var req DeleteNoteItemsRequest
 	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
-	if status, err := validateItemIDs(req.ItemIDs); err != nil {
-		return status, nil, err
-	}
 
-	items, deleted, err := h.noteStore.DeleteItems(r.Context(), noteID, user.ID, req.ItemIDs)
+	items, err := h.notes.DeleteItems(r.Context(), noteID, user.ID, req.ItemIDs)
 	if err != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("delete items: %w", err)
-	}
-
-	// IDs already gone (an offline client's replay) are ignored, so a call
-	// that removed nothing changed nothing and wakes no collaborator.
-	if deleted > 0 {
-		h.publishItemChangeEvent(r.Context(), noteID, user.ID)
+		return storeError(err, "delete items")
 	}
 	return http.StatusOK, items, nil
-}
-
-// publishItemChangeEvent broadcasts a personalized note_updated event to every
-// collaborator after an item-level change. Items are shared content, so each
-// audience member receives their own personalized copy of the note (preserving
-// per-user state, including their unread badge).
-func (h *NotesHandler) publishItemChangeEvent(ctx context.Context, noteID, userID string) {
-	h.events.NoteUpdated(ctx, noteID, nil, userID, true)
 }

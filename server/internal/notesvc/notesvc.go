@@ -16,7 +16,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"unicode/utf8"
 
 	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/blobstore"
@@ -265,8 +264,8 @@ func validateItem(item NewItem) error {
 	if item.IndentLevel < 0 || item.IndentLevel > 1 {
 		return apierr.Invalid(errors.New("indent_level must be 0 or 1"))
 	}
-	if utf8.RuneCountInString(item.Text) > models.NoteItemTextMaxLength {
-		return apierr.Invalid(fmt.Errorf("item text must be %d characters or fewer", models.NoteItemTextMaxLength))
+	if err := validateItemText(item.Text); err != nil {
+		return err
 	}
 	if item.ID != "" && !models.IsValidID(item.ID) {
 		return apierr.Invalid(errors.New("invalid item ID format"))
