@@ -20,6 +20,7 @@ import { seedImageUpload } from './helpers/fixtures';
 import { jot } from '../src/api/jot';
 import { SERVER_BUILD_INFO_TIMEOUT_MS } from '../src/utils/diagnosticsReport';
 import { silenceConsole } from './helpers/consoleGuard';
+import { formatDate } from '../src/i18n/utils';
 
 jest.mock('../src/api/jot', () => ({
   jot: {
@@ -197,7 +198,7 @@ describe('DiagnosticsScreen', () => {
     });
 
     expect(await findByText('Disconnected')).toBeTruthy();
-    expect(await findByText(new Date('2026-07-12T10:00:00.000Z').toLocaleString())).toBeTruthy();
+    expect(await findByText(formatDate('2026-07-12T10:00:00.000Z', 'dateTime'))).toBeTruthy();
   });
 
   it('includes server reachability, sync freshness, and dead-letter fields in the share report', async () => {

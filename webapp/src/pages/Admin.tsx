@@ -8,6 +8,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import CreateUserModal from '@/components/CreateUserModal';
 import ResetPasswordModal from '@/components/ResetPasswordModal';
 import { apiErrorMessage } from '@/utils/apiError';
+import { formatDate } from '@/utils/formatDate';
 
 interface AdminProps {
   passwordMinLength: number;
@@ -113,11 +114,6 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
     }
     return t('admin.stats.runtime.uptimeMinutes', { minutes });
   }, [t]);
-
-  const formatDateTime = useCallback((iso: string) => {
-    return new Intl.DateTimeFormat(i18n.resolvedLanguage, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
-  }, [i18n.resolvedLanguage]);
-
 
   // fetchUsers / fetchStats never flip their loading flags on synchronously:
   // the mount effect below calls them, and a synchronous setState there is a
@@ -313,7 +309,7 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
                   value={formatUptime(stats.runtime.uptime_seconds)}
                   valueTestId="admin-stats-uptime"
                 >
-                  <StatLine label={t('admin.stats.runtime.startedAt')} value={formatDateTime(stats.runtime.started_at)} />
+                  <StatLine label={t('admin.stats.runtime.startedAt')} value={formatDate(stats.runtime.started_at, 'dateTime')} />
                 </StatCard>
 
                 <StatCard
@@ -413,7 +409,7 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
                             )}
                           </div>
                           <p className="text-sm text-gray-500 dark:text-gray-400" title={user.id}>
-                            {t('admin.userCreated', { date: new Date(user.created_at).toLocaleDateString(i18n.resolvedLanguage) })}
+                            {t('admin.userCreated', { date: formatDate(user.created_at, 'date') })}
                           </p>
                         </div>
                       </div>

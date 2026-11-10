@@ -2,6 +2,7 @@ import { useState, useEffect, useEffectEvent, useMemo, useRef, useCallback, useI
 import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Users, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, Pin, EllipsisVertical, Square, Undo2, DropletOff } from 'lucide-react';
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
+import { formatDate } from '@/utils/formatDate';
 import type { TFunction } from 'i18next';
 import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, normalizeNoteColor, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, distinctCompletedTexts, findSuggestedItem, generateId, reviveSuggestedItem, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, toggleTaskMarkerAt, completedCascadeScope, completedPriorById, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
@@ -173,7 +174,7 @@ function isPreviewControl(target: EventTarget, preview: Element): boolean {
 }
 
 export default function NoteModal({ note = null, onClose, onSave, onCreated, onRefresh, onShare, onDelete, onDuplicate, onConvert, onRestore, onPermanentlyDelete, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent }: NoteModalProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { showToast, showErrorToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -2786,7 +2787,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                   </div>
                 ) : note ? (
                   <p className="text-xs text-gray-600 dark:text-gray-300">
-                    {t('note.lastEdited', { date: new Date(note.updated_at).toLocaleString(i18n.resolvedLanguage) })}
+                    {t('note.lastEdited', { date: formatDate(note.updated_at, 'dateTime') })}
                   </p>
                 ) : null}
               </div>

@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { formatDate } from '@/utils/formatDate';
 import { Copy, Check, Link2 } from 'lucide-react';
 import {
   PUBLIC_LINK_EXPIRY_CHOICES,
@@ -42,7 +43,7 @@ const EXPIRY_LABEL_KEYS = {
  * caller holds it, so a change made elsewhere (arriving over SSE) shows here too.
  */
 export default function PublicLinkSection({ note, config, currentUserId, users, onChange }: PublicLinkSectionProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const expiryId = useId();
   const urlId = useId();
   // '' is "not chosen yet"; see `selectedExpiry` below.
@@ -92,9 +93,6 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
       setBusy(false);
     }
   };
-
-  const formatDate = (iso: string) =>
-    new Date(iso).toLocaleDateString(i18n.resolvedLanguage, { dateStyle: 'medium' });
 
   const creatorLabel = (createdBy: string | null) => {
     if (createdBy === null) return t('publicLink.createdByFormer');
@@ -149,7 +147,7 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
           </div>
           <p className="mt-2 text-xs text-gray-500 dark:text-gray-400" data-testid="public-link-details">
             {link.expires_at
-              ? t('publicLink.expiresOn', { date: formatDate(link.expires_at) })
+              ? t('publicLink.expiresOn', { date: formatDate(link.expires_at, 'date') })
               : t('publicLink.neverExpires')}
             {createdBy && <> · {createdBy}</>}
           </p>

@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
+import { formatDate } from '@/utils/formatDate';
 import SettingsSectionCard, { SETTINGS_BTN_CLASSES } from '@/pages/settings/SettingsSectionCard';
 import { InfoRow, InfoSubheading } from '@/components/InfoList';
 import { getDiagnostics, subscribeToDiagnostics, type SSEStatus } from '@/utils/diagnostics';
@@ -21,13 +22,12 @@ const SSE_STATUS_KEYS: Record<SSEStatus, string> = {
  * the copied report carries them too, since it is read without that screen.
  */
 const DiagnosticsSection = () => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const diagnostics = useSyncExternalStore(subscribeToDiagnostics, getDiagnostics);
   // Not shown here (About has it), only put in the copied report.
   const serverInfo = useServerInfo();
   const { copied, copy } = useCopyToClipboard();
 
-  const formatTime = (iso: string) => new Date(iso).toLocaleTimeString(i18n.resolvedLanguage);
   const { sse, failedRequests } = diagnostics;
 
   const handleCopy = () => {
@@ -46,7 +46,7 @@ const DiagnosticsSection = () => {
             <InfoRow label={t('settings.diagnosticsReconnectAttempts')} value={String(sse.reconnectAttempts)} testId="diagnostics-sse-attempts" />
             <InfoRow
               label={t('settings.diagnosticsLastEvent')}
-              value={sse.lastEventAt ? formatTime(sse.lastEventAt) : t('settings.diagnosticsNoEvents')}
+              value={sse.lastEventAt ? formatDate(sse.lastEventAt, 'time') : t('settings.diagnosticsNoEvents')}
             />
           </dl>
         </div>
@@ -72,7 +72,7 @@ const DiagnosticsSection = () => {
                     </span>
                   </div>
                   <div className="flex justify-between gap-2 min-w-0 text-gray-600 dark:text-gray-300">
-                    <span className="shrink-0">{formatTime(req.time)}</span>
+                    <span className="shrink-0">{formatDate(req.time, 'time')}</span>
                     {req.requestId && <span className="truncate">{t('toast.reference', { id: req.requestId })}</span>}
                   </div>
                 </li>

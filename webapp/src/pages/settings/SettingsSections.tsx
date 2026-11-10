@@ -2,7 +2,6 @@ import type { ChangeEvent, FormEvent, ReactNode, RefObject } from 'react';
 import { useState } from 'react';
 import { Upload, Download } from 'lucide-react';
 import type { TFunction } from 'i18next';
-import { useTranslation } from 'react-i18next';
 import LetterAvatar from '@/components/LetterAvatar';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import MobileAppPreference from '@/components/MobileAppPreference';
@@ -11,7 +10,8 @@ import SettingsSectionCard, { SETTINGS_BTN_CLASSES } from '@/pages/settings/Sett
 import { passwordFormKeys } from '@/pages/settings/passwordFormKeys';
 import { SUPPORTED_LANGUAGES, type LanguagePreference } from '@/utils/language';
 import type { ThemePreference } from '@/utils/theme';
-import { VALIDATION, MEDIUM_DATE_FORMAT, patLastUsedMessage } from '@jot/shared';
+import { formatDate } from '@/utils/formatDate';
+import { VALIDATION, patLastUsedMessage } from '@jot/shared';
 import type { ActiveSession, ExportFormat, PersonalAccessToken, User } from '@jot/shared';
 
 type Translate = TFunction;
@@ -136,10 +136,9 @@ export const IdentitySecurityColumn = ({
   ssoSection,
   displayMsg,
 }: IdentitySecurityColumnProps) => {
-  const { i18n } = useTranslation();
   const [newPATName, setNewPATName] = useState('');
   const patLastUsed = (lastUsedAt: string | null) => {
-    const { key, values } = patLastUsedMessage(lastUsedAt, i18n.resolvedLanguage);
+    const { key, values } = patLastUsedMessage(lastUsedAt, formatDate);
     return t(key, values);
   };
   const [patPendingRevoke, setPATpendingRevoke] = useState<PersonalAccessToken | null>(null);
@@ -383,7 +382,7 @@ export const IdentitySecurityColumn = ({
                   {pat.name}
                 </span>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  {t('settings.patsCreatedOn', { date: new Date(pat.created_at).toLocaleDateString(i18n.resolvedLanguage, MEDIUM_DATE_FORMAT) })}
+                  {t('settings.patsCreatedOn', { date: formatDate(pat.created_at, 'date') })}
                   {' · '}
                   <span data-testid="pat-last-used">{patLastUsed(pat.last_used_at)}</span>
                 </p>
@@ -459,9 +458,7 @@ export const PreferencesInfoColumn = ({
   exportFormat,
   onExportFormatChange,
   isExporting,
-}: PreferencesInfoColumnProps) => {
-  const { i18n } = useTranslation();
-  return (
+}: PreferencesInfoColumnProps) => (
   <div className="space-y-6">
     <SettingsSectionCard title={t('settings.sessionsSection')}>
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
@@ -492,7 +489,7 @@ export const PreferencesInfoColumn = ({
                   )}
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  {new Date(session.created_at).toLocaleDateString(i18n.resolvedLanguage, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  {formatDate(session.created_at, 'dateTime')}
                 </p>
               </div>
               {!session.is_current && (
@@ -604,5 +601,4 @@ export const PreferencesInfoColumn = ({
 
     <DiagnosticsSection />
   </div>
-  );
-};
+);

@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useId, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
+import { formatDate } from '@/utils/formatDate';
 import { ChevronDown, Square, SquareCheck, FileQuestion } from 'lucide-react';
 import { VALIDATION, groupNoteItems, type PublicListNote, type PublicNote as PublicNoteData, type PublicNoteItem } from '@jot/shared';
 import { publicNoteImages, publicNotes } from '@/utils/api';
@@ -80,7 +81,7 @@ function Message({ title, body }: { title: string; body: string }) {
 }
 
 function PublicNoteView({ note, token }: { note: PublicNoteData; token: string }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const imageUrls = useMemo(() => publicNoteImages(token), [token]);
   // The response carries no filenames, so the gallery gets a numbered name
   // for each image.
@@ -121,7 +122,7 @@ function PublicNoteView({ note, token }: { note: PublicNoteData; token: string }
       </div>
       <footer className="border-t border-gray-200 dark:border-slate-700 px-6 py-3 text-xs text-gray-600 dark:text-gray-300">
         {t('publicNote.footer', {
-          date: new Date(note.updated_at).toLocaleString(i18n.resolvedLanguage, { dateStyle: 'medium', timeStyle: 'short' }),
+          date: formatDate(note.updated_at, 'dateTime'),
         })}
       </footer>
     </article>

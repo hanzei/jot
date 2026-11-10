@@ -40,6 +40,10 @@ export default [
   // `no-restricted-syntax` selectors apply the same test to `import('x')` types
   // and dynamic `import('x')` expressions. Tests are exempt: vitest runs them,
   // and `shared-ci.yml` installs their dependencies (`marked`, `vitest`).
+  //
+  // Dates are formatted only by formatDateInLocale() in dates.ts, so both
+  // clients' formatDate() wrappers decide the locale (#1236). The client
+  // configs carry the same selector; shared/ is linted by neither of them.
   {
     files: ['src/**/*.ts'],
     ignores: ['src/__tests__/**'],
@@ -53,6 +57,10 @@ export default [
       'no-restricted-syntax': ['error',
         { selector: 'TSImportType[argument.literal.value=/^[^.]/]', message: SHARED_PACKAGE_IMPORT_MESSAGE },
         { selector: 'ImportExpression[source.value=/^[^.]/]', message: SHARED_PACKAGE_IMPORT_MESSAGE },
+        {
+          selector: "CallExpression[callee.property.name=/^toLocale(Date|Time)?String$/], :matches(NewExpression, CallExpression)[callee.object.name='Intl'][callee.property.name='DateTimeFormat']",
+          message: 'Format dates with formatDateInLocale() from dates.ts (#1236).',
+        },
       ],
     },
   },
