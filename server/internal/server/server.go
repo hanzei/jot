@@ -555,7 +555,7 @@ func (s *Server) setupRoutes() error {
 			}
 
 			allowExpensive := s.rateLimiter.allowUser(bucketExpensive, s.cfg.RateLimitExpensivePerMinute)
-			r.Handle("/mcp", mcphandler.New(s.noteStore, s.labelStore, s.notes, s.hub, allowExpensive).NewStreamableHTTPHandler())
+			r.Handle("/mcp", mcphandler.New(s.noteStore, s.labelStore, s.notes, allowExpensive).NewStreamableHTTPHandler())
 		})
 
 		r.Group(func(r chi.Router) {
