@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Copy, Check, Link2 } from 'lucide-react';
+import { Copy, Check, Link2, Pencil } from 'lucide-react';
 import {
   PUBLIC_LINK_EXPIRY_CHOICES,
   isPublicLinkActive,
@@ -179,22 +179,21 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
 
       {link && (
         <div className="mb-3">
-          <div className="flex gap-2">
+          {/* One grid for both rows, so Copy link and Change share a column and a width. */}
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
             <p
               data-testid="public-link-url"
-              className="min-w-0 flex-1 truncate rounded-md border border-gray-300 dark:border-slate-600 bg-gray-50 dark:bg-slate-700 text-gray-900 dark:text-gray-100 px-3 py-1.5 text-sm"
+              className="truncate rounded-md border border-gray-300 dark:border-slate-600 bg-gray-50 dark:bg-slate-700 text-gray-900 dark:text-gray-100 px-3 py-1.5 text-sm"
             >
               <span className="sr-only">{t('publicLink.urlLabel')}: </span>
               {shortPublicLinkUrl(url)}
             </p>
-            <button type="button" onClick={() => void copy(url)} className={`${buttonClassName} flex items-center`}>
+            <button type="button" onClick={() => void copy(url)} className={`${buttonClassName} flex items-center justify-center`}>
               {copied
                 ? <Check aria-hidden="true" className="h-4 w-4 mr-1" />
                 : <Copy aria-hidden="true" className="h-4 w-4 mr-1" />}
               {copied ? t('publicLink.copied') : t('publicLink.copy')}
             </button>
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
             <p className="text-xs text-gray-500 dark:text-gray-400" data-testid="public-link-details">
               {link.expires_at
                 ? t('publicLink.expiresOn', { date: formatDate(link.expires_at) })
@@ -208,8 +207,9 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
                 onClick={openEditor}
                 disabled={busy}
                 aria-label={t('publicLink.changeExpiry')}
-                className="text-xs font-medium text-blue-700 hover:text-blue-800 hover:underline dark:text-blue-300 dark:hover:text-blue-200 disabled:opacity-50"
+                className={`${buttonClassName} flex items-center justify-center`}
               >
+                <Pencil aria-hidden="true" className="h-4 w-4 mr-1" />
                 {t('publicLink.change')}
               </button>
             )}
