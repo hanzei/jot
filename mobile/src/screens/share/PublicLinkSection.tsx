@@ -7,6 +7,7 @@ import {
   isPublicLinkActive,
   publicLinkExpiresAt,
   publicLinkUrl,
+  shortPublicLinkUrl,
   userDisplayName,
   type PublicLink,
   type PublicLinkExpiryChoice,
@@ -113,6 +114,7 @@ export default function PublicLinkSection({ noteId, publicLink, currentUserId, u
   };
 
   const url = link ? publicLinkUrl(link, config.public_url, serverUrl) : '';
+  const shortUrl = shortPublicLinkUrl(url);
 
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString(getCurrentLocale(), { year: 'numeric', month: 'short', day: 'numeric' });
@@ -136,7 +138,17 @@ export default function PublicLinkSection({ noteId, publicLink, currentUserId, u
       {link && (
         <View style={styles.linkBlock}>
           <View style={[styles.urlRow, { borderColor: colors.border, backgroundColor: colors.inputBackground }]}>
-            <Text selectable style={[styles.url, { color: colors.text }]} testID="public-link-url">{url}</Text>
+            {/* Shortened so the token, the only key to the note, stays out of
+                screenshots and screen recordings; Share link hands out the
+                full URL. Not selectable: a selection would copy a broken link. */}
+            <Text
+              style={[styles.url, { color: colors.text }]}
+              numberOfLines={1}
+              accessibilityLabel={t('publicLink.urlA11y', { url: shortUrl })}
+              testID="public-link-url"
+            >
+              {shortUrl}
+            </Text>
           </View>
           <Text style={[styles.details, { color: colors.textMuted }]} testID="public-link-details">
             {link.expires_at

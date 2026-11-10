@@ -427,6 +427,7 @@
   "publicLink": {
     "heading": "Public link",
     "description": "Anyone with the link can view this note without signing in. They can't change it.",
+    "urlA11y": "Public link URL: {{url}}",
     "share": "Share link",
     "expiry": "Expires",
     "newExpiry": "New expiry",

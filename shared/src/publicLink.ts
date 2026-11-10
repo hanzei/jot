@@ -31,6 +31,28 @@ export function publicLinkUrl(
   return publicNoteUrl(publicUrl ?? fallbackBaseUrl, link.token);
 }
 
+/** How many characters of the token `shortPublicLinkUrl` keeps. */
+const SHORT_TOKEN_CHARS = 4;
+
+/**
+ * `url` (a full link from `publicLinkUrl`) for display: no scheme, and the
+ * token, its last path segment, cut to its first few characters and an
+ * ellipsis (`jot.example.com/share/W15w…`). The token is the only key to the
+ * note, so the full value stays out of screenshots and screen shares; clients
+ * copy or share the full URL.
+ *
+ * Plain string handling rather than `URL`: React Native's `URL` is incomplete,
+ * and `URL.host` would show an internationalized domain in punycode.
+ */
+export function shortPublicLinkUrl(url: string): string {
+  const withoutScheme = url.replace(/^[a-z][a-z\d+.-]*:\/\//i, '');
+  const tokenStart = withoutScheme.lastIndexOf('/') + 1;
+  const token = withoutScheme.slice(tokenStart);
+  // Never the whole token, even one shorter than the usual cut.
+  const kept = token.slice(0, Math.min(SHORT_TOKEN_CHARS, token.length - 1));
+  return `${withoutScheme.slice(0, tokenStart)}${kept}…`;
+}
+
 /** The expiry choices offered when creating a public link or changing its expiry. */
 export const PUBLIC_LINK_EXPIRY_CHOICES = ['never', '7d', '30d', '3m'] as const;
 export type PublicLinkExpiryChoice = (typeof PUBLIC_LINK_EXPIRY_CHOICES)[number];

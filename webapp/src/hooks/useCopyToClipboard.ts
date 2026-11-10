@@ -28,7 +28,7 @@ function copyWithExecCommand(text: string): boolean {
 // Copies text to the clipboard, falling back to execCommand where the
 // Clipboard API is unavailable (e.g. a self-hosted server on plain HTTP).
 // `copied` stays true for a moment after a successful copy, for a "Copied!"
-// label.
+// label. `copy` resolves to whether it worked.
 export function useCopyToClipboard() {
   const [copied, setCopied] = useState(false);
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -37,7 +37,7 @@ export function useCopyToClipboard() {
     if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
   }, []);
 
-  const copy = useCallback(async (text: string) => {
+  const copy = useCallback(async (text: string): Promise<boolean> => {
     let ok: boolean;
     try {
       await navigator.clipboard.writeText(text);
@@ -45,10 +45,11 @@ export function useCopyToClipboard() {
     } catch {
       ok = copyWithExecCommand(text);
     }
-    if (!ok) return;
+    if (!ok) return false;
     setCopied(true);
     if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
     resetTimerRef.current = setTimeout(() => setCopied(false), COPIED_RESET_MS);
+    return true;
   }, []);
 
   return { copied, copy };

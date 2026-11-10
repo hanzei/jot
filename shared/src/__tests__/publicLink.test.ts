@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isPublicLinkActive, publicLinkExpiresAt, publicLinkUrl, publicNoteUrl } from '../publicLink';
+import { isPublicLinkActive, publicLinkExpiresAt, publicLinkUrl, publicNoteUrl, shortPublicLinkUrl } from '../publicLink';
 
 const token = 'q3XvT0b9Lr2Kp8WmZcE1yN4hUa7sDfGj6oBtYiR5lMw';
 
@@ -68,5 +68,35 @@ describe('isPublicLinkActive', () => {
   it('drops a link that expired since the note was loaded', () => {
     expect(isPublicLinkActive({ ...link, expires_at: '2026-11-09T11:59:59Z' }, now)).toBe(false);
     expect(isPublicLinkActive({ ...link, expires_at: '2026-11-09T12:00:01Z' }, now)).toBe(true);
+  });
+});
+
+describe('shortPublicLinkUrl', () => {
+  it('shortens a link built on public_url', () => {
+    const url = publicLinkUrl({ token }, 'https://jot.example.com', 'http://internal:8080');
+    expect(shortPublicLinkUrl(url)).toBe('jot.example.com/share/q3Xv…');
+  });
+
+  it('shortens a link built on the client origin when public_url is unset', () => {
+    const url = publicLinkUrl({ token }, null, 'https://notes.example.org');
+    expect(shortPublicLinkUrl(url)).toBe('notes.example.org/share/q3Xv…');
+  });
+
+  it('keeps the port of an origin that has one', () => {
+    const url = publicLinkUrl({ token }, null, 'http://192.168.1.10:8080');
+    expect(shortPublicLinkUrl(url)).toBe('192.168.1.10:8080/share/q3Xv…');
+  });
+
+  it('shows an internationalized domain as configured, not in punycode', () => {
+    const url = publicLinkUrl({ token }, 'https://notizen.müller.de', 'http://localhost');
+    expect(shortPublicLinkUrl(url)).toBe('notizen.müller.de/share/q3Xv…');
+  });
+
+  it('never shows the token in full', () => {
+    for (const t of [token, 'abcd', 'abc', 'a']) {
+      const short = shortPublicLinkUrl(publicLinkUrl({ token: t }, null, 'https://jot.example.com'));
+      expect(short).not.toContain(`/share/${t}`);
+      expect(short.endsWith('…')).toBe(true);
+    }
   });
 });

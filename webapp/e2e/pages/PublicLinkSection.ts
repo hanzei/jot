@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import { confirmDialog } from './dialogs';
 import { readClipboard } from '../fixtures/clipboard';
 
@@ -21,14 +21,31 @@ export class PublicLinkSection {
     return this.section().getByTestId('public-link-url');
   }
 
+  /** The shortened link's visible text, without its screen-reader label. */
+  shownUrl() {
+    return this.urlField().locator('[aria-hidden="true"]');
+  }
+
+  /** The full URL, offered in a selectable field only when copying failed. */
+  fullUrlFallback() {
+    return this.section().getByLabel('Public link URL');
+  }
+
   details() {
     return this.section().getByTestId('public-link-details');
   }
 
-  /** The full URL, as Copy link puts it on the clipboard. */
+  /**
+   * The full URL, as Copy link puts it on the clipboard. The clipboard is
+   * cleared first and polled after, since the write finishes asynchronously
+   * and a stale value from an earlier copy must not count.
+   */
   async copiedUrl(): Promise<string> {
+    await this.page.evaluate(() => navigator.clipboard.writeText(''));
     await this.copy();
-    return readClipboard(this.page);
+    let text = '';
+    await expect.poll(async () => (text = await readClipboard(this.page))).not.toBe('');
+    return text;
   }
 
   async create(expiry: ExpiryLabel = 'Never') {

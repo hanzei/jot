@@ -404,6 +404,7 @@
   "publicLink": {
     "heading": "Lien public",
     "description": "Toute personne disposant du lien peut consulter cette note sans se connecter, sans pouvoir la modifier.",
+    "urlA11y": "URL du lien public : {{url}}",
     "share": "Partager le lien",
     "expiry": "Expire",
     "newExpiry": "Nouvelle expiration",

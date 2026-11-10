@@ -6,6 +6,7 @@ import {
   isPublicLinkActive,
   publicLinkExpiresAt,
   publicLinkUrl,
+  shortPublicLinkUrl,
   userDisplayName,
   type Note,
   type PublicLink,
@@ -16,7 +17,7 @@ import { notes } from '@/utils/api';
 import { apiErrorMessage } from '@/utils/apiError';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import { shortPublicLinkUrl, type PublicLinksConfig } from '@/utils/publicLink';
+import type { PublicLinksConfig } from '@/utils/publicLink';
 
 interface PublicLinkSectionProps {
   note: Note;
@@ -44,11 +45,15 @@ const EXPIRY_LABEL_KEYS = {
 export default function PublicLinkSection({ note, config, currentUserId, users, onChange }: PublicLinkSectionProps) {
   const { t, i18n } = useTranslation();
   const expiryId = useId();
+  const urlId = useId();
   // '' is "not chosen yet"; see `selectedExpiry` below.
   const [expiry, setExpiry] = useState<PublicLinkExpiryChoice | ''>('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [confirmingRevoke, setConfirmingRevoke] = useState(false);
+  // Copying failed (no Clipboard API and execCommand refused): show the full
+  // URL in a selectable field, the only other way to get it.
+  const [copyFailed, setCopyFailed] = useState(false);
   const { copied, copy } = useCopyToClipboard();
 
   if (!config.enabled) return null;
@@ -83,6 +88,7 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
       await notes.deletePublicLink(note.id);
       setConfirmingRevoke(false);
       setExpiry('');
+      setCopyFailed(false);
       onChange?.(note.id, null);
     } catch (err) {
       setConfirmingRevoke(false);
@@ -90,6 +96,10 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleCopy = async () => {
+    setCopyFailed(!(await copy(url)));
   };
 
   const formatDate = (iso: string) =>
@@ -103,6 +113,7 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
   };
 
   const url = link ? publicLinkUrl(link, config.publicUrl, window.location.origin) : '';
+  const shortUrl = shortPublicLinkUrl(url);
   const createdBy = link ? creatorLabel(link.created_by) : null;
 
   const buttonClassName = 'px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50';
@@ -136,16 +147,32 @@ export default function PublicLinkSection({ note, config, currentUserId, users, 
               data-testid="public-link-url"
               className="min-w-0 flex-1 truncate rounded-md border border-gray-300 dark:border-slate-600 bg-gray-50 dark:bg-slate-700 text-gray-900 dark:text-gray-100 px-3 py-1.5 text-sm"
             >
-              <span className="sr-only">{t('publicLink.urlLabel')}: </span>
-              {shortPublicLinkUrl(url)}
+              <span className="sr-only">{t('publicLink.urlA11y', { url: shortUrl })}</span>
+              <span aria-hidden="true">{shortUrl}</span>
             </p>
-            <button type="button" onClick={() => void copy(url)} className={`${buttonClassName} flex items-center`}>
+            <button type="button" onClick={() => void handleCopy()} className={`${buttonClassName} flex items-center`}>
               {copied
                 ? <Check aria-hidden="true" className="h-4 w-4 mr-1" />
                 : <Copy aria-hidden="true" className="h-4 w-4 mr-1" />}
               {copied ? t('publicLink.copied') : t('publicLink.copy')}
             </button>
           </div>
+          {copyFailed && (
+            <div className="mt-2">
+              <p role="alert" className="mb-1 text-sm text-red-700 dark:text-red-400">{t('publicLink.copyFailed')}</p>
+              <label htmlFor={urlId} className="sr-only">{t('publicLink.urlLabel')}</label>
+              <input
+                id={urlId}
+                type="text"
+                readOnly
+                autoFocus
+                value={url}
+                onFocus={(e) => e.currentTarget.select()}
+                data-testid="public-link-full-url"
+                className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-gray-50 dark:bg-slate-700 text-gray-900 dark:text-gray-100 px-3 py-1.5 text-sm"
+              />
+            </div>
+          )}
           <p className="mt-2 text-xs text-gray-500 dark:text-gray-400" data-testid="public-link-details">
             {link.expires_at
               ? t('publicLink.expiresOn', { date: formatDate(link.expires_at) })

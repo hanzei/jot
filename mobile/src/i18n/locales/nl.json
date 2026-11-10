@@ -427,6 +427,7 @@
   "publicLink": {
     "heading": "Openbare link",
     "description": "Iedereen met de link kan deze notitie zonder in te loggen bekijken, maar niet wijzigen.",
+    "urlA11y": "URL van de openbare link: {{url}}",
     "share": "Link delen",
     "expiry": "Verloopt",
     "newExpiry": "Nieuwe vervaldatum",

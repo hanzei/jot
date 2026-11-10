@@ -173,8 +173,8 @@ test.describe('Public link section of the share dialog', () => {
     expect(url).toMatch(new RegExp(`^${origin}/share/[A-Za-z0-9_-]{43}$`));
     const token = new URL(url).pathname.slice('/share/'.length);
     // Shown without the scheme and with the token cut short, so it stays out
-    // of screenshots; the screen-reader label comes first.
-    await expect(publicLinkSection.urlField()).toHaveText(`Public link URL: ${new URL(url).host}/share/${token.slice(0, 4)}…`);
+    // of screenshots and screen readers alike.
+    await expect(publicLinkSection.shownUrl()).toHaveText(`${new URL(url).host}/share/${token.slice(0, 4)}…`);
     await expect(publicLinkSection.section()).not.toContainText(token);
     await expect(publicLinkSection.details()).toContainText('Expires');
     await expect(publicLinkSection.details()).toContainText('Created by you');
@@ -207,8 +207,29 @@ test.describe('Public link section of the share dialog', () => {
     await dashboardPage.openShareModalFromModal();
 
     await publicLinkSection.create();
-    await expect(publicLinkSection.urlField()).toHaveText(/^Public link URL: jot\.example\.com\/share\/[A-Za-z0-9_-]{4}…$/);
+    await expect(publicLinkSection.shownUrl()).toHaveText(/^jot\.example\.com\/share\/[A-Za-z0-9_-]{4}…$/);
     expect(await publicLinkSection.copiedUrl()).toMatch(/^https:\/\/jot\.example\.com\/share\/[A-Za-z0-9_-]{43}$/);
+  });
+
+  test('offers the full link to select by hand when copying fails', async ({ page, authenticatedUser, dashboardPage, publicLinkSection }) => {
+    void authenticatedUser;
+    // Neither the Clipboard API nor the execCommand fallback works, as on a
+    // browser that blocks both.
+    await page.addInitScript(() => {
+      navigator.clipboard.writeText = () => Promise.reject(new Error('denied'));
+      document.execCommand = () => false;
+    });
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Copy fails note');
+    await dashboardPage.openNote('Copy fails note');
+    await dashboardPage.openShareModalFromModal();
+
+    await publicLinkSection.create();
+    await expect(publicLinkSection.fullUrlFallback()).toHaveCount(0);
+    await publicLinkSection.copy();
+    await expect(publicLinkSection.section().getByRole('alert')).toHaveText("Couldn't copy the link. Select it below and copy it yourself.");
+    await expect(publicLinkSection.fullUrlFallback()).toBeFocused();
+    await expect(publicLinkSection.fullUrlFallback()).toHaveValue(new RegExp(`^${new URL(page.url()).origin}/share/[A-Za-z0-9_-]{43}$`));
   });
 
   test('is hidden when the server has public links switched off', async ({ page, authenticatedUser, dashboardPage, publicLinkSection }) => {

@@ -427,6 +427,7 @@
   "publicLink": {
     "heading": "Enlace público",
     "description": "Cualquiera con el enlace puede ver esta nota sin iniciar sesión, pero no modificarla.",
+    "urlA11y": "URL del enlace público: {{url}}",
     "share": "Compartir enlace",
     "expiry": "Caduca",
     "newExpiry": "Nueva caducidad",

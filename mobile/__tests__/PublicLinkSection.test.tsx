@@ -146,7 +146,7 @@ describe('PublicLinkSection states', () => {
   it('shows an active link with its expiry and creator, and change and revoke', async () => {
     await renderSection(makeLink({ expires_at: inDays(5), created_by: alice.id }));
 
-    expect(screen.getByTestId('public-link-url')).toHaveTextContent(`http://192.168.1.20:8080/share/${TOKEN}`);
+    expect(screen.getByTestId('public-link-url')).toHaveTextContent('192.168.1.20:8080/share/q3Xv…');
     expect(screen.getByTestId('public-link-details')).toHaveTextContent(/^Expires .+ · Created by Alice Smith$/);
     expect(screen.getByTestId('public-link-submit')).toHaveTextContent('Change expiry');
     expect(screen.getByTestId('public-link-revoke')).toBeTruthy();
@@ -204,6 +204,16 @@ describe('PublicLinkSection states', () => {
 });
 
 describe('PublicLinkSection URL', () => {
+  it('shows the link shortened, so the full token stays off the screen', async () => {
+    await renderSection(makeLink());
+
+    const url = screen.getByTestId('public-link-url');
+    expect(url).toHaveTextContent('192.168.1.20:8080/share/q3Xv…');
+    expect(url).toHaveProp('accessibilityLabel', 'Public link URL: 192.168.1.20:8080/share/q3Xv…');
+    expect(url).not.toHaveProp('selectable', true);
+    expect(screen.queryByText(new RegExp(TOKEN))).toBeNull();
+  });
+
   it('builds the shared link on the connected server URL when public_url is unset', async () => {
     const shareSpy = jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' });
     await renderSection(makeLink());
@@ -218,7 +228,7 @@ describe('PublicLinkSection URL', () => {
     const shareSpy = jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' });
     await renderSection(makeLink());
 
-    expect(screen.getByTestId('public-link-url')).toHaveTextContent(`https://jot.example.com/share/${TOKEN}`);
+    expect(screen.getByTestId('public-link-url')).toHaveTextContent('jot.example.com/share/q3Xv…');
     await fireEvent.press(screen.getByTestId('public-link-share'));
 
     expect(shareSpy).toHaveBeenCalledWith({ message: `https://jot.example.com/share/${TOKEN}` });

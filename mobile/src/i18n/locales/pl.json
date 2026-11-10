@@ -404,6 +404,7 @@
   "publicLink": {
     "heading": "Link publiczny",
     "description": "Każdy, kto ma link, może zobaczyć tę notatkę bez logowania, ale nie może jej zmienić.",
+    "urlA11y": "Adres URL linku publicznego: {{url}}",
     "share": "Udostępnij link",
     "expiry": "Wygasa",
     "newExpiry": "Nowy termin wygaśnięcia",

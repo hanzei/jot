@@ -404,6 +404,7 @@
   "publicLink": {
     "heading": "Öffentlicher Link",
     "description": "Jeder mit dem Link kann diese Notiz ohne Anmeldung ansehen, aber nicht ändern.",
+    "urlA11y": "URL des öffentlichen Links: {{url}}",
     "share": "Link teilen",
     "expiry": "Läuft ab",
     "newExpiry": "Neuer Ablauf",
