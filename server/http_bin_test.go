@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -288,8 +289,11 @@ func TestBinEmptyTrashDoesNotAffectOtherUsersTrashedNotes(t *testing.T) {
 func TestBinTrashPurgeRespectsRetention(t *testing.T) {
 	t.Parallel()
 
+	// ts itself keeps the purge off: its startup purge runs concurrently with
+	// the backdating below and would otherwise race it.
 	var cfg *config.Config
 	ts := setupTestServerWithConfig(t, func(c *config.Config) {
+		c.TrashRetentionDays = 0
 		cfg = c
 	})
 	user := ts.createTestUser(t, "binretention", "password123", false)
@@ -303,9 +307,21 @@ func TestBinTrashPurgeRespectsRetention(t *testing.T) {
 	recent := trashedDaysAgo(8)
 	old := trashedDaysAgo(31)
 
+	// purged reports whether the note is gone. It runs in the goroutine
+	// assert.Never/require.Eventually poll from, which can outlive the subtest,
+	// so it must not touch t: a late call would fail a finished test and panic.
+	// A query error reads as "not purged".
+	purged := func(id string) bool {
+		var n int
+		err := ts.Server.GetDB().QueryRowContext(context.Background(),
+			ts.dialect.RewritePlaceholders("SELECT COUNT(*) FROM notes WHERE id = ?"), id).Scan(&n)
+		return err == nil && n == 0
+	}
+
 	// startServer starts a server on ts's database with the given retention
-	// and stops it when the test ends.
-	startServer := func(days int) {
+	// and stops it when t ends.
+	startServer := func(t *testing.T, days int) {
+		t.Helper()
 		c := *cfg
 		c.TrashRetentionDays = days
 		log := logrus.New()
@@ -319,19 +335,15 @@ func TestBinTrashPurgeRespectsRetention(t *testing.T) {
 	}
 
 	t.Run("0 keeps every trashed note", func(t *testing.T) {
-		startServer(0)
-		assert.Never(t, func() bool {
-			return countNotesByID(t, ts, old) == 0
-		}, 200*time.Millisecond, 10*time.Millisecond)
+		startServer(t, 0)
+		assert.Never(t, func() bool { return purged(old) }, 200*time.Millisecond, 10*time.Millisecond)
 	})
 
 	t.Run("30 days purges only notes trashed longer ago", func(t *testing.T) {
-		startServer(30)
+		startServer(t, 30)
 		// Both notes are checked in one purge transaction, so once the old
 		// note is gone the recent one has already been considered.
-		require.Eventually(t, func() bool {
-			return countNotesByID(t, ts, old) == 0
-		}, 5*time.Second, 10*time.Millisecond)
+		require.Eventually(t, func() bool { return purged(old) }, 5*time.Second, 10*time.Millisecond)
 		assert.Equal(t, 1, countNotesByID(t, ts, recent))
 	})
 }

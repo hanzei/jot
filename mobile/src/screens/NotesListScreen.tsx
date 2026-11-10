@@ -70,9 +70,8 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
   const { colors } = useTheme();
   const { t } = useTranslation();
   const { trash_retention_days: trashRetentionDays = DEFAULT_TRASH_RETENTION_DAYS } = useServerConfig();
-  const binInfo = trashRetentionDays === 0
-    ? t('dashboard.binInfoUntilEmptied')
-    : t('dashboard.binInfo', { count: trashRetentionDays });
+  // A retention of 0 (no automatic purge) resolves to the `binInfo_zero` text.
+  const binInfo = t('dashboard.binInfo', { count: trashRetentionDays });
   const { confirm } = useConfirm();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const fabBottom = Math.max(insets.bottom + 20, 20);

@@ -98,7 +98,7 @@
     "binInfo_few": "Elemente im Papierkorb werden nach {{count}} Tagen automatisch gelöscht",
     "binInfo_many": "Elemente im Papierkorb werden nach {{count}} Tagen automatisch gelöscht",
     "binInfo_other": "Elemente im Papierkorb werden nach {{count}} Tagen automatisch gelöscht",
-    "binInfoUntilEmptied": "Elemente im Papierkorb bleiben erhalten, bis er geleert wird",
+    "binInfo_zero": "Elemente im Papierkorb bleiben erhalten, bis er geleert wird",
     "emptyTrash": "Papierkorb leeren",
     "emptyTrashConfirmMessage_one": "Die {{count}} Notiz im Papierkorb endgültig löschen? Dies kann nicht rückgängig gemacht werden.",
     "emptyTrashConfirmMessage_other": "Alle {{count}} Notizen im Papierkorb endgültig löschen? Dies kann nicht rückgängig gemacht werden.",

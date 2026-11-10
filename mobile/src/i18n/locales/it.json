@@ -115,7 +115,7 @@
     "binInfo_few": "Gli elementi nel cestino vengono eliminati automaticamente dopo {{count}} giorni",
     "binInfo_many": "Gli elementi nel cestino vengono eliminati automaticamente dopo {{count}} giorni",
     "binInfo_other": "Gli elementi nel cestino vengono eliminati automaticamente dopo {{count}} giorni",
-    "binInfoUntilEmptied": "Gli elementi nel cestino vengono conservati finché non viene svuotato",
+    "binInfo_zero": "Gli elementi nel cestino vengono conservati finché non viene svuotato",
     "emptyTrash": "Svuota cestino",
     "emptyTrashConfirmMessage_one": "Eliminare definitivamente la {{count}} nota nel cestino? Questa azione è irreversibile.",
     "emptyTrashConfirmMessage_other": "Eliminare definitivamente le {{count}} note nel cestino? Questa azione è irreversibile.",

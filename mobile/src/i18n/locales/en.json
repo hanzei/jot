@@ -115,7 +115,7 @@
     "binInfo_few": "Items in Trash are automatically deleted after {{count}} days",
     "binInfo_many": "Items in Trash are automatically deleted after {{count}} days",
     "binInfo_other": "Items in Trash are automatically deleted after {{count}} days",
-    "binInfoUntilEmptied": "Items in Trash are kept until Trash is emptied",
+    "binInfo_zero": "Items in Trash are kept until Trash is emptied",
     "emptyTrash": "Empty Trash",
     "emptyTrashConfirmMessage_one": "Permanently delete the {{count}} note in trash? This action cannot be undone.",
     "emptyTrashConfirmMessage_other": "Permanently delete all {{count}} notes in trash? This action cannot be undone.",

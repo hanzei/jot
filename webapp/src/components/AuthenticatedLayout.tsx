@@ -144,9 +144,7 @@ const AuthenticatedLayout = ({ onLogout, trashRetentionDays = DEFAULT_TRASH_RETE
     },
     {
       label: t('dashboard.tabBin'),
-      title: trashRetentionDays === 0
-        ? t('dashboard.binTooltipUntilEmptied')
-        : t('dashboard.binTooltip', { count: trashRetentionDays }),
+      title: t('dashboard.binTooltip', { count: trashRetentionDays }),
       icon: <Trash2 className="h-4 w-4 shrink-0" />,
       href: '/?view=bin',
       isActive: isAtDashboard && view === 'bin',
