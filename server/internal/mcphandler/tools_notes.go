@@ -55,9 +55,6 @@ func (h *Handler) handleListNotes(userID string) mcp.ToolHandlerFor[listNotesInp
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in listNotesInput) (*mcp.CallToolResult, any, error) {
 		// Search is a full-text scan, rate-limited like GET /notes?search=.
 		if in.Search != "" {
-			// The context's logger is the one of the request that opened the
-			// MCP session, so name the tool for anyone tracing a throttle.
-			ctx = logutil.NewContext(ctx, logutil.FromContext(ctx).WithField("mcp_tool", "list_notes"))
 			allowed, err := h.allowExpensive(ctx, userID)
 			if err != nil {
 				return toolError("list notes: %w", err)

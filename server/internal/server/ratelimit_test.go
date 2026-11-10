@@ -181,10 +181,13 @@ func TestRateLimiterAllowUser(t *testing.T) {
 	t.Run("a failing counter is an error, not a throttle", func(t *testing.T) {
 		rl := newTestRateLimiter(t)
 		// Plant a limiter whose counter fails under the bucket name allowUser
-		// looks up, wired to the same error handler limiter() installs.
+		// looks up, wired to the same handlers limiter() installs. httprate
+		// calls both on a counter failure: the error handler, then the limit
+		// handler.
 		rl.limiters["test"] = httprate.NewRateLimiter(1, time.Minute,
 			httprate.WithLimitCounter(failingCounter{}),
-			httprate.WithErrorHandler(rl.onCounterError("test")),
+			httprate.WithLimitHandler(rl.onLimitExceeded("test")),
+			httprate.WithErrorHandler(rl.onCheckError("test")),
 		)
 		allow := rl.allowUser("test", 1)
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/blobstore"
+	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/notify"
 	"github.com/hanzei/jot/server/internal/sse"
@@ -26,18 +27,14 @@ type Handler struct {
 	// events publishes the same SSE events the REST handlers do, so a change
 	// made over MCP reaches open webapp and mobile clients.
 	events *notify.Publisher
-	// allowExpensive draws one request from the user's expensive-operation
-	// rate-limit bucket, the one GET /notes?search= uses, and reports whether
-	// it was within the limit, or an error if the check itself failed. Rate
-	// limiting is HTTP middleware, and one /mcp request can carry any tool, so
-	// tools that cost what their REST counterpart does check the bucket
-	// themselves.
+	// allowExpensive draws from the user's expensive-operation rate-limit
+	// bucket, the one GET /notes?search= uses (see the server's
+	// rateLimiter.allowUser).
 	allowExpensive func(ctx context.Context, userID string) (bool, error)
 }
 
 // New creates a new Handler backed by the provided stores, publishing change
-// events to hub. allowExpensive is the expensive-operation rate-limit check
-// described on [Handler].
+// events to hub.
 func New(noteStore *models.NoteStore, labelStore *models.LabelStore, imageStore *blobstore.ImageStore, hub *sse.Hub, allowExpensive func(ctx context.Context, userID string) (bool, error)) *Handler {
 	return &Handler{
 		noteStore:      noteStore,
@@ -78,10 +75,23 @@ func (h *Handler) buildServer(req *http.Request) *mcp.Server {
 	}
 
 	srv := mcp.NewServer(&mcp.Implementation{Name: "jot"}, nil)
+	srv.AddReceivingMiddleware(logToolName)
 	h.registerNoteTools(srv, user.ID)
 	h.registerNoteItemTools(srv, user.ID)
 	h.registerLabelTools(srv, user.ID)
 	return srv
+}
+
+// logToolName adds the tool's name to the logger of every tool call. A tool
+// call's context carries the logger of the HTTP request that opened the MCP
+// session, so without it nothing in a tool's log lines says which tool ran.
+func logToolName(next mcp.MethodHandler) mcp.MethodHandler {
+	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+		if call, ok := req.(*mcp.CallToolRequest); ok && call.Params != nil {
+			ctx = logutil.NewContext(ctx, logutil.FromContext(ctx).WithField("mcp_tool", call.Params.Name))
+		}
+		return next(ctx, method, req)
+	}
 }
 
 // toolTextResult wraps a JSON-marshaled value as a single text MCP result.
