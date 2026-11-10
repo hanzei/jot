@@ -192,7 +192,7 @@ task lint-mobile     # Run mobile app linting
 task lint-shared     # Run shared package linting
 task check-docs      # Check server/docs/ matches the handler annotations
 task check-migrations   # Check the sqlite and postgres migration trees match
-task check-translations # Check locale files for missing/extra keys
+task check-translations # Check locale files for missing/extra keys and plural forms
 task check-mobile-flows # Validate the Maestro flow syntax (no emulator needed)
 task check-mobile-expo  # expo-doctor: Expo SDK/native alignment (run by the dep sweep, not by check)
 task gen-docs        # Regenerate Swagger API docs
