@@ -75,7 +75,7 @@ describe('App routing — public note links', () => {
       title: '',
       content: 'Hello from a public link',
       updated_at: '2026-11-09T12:00:00Z',
-      image_ids: [],
+      images: [],
     });
 
     render(<App />);

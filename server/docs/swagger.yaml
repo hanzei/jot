@@ -931,12 +931,12 @@ definitions:
       content:
         description: Content is present for text notes only.
         type: string
-      image_ids:
+      images:
         description: |-
-          ImageIDs lists the note's images in upload order; fetch each through
+          Images lists the note's images in upload order; fetch each through
           /public/notes/{token}/images/{id} (or .../thumbnail).
         items:
-          type: string
+          $ref: '#/definitions/models.PublicNoteImage'
         type: array
       items:
         description: Items is present for list notes only.
@@ -954,6 +954,15 @@ definitions:
         type: string
       updated_at:
         type: string
+    type: object
+  models.PublicNoteImage:
+    properties:
+      height:
+        type: integer
+      id:
+        type: string
+      width:
+        type: integer
     type: object
   models.PublicNoteItem:
     properties:
