@@ -26,7 +26,7 @@ import { buildShareAvatars } from '@/utils/shareAvatars';
 import { buildMobileDeepLink } from '@/utils/deepLink';
 import { isEditableElementFocused } from '@/utils/keyboardShortcuts';
 import { canAnimate } from '@/utils/motion';
-import { findNoteCardRect, playNoteModalExit, playNoteModalOpen } from '@/utils/noteZoom';
+import { findNoteCardRect, playNoteModalExit, playNoteModalOpen, stopNoteModalOpen } from '@/utils/noteZoom';
 import {
   applyCompletedCascade,
   changeItemIndent,
@@ -403,8 +403,10 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
   // created or switched to while the modal stays open does not re-zoom.
   const [zoomFrom] = useState(() => (canAnimate(document.body) ? zoomOrigin : null));
   // The note the modal shows now, which is what the close zooms back onto — it
-  // can differ from the one it opened with (an unsaved note gets created).
-  const zoomNoteIdRef = useRef(note?.id ?? null);
+  // can differ from the one it opened with (the shared-note toast's Open swaps
+  // the note in place).
+  const [zoomOpenedNoteId] = useState(note?.id ?? null);
+  const zoomNoteIdRef = useRef(zoomOpenedNoteId);
   useEffect(() => {
     zoomNoteIdRef.current = note?.id ?? null;
   }, [note?.id]);
@@ -417,19 +419,22 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     const panel = panelRef.current;
     const openAnimation = panel && zoomFrom ? playNoteModalOpen(panel, zoomFrom) : null;
     return () => {
-      openAnimation?.cancel();
+      // A close during the open zoom carries on from where it had got to.
+      const interrupted = panel ? stopNoteModalOpen(panel, openAnimation) : null;
       if (!panel) return;
       // Layout-effect cleanups run before React removes the DOM, so the panel
       // can still be measured and snapshotted here. Only a modal that zoomed
       // open zooms closed; the live card is preferred over the click-time
       // rect, which goes stale if the grid reflowed while the modal was open.
       // When the card is gone (deleted, archived away) it shrinks onto the
-      // click-time rect, as on mobile.
+      // click-time rect, as on mobile — but only for the note that was
+      // clicked; a note swapped in since has no card there, so it fades.
       const noteId = zoomNoteIdRef.current;
-      const target = zoomFrom ? (noteId ? findNoteCardRect(noteId, zoomFrom) : null) ?? zoomFrom : null;
-      cancelExitRef.current = playNoteModalExit(panel, target);
+      const liveCard = zoomFrom && noteId ? findNoteCardRect(noteId, zoomFrom) : null;
+      const target = liveCard ?? (noteId === zoomOpenedNoteId ? zoomFrom : null);
+      cancelExitRef.current = playNoteModalExit(panel, target, interrupted);
     };
-  }, [panelRef, zoomFrom]);
+  }, [panelRef, zoomFrom, zoomOpenedNoteId]);
 
   const colorClasses: Record<string, string> = {
     '#ffffff': 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600',

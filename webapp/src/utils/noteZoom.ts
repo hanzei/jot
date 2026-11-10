@@ -67,6 +67,12 @@ export function findNoteCardRect(noteId: string, near: DOMRect | null): DOMRect 
   return best;
 }
 
+/** Marks the close's snapshot and its backdrop (they are not the real modal). */
+export const NOTE_ZOOM_GHOST_ATTR = 'data-note-zoom-ghost';
+
+/** Where an animated element visually is right now, as a keyframe. */
+export type ZoomFrame = { transform: string; opacity: number };
+
 /** Zoom the freshly mounted panel open from `origin` (the clicked card's rect). */
 export function playNoteModalOpen(panel: HTMLElement, origin: DOMRect): Animation | null {
   if (!canAnimate(panel)) return null;
@@ -81,16 +87,33 @@ export function playNoteModalOpen(panel: HTMLElement, origin: DOMRect): Animatio
 }
 
 /**
+ * Stop the open zoom, returning where it had got to if it was still running so
+ * the close can start from there rather than from the panel's full size.
+ */
+export function stopNoteModalOpen(panel: HTMLElement, animation: Animation | null): ZoomFrame | null {
+  if (!animation) return null;
+  let frame: ZoomFrame | null = null;
+  if (animation.playState === 'running') {
+    const style = getComputedStyle(panel);
+    frame = { transform: style.transform, opacity: Number(style.opacity) };
+  }
+  animation.cancel();
+  return frame;
+}
+
+/**
  * Play the modal's close over a snapshot of `panel`, which must still be in the
  * document (call it from the modal's layout-effect cleanup, which React runs
  * before removing the DOM). Shrinks onto `target` when given, otherwise fades
- * and scales down slightly.
+ * and scales down slightly. `from` is where an interrupted open zoom had got to
+ * (stopNoteModalOpen); the panel itself must already be back at rest, since its
+ * layout box is what the snapshot copies.
  *
  * The snapshot is appended on the next microtask rather than synchronously, so
  * a StrictMode simulated unmount can call the returned cancel function from the
  * effect's re-run before anything reaches the document.
  */
-export function playNoteModalExit(panel: HTMLElement, target: DOMRect | null): () => void {
+export function playNoteModalExit(panel: HTMLElement, target: DOMRect | null, from: ZoomFrame | null = null): () => void {
   if (!canAnimate(panel) || !panel.isConnected) return () => {};
 
   const rect = panel.getBoundingClientRect();
@@ -116,6 +139,8 @@ export function playNoteModalExit(panel: HTMLElement, target: DOMRect | null): (
     el.removeAttribute('id');
     el.removeAttribute('data-testid');
   }
+  ghost.removeAttribute('data-note-modal-panel');
+  ghost.setAttribute(NOTE_ZOOM_GHOST_ATTR, '');
   ghost.setAttribute('aria-hidden', 'true');
   ghost.inert = true;
   Object.assign(ghost.style, {
@@ -131,6 +156,7 @@ export function playNoteModalExit(panel: HTMLElement, target: DOMRect | null): (
 
   const backdrop = document.createElement('div');
   backdrop.setAttribute('aria-hidden', 'true');
+  backdrop.setAttribute(NOTE_ZOOM_GHOST_ATTR, '');
   backdrop.className = 'fixed inset-0 z-50 pointer-events-none bg-black/30 dark:bg-black/50';
 
   let cancelled = false;
@@ -148,14 +174,15 @@ export function playNoteModalExit(panel: HTMLElement, target: DOMRect | null): (
     }
 
     const duration = target ? NOTE_ZOOM_MS : FALLBACK_MS;
+    const start = from ?? { transform: 'none', opacity: 1 };
     const panelFrames: Keyframe[] = target
       ? [
-        { transform: 'none', opacity: 1 },
-        { opacity: 1, offset: 0.8 },
+        start,
+        { opacity: start.opacity, offset: 0.8 },
         { transform: cardTransform(rect, target), opacity: 0 },
       ]
       : [
-        { transform: 'none', opacity: 1 },
+        start,
         { transform: 'scale(0.95)', opacity: 0 },
       ];
     animations.push(

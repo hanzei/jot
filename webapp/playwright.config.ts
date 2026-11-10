@@ -68,6 +68,11 @@ export default defineConfig({
     actionTimeout: 10_000,
     navigationTimeout: 15_000,
     serviceWorkers: 'block',
+    // Motion off by default. The note modal's close plays over a snapshot of
+    // the modal (src/utils/noteZoom.ts) that lingers for ~250ms with the same
+    // text and placeholders, which page-wide locators would also match. Specs
+    // about motion opt back in with `reducedMotion: 'no-preference'`.
+    reducedMotion: 'reduce',
   },
   projects: [
     // Admin tests run first in isolation before parallel workers start.
