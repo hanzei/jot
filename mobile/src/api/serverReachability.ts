@@ -13,9 +13,14 @@
  * persist + enqueue path once the server is known-unreachable, and resume
  * hitting the network the moment it answers again. The signal is updated from
  * the axios interceptors (a response of any status means the server answered; a
- * transport failure means it did not) and from the SSE stream opening, and is
- * re-armed to reachable whenever the device regains connectivity so a new link
- * gets a fresh probe.
+ * transport failure, client timeout included, means it did not) and from the
+ * SSE stream opening or delivering any message, keepalives included. It is also
+ * re-armed to reachable whenever the device regains connectivity or the app
+ * returns to the foreground, so a new link gets a fresh probe, and on a server
+ * switch. While it is false, writes, queue drains and read syncs are all parked,
+ * so nothing they send can re-arm it: the SSE keepalive (every 30 s on an open
+ * stream) and the stream's backed-off reconnect are what bound how long a wrong
+ * `false` lasts. See docs/specs/mobile-connectivity-handling.md §3.1.
  *
  * Its one dependency is the leaf `localMode` flag (used by the
  * `isOnlineWriteAllowed` gate below), which imports nothing back — so this

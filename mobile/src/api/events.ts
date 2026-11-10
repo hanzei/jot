@@ -100,10 +100,15 @@ export class SSEConnectionManager {
         // Reset watchdog and backoff on any message (including keepalive empty-data events).
         this.lastEventAt = Date.now();
         this.reconnectDelay = BASE_RECONNECT_DELAY_MS;
-        if (!event.data) return;
         if (this.generationId !== getCurrentSwitchGenerationId() || isSseQuiesced()) {
           return;
         }
+        // Any message, keepalives included, proves the server answers. While the
+        // reachability belief is false, writes, drains and read syncs are all
+        // parked, so no axios response arrives to clear it; on an already-open
+        // stream this is the only signal that does (#1217).
+        markServerReachable();
+        if (!event.data) return;
         try {
           const parsed: SSEEvent = JSON.parse(event.data as string);
           this.callback?.(parsed);

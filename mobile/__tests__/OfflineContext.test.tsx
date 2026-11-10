@@ -120,6 +120,7 @@ describe('OfflineProvider queue draining', () => {
     jest.useRealTimers();
     jest.restoreAllMocks();
     setLocalModeActive(false);
+    serverReachability.markServerReachable();
   });
 
   it('never drains the queue in local mode (mount, foreground, or enqueue)', async () => {
@@ -372,6 +373,82 @@ describe('OfflineProvider queue draining', () => {
     expect(mockDrainQueue).toHaveBeenCalledTimes(1);
 
     reachableSpy.mockRestore();
+  });
+
+  it('drains the queue when reachability flips back to reachable with no other trigger (#1217)', async () => {
+    // A stalled drain's backoff timer returns early while the server is
+    // unreachable and does not reschedule, so the queue would stay parked
+    // after an SSE keepalive re-arms the belief unless the flip itself drains.
+    silenceConsole('info', /^Server reachability:/);
+    await renderProvider();
+    await flush();
+    const drainsAfterMount = mockDrainQueue.mock.calls.length;
+
+    // A request times out; nothing else happens until the belief re-arms.
+    await act(() => {
+      serverReachability.markServerUnreachable();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(60000);
+    });
+    await flush();
+    expect(mockDrainQueue).toHaveBeenCalledTimes(drainsAfterMount);
+
+    await act(() => {
+      serverReachability.markServerReachable();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    await flush();
+
+    expect(mockDrainQueue).toHaveBeenCalledTimes(drainsAfterMount + 1);
+  });
+
+  it('does not resume auto-retrying on a reachability flip once the failure cap paused it (#1217)', async () => {
+    silenceConsole('info', /^Server reachability:/);
+    mockGetPendingCount.mockResolvedValue(1);
+    await renderProvider();
+    await flush();
+    for (let i = 0; i < 12; i++) {
+      await act(async () => {
+        jest.advanceTimersByTime(60000);
+      });
+      await flush();
+    }
+    expect(lastSyncError).toBe(true);
+    const drainsAtCap = mockDrainQueue.mock.calls.length;
+
+    // The flip is a weaker signal than a reconnect, foreground or new write,
+    // so it must not reset the budget the cap exists to enforce.
+    await act(() => {
+      serverReachability.markServerUnreachable();
+      serverReachability.markServerReachable();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(60000);
+    });
+    await flush();
+
+    expect(mockDrainQueue).toHaveBeenCalledTimes(drainsAtCap);
+    expect(lastSyncError).toBe(true);
+  });
+
+  it('does not drain on a re-arm while the server was already reachable', async () => {
+    await renderProvider();
+    await flush();
+    const drainsAfterMount = mockDrainQueue.mock.calls.length;
+
+    // markServerReachable is called on every response; only a real flip counts.
+    await act(() => {
+      serverReachability.markServerReachable();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    await flush();
+
+    expect(mockDrainQueue).toHaveBeenCalledTimes(drainsAfterMount);
   });
 
   it('resets the retry budget and resumes draining when a new write is enqueued after the cap', async () => {

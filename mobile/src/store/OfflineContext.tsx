@@ -12,7 +12,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useQueryClient } from '@tanstack/react-query';
 import { drainQueue, getPendingCount, getDeadLetterCount, subscribeToEnqueue } from '../db/syncQueue';
-import { isServerReachable, markServerReachable } from '../api/serverReachability';
+import { isServerReachable, markServerReachable, subscribeToServerReachability } from '../api/serverReachability';
 import { drainImageUploadQueue, getQueuedImageUploadCount } from '../db/imageUploadQueue';
 import { getPendingCreateNoteIds, getFailedNoteIds } from '../db/noteQueries';
 import { isClosedDatabaseError } from '../db/errors';
@@ -225,9 +225,9 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     // (see serverReachability.ts). Without this check a scheduled backoff drain
     // would still fire the head entry's request and eat the full write timeout
     // before bailing (#718) — mirrors the read path's `retrySync`, which already
-    // fast-fails on `!isServerReachable()`. Skip the network drain and wait for an
-    // existing re-arm trigger (reconnect, foreground, or a new write) to schedule
-    // a fresh one once the server is reachable again.
+    // fast-fails on `!isServerReachable()`. Skip the network drain; the
+    // reachability subscription below schedules a fresh one once the server is
+    // reachable again (#1217).
     if (!isServerReachable()) return;
     // Local mode has no server and never enqueues server ops, so the drain loop
     // stays parked (issue #514). This single guard covers every drain trigger
@@ -450,6 +450,23 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     });
     return unsubscribe;
   }, [scheduleDrain, refreshPendingNoteIds]);
+
+  // Drain when the server becomes reachable again. performDrain returns early
+  // while it is unreachable without rescheduling, so a stalled drain's backoff
+  // chain ends there; without this, a re-arm that is not itself a drain trigger
+  // (any API response, an SSE message) would leave the queue parked until the
+  // next write, reconnect or foreground (#1217). Unlike those triggers this does
+  // not reset the failure count: a flip can repeat every keepalive, and the cap
+  // must still stop retries against a write that keeps failing. A pending
+  // backoff timer is left alone so the flip cannot shortcut it.
+  useEffect(() => {
+    return subscribeToServerReachability((reachable) => {
+      if (!reachable || !isConnectedRef.current) return;
+      if (failureCountRef.current >= MAX_CONSECUTIVE_DRAIN_FAILURES) return;
+      if (drainTimerRef.current !== null) return;
+      scheduleDrain(ENQUEUE_DRAIN_DEBOUNCE_MS);
+    });
+  }, [scheduleDrain]);
 
   // Seed the pending-create set on mount so notes created in a previous session
   // that never drained are gated correctly from first render (#475).
