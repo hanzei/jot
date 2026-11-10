@@ -25,8 +25,8 @@ describe('calendarDaysAgo', () => {
 });
 
 describe('formatDateInLocale', () => {
-  // Local time, so the expectations hold in whatever time zone the suite runs in.
-  const evening = new Date(2026, 10, 10, 21, 34, 8);
+  // Built in local time, so the expectations hold in whatever time zone the suite runs in.
+  const evening = new Date(2026, 10, 10, 21, 34, 8).toISOString();
 
   it.each<[string, DateStyle, string]>([
     ['en-US', 'date', 'Nov 10, 2026'],
@@ -41,10 +41,6 @@ describe('formatDateInLocale', () => {
   ])('formats %s %s', (locale, style, expected) => {
     // ICU puts a narrow no-break space before AM/PM.
     expect(formatDateInLocale(evening, locale, style).replace(/\u202f/g, ' ')).toBe(expected);
-  });
-
-  it('accepts an ISO string', () => {
-    expect(formatDateInLocale(evening.toISOString(), 'de', 'dateTime')).toBe('10. Nov. 2026, 21:34');
   });
 
   it('shows a dash for a value that does not parse', () => {

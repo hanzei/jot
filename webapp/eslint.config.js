@@ -69,10 +69,7 @@ export default [
         selector: "JSXOpeningElement[name.name='MenuItems'] > JSXAttribute[name.name='transition']",
         message: 'Do not use the `transition` prop on MenuItems (#1013); animate the open with `starting:` classes instead.',
       }, {
-        selector: 'CallExpression[callee.property.name=/^toLocale(Date|Time)?String$/]',
-        message: 'Format dates with formatDate() from @/utils/formatDate, which uses the app language (#1236).',
-      }, {
-        selector: ":matches(NewExpression, CallExpression)[callee.object.name='Intl'][callee.property.name='DateTimeFormat']",
+        selector: "CallExpression[callee.property.name=/^toLocale(Date|Time)?String$/], :matches(NewExpression, CallExpression)[callee.object.name='Intl'][callee.property.name='DateTimeFormat']",
         message: 'Format dates with formatDate() from @/utils/formatDate, which uses the app language (#1236).',
       }],
     },

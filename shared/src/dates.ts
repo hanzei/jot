@@ -43,8 +43,9 @@ const DATE_STYLE_OPTIONS: Record<DateStyle, Intl.DateTimeFormatOptions> = {
  * call their own `formatDate(value, style)`, which supplies the app locale;
  * call this directly only to format in an explicit locale.
  */
-export function formatDateInLocale(value: string | Date, locale: string | undefined, style: DateStyle): string {
+export function formatDateInLocale(value: string, locale: string | undefined, style: DateStyle): string {
   const date = new Date(value);
+  // eslint-disable-next-line no-restricted-syntax -- the one place dates are formatted; everything else calls this
   return isNaN(date.getTime()) ? '—' : date.toLocaleString(locale, DATE_STYLE_OPTIONS[style]);
 }
 

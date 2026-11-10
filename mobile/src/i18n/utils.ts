@@ -20,9 +20,8 @@ export function displayMessage(t: TFunction, message: string): string {
  * to use. Every date the app shows goes through here; ESLint rejects
  * `toLocale*String` and `Intl.DateTimeFormat` elsewhere.
  */
-export function formatDate(value: string | Date, style: DateStyle): string {
-  const language = i18n.resolvedLanguage || i18n.language || undefined;
-  return formatDateInLocale(value, dateLocale(language, getLocales()[0]?.regionCode), style);
+export function formatDate(value: string, style: DateStyle): string {
+  return formatDateInLocale(value, dateLocale(i18n.resolvedLanguage || i18n.language, getLocales()[0]?.regionCode), style);
 }
 
 /**

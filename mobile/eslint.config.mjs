@@ -67,10 +67,7 @@ export default [
       // app language. A direct call picks its locale at the call site, and one
       // that leaves it out follows the device instead (#1236).
       'no-restricted-syntax': ['error', {
-        selector: 'CallExpression[callee.property.name=/^toLocale(Date|Time)?String$/]',
-        message: 'Format dates with formatDate() from src/i18n/utils, which uses the app language (#1236).',
-      }, {
-        selector: ":matches(NewExpression, CallExpression)[callee.object.name='Intl'][callee.property.name='DateTimeFormat']",
+        selector: "CallExpression[callee.property.name=/^toLocale(Date|Time)?String$/], :matches(NewExpression, CallExpression)[callee.object.name='Intl'][callee.property.name='DateTimeFormat']",
         message: 'Format dates with formatDate() from src/i18n/utils, which uses the app language (#1236).',
       }],
     },

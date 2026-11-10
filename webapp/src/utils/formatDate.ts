@@ -7,7 +7,7 @@ import i18n from '@/i18n';
  * to use. Every date the webapp shows goes through here; ESLint rejects
  * `toLocale*String` and `Intl.DateTimeFormat` elsewhere.
  */
-export function formatDate(value: string | Date, style: DateStyle): string {
+export function formatDate(value: string, style: DateStyle): string {
   return formatDateInLocale(value, dateLocale(i18n.resolvedLanguage, browserRegion()), style);
 }
 
