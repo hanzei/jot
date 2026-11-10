@@ -459,7 +459,9 @@ export const PreferencesInfoColumn = ({
   exportFormat,
   onExportFormatChange,
   isExporting,
-}: PreferencesInfoColumnProps) => (
+}: PreferencesInfoColumnProps) => {
+  const { i18n } = useTranslation();
+  return (
   <div className="space-y-6">
     <SettingsSectionCard title={t('settings.sessionsSection')}>
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
@@ -490,7 +492,7 @@ export const PreferencesInfoColumn = ({
                   )}
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  {new Date(session.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  {new Date(session.created_at).toLocaleDateString(i18n.resolvedLanguage, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 </p>
               </div>
               {!session.is_current && (
@@ -602,4 +604,5 @@ export const PreferencesInfoColumn = ({
 
     <DiagnosticsSection />
   </div>
-);
+  );
+};
