@@ -14,10 +14,11 @@ import (
 )
 
 type patResponse struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
-	Token     string    `json:"token"`
+	ID         string     `json:"id"`
+	Name       string     `json:"name"`
+	CreatedAt  time.Time  `json:"created_at"`
+	LastUsedAt *time.Time `json:"last_used_at"`
+	Token      string     `json:"token"`
 }
 
 func createPAT(t *testing.T, ts *TestServer, tu *TestUser, name string) *patResponse {
@@ -171,6 +172,32 @@ func TestPATs(t *testing.T) {
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("list reports when a token was last used", func(t *testing.T) {
+		ts := setupTestServer(t)
+		u := ts.createTestUser(t, "alice", "password123", false)
+
+		used := createPAT(t, ts, u, "used")
+		assert.Nil(t, used.LastUsedAt, "create returns last_used_at as null")
+		createPAT(t, ts, u, "unused")
+
+		before := time.Now().UTC().Add(-time.Second)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/users/me", nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+used.Token)
+		resp, err := ts.HTTPServer.Client().Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		lastUsed := map[string]*time.Time{}
+		for _, p := range listPATs(t, ts, u) {
+			lastUsed[p.Name] = p.LastUsedAt
+		}
+		require.NotNil(t, lastUsed["used"])
+		assert.True(t, lastUsed["used"].After(before), "last_used_at is the time of the request")
+		assert.Nil(t, lastUsed["unused"])
 	})
 
 	t.Run("revoked Bearer token is rejected", func(t *testing.T) {

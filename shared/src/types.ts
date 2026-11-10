@@ -597,6 +597,12 @@ export interface PersonalAccessToken {
   id: string;
   name: string;
   created_at: string;
+  /**
+   * When the token last authenticated a request, accurate to about an hour.
+   * Null until its first recorded use; for a token older than the feature,
+   * that means no use since the upgrade rather than never used.
+   */
+  last_used_at: string | null;
   /** Only present in the create response; never returned by list. */
   token?: string;
 }

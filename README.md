@@ -579,7 +579,9 @@ The MCP server exposes note and label tools. They apply the same validation as
 the REST API (field limits, colors, which fields each note type has), and their
 changes are pushed to open web and mobile clients over server-sent events like
 any other edit. PATs are created from Settings in the web app and are only shown
-once.
+once. Settings shows when each token was last used (to the day; a use is
+recorded at most once an hour), so tokens no client uses any more are easy to
+find and revoke.
 
 ## jotctl admin CLI
 

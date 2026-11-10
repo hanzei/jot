@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -463,6 +464,47 @@ func TestMCPUnauthenticated(t *testing.T) {
 	}
 	_, err := c.Connect(t.Context(), transport, nil)
 	require.Error(t, err, "expected connection to fail without authentication")
+}
+
+// TestMCPRecordsPATUse verifies that an MCP session authenticated with a
+// personal access token, which is how MCP clients are configured, shows up as
+// the token's last use.
+func TestMCPRecordsPATUse(t *testing.T) {
+	t.Parallel()
+	ts := setupTestServer(t)
+	tu := ts.createTestUser(t, "mcpuser", "password123", false)
+	pat := createPAT(t, ts, tu, "assistant")
+
+	c := mcp.NewClient(&mcp.Implementation{Name: "pat-client"}, nil)
+	transport := &mcp.StreamableClientTransport{
+		Endpoint: ts.HTTPServer.URL + "/api/v1/mcp",
+		HTTPClient: &http.Client{Transport: &bearerRoundTripper{
+			token: pat.Token,
+			base:  ts.HTTPServer.Client().Transport,
+		}},
+		DisableStandaloneSSE: true,
+	}
+	sess, err := c.Connect(t.Context(), transport, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sess.Close() })
+
+	var notes []client.Note
+	callTool(t, sess, "list_notes", map[string]any{}, &notes)
+
+	pats := listPATs(t, ts, tu)
+	require.Len(t, pats, 1)
+	assert.NotNil(t, pats[0].LastUsedAt, "an MCP request authenticated with the token records its use")
+}
+
+type bearerRoundTripper struct {
+	token string
+	base  http.RoundTripper
+}
+
+func (b *bearerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	req.Header.Set("Authorization", "Bearer "+b.token)
+	return b.base.RoundTrip(req)
 }
 
 // TestMCPNoteValidation verifies that the MCP note tools apply the same field

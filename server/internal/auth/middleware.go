@@ -104,7 +104,22 @@ func (s *SessionService) authenticateWithPAT(ctx context.Context, rawToken strin
 	if err != nil {
 		return nil, fmt.Errorf("get user for PAT: %w", err)
 	}
+	s.recordPATUse(ctx, pat)
 	return user, nil
+}
+
+// recordPATUse updates the token's last_used_at when the stored value is stale.
+// Checking here first keeps a fresh token's requests free of any write; the
+// store's conditional UPDATE settles races between requests that both saw it
+// stale. Failing to record is logged and never fails the request.
+func (s *SessionService) recordPATUse(ctx context.Context, pat *models.PersonalAccessToken) {
+	now := models.Now()
+	if pat.LastUsedAt != nil && now.Sub(*pat.LastUsedAt) < models.PATLastUsedInterval {
+		return
+	}
+	if _, err := s.patStore.RecordUse(ctx, pat.ID, now); err != nil {
+		logutil.FromContext(ctx).WithError(err).Warn("Failed to record personal access token use")
+	}
 }
 
 func GetUserFromContext(ctx context.Context) (*models.User, bool) {

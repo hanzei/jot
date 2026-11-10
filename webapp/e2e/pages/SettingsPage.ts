@@ -160,6 +160,19 @@ export class SettingsPage {
     await this.page.getByRole('button', { name: 'Create', exact: true }).click();
   }
 
+  /** Reads the raw token from the show-once dialog, then dismisses it. */
+  async takeNewPATToken(): Promise<string> {
+    const dialog = this.page.getByRole('dialog', { name: 'Your new access token' });
+    const token = await dialog.getByRole('textbox', { name: 'Your new access token' }).inputValue();
+    await dialog.getByRole('button', { name: 'Done' }).click();
+    await expect(dialog).toBeHidden();
+    return token;
+  }
+
+  patLastUsed(name: string): Locator {
+    return this.page.getByRole('listitem').filter({ hasText: name }).getByTestId('pat-last-used');
+  }
+
   diagnosticsSection() {
     return this.page.getByTestId('diagnostics-section');
   }

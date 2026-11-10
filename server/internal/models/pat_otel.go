@@ -45,3 +45,9 @@ func (s *PATStore) Delete(ctx context.Context, id, userID string) (_ bool, err e
 	defer end()
 	return s.inner.Delete(ctx, id, userID)
 }
+
+func (s *PATStore) RecordUse(ctx context.Context, id string, now time.Time) (_ bool, err error) {
+	ctx, end := startSpan(ctx, s.instr, "PATStore.RecordUse", &err)
+	defer end()
+	return s.inner.RecordUse(ctx, id, now)
+}

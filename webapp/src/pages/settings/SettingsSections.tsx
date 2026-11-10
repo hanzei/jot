@@ -10,10 +10,32 @@ import SettingsSectionCard, { SETTINGS_BTN_CLASSES } from '@/pages/settings/Sett
 import { passwordFormKeys } from '@/pages/settings/passwordFormKeys';
 import { SUPPORTED_LANGUAGES, type LanguagePreference } from '@/utils/language';
 import type { ThemePreference } from '@/utils/theme';
-import { VALIDATION } from '@jot/shared';
+import { VALIDATION, calendarDaysAgo } from '@jot/shared';
 import type { ActiveSession, ExportFormat, PersonalAccessToken, User } from '@jot/shared';
 
 type Translate = TFunction;
+
+const PAT_DATE_FORMAT: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' };
+
+// Writes of last_used_at are throttled server-side, so the last use is shown
+// to the day, never to the minute.
+function patLastUsedLabel(t: Translate, lastUsedAt: string | null): string {
+  if (!lastUsedAt) {
+    return t('settings.patsNoRecordedUse');
+  }
+  const date = new Date(lastUsedAt);
+  const days = calendarDaysAgo(date);
+  if (days <= 0) {
+    return t('settings.patsLastUsedToday');
+  }
+  if (days === 1) {
+    return t('settings.patsLastUsedYesterday');
+  }
+  if (days < 30) {
+    return t('settings.patsLastUsedDaysAgo', { days });
+  }
+  return t('settings.patsLastUsedOn', { date: date.toLocaleDateString(undefined, PAT_DATE_FORMAT) });
+}
 
 interface PATsSectionProps {
   pats: PersonalAccessToken[];
@@ -377,7 +399,9 @@ export const IdentitySecurityColumn = ({
                   {pat.name}
                 </span>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  {new Date(pat.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                  {t('settings.patsCreatedOn', { date: new Date(pat.created_at).toLocaleDateString(undefined, PAT_DATE_FORMAT) })}
+                  {' · '}
+                  <span data-testid="pat-last-used">{patLastUsedLabel(t, pat.last_used_at)}</span>
                 </p>
               </div>
               <button

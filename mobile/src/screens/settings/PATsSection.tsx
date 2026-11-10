@@ -13,10 +13,33 @@ import { subscribeToClientActiveServerChanges } from '../../api/client';
 import { getActiveServer } from '../../store/serverAccounts';
 import { displayMessage, getCurrentLocale } from '../../i18n/utils';
 import { useConfirm } from '../../hooks/useConfirm';
-import { VALIDATION } from '@jot/shared';
+import { VALIDATION, calendarDaysAgo } from '@jot/shared';
 import type { PersonalAccessToken } from '@jot/shared';
+import type { TFunction } from 'i18next';
 import { styles } from './styles';
 import { jot } from '../../api/jot';
+
+const PAT_DATE_FORMAT: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' };
+
+// Writes of last_used_at are throttled server-side, so the last use is shown
+// to the day, never to the minute.
+function patLastUsedLabel(t: TFunction, lastUsedAt: string | null, locale: string | undefined): string {
+  if (!lastUsedAt) {
+    return t('settings.patsNoRecordedUse');
+  }
+  const date = new Date(lastUsedAt);
+  const days = calendarDaysAgo(date);
+  if (days <= 0) {
+    return t('settings.patsLastUsedToday');
+  }
+  if (days === 1) {
+    return t('settings.patsLastUsedYesterday');
+  }
+  if (days < 30) {
+    return t('settings.patsLastUsedDaysAgo', { days });
+  }
+  return t('settings.patsLastUsedOn', { date: date.toLocaleDateString(locale, PAT_DATE_FORMAT) });
+}
 
 export default function PATsSection() {
   const { colors } = useTheme();
@@ -180,9 +203,15 @@ export default function PATsSection() {
               <View style={styles.sessionInfo}>
                 <Text style={[styles.sessionBrowser, { color: colors.text }]}>{pat.name}</Text>
                 <Text style={[styles.sessionDate, { color: colors.textMuted }]}>
-                  {new Date(pat.created_at).toLocaleDateString(currentLocale, {
-                    year: 'numeric', month: 'short', day: 'numeric',
+                  {t('settings.patsCreatedOn', {
+                    date: new Date(pat.created_at).toLocaleDateString(currentLocale, PAT_DATE_FORMAT),
                   })}
+                </Text>
+                <Text
+                  testID={`pat-last-used-${pat.id}`}
+                  style={[styles.sessionDate, { color: colors.textMuted }]}
+                >
+                  {patLastUsedLabel(t, pat.last_used_at, currentLocale)}
                 </Text>
               </View>
               <TouchableOpacity
