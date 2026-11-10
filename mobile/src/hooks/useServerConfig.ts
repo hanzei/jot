@@ -50,6 +50,11 @@ export function parseCachedConfig(raw: string): ServerConfig | null {
       if (typeof parsed.public_url === 'string' || parsed.public_url === null) {
         config.public_url = parsed.public_url;
       }
+      // Absent on a server that predates the setting; the trash banner then
+      // shows the default retention.
+      if (typeof parsed.trash_retention_days === 'number') {
+        config.trash_retention_days = parsed.trash_retention_days;
+      }
       return config;
     }
   } catch {
@@ -67,7 +72,7 @@ async function loadCachedServerConfig(serverId: string): Promise<ServerConfig> {
 }
 
 // The active server's public /config values (password_min_length,
-// upload_max_bytes, registration_enabled, sso, public links). Never blocks:
+// upload_max_bytes, registration_enabled, sso, public links, trash retention). Never blocks:
 // renders the cached or shared-default value immediately, then refreshes in the
 // background — per the mobile connectivity rules, auth screens must not freeze
 // on a network call, and there is no queue to fall back on for a GET. Reloads

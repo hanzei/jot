@@ -444,8 +444,21 @@ export class DashboardPage {
     await expect(this.page.getByText('Archived notes are hidden from the main view but kept forever.')).toBeVisible();
   }
 
-  async expectBinInfoVisible() {
-    await expect(this.page.getByText('Notes in the bin are deleted after 7 days')).toBeVisible();
+  async expectBinInfoVisible(expected = 'Notes in the bin are deleted after 7 days') {
+    await expect(this.page.getByText(expected)).toBeVisible();
+  }
+
+  /**
+   * Serves `/config` with `trash_retention_days` replaced, so the bin texts can
+   * be checked against a value the e2e server does not run with. Call before
+   * `goto()`: the app reads the config once on load.
+   */
+  async overrideTrashRetentionDays(days: number) {
+    await this.page.route('**/api/v1/config', async (route) => {
+      const response = await route.fetch();
+      const json = await response.json();
+      await route.fulfill({ response, json: { ...json, trash_retention_days: days } });
+    });
   }
 
   async switchToMyTasks() {

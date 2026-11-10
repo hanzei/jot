@@ -29,6 +29,11 @@ export const VALIDATION = {
   LABEL_NAME_MAX_LENGTH: 100,
 } as const;
 
+// Trash retention the server uses when JOT_TRASH_RETENTION_DAYS is unset, and
+// what clients assume when a server (or a cached config) predates the
+// trash_retention_days field. Keep in sync with server/internal/config/config.go.
+export const DEFAULT_TRASH_RETENTION_DAYS = 7;
+
 // Note image upload limits. Keep in sync with the server-side mirror in
 // server/internal/config/config.go (UPLOAD_MAX_BYTES) and
 // server/internal/handlers/note_images.go (IMAGE_MAX_PER_NOTE / allowed types).

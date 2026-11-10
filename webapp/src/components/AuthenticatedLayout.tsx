@@ -44,9 +44,11 @@ export const useAuthenticatedLayout = () => useOutletContext<AuthenticatedLayout
 
 interface AuthenticatedLayoutProps {
   onLogout: () => void;
+  /** `/config`'s `trash_retention_days`, for the bin tab's tooltip. 0 means no automatic purge. */
+  trashRetentionDays: number;
 }
 
-const AuthenticatedLayout = ({ onLogout }: AuthenticatedLayoutProps) => {
+const AuthenticatedLayout = ({ onLogout, trashRetentionDays }: AuthenticatedLayoutProps) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
@@ -142,12 +144,12 @@ const AuthenticatedLayout = ({ onLogout }: AuthenticatedLayoutProps) => {
     },
     {
       label: t('dashboard.tabBin'),
-      title: t('dashboard.binTooltip'),
+      title: t('dashboard.binTooltip', { count: trashRetentionDays }),
       icon: <Trash2 className="h-4 w-4 shrink-0" />,
       href: '/?view=bin',
       isActive: isAtDashboard && view === 'bin',
     },
-  ], [t, isAtDashboard, view]);
+  ], [t, isAtDashboard, view, trashRetentionDays]);
 
   const handleLabelSelect = useCallback((labelId: string) => {
     // When on Dashboard, toggle the label selection; from other pages, navigate to Dashboard

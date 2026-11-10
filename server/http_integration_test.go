@@ -139,6 +139,8 @@ func defaultTestConfig(t *testing.T, tmpDir string) *config.Config {
 		LocalLoginEnabled: true,
 		// Mirrors config.Load's default.
 		PublicLinksEnabled: true,
+		// Mirrors config.Load's default.
+		TrashRetentionDays: 7,
 	}
 }
 
@@ -356,6 +358,16 @@ func TestConfigEndpoint(t *testing.T) {
 		cfg, err := c.Config(t.Context())
 		require.NoError(t, err)
 		assert.True(t, cfg.RegistrationEnabled)
+	})
+
+	t.Run("returns trash_retention_days", func(t *testing.T) {
+		ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
+			cfg.TrashRetentionDays = 30
+		})
+
+		cfg, err := ts.newClient().Config(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, 30, cfg.TrashRetentionDays)
 	})
 
 	t.Run("returns default password_min_length", func(t *testing.T) {

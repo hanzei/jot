@@ -5124,6 +5124,10 @@ const docTemplate = `{
                 "sso": {
                     "$ref": "#/definitions/server.ssoConfig"
                 },
+                "trash_retention_days": {
+                    "description": "TrashRetentionDays is JOT_TRASH_RETENTION_DAYS: how many days a trashed\nnote is kept before it is deleted for good. 0 means it is kept until\nthe trash is emptied.",
+                    "type": "integer"
+                },
                 "upload_max_bytes": {
                     "type": "integer"
                 }

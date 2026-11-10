@@ -19,7 +19,8 @@ compiled web app, while SQLite keeps the default deployment small and portable.
 - **Search and shortcuts**: Search across notes quickly, with keyboard
   shortcuts for common navigation and creation actions.
 - **Pin, archive, duplicate, trash**: Keep active notes focused while retaining
-  archived notes and automatically purging trashed notes after seven days.
+  archived notes and automatically purging trashed notes after a
+  configurable retention period (seven days by default).
 - **Import and export**: Import from a Jot export, Google Keep, or usememos,
   keeping each note's creation and last-modified dates, and export your Jot
   notes, with their images, as a `.zip` bundle — either a Jot backup that
@@ -355,6 +356,7 @@ App-specific variables use a `JOT_` prefix.
 | `JOT_DB_DSN` | `./jot.db` | SQLite file path or Postgres connection string. |
 | `JOT_UPLOAD_DIR` | `./uploads` | Filesystem root for uploaded image blobs and thumbnails. |
 | `JOT_UPLOAD_MAX_BYTES` | `26214400` | Maximum upload size per note image, from 1 MiB to 500 MiB. |
+| `JOT_TRASH_RETENTION_DAYS` | `7` | Days a trashed note is kept before it is deleted for good, from 0 to 36500. `0` turns the automatic purge off: trashed notes stay until the user empties the trash or deletes them. The purge runs at startup and then hourly, so lowering the value deletes every note already trashed for longer than the new window at the next start. Exposed as `trash_retention_days` in `GET /api/v1/config`. |
 
 Timestamps are always stored as UTC, whichever driver you use. Jot pins every
 Postgres session it opens to `SET TIME ZONE 'UTC'`, so a server or database

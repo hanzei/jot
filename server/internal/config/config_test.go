@@ -231,6 +231,36 @@ func TestLoadSlowQueryThreshold(t *testing.T) {
 	}
 }
 
+func TestLoadTrashRetentionDays(t *testing.T) {
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
+
+	for _, tc := range []struct {
+		value string
+		want  int
+	}{
+		{"", 7},
+		{"0", 0},
+		{"30", 30},
+		{"36500", 36500},
+	} {
+		t.Run("value "+tc.value, func(t *testing.T) {
+			t.Setenv("JOT_TRASH_RETENTION_DAYS", tc.value)
+			cfg, err := Load()
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, cfg.TrashRetentionDays)
+		})
+	}
+
+	for _, value := range []string{"-1", "36501", "7d", "720h"} {
+		t.Run("invalid "+value, func(t *testing.T) {
+			t.Setenv("JOT_TRASH_RETENTION_DAYS", value)
+			_, err := Load()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid JOT_TRASH_RETENTION_DAYS value")
+		})
+	}
+}
+
 func TestLoadStaticDirDefault(t *testing.T) {
 	t.Setenv("JOT_PORT", "")
 	t.Setenv("JOT_DB_DSN", "")
