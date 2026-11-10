@@ -667,16 +667,22 @@ func TestMCPCreateNoteLabelsAndPinned(t *testing.T) {
 	t.Run("a new label name over the limit creates nothing", func(t *testing.T) {
 		var before []client.Note
 		callTool(t, sess, "list_notes", map[string]any{}, &before)
+		var labelsBefore []client.Label
+		callTool(t, sess, "list_labels", map[string]any{}, &labelsBefore)
 
 		msg := callToolExpectError(t, sess, "create_note", map[string]any{
 			"content": "never created",
-			"labels":  []string{strings.Repeat("a", 101)},
+			// The valid name ahead of the bad one must not be created either.
+			"labels": []string{"fresh", strings.Repeat("a", 101)},
 		})
 		assert.Contains(t, msg, "label name must be 100 characters or fewer")
 
 		var after []client.Note
 		callTool(t, sess, "list_notes", map[string]any{}, &after)
 		assert.Len(t, after, len(before))
+		var labelsAfter []client.Label
+		callTool(t, sess, "list_labels", map[string]any{}, &labelsAfter)
+		assert.Len(t, labelsAfter, len(labelsBefore))
 	})
 }
 

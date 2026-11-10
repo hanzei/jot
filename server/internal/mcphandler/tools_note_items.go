@@ -62,24 +62,25 @@ func validateItemText(text string) error {
 
 // validateItemAssignee applies the REST API's rules for assigned_to: items can
 // only be assigned on a shared note, and only to its owner or a collaborator.
-// An empty assignedTo unassigns and is always allowed.
-func (h *Handler) validateItemAssignee(ctx context.Context, noteID, assignedTo string) error {
+// An empty assignedTo unassigns and is always allowed. note is the one
+// loadListNote returned, which already carries the owner and the shares.
+func validateItemAssignee(note *models.Note, assignedTo string) error {
 	if assignedTo == "" {
 		return nil
 	}
 	if !models.IsValidID(assignedTo) {
 		return errors.New("invalid assigned_to format")
 	}
-	// The audience is the owner plus every collaborator, so a note with an
-	// audience of one is not shared.
-	audience, err := h.noteStore.GetNoteAudienceIDs(ctx, noteID)
-	if err != nil {
-		return fmt.Errorf("get note audience: %w", err)
-	}
-	if len(audience) < 2 {
+	if len(note.SharedWith) == 0 {
 		return errors.New("cannot assign items on an unshared note")
 	}
-	if !slices.Contains(audience, assignedTo) {
+	if assignedTo == note.UserID {
+		return nil
+	}
+	isCollaborator := slices.ContainsFunc(note.SharedWith, func(s models.NoteShare) bool {
+		return s.SharedWithUserID == assignedTo
+	})
+	if !isCollaborator {
 		return errors.New("assigned user does not have access to this note")
 	}
 	return nil
@@ -157,7 +158,7 @@ func (h *Handler) handleCreateNoteItem(userID string) mcp.ToolHandlerFor[createN
 		if err = validateItemText(in.Text); err != nil {
 			return toolError("%w", err)
 		}
-		if err = h.validateItemAssignee(ctx, in.NoteID, in.AssignedTo); err != nil {
+		if err = validateItemAssignee(note, in.AssignedTo); err != nil {
 			return toolError("%w", err)
 		}
 
@@ -202,19 +203,20 @@ type updateNoteItemInput struct {
 
 func (h *Handler) handleUpdateNoteItem(userID string) mcp.ToolHandlerFor[updateNoteItemInput, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in updateNoteItemInput) (*mcp.CallToolResult, any, error) {
-		if _, err := h.loadListNote(ctx, in.NoteID, userID); err != nil {
+		note, err := h.loadListNote(ctx, in.NoteID, userID)
+		if err != nil {
 			return toolError("%w", err)
 		}
 		if in.ItemID == "" {
 			return toolError("item_id is required")
 		}
 		if in.Text != nil {
-			if err := validateItemText(*in.Text); err != nil {
+			if err = validateItemText(*in.Text); err != nil {
 				return toolError("%w", err)
 			}
 		}
 		if in.AssignedTo != nil {
-			if err := h.validateItemAssignee(ctx, in.NoteID, *in.AssignedTo); err != nil {
+			if err = validateItemAssignee(note, *in.AssignedTo); err != nil {
 				return toolError("%w", err)
 			}
 		}

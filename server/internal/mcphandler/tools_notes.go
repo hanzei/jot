@@ -50,7 +50,7 @@ type listNotesInput struct {
 	Label    string `json:"label,omitempty"    jsonschema:"Filter by label ID"`
 	Archived bool   `json:"archived,omitempty" jsonschema:"Include archived notes instead of active notes"`
 	Trashed  bool   `json:"trashed,omitempty"  jsonschema:"List notes in the trash instead of active notes"`
-	MyTasks  bool   `json:"my_tasks,omitempty" jsonschema:"List only notes with list items assigned to the authenticated user"`
+	MyTasks  bool   `json:"my_tasks,omitempty" jsonschema:"List only notes with list items assigned to the authenticated user, archived or not (archived is ignored; trashed takes precedence)"`
 }
 
 func (h *Handler) handleListNotes(userID string) mcp.ToolHandlerFor[listNotesInput, any] {
@@ -125,10 +125,10 @@ func (h *Handler) handleCreateNote(userID string) mcp.ToolHandlerFor[createNoteI
 			return toolError("%w", err)
 		}
 
-		// Resolve the labels before creating the note, so a label name that is
-		// too long fails the call without leaving a note behind.
-		labelIDs, err := h.resolveLabels(ctx, userID, in.Labels)
-		if err != nil {
+		// Check the label names before writing anything, so a name that is too
+		// long fails the call without leaving a note or other new labels behind.
+		labels := normalizeLabelNames(in.Labels)
+		if err = h.checkNewLabelNames(ctx, userID, labels); err != nil {
 			return toolError("%w", err)
 		}
 
@@ -143,17 +143,15 @@ func (h *Handler) handleCreateNote(userID string) mcp.ToolHandlerFor[createNoteI
 			return toolError("create note: %w", itemCapError(err))
 		}
 
-		for _, labelID := range labelIDs {
-			if err = h.noteStore.AddLabelToNote(ctx, note.ID, labelID, userID); err != nil {
-				return toolError("add label to note: %w", err)
-			}
+		if err = h.attachLabels(ctx, note.ID, userID, labels); err != nil {
+			return toolError("%w", err)
 		}
 
 		// CreateWithItems builds its return value from the arguments and does
 		// not read the inserted items or labels back, so refetch to return the
 		// note with them (and their generated IDs) — the same thing the REST API
 		// does.
-		if len(items) > 0 || len(labelIDs) > 0 {
+		if len(items) > 0 || len(labels) > 0 {
 			note, err = h.noteStore.GetByID(ctx, note.ID, userID)
 			if err != nil {
 				return toolError("get created note: %w", err)
@@ -165,27 +163,54 @@ func (h *Handler) handleCreateNote(userID string) mcp.ToolHandlerFor[createNoteI
 	}
 }
 
-// resolveLabels returns the IDs of the caller's labels with the given names,
-// creating the ones that do not exist yet. Names are trimmed; blank names and
-// repeats are skipped, as in the REST API.
-func (h *Handler) resolveLabels(ctx context.Context, userID string, names []string) ([]string, error) {
-	var ids []string
+// normalizeLabelNames trims names and drops blank names and exact repeats, as
+// the REST API does.
+func normalizeLabelNames(names []string) []string {
+	var result []string
 	for _, name := range names {
 		name = strings.TrimSpace(name)
-		if name == "" {
-			continue
-		}
-		label, _, err := h.labelStore.GetOrCreateLabel(ctx, userID, name)
-		if err != nil {
-			return nil, fmt.Errorf("get or create label %q: %w", name, err)
-		}
-		// Label names match case-insensitively, so two names can resolve to
-		// the same label.
-		if !slices.Contains(ids, label.ID) {
-			ids = append(ids, label.ID)
+		if name != "" && !slices.Contains(result, name) {
+			result = append(result, name)
 		}
 	}
-	return ids, nil
+	return result
+}
+
+// checkNewLabelNames rejects, without writing anything, a name over the length
+// limit that does not match an existing label — the one name create_note would
+// otherwise fail on after the note and earlier labels already exist. Mirrors
+// the REST API's check.
+func (h *Handler) checkNewLabelNames(ctx context.Context, userID string, names []string) error {
+	for _, name := range names {
+		lengthErr := models.ValidateLabelName(name)
+		if lengthErr == nil {
+			continue
+		}
+		_, err := h.labelStore.GetLabelByName(ctx, userID, name)
+		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
+			return lengthErr
+		}
+		if err != nil {
+			return fmt.Errorf("check label name: %w", err)
+		}
+	}
+	return nil
+}
+
+// attachLabels attaches the caller's labels with the given names to noteID,
+// creating the ones that do not exist yet. Names that differ only in case
+// resolve to the same label, and attaching it twice is a no-op.
+func (h *Handler) attachLabels(ctx context.Context, noteID, userID string, names []string) error {
+	for _, name := range names {
+		label, _, err := h.labelStore.GetOrCreateLabel(ctx, userID, name)
+		if err != nil {
+			return fmt.Errorf("get or create label %q: %w", name, err)
+		}
+		if err = h.noteStore.AddLabelToNote(ctx, noteID, label.ID, userID); err != nil {
+			return fmt.Errorf("add label to note: %w", err)
+		}
+	}
+	return nil
 }
 
 // resolveCreateNote fills in create_note's defaults (type, color) and applies
