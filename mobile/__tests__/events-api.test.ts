@@ -139,10 +139,13 @@ describe('SSEConnectionManager', () => {
     manager.disconnect();
   });
 
-  it('re-arms server reachability on a keepalive while the stream stays open', async () => {
+  it.each([
+    ['a keepalive', ''],
+    ['a data event', JSON.stringify({ type: 'note_updated', note_id: 'n1', note: null, source_user_id: 'u1' })],
+  ])('re-arms server reachability on %s while the stream stays open', async (_name, data) => {
     // A single write that timed out client-side marks the server unreachable,
     // which parks writes, drains and read syncs, so no axios response arrives to
-    // clear it. On an already-open stream the keepalive is then the only signal
+    // clear it. On an already-open stream, SSE traffic is then the only signal
     // that the server still answers (#1217).
     const manager = new SSEConnectionManager();
     await manager.connect(jest.fn());
@@ -152,23 +155,7 @@ describe('SSEConnectionManager', () => {
     )?.[1] as (event: { data?: string }) => void;
 
     markServerUnreachable();
-    messageHandler({ data: '' });
-
-    expect(isServerReachable()).toBe(true);
-
-    manager.disconnect();
-  });
-
-  it('re-arms server reachability on a data event', async () => {
-    const manager = new SSEConnectionManager();
-    await manager.connect(jest.fn());
-
-    const messageHandler = mockAddEventListener.mock.calls.find(
-      (call: [string, unknown]) => call[0] === 'message',
-    )?.[1] as (event: { data?: string }) => void;
-
-    markServerUnreachable();
-    messageHandler({ data: JSON.stringify({ type: 'note_updated', note_id: 'n1', note: null, source_user_id: 'u1' }) });
+    messageHandler({ data });
 
     expect(isServerReachable()).toBe(true);
 

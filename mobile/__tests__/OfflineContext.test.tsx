@@ -375,18 +375,21 @@ describe('OfflineProvider queue draining', () => {
     reachableSpy.mockRestore();
   });
 
-  it('drains the queue when reachability flips back to reachable with no other trigger (#1217)', async () => {
-    // A stalled drain's backoff timer returns early while the server is
-    // unreachable and does not reschedule, so the queue would stay parked
-    // after an SSE keepalive re-arms the belief unless the flip itself drains.
+  it('resumes a drain parked while unreachable when reachability flips back (#1217)', async () => {
+    // The drain's early return while unreachable does not reschedule, so after
+    // an SSE keepalive re-arms the belief the queue would stay parked unless
+    // the flip resumes it.
     silenceConsole('info', /^Server reachability:/);
     await renderProvider();
     await flush();
     const drainsAfterMount = mockDrainQueue.mock.calls.length;
 
-    // A request times out; nothing else happens until the belief re-arms.
+    // A write times out and is queued; its drain parks.
     await act(() => {
       serverReachability.markServerUnreachable();
+    });
+    await act(() => {
+      enqueueListener?.();
     });
     await act(async () => {
       jest.advanceTimersByTime(60000);
@@ -434,6 +437,26 @@ describe('OfflineProvider queue draining', () => {
     expect(lastSyncError).toBe(true);
   });
 
+  it('does not drain on a flip back to reachable when no drain was parked', async () => {
+    silenceConsole('info', /^Server reachability:/);
+    await renderProvider();
+    await flush();
+    const drainsAfterMount = mockDrainQueue.mock.calls.length;
+
+    await act(() => {
+      serverReachability.markServerUnreachable();
+    });
+    await act(() => {
+      serverReachability.markServerReachable();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(60000);
+    });
+    await flush();
+
+    expect(mockDrainQueue).toHaveBeenCalledTimes(drainsAfterMount);
+  });
+
   it('drains once when a foreground reconnect re-arms reachability (#1217)', async () => {
     // handleReconnect re-arms the belief and then drains after revalidating the
     // session; the reachability listener must not add a second, earlier drain.
@@ -445,6 +468,13 @@ describe('OfflineProvider queue draining', () => {
     await act(() => {
       serverReachability.markServerUnreachable();
     });
+    await act(() => {
+      enqueueListener?.();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    await flush();
     // Session revalidation on a slow link outlasts the flip's drain debounce.
     mockRevalidate.mockImplementationOnce(() => new Promise((resolve) => {
       setTimeout(() => resolve(true), 5000);

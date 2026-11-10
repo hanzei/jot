@@ -163,6 +163,11 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   // Set when a drain is requested while one is already in flight, so we run one
   // more pass afterward to pick up anything enqueued during the drain.
   const rerunRequestedRef = useRef(false);
+  // Set when performDrain skipped because the server was unreachable; that
+  // early return ends the drain's backoff chain, so the next flip back to
+  // reachable resumes it (#1217, spec §3.1). Cleared by anything that
+  // schedules or runs a drain itself, and by the failure cap.
+  const drainParkedRef = useRef(false);
   // Holds the latest performDrain so timers always call the current closure.
   const performDrainRef = useRef<() => void>(() => {});
   // Guard so near-simultaneous reconnect signals collapse into a single resync.
@@ -180,6 +185,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
 
   const scheduleDrain = useCallback((delayMs: number) => {
     clearDrainTimer();
+    drainParkedRef.current = false;
     drainTimerRef.current = setTimeout(() => {
       drainTimerRef.current = null;
       performDrainRef.current();
@@ -199,6 +205,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
         `Queue drain failed ${failureCountRef.current} times in a row; pausing automatic retries.`,
       );
       clearDrainTimer();
+      drainParkedRef.current = false;
       setSyncError(true);
       return;
     }
@@ -225,10 +232,12 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     // (see serverReachability.ts). Without this check a scheduled backoff drain
     // would still fire the head entry's request and eat the full write timeout
     // before bailing (#718) — mirrors the read path's `retrySync`, which already
-    // fast-fails on `!isServerReachable()`. Skip the network drain; the
-    // reachability subscription below schedules a fresh one once the server is
-    // reachable again (#1217).
-    if (!isServerReachable()) return;
+    // fast-fails on `!isServerReachable()`. Park instead; the reachability
+    // subscription below resumes the drain once the server is reachable again.
+    if (!isServerReachable()) {
+      drainParkedRef.current = true;
+      return;
+    }
     // Local mode has no server and never enqueues server ops, so the drain loop
     // stays parked (issue #514). This single guard covers every drain trigger
     // (mount, reconnect, foreground, post-enqueue), keeping the online sync engine
@@ -362,6 +371,9 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     isReconnectingRef.current = true;
+    // This reconnect drains below, after revalidating the session, so the flip
+    // the next line may cause must not resume a parked drain ahead of it.
+    drainParkedRef.current = false;
     // The device just regained connectivity: re-arm the server-reachable belief
     // so the next write probes the network again instead of staying parked on the
     // queue from a prior outage. A still-down server flips it back on the first
@@ -451,23 +463,12 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     return unsubscribe;
   }, [scheduleDrain, refreshPendingNoteIds]);
 
-  // Drain when the server becomes reachable again. performDrain returns early
-  // while it is unreachable without rescheduling, so a stalled drain's backoff
-  // chain ends there; without this, a re-arm that is not itself a drain trigger
-  // (any API response, an SSE message) would leave the queue parked until the
-  // next write, reconnect or foreground (#1217). Unlike those triggers this does
-  // not reset the failure count: a flip can repeat every keepalive, and the cap
-  // must still stop retries against a write that keeps failing. A pending
-  // backoff timer is left alone so the flip cannot shortcut it, and a reconnect
-  // in progress (which re-arms the belief itself) drains after revalidating the
-  // session, so the flip must not drain ahead of it.
+  // Resume a parked drain when the server becomes reachable again. Unlike a
+  // reconnect, foreground or new write, this keeps the failure count, so the
+  // cap still bounds a write that keeps failing (#1217, spec §3.1).
   useEffect(() => {
     return subscribeToServerReachability((reachable) => {
-      if (!reachable || !isConnectedRef.current) return;
-      if (isReconnectingRef.current) return;
-      if (failureCountRef.current >= MAX_CONSECUTIVE_DRAIN_FAILURES) return;
-      if (drainTimerRef.current !== null) return;
-      scheduleDrain(ENQUEUE_DRAIN_DEBOUNCE_MS);
+      if (reachable && drainParkedRef.current) scheduleDrain(ENQUEUE_DRAIN_DEBOUNCE_MS);
     });
   }, [scheduleDrain]);
 

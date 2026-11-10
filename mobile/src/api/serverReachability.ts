@@ -13,14 +13,10 @@
  * persist + enqueue path once the server is known-unreachable, and resume
  * hitting the network the moment it answers again. The signal is updated from
  * the axios interceptors (a response of any status means the server answered; a
- * transport failure, client timeout included, means it did not) and from the
- * SSE stream opening or delivering any message, keepalives included. It is also
- * re-armed to reachable whenever the device regains connectivity or the app
- * returns to the foreground, so a new link gets a fresh probe, and on a server
- * switch. While it is false, writes, queue drains and read syncs are all parked,
- * so nothing they send can re-arm it: the SSE keepalive (every 30 s on an open
- * stream) and the stream's backed-off reconnect are what bound how long a wrong
- * `false` lasts. See docs/specs/mobile-connectivity-handling.md §3.1.
+ * transport failure, client timeout included, means it did not) and from SSE
+ * traffic. While it is false, writes, queue drains and read syncs are parked, so
+ * nothing they send can re-arm it. The full list of writers and readers, and the
+ * re-arm guarantee, is docs/specs/mobile-connectivity-handling.md §3.1.
  *
  * Its one dependency is the leaf `localMode` flag (used by the
  * `isOnlineWriteAllowed` gate below), which imports nothing back — so this
@@ -68,9 +64,8 @@ function setReachable(next: boolean): void {
 }
 
 /**
- * Record that the server answered — a successful response, an HTTP error status
- * (still proof the server is up), the SSE stream opening, or a fresh device
- * connection worth re-probing.
+ * Record that the server answered, or that a fresh probe is warranted (sources:
+ * docs/specs/mobile-connectivity-handling.md §3.1).
  */
 export function markServerReachable(): void {
   setReachable(true);

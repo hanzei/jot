@@ -97,12 +97,14 @@ with 502s).
 SSE re-arms only from a stream opened for the current server: after a server
 switch, the old server's stream says nothing about the new one.
 
-**Drain on re-arm.** A flip from `false` to `true` schedules a queue drain,
-because the drain's backoff chain ended when it returned early. The flip does
-not reset the drain's failure count, and does not shortcut a pending backoff
-timer, so a write that keeps failing still reaches the failure cap. During a
-reconnect or foreground, `handleReconnect` re-arms the flag itself and drains
-after revalidating the session, so the flip does not schedule a second drain.
+**Drain on re-arm.** A drain that returns early because the flag is `false`
+parks: its backoff chain ends there. A flip from `false` to `true` resumes a
+parked drain, and does nothing when no drain parked. Anything that schedules or
+runs a drain itself clears the park, so the flip never shortcuts a pending
+backoff timer, never runs ahead of `handleReconnect` (which re-arms the flag
+itself and drains after revalidating the session), and never drains past the
+failure cap. It also keeps the failure count, so a write that keeps failing
+still reaches the cap.
 
 **Known cost.** If the API times out while the SSE stream stays healthy (an
 overloaded server, a proxy timing out only API routes), each keepalive re-arms

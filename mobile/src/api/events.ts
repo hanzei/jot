@@ -92,10 +92,7 @@ export class SSEConnectionManager {
         // The stream opened, so the server is reachable — an always-on recovery
         // signal that flips writes back to the network path even with no other
         // request in flight (e.g. the server came back while the note sat idle).
-        // A stream from before a server switch says nothing about the new server.
-        if (this.generationId === getCurrentSwitchGenerationId() && !isSseQuiesced()) {
-          markServerReachable();
-        }
+        if (this.isCurrentStream()) markServerReachable();
         this.statusChangeCallback?.('connected');
       });
 
@@ -103,13 +100,9 @@ export class SSEConnectionManager {
         // Reset watchdog and backoff on any message (including keepalive empty-data events).
         this.lastEventAt = Date.now();
         this.reconnectDelay = BASE_RECONNECT_DELAY_MS;
-        if (this.generationId !== getCurrentSwitchGenerationId() || isSseQuiesced()) {
-          return;
-        }
-        // Any message, keepalives included, proves the server answers. While the
-        // reachability belief is false, writes, drains and read syncs are all
-        // parked, so no axios response arrives to clear it; on an already-open
-        // stream this is the only signal that does (#1217).
+        if (!this.isCurrentStream()) return;
+        // Any message, keepalives included, proves the server answers; on an
+        // open stream it is the only thing that can re-arm the belief (#1217).
         markServerReachable();
         if (!event.data) return;
         try {
@@ -151,6 +144,11 @@ export class SSEConnectionManager {
       // Handle errors (e.g., SecureStore failures) — schedule a retry
       this.scheduleReconnect();
     }
+  }
+
+  // A stream from before a server switch says nothing about the new server.
+  private isCurrentStream(): boolean {
+    return this.generationId === getCurrentSwitchGenerationId() && !isSseQuiesced();
   }
 
   private scheduleReconnect(): void {
