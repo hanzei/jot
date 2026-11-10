@@ -32,6 +32,13 @@ const PLURAL_SUFFIX = /_(zero|one|two|few|many|other)$/;
 // rules can produce. en.json repeats `_other` for forms English never uses, which keeps
 // the key sets identical.
 function findMissingPluralForms(keys, locale) {
+  // Intl.PluralRules silently falls back to the default locale's rules for a locale it has
+  // no data for (a Node built with small-icu, or a misnamed locale file), which would let
+  // every Polish `_few` gap pass as if Polish were English.
+  if (Intl.PluralRules.supportedLocalesOf(locale).length === 0) {
+    console.error(`No plural rules for locale "${locale}" in this Node build; cannot check its plural forms`);
+    process.exit(1);
+  }
   const categories = new Intl.PluralRules(locale).resolvedOptions().pluralCategories;
   const pluralBases = new Set(keys.filter((k) => PLURAL_SUFFIX.test(k)).map((k) => k.replace(PLURAL_SUFFIX, '')));
   const keySet = new Set(keys);
