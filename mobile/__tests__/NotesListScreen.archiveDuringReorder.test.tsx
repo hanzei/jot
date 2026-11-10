@@ -68,10 +68,6 @@ jest.mock('../src/theme/ThemeContext', () => ({
 }));
 
 
-jest.mock('../src/hooks/useServerConfig', () => ({
-  useServerConfig: jest.fn(() => ({})),
-}));
-
 jest.mock('../src/hooks/useNetworkStatus', () => ({
   useNetworkStatus: jest.fn().mockReturnValue({ isConnected: true }),
 }));

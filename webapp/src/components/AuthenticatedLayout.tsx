@@ -16,7 +16,7 @@ import SidebarLabels from '@/components/SidebarLabels';
 import { useSidebarLabelsController } from '@/hooks/useSidebarLabelsController';
 import { auth } from '@/utils/api';
 import { removeUser, isAdmin } from '@/utils/auth';
-import { DEFAULT_TRASH_RETENTION_DAYS, type Label, type LabelWithCount } from '@jot/shared';
+import type { Label, LabelWithCount } from '@jot/shared';
 
 interface LabelCallbacks {
   onRenameSuccess?: (label: Label, newName: string) => void | Promise<void>;
@@ -45,10 +45,10 @@ export const useAuthenticatedLayout = () => useOutletContext<AuthenticatedLayout
 interface AuthenticatedLayoutProps {
   onLogout: () => void;
   /** `/config`'s `trash_retention_days`, for the bin tab's tooltip. 0 means no automatic purge. */
-  trashRetentionDays?: number;
+  trashRetentionDays: number;
 }
 
-const AuthenticatedLayout = ({ onLogout, trashRetentionDays = DEFAULT_TRASH_RETENTION_DAYS }: AuthenticatedLayoutProps) => {
+const AuthenticatedLayout = ({ onLogout, trashRetentionDays }: AuthenticatedLayoutProps) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();

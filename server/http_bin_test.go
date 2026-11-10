@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"testing"
 	"time"
@@ -11,8 +10,6 @@ import (
 	"github.com/hanzei/jot/server/client"
 	"github.com/hanzei/jot/server/internal/config"
 	"github.com/hanzei/jot/server/internal/models"
-	"github.com/hanzei/jot/server/internal/server"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -322,15 +319,10 @@ func TestBinTrashPurgeRespectsRetention(t *testing.T) {
 	// and stops it when t ends.
 	startServer := func(t *testing.T, days int) {
 		t.Helper()
-		c := *cfg
-		c.TrashRetentionDays = days
-		log := logrus.New()
-		log.SetOutput(io.Discard)
-		s, err := server.NewWithLogger(&c, log)
-		require.NoError(t, err)
-		t.Cleanup(func() {
-			s.StopBackgroundTasks()
-			_ = s.GetDB().Close()
+		setupTestServerWithConfig(t, func(c *config.Config) {
+			c.DBDSN = cfg.DBDSN
+			c.UploadDir = cfg.UploadDir
+			c.TrashRetentionDays = days
 		})
 	}
 

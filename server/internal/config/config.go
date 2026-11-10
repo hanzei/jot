@@ -317,7 +317,6 @@ func Load() (*Config, error) {
 	}
 	cfg.SlowQueryThreshold = slowQueryThreshold
 
-	// 0 turns the automatic trash purge off.
 	trashRetentionDays, err := parseIntRangeEnv("JOT_TRASH_RETENTION_DAYS", cfg.TrashRetentionDays, 0, 36500)
 	if err != nil {
 		return nil, err
