@@ -385,6 +385,15 @@ func TestMCPNoteItemErrors(t *testing.T) {
 		assert.Contains(t, msg, "500 characters or fewer")
 	})
 
+	t.Run("malformed parent_id", func(t *testing.T) {
+		msg := callToolExpectError(t, sess, "create_note_item", map[string]any{
+			"note_id":   listNote.ID,
+			"text":      "child",
+			"parent_id": "not-an-id",
+		})
+		assert.Equal(t, "create note item: invalid parent_id format", msg, "the same message REST returns")
+	})
+
 	t.Run("too many items on create", func(t *testing.T) {
 		items := make([]map[string]any, 501)
 		for i := range items {
