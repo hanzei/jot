@@ -218,6 +218,25 @@ test.describe('Modal focus management', () => {
     await expect(confirm).toBeHidden();
     await expect(revoke).toBeFocused();
     await expect(publicLinkSection.urlField()).toBeVisible();
+
+    // Change opens the expiry editor with focus on its select; Cancel and
+    // Escape both close only the editor and return focus to Change.
+    const change = publicLinkSection.changeButton();
+    await change.focus();
+    await page.keyboard.press('Enter');
+    await expect(publicLinkSection.newExpirySelect()).toBeFocused();
+    await publicLinkSection.cancelButton().focus();
+    await page.keyboard.press('Enter');
+    await expect(publicLinkSection.newExpirySelect()).toHaveCount(0);
+    await expect(change).toBeFocused();
+
+    await page.keyboard.press('Enter');
+    await expect(publicLinkSection.newExpirySelect()).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(publicLinkSection.newExpirySelect()).toHaveCount(0);
+    await expect(change).toBeFocused();
+    await expect(publicLinkSection.section()).toBeVisible();
+    await expectFocusTrapped(page, shareDialog);
   });
 
   test('image lightbox traps focus and closes on Escape', async ({ authenticatedUser, page, dashboardPage }) => {
