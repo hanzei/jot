@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
@@ -96,23 +97,30 @@ func (rl *rateLimiter) limit(bucket string, requestsPerMinute int, keyFn httprat
 // ID, for operations that are not routes of their own: one /mcp request can
 // carry any tool, so the MCP handler checks a bucket per tool call. The
 // returned function draws one request from userID's bucket and reports whether
-// it was within the limit, counting and logging a rejection as limit does. It
-// always allows when rate limiting is disabled.
-func (rl *rateLimiter) allowUser(bucket string, requestsPerMinute int) func(ctx context.Context, userID string) bool {
+// it was within the limit, counting and logging a rejection as limit does, or
+// an error if the check itself failed. It always allows when rate limiting is
+// disabled.
+func (rl *rateLimiter) allowUser(bucket string, requestsPerMinute int) func(ctx context.Context, userID string) (bool, error) {
 	if !rl.cfg.RateLimitEnabled {
-		return func(context.Context, string) bool { return true }
+		return func(context.Context, string) (bool, error) { return true, nil }
 	}
 	l := rl.limiter(bucket, requestsPerMinute)
-	return func(ctx context.Context, userID string) bool {
-		// OnLimit only reads the request's context, and the rate-limit headers
-		// it sets have no HTTP response to go to.
+	return func(ctx context.Context, userID string) (bool, error) {
+		// OnLimit, and onCounterError when it fails, only read the request's
+		// context (pinned by TestRateLimiterAllowUser, which hands them this
+		// same bare request).
 		r := (&http.Request{}).WithContext(ctx)
-		if !l.OnLimit(discardResponseWriter{}, r, userID) {
-			return true
+		w := &limitResult{header: http.Header{}}
+		if !l.OnLimit(w, r, userID) {
+			return true, nil
+		}
+		if w.status != 0 {
+			// onCounterError wrote an error response and logged the cause.
+			return false, errors.New("rate limit check failed")
 		}
 		rl.throttled.Add(ctx, 1, metric.WithAttributes(attribute.String("bucket", bucket)))
 		logutil.FromContext(ctx).WithField("ratelimit_bucket", bucket).Warn("Rate limit exceeded")
-		return false
+		return false, nil
 	}
 }
 
@@ -127,20 +135,23 @@ func (rl *rateLimiter) limiter(bucket string, requestsPerMinute int) *httprate.R
 
 	l := httprate.NewRateLimiter(requestsPerMinute, time.Minute,
 		httprate.WithLimitHandler(rl.onLimitExceeded(bucket)),
-		// Only reached if the counter fails, which the in-memory one never does.
-		httprate.WithErrorHandler(rl.onKeyError(bucket)),
+		httprate.WithErrorHandler(rl.onCounterError(bucket)),
 	)
 	rl.limiters[bucket] = l
 	return l
 }
 
-// discardResponseWriter is what allowUser hands httprate, which sets
-// rate-limit headers on it that nothing reads.
-type discardResponseWriter struct{}
+// limitResult is the response writer allowUser hands httprate. The rate-limit
+// headers httprate sets on it go nowhere; status records whether
+// onCounterError wrote an error response.
+type limitResult struct {
+	header http.Header
+	status int
+}
 
-func (discardResponseWriter) Header() http.Header         { return http.Header{} }
-func (discardResponseWriter) Write(b []byte) (int, error) { return len(b), nil }
-func (discardResponseWriter) WriteHeader(int)             {}
+func (w *limitResult) Header() http.Header         { return w.header }
+func (w *limitResult) Write(b []byte) (int, error) { return len(b), nil }
+func (w *limitResult) WriteHeader(status int)      { w.status = status }
 
 // onLimitExceeded logs and counts a throttled request, then responds 429.
 // httprate has already set the Retry-After/X-RateLimit-* headers by the time
@@ -162,6 +173,15 @@ func (rl *rateLimiter) onLimitExceeded(bucket string) http.HandlerFunc {
 func (rl *rateLimiter) onKeyError(bucket string) func(http.ResponseWriter, *http.Request, error) {
 	return func(w http.ResponseWriter, r *http.Request, err error) {
 		logutil.FromContext(r.Context()).WithError(err).WithField("ratelimit_bucket", bucket).Error("Rate limit key function failed")
+		apierr.Write(w, r, http.StatusInternalServerError, apierr.CodeInternal, apierr.InternalMessage)
+	}
+}
+
+// onCounterError handles a failure of the limiter's counter, which the
+// in-memory one never reports, the same way: logged, and a generic 500.
+func (rl *rateLimiter) onCounterError(bucket string) func(http.ResponseWriter, *http.Request, error) {
+	return func(w http.ResponseWriter, r *http.Request, err error) {
+		logutil.FromContext(r.Context()).WithError(err).WithField("ratelimit_bucket", bucket).Error("Rate limit counter failed")
 		apierr.Write(w, r, http.StatusInternalServerError, apierr.CodeInternal, apierr.InternalMessage)
 	}
 }

@@ -28,16 +28,17 @@ type Handler struct {
 	events *notify.Publisher
 	// allowExpensive draws one request from the user's expensive-operation
 	// rate-limit bucket, the one GET /notes?search= uses, and reports whether
-	// it was within the limit. Rate limiting is HTTP middleware, and one /mcp
-	// request can carry any tool, so tools that cost what their REST
-	// counterpart does check the bucket themselves.
-	allowExpensive func(ctx context.Context, userID string) bool
+	// it was within the limit, or an error if the check itself failed. Rate
+	// limiting is HTTP middleware, and one /mcp request can carry any tool, so
+	// tools that cost what their REST counterpart does check the bucket
+	// themselves.
+	allowExpensive func(ctx context.Context, userID string) (bool, error)
 }
 
 // New creates a new Handler backed by the provided stores, publishing change
 // events to hub. allowExpensive is the expensive-operation rate-limit check
 // described on [Handler].
-func New(noteStore *models.NoteStore, labelStore *models.LabelStore, imageStore *blobstore.ImageStore, hub *sse.Hub, allowExpensive func(ctx context.Context, userID string) bool) *Handler {
+func New(noteStore *models.NoteStore, labelStore *models.LabelStore, imageStore *blobstore.ImageStore, hub *sse.Hub, allowExpensive func(ctx context.Context, userID string) (bool, error)) *Handler {
 	return &Handler{
 		noteStore:      noteStore,
 		labelStore:     labelStore,
