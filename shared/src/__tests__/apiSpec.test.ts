@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import ts from 'typescript';
 import swagger from '../../../server/docs/swagger.json';
+// `types.ts` is read through the compiler below, not imported, so nothing else
+// tells vitest's watch mode to re-run this file when it changes.
+import '../types';
 
 // `types.ts` is written by hand; `server/docs/swagger.json` is generated from
 // the Go handlers and models (`task gen-docs`, kept current by `task
@@ -141,7 +144,11 @@ interface SpecDefinition {
   properties?: Record<string, SpecProperty>;
 }
 
-const definitions: Record<string, SpecDefinition> = swagger.definitions;
+// Cast rather than assigned: the JSON's inferred type follows every generated
+// property, so one these interfaces do not describe (a numeric enum, a property
+// with nothing but a description) would fail `tsc` instead of a test here, and
+// check-changed.sh runs only the tests when the spec alone changed.
+const definitions = swagger.definitions as unknown as Record<string, SpecDefinition>;
 
 /** The values a spec property is limited to, given inline or through a `$ref` to an enum definition. */
 function specEnum(property: SpecProperty): string[] | undefined {
@@ -163,9 +170,11 @@ const exported = new Map(
 
 const unionMembers = (type: ts.Type): ts.Type[] => (type.isUnion() ? type.types : [type]);
 
+const sorted = (values: Iterable<string>): string[] => [...values].sort();
+
 function fieldNames(type: ts.Type): string[] {
   const names = unionMembers(type).flatMap(member => checker.getPropertiesOfType(member).map(property => property.name));
-  return [...new Set(names)].sort();
+  return sorted(new Set(names));
 }
 
 /** The string literals a type is limited to, ignoring null and undefined; undefined for any other type. */
@@ -176,7 +185,7 @@ function literals(type: ts.Type): string[] | undefined {
     if (!member.isStringLiteral()) return undefined;
     values.add(member.value);
   }
-  return values.size > 0 ? [...values].sort() : undefined;
+  return values.size > 0 ? sorted(values) : undefined;
 }
 
 /** `literals` for one field, across every union member that has it. */
@@ -189,10 +198,8 @@ function fieldLiterals(type: ts.Type, field: string): string[] | undefined {
     if (!memberValues) return undefined;
     for (const value of memberValues) values.add(value);
   }
-  return values.size > 0 ? [...values].sort() : undefined;
+  return values.size > 0 ? sorted(values) : undefined;
 }
-
-const sorted = (values: Iterable<string>): string[] => [...values].sort();
 
 /** `types.ts` type name -> the spec definitions mapped to it. */
 const mappedTypes = new Map<string, string[]>();
