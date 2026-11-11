@@ -96,7 +96,9 @@ test.describe('Markdown note editing', () => {
 
     const card = dashboardPage.noteCardByText('passport');
     await expect(card).toContainText('☐ passport');
-    await expect(card.locator('input')).toHaveCount(0);
+    // The preview renders glyphs, not controls. The card's own multi-select
+    // checkbox (#1255) is the one input a card carries.
+    await expect(card.locator('input:not([data-testid="note-card-select"])')).toHaveCount(0);
 
     await dashboardPage.openTextNote('passport');
     const preview = noteEditorPage.preview();
