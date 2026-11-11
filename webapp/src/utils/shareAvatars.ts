@@ -1,4 +1,4 @@
-import type { Note, User } from '@jot/shared';
+import type { Note, KnownUser } from '@jot/shared';
 
 export interface AvatarInfo {
   key: string;
@@ -18,7 +18,7 @@ function formatDisplayName(username: string, firstName?: string, lastName?: stri
 export function buildShareAvatars(
   note: Note,
   currentUserId: string | undefined,
-  usersById: Map<string, User> | undefined,
+  usersById: Map<string, KnownUser> | undefined,
 ): AvatarInfo[] {
   const isOwner = note.user_id === currentUserId;
   const avatars: AvatarInfo[] = [];

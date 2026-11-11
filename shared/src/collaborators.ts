@@ -1,4 +1,4 @@
-import type { User } from './types';
+import type { KnownUser, UserInfo } from './types';
 
 /** How many past collaborators the share pickers offer as one-tap suggestions. */
 export const RECENT_SHARE_TARGETS_LIMIT = 5;
@@ -17,8 +17,8 @@ export function displayName(c: Collaborator): string {
   return full || c.username;
 }
 
-/** `displayName` for a full `User` record. */
-export function userDisplayName(user: User): string {
+/** `displayName` for a user record. */
+export function userDisplayName(user: UserInfo): string {
   return displayName({
     userId: user.id,
     username: user.username,
@@ -30,7 +30,7 @@ export function userDisplayName(user: User): string {
 export function buildCollaborators(
   noteUserId: string,
   sharedWith: { shared_with_user_id: string; username?: string; first_name?: string; last_name?: string; has_profile_icon?: boolean }[] | undefined,
-  usersById: Map<string, User> | undefined,
+  usersById: Map<string, KnownUser> | undefined,
 ): Collaborator[] {
   const result: Collaborator[] = [];
   const seen = new Set<string>();
@@ -124,12 +124,12 @@ export function recentShareTargets(
 
 export interface ShareSuggestions {
   /** Past collaborators, most recently shared with first. */
-  recent: User[];
+  recent: KnownUser[];
   /** Everyone else, alphabetical by display name. */
-  others: User[];
+  others: KnownUser[];
 }
 
-function suggestionSortName(user: User): string {
+function suggestionSortName(user: KnownUser): string {
   return userDisplayName(user).toLowerCase();
 }
 
@@ -145,16 +145,16 @@ function suggestionSortName(user: User): string {
  * render them as separate labelled sections.
  */
 export function buildShareSuggestions(
-  users: User[],
+  users: KnownUser[],
   recentUserIds: string[],
   excludedUserIds: Set<string>,
 ): ShareSuggestions {
-  const candidates = new Map<string, User>();
+  const candidates = new Map<string, KnownUser>();
   users.forEach(user => {
     if (!excludedUserIds.has(user.id)) candidates.set(user.id, user);
   });
 
-  const recent: User[] = [];
+  const recent: KnownUser[] = [];
   recentUserIds.forEach(userId => {
     const user = candidates.get(userId);
     if (!user) return;

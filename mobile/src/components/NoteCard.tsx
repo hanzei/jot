@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { CircleAlert, CloudOff, Square } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, groupNoteItems, hasCustomNoteColor, type Note, type NoteItem, type User } from '@jot/shared';
+import { VALIDATION, groupNoteItems, hasCustomNoteColor, type Note, type NoteItem, type KnownUser } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../store/AuthContext';
 import { useFailedNoteIds } from '../store/OfflineContext';
@@ -51,7 +51,7 @@ interface AvatarData {
 function buildNoteAvatars(
   note: Note,
   currentUserId: string | undefined,
-  usersById: Map<string, User>,
+  usersById: Map<string, KnownUser>,
 ): AvatarData[] {
   const isOwner = note.user_id === currentUserId;
   const avatars: AvatarData[] = [];

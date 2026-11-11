@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { User } from '@jot/shared';
+import type { KnownUser } from '@jot/shared';
 import { getBaseUrl } from '../api/client';
 import { useAuth } from './AuthContext';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -13,17 +13,17 @@ import { subscribeToReconnectResync } from './resyncEvents';
 import { jot } from '../api/jot';
 
 interface UsersState {
-  usersById: Map<string, User>;
+  usersById: Map<string, KnownUser>;
   refreshUsers: () => Promise<void>;
 }
 
 const UsersContext = createContext<UsersState | undefined>(undefined);
 
-const EMPTY_USERS: Map<string, User> = new Map();
+const EMPTY_USERS: Map<string, KnownUser> = new Map();
 
-function buildUsersMap(seedUser: User | null | undefined, list: User[]): Map<string, User> {
-  const map = new Map<string, User>();
-  if (seedUser) map.set(seedUser.id, seedUser as User);
+function buildUsersMap(seedUser: KnownUser | null | undefined, list: KnownUser[]): Map<string, KnownUser> {
+  const map = new Map<string, KnownUser>();
+  if (seedUser) map.set(seedUser.id, seedUser);
   for (const u of list) map.set(u.id, u);
   return map;
 }
@@ -38,7 +38,7 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
   // sign-out where the previous session's collaborators were still readable, and
   // — because loadUsers only replaces the map once it resolves — every render of
   // account B's session before its own load lands.
-  const [loaded, setLoaded] = useState<{ ownerId: string | null; byId: Map<string, User> }>({
+  const [loaded, setLoaded] = useState<{ ownerId: string | null; byId: Map<string, KnownUser> }>({
     ownerId: null,
     byId: new Map(),
   });

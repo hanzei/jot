@@ -1,4 +1,4 @@
-import type { Note, NoteSSEEvent, SSEEvent, User } from './types';
+import type { Note, NoteSSEEvent, SSEEvent, KnownUser } from './types';
 import { codePointLength, truncateToCodePoints } from './text';
 import { userDisplayName } from './collaborators';
 import { HEADING_RE } from './noteConversion';
@@ -44,7 +44,7 @@ export function noteNoticeTitle(note: Note, maxLength: number = SHARED_NOTE_TITL
  * Either is empty when unknown (sharer not in `usersById`, note without a
  * payload or anything to show); callers substitute their localized fallback.
  */
-export function noteShareNoticeParts(event: NoteSSEEvent, usersById: ReadonlyMap<string, User>): { name: string; title: string } {
+export function noteShareNoticeParts(event: NoteSSEEvent, usersById: ReadonlyMap<string, KnownUser>): { name: string; title: string } {
   const sharer = usersById.get(event.source_user_id);
   return {
     name: sharer ? userDisplayName(sharer) : '',

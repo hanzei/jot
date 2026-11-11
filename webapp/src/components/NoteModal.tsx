@@ -4,7 +4,7 @@ import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuI
 import { useTranslation } from 'react-i18next';
 import { formatDate } from '@/utils/formatDate';
 import type { TFunction } from 'i18next';
-import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, normalizeNoteColor, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, distinctCompletedTexts, findSuggestedItem, generateId, reviveSuggestedItem, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, toggleTaskMarkerAt, completedCascadeScope, completedPriorById, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, normalizeNoteColor, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, distinctCompletedTexts, findSuggestedItem, generateId, reviveSuggestedItem, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, toggleTaskMarkerAt, completedCascadeScope, completedPriorById, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type KnownUser, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
 import { renderMarkdown, renderInteractiveMarkdown, inlineMarkdownToText, type InteractiveMarkdownRender } from '@/utils/markdown';
 import LabelChip from '@/components/LabelChip';
@@ -146,7 +146,7 @@ interface NoteModalProps {
   onRestore?: (noteId: string) => void;
   onPermanentlyDelete?: (noteId: string) => void;
   isOwner?: boolean;
-  usersById?: Map<string, User>;
+  usersById?: Map<string, KnownUser>;
   currentUserId?: string | undefined;
   // Server-configured image upload cap, fetched via GET /config. Falls back
   // to the shared default so this component still works if a caller (e.g. a

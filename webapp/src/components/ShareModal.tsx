@@ -10,7 +10,7 @@ import {
   type Note,
   type NoteShare,
   type PublicLink,
-  type User,
+  type KnownUser,
 } from '@jot/shared';
 import { notes, users as usersApi } from '@/utils/api';
 import { useSizeTransition } from '@/hooks/useSizeTransition';
@@ -39,7 +39,7 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [shares, setShares] = useState<NoteShare[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<KnownUser[]>([]);
   // Distinguishes "the directory hasn't arrived yet" from "there is genuinely
   // nobody left to suggest", so the empty dropdown never accuses a populated
   // instance of having no other users.
@@ -259,7 +259,7 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
     setSelectedUserIndex(-1);
   };
 
-  const handleUserSelect = (user: User) => {
+  const handleUserSelect = (user: KnownUser) => {
     handleShare(user.id);
     setShowSuggestions(false);
   };
@@ -311,7 +311,7 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
 
   // `index` is the row's position in `orderedSuggestions` so that keyboard
   // selection lines up with the rendered order in the grouped presentation too.
-  const renderSuggestion = (user: User, index: number) => {
+  const renderSuggestion = (user: KnownUser, index: number) => {
     const hasName = !!(user.first_name || user.last_name);
     const displayName = hasName
       ? `${user.first_name} ${user.last_name}`.trim()

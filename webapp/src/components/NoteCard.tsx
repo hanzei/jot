@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, groupNoteItems, normalizeNoteColor, type Note, type User } from '@jot/shared';
+import { VALIDATION, groupNoteItems, normalizeNoteColor, type Note, type KnownUser } from '@jot/shared';
 import { notes, images as imagesApi } from '@/utils/api';
 import LetterAvatar from '@/components/LetterAvatar';
 import LabelChip from '@/components/LabelChip';
@@ -32,7 +32,7 @@ interface NoteCardProps {
   onRestore?: ((noteId: string) => void) | undefined;
   onPermanentlyDelete?: ((noteId: string) => void) | undefined;
   currentUserId?: string | undefined;
-  usersById?: Map<string, User> | undefined;
+  usersById?: Map<string, KnownUser> | undefined;
   inBin?: boolean;
   onRefresh?: (() => void) | undefined;
   onLabelClick?: ((labelId: string) => void) | undefined;

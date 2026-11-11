@@ -88,6 +88,20 @@ export interface User {
   updated_at: string;
 }
 
+/**
+ * The public profile `GET /users` returns for every user but the caller: what a
+ * share picker or an avatar needs, and no more.
+ */
+export type UserInfo = Pick<User, 'id' | 'username' | 'first_name' | 'last_name' | 'role' | 'has_profile_icon'>;
+
+/**
+ * A user as a client holds one for display. `GET /users` supplies the
+ * `UserInfo` fields only; the timestamps are there when the record came from a
+ * source that carries them (the signed-in user, a `profile_icon_updated`
+ * event). Avatars bust the icon cache off `updated_at` when it is present.
+ */
+export type KnownUser = UserInfo & Partial<Pick<User, 'created_at' | 'updated_at'>>;
+
 export type ThemePreference = 'system' | 'light' | 'dark';
 export type NoteSort = 'manual' | 'updated_at' | 'created_at';
 
@@ -114,6 +128,16 @@ export interface RegisterRequest {
   password: string;
 }
 
+/**
+ * POST /auth/oidc/native/exchange and /auth/oidc/native/link: the one-time
+ * hand-off code from the native SSO redirect and the PKCE verifier it was
+ * started with.
+ */
+export interface NativeExchangeRequest {
+  code: string;
+  code_verifier: string;
+}
+
 export interface Label {
   id: string;
   user_id: string;
@@ -134,6 +158,20 @@ export interface LabelWithCount extends Label {
 /** GET /labels */
 export interface LabelListResponse {
   labels: LabelWithCount[];
+}
+
+/**
+ * POST /labels and POST /notes/{id}/labels. With an `id` the label is created
+ * under that ID, so a replayed offline create is rejected instead of duplicated.
+ */
+export interface AddLabelRequest {
+  id?: string;
+  name: string;
+}
+
+/** PATCH /labels/{id} */
+export interface RenameLabelRequest {
+  name: string;
 }
 
 export type NoteType = 'text' | 'list';
@@ -357,6 +395,41 @@ export interface ReorderNoteItemsRequest {
   item_ids: string[];
 }
 
+/** POST /notes/{id}/items/set-completed */
+export interface SetNoteItemsCompletedRequest {
+  item_ids: string[];
+  completed: boolean;
+}
+
+/** POST /notes/{id}/items/delete */
+export interface DeleteNoteItemsRequest {
+  item_ids: string[];
+}
+
+/** POST /notes/reorder: every note whose position moved, in its new order. */
+export interface ReorderNotesRequest {
+  note_ids: string[];
+}
+
+/**
+ * Optional body of `POST /notes/{id}/duplicate`. `id` is the copy's
+ * client-supplied ID; `item_ids` maps each source item ID to the ID its copy
+ * gets.
+ */
+export interface DuplicateNoteRequest {
+  id?: string;
+  item_ids?: Record<string, string>;
+}
+
+/**
+ * Optional body of `POST /notes/{id}/viewed`. `viewed_at` (RFC 3339) is when
+ * the note was opened, for a client replaying a view it recorded offline;
+ * omitted means now.
+ */
+export interface MarkNoteViewedRequest {
+  viewed_at?: string;
+}
+
 export interface CreateTextNoteRequest {
   /**
    * Optional client-supplied note ID. When provided, the server uses it as the
@@ -454,7 +527,7 @@ export interface UserListResponse {
  * `truncated` is false.
  */
 export interface UserSearchResponse {
-  users: User[];
+  users: UserInfo[];
   truncated: boolean;
 }
 

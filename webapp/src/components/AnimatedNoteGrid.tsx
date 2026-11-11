@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { SortableContext, rectSortingStrategy } from '@dnd-kit/sortable';
-import type { Note, User } from '@jot/shared';
+import type { Note, KnownUser } from '@jot/shared';
 import SortableNoteCard from './SortableNoteCard';
 import { canAnimate } from '@/utils/motion';
 
@@ -172,7 +172,7 @@ interface AnimatedNoteGridProps {
   disabled: boolean;
   inBin: boolean;
   currentUserId?: string | undefined;
-  usersById?: Map<string, User> | undefined;
+  usersById?: Map<string, KnownUser> | undefined;
   onEdit: (note: Note, originRect?: DOMRect) => void;
   onDelete: (noteId: string) => void;
   onDuplicate?: ((noteId: string) => Promise<void> | void) | undefined;

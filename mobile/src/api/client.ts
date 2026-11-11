@@ -1,6 +1,6 @@
 import axios, { AxiosHeaders, CanceledError, type InternalAxiosRequestConfig } from 'axios';
 import { Platform } from 'react-native';
-import type { AuthResponse, LoginRequest, RegisterRequest } from '@jot/shared';
+import type { AuthResponse, LoginRequest, NativeExchangeRequest, RegisterRequest } from '@jot/shared';
 import { apiPaths, apiRequestId, apiUrl, createJotApi, canonicalizeServerOrigin, isServerError } from '@jot/shared';
 import { randomUUID } from '../utils/random';
 import { markServerReachable, markServerUnreachable } from './serverReachability';
@@ -649,7 +649,7 @@ export const auth = {
         throw new CanceledError('Active server changed during the SSO exchange.');
       }
     };
-    const res = await api.post(apiPaths.oidcNativeExchange, { code, code_verifier: codeVerifier });
+    const res = await api.post(apiPaths.oidcNativeExchange, { code, code_verifier: codeVerifier } satisfies NativeExchangeRequest);
     assertStillActive();
     await storeSessionFromResponse(res.headers as Record<string, string | string[] | undefined>, serverId);
     await cacheAuthProfile(res.data, serverId);
@@ -663,7 +663,7 @@ export const auth = {
    * 403 when the server has local login disabled, 400 for a bad code.
    */
   oidcNativeLink: async (code: string, codeVerifier: string): Promise<void> => {
-    await api.post(apiPaths.oidcNativeLink, { code, code_verifier: codeVerifier });
+    await api.post(apiPaths.oidcNativeLink, { code, code_verifier: codeVerifier } satisfies NativeExchangeRequest);
   },
 
   /** Unbinds the SSO identity; the server refuses (422) when that would strand a password-less account. */

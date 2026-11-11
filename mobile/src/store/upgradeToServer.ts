@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { apiPaths, apiUrl, generateId, canonicalizeServerOrigin, parseApiErrorBody } from '@jot/shared';
-import type { GetNotesParams } from '@jot/shared';
+import type { AddLabelRequest, GetNotesParams } from '@jot/shared';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { getAllLocalNotes } from '../db/noteQueries';
 import { drainQueue, getPendingCount, getDeadLetterCount, insertQueueEntry, saveServerNotesScope } from '../db/syncQueue';
@@ -300,7 +300,7 @@ export async function seedReplayQueue(
         operation: 'createLabel',
         endpoint: apiPaths.labels,
         method: 'POST',
-        body: { id: label.id, name: label.name },
+        body: { id: label.id, name: label.name } satisfies AddLabelRequest,
       });
       totalEnqueued++;
     }

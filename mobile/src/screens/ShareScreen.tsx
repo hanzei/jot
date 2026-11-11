@@ -27,7 +27,7 @@ import { isServerReachable } from '../api/serverReachability';
 import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
 import { getLocalShareHistory } from '../db/noteQueries';
-import { buildShareSuggestions, recentShareTargets, type User, type NoteShare } from '@jot/shared';
+import { buildShareSuggestions, recentShareTargets, type KnownUser, type NoteShare } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { jot } from '../api/jot';
 
@@ -46,7 +46,7 @@ export default function ShareScreen() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<User[]>([]);
+  const [searchResults, setSearchResults] = useState<KnownUser[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState(false);
   // The server caps a search at 50 matches; true when it dropped some.
@@ -220,7 +220,7 @@ export default function ShareScreen() {
   );
 
   const handleShare = useCallback(
-    async (user: User) => {
+    async (user: KnownUser) => {
       if (pendingUserIdsRef.current.has(user.id)) return;
       pendingUserIdsRef.current.add(user.id);
       setPendingUserIds(new Set(pendingUserIdsRef.current));
@@ -271,7 +271,7 @@ export default function ShareScreen() {
   }, [confirm, leaveMutation, noteId, navigation, t]);
 
   const renderSearchResult = useCallback(
-    ({ item }: { item: User }) => (
+    ({ item }: { item: KnownUser }) => (
       <TouchableOpacity
         style={[styles.userRow, { borderBottomColor: colors.borderLight }]}
         onPress={() => handleShare(item)}
@@ -292,7 +292,7 @@ export default function ShareScreen() {
   );
 
   /** One labelled group of the empty-query suggestions; nothing when empty. */
-  const renderSuggestionSection = (title: string, data: User[], testID: string) =>
+  const renderSuggestionSection = (title: string, data: KnownUser[], testID: string) =>
     data.length > 0 ? (
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>{title}</Text>

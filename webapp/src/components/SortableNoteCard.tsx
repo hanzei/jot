@@ -2,7 +2,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { Note, User } from '@jot/shared';
+import type { Note, KnownUser } from '@jot/shared';
 import NoteCard from './NoteCard';
 
 interface SortableNoteCardProps {
@@ -14,7 +14,7 @@ interface SortableNoteCardProps {
   onRestore?: ((noteId: string) => void) | undefined;
   onPermanentlyDelete?: ((noteId: string) => void) | undefined;
   currentUserId?: string | undefined;
-  usersById?: Map<string, User> | undefined;
+  usersById?: Map<string, KnownUser> | undefined;
   disabled?: boolean;
   inBin?: boolean;
   onRefresh?: (() => void) | undefined;
