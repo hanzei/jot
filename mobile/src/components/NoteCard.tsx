@@ -76,7 +76,9 @@ function buildNoteAvatars(
         userId: s.shared_with_user_id,
         username: s.username || '?',
         hasProfileIcon: s.has_profile_icon ?? u?.has_profile_icon,
-        iconVersion: u?.updated_at ?? s.updated_at,
+        // `||`, not `??`: a user read back from SQLite carries '' for a
+        // timestamp GET /users never supplied, and that must fall back too.
+        iconVersion: u?.updated_at || s.updated_at,
       });
     });
 

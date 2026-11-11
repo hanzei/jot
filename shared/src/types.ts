@@ -161,8 +161,9 @@ export interface LabelListResponse {
 }
 
 /**
- * POST /labels and POST /notes/{id}/labels. With an `id` the label is created
- * under that ID, so a replayed offline create is rejected instead of duplicated.
+ * POST /labels and POST /notes/{id}/labels. On POST /labels an `id` creates the
+ * label under that ID, so a replayed offline create is rejected instead of
+ * duplicated. POST /notes/{id}/labels reads `name` only and ignores `id`.
  */
 export interface AddLabelRequest {
   id?: string;

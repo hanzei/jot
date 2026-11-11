@@ -11,7 +11,7 @@ import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { displayMessage, extractApiError } from '../../i18n/utils';
 import { styles } from './styles';
 import { jot } from '../../api/jot';
-import { apiPaths } from '@jot/shared';
+import { apiPaths, type UpdateMeRequest } from '@jot/shared';
 
 export default function AccountSection() {
   const { user, settings, setUser, setSettings, isLocalMode } = useAuth();
@@ -41,7 +41,7 @@ export default function AccountSection() {
     setProfileError('');
     setProfileSuccess('');
     setProfileSaving(true);
-    const profileUpdate = { username, first_name: firstName, last_name: lastName };
+    const profileUpdate = { username, first_name: firstName, last_name: lastName } satisfies UpdateMeRequest;
 
     const previousUser = user;
     if (user) {

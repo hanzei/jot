@@ -9,7 +9,7 @@ import { saveNote } from '../src/db/noteQueries';
 import { getDefaultTestDb } from './helpers/testDb';
 import { makeNoteItem } from './helpers/fixtures';
 import i18n from '../src/i18n';
-import type { Note } from '@jot/shared';
+import type { KnownUser, Note } from '@jot/shared';
 
 const fs = globalThis.mockFileSystem;
 
@@ -31,12 +31,20 @@ jest.mock('../src/store/AuthContext', () => ({
   }),
 }));
 
+let mockUsersById = new Map<string, KnownUser>();
 jest.mock('../src/store/UsersContext', () => ({
   __esModule: true,
   useUsers: () => ({
-    usersById: new Map(),
+    usersById: mockUsersById,
     refreshUsers: jest.fn(),
   }),
+}));
+
+// Stubbed to a cold cache (what the real hook returns until a download lands)
+// so a test can read the icon version an avatar was rendered with.
+const mockUseProfileIcon = jest.fn((..._args: unknown[]): string | null => null);
+jest.mock('../src/hooks/useProfileIcon', () => ({
+  useProfileIcon: (...args: unknown[]) => mockUseProfileIcon(...args),
 }));
 
 let mockFailedNoteIds = new Set<string>();
@@ -108,6 +116,8 @@ describe('NoteCard', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('en');
     mockFailedNoteIds = new Set<string>();
+    mockUsersById = new Map();
+    mockUseProfileIcon.mockClear();
     fs.reset();
   });
 
@@ -481,6 +491,37 @@ describe('NoteCard', () => {
     );
 
     expect(getByText('B')).toBeTruthy();
+  });
+
+  it('versions a collaborator icon off the share when the cached user has no timestamp', async () => {
+    // A collaborator read back from SQLite after a GET /users sync: the
+    // endpoint carries no timestamps, so the row holds the '' sentinel.
+    mockUsersById = new Map([
+      ['user-2', {
+        id: 'user-2', username: 'bob', first_name: '', last_name: '', role: 'user',
+        has_profile_icon: true, created_at: '', updated_at: '',
+      }],
+    ]);
+    const ownedSharedNote: Note = {
+      ...baseNote,
+      user_id: 'current-user',
+      shared_with: [
+        {
+          id: 'share-1',
+          note_id: 'note-1',
+          shared_with_user_id: 'user-2',
+          shared_by_user_id: 'current-user',
+          username: 'bob',
+          has_profile_icon: true,
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-02-02T00:00:00Z',
+        },
+      ],
+    };
+
+    await render(<NoteCard note={ownedSharedNote} onPress={jest.fn()} />);
+
+    expect(mockUseProfileIcon).toHaveBeenCalledWith('user-2', true, '2024-02-02T00:00:00Z', expect.any(String));
   });
 
   it('renders a cover image from the note\'s first image', async () => {

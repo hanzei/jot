@@ -19,6 +19,7 @@ import type {
   ReorderNotesRequest,
   DuplicateNoteRequest,
   MarkNoteViewedRequest,
+  ShareNoteRequest,
   ConvertToListCapViolation,
 } from '@jot/shared';
 import type { LocalNoteChanges } from '../db/noteQueries';
@@ -839,7 +840,7 @@ export function useReorderNoteItems() {
         operation: 'reorderItems',
         endpoint: apiPaths.noteItemsReorder(noteId),
         method: 'POST',
-        body: { item_ids: itemIds } satisfies ReorderNoteItemsRequest as Record<string, unknown>,
+        body: { item_ids: itemIds } satisfies ReorderNoteItemsRequest,
       });
     },
     onSuccess: (_data, { noteId }) => {
@@ -1218,7 +1219,7 @@ export function useReorderNotes() {
           operation: 'reorder',
           endpoint: apiPaths.notesReorder,
           method: 'POST',
-          body: { note_ids: noteIds } satisfies ReorderNotesRequest as Record<string, unknown>,
+          body: { note_ids: noteIds } satisfies ReorderNotesRequest,
         });
       } catch (err) {
         await restorePositions();
@@ -1313,7 +1314,7 @@ export function useShareNote() {
         operation: 'share',
         endpoint: apiPaths.noteShare(noteId),
         method: 'POST',
-        body: { user_id: user.id },
+        body: { user_id: user.id } satisfies ShareNoteRequest,
       });
     },
     onSuccess: (_data, { noteId }) => {
@@ -1467,7 +1468,7 @@ export function useToggleNoteItemCompleted() {
           operation: 'setItemsCompleted',
           endpoint: apiPaths.noteItemsSetCompleted(noteId),
           method: 'POST',
-          body: { item_ids: [itemId], completed } satisfies SetNoteItemsCompletedRequest as Record<string, unknown>,
+          body: { item_ids: [itemId], completed } satisfies SetNoteItemsCompletedRequest,
         },
       });
     },
@@ -1512,7 +1513,7 @@ export function useUncheckAllItems() {
           operation: 'setItemsCompleted',
           endpoint: apiPaths.noteItemsSetCompleted(noteId),
           method: 'POST',
-          body: { item_ids: itemIds, completed: false } satisfies SetNoteItemsCompletedRequest as Record<string, unknown>,
+          body: { item_ids: itemIds, completed: false } satisfies SetNoteItemsCompletedRequest,
         },
       });
     },
@@ -1578,7 +1579,7 @@ export function useDeleteCompletedItems() {
         operation: 'deleteCompletedItems',
         endpoint: apiPaths.noteItemsDelete(noteId),
         method: 'POST',
-        body: { item_ids: itemIds } satisfies DeleteNoteItemsRequest as Record<string, unknown>,
+        body: { item_ids: itemIds } satisfies DeleteNoteItemsRequest,
       });
       return [];
     },
