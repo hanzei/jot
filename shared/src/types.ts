@@ -651,9 +651,10 @@ export interface NoteImageSSEEvent {
 export type SSEEvent = NoteSSEEvent | LabelsChangedSSEEvent | ProfileIconSSEEvent | NoteImageSSEEvent;
 
 /**
- * Stable, machine-readable code carried by every API error response. Keep in
- * sync with the Code constants in server/internal/apierr/apierr.go; the
- * swagger spec (server/docs/swagger.yaml, `apierr.Code`) documents each one.
+ * Stable, machine-readable code carried by every API error response: the Code
+ * constants in server/internal/apierr/apierr.go. The swagger spec
+ * (server/docs/swagger.yaml, `apierr.Code`) documents each one, and
+ * apiSpec.test.ts fails when this list and the spec's differ.
  *
  * Generic codes (one per status class): validation_failed (400),
  * unauthorized (401), forbidden (403), not_found (404), method_not_allowed

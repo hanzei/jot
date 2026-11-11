@@ -112,6 +112,10 @@ A formatting-only commit goes in `.git-blame-ignore-revs`.
 ### `@jot/shared`
 
 Domain types live in `shared/src/types.ts`; do not duplicate them in a client.
+`apiSpec.test.ts` compares their field names and enum values with
+`server/docs/swagger.json`, so a server payload change fails `task test-shared`
+until `types.ts` follows. A new spec definition or exported type needs an entry
+in that test's mapping table, or in its exceptions lists with a reason.
 
 REST calls live in `shared/src/api/`: `apiPaths` builds every path and
 `createJotApi(instance)` holds the endpoint functions, bound to each client's

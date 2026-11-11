@@ -9,6 +9,8 @@ on:
   pull_request:
     paths:
       - "shared/**"
+      # apiSpec.test.ts compares shared/src/types.ts with the generated spec.
+      - "server/docs/**"
       # Both jobs go through `task`, so the Taskfile and the scripts it calls
       # are inputs to this workflow as much as the source is.
       - "Taskfile.yml"
