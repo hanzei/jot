@@ -22,6 +22,9 @@ interface SortableNoteCardProps {
   /** Whether this card holds the grid's one roving-tabindex stop (#950). */
   isActive: boolean;
   onCardFocus: (noteId: string) => void;
+  selected?: boolean;
+  selectionActive?: boolean;
+  onToggleSelect?: ((noteId: string, range: boolean) => void) | undefined;
 }
 
 export default function SortableNoteCard({
@@ -40,6 +43,9 @@ export default function SortableNoteCard({
   onLabelClick,
   isActive,
   onCardFocus,
+  selected = false,
+  selectionActive = false,
+  onToggleSelect,
 }: SortableNoteCardProps) {
   const { t } = useTranslation();
   const {
@@ -151,6 +157,9 @@ export default function SortableNoteCard({
           onLabelClick={onLabelClick}
           isActive={isActive}
           onCardFocus={onCardFocus}
+          selected={selected}
+          selectionActive={selectionActive}
+          onToggleSelect={onToggleSelect}
         />
       </div>
     </div>

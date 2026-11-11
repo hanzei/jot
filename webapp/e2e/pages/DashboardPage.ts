@@ -531,6 +531,30 @@ export class DashboardPage {
     return this.noteCard(title).locator('[data-note-card="true"]');
   }
 
+  /** The card's multi-select checkbox (#1255). */
+  noteCardCheckbox(title: string): Locator {
+    return this.noteCard(title).getByTestId('note-card-select');
+  }
+
+  /** Ticks the card's checkbox, shift-clicking it when `range` is set. */
+  async toggleNoteSelection(title: string, { range = false } = {}) {
+    await this.noteCard(title).hover();
+    await this.noteCardCheckbox(title).click(range ? { modifiers: ['Shift'] } : undefined);
+  }
+
+  /** The header's action bar, shown in place of the search bar while notes are selected. */
+  selectionBar(): Locator {
+    return this.page.getByTestId('note-selection-bar');
+  }
+
+  selectionAction(name: string | RegExp): Locator {
+    return this.selectionBar().getByRole('button', { name, exact: typeof name === 'string' });
+  }
+
+  async expectSelectionCount(count: number) {
+    await expect(this.page.getByTestId('note-selection-count')).toHaveText(`${count} selected`);
+  }
+
   /**
    * The "Pinned" section heading. Since the per-card pin badge was removed, this
    * heading is the UI contract for "a note is pinned" on the dashboard: it is

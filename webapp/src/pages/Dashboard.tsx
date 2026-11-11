@@ -20,6 +20,7 @@ import {
   type SSEEvent,
   type NoteSort,
   type ConvertNoteTypeRequest,
+  type Label,
 } from '@jot/shared';
 import { useSearchParams, useParams, useNavigate, useMatch } from 'react-router';
 import PageContent from '@/components/PageContent';
@@ -29,6 +30,8 @@ import NoteModal from '@/components/NoteModal';
 import ShareModal from '@/components/ShareModal';
 import type { PublicLinksConfig } from '@/utils/publicLink';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import NoteSelectionBar, { type SelectionLabelState } from '@/components/NoteSelectionBar';
+import { MAX_BATCH_NOTES, idRange, runSequentially } from '@/utils/noteBatch';
 import { useToast } from '@/hooks/useToast';
 import { useAuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { isAnyModalDialogOpen, isEditableElementFocused, isOverlayControlFocused } from '@/utils/keyboardShortcuts';
@@ -55,6 +58,7 @@ import {
 
 const SEARCH_DEBOUNCE_MS = 300;
 const NO_NOTES: Note[] = [];
+const NO_SELECTION: ReadonlySet<string> = new Set();
 const isApplePlatform = () => typeof navigator !== 'undefined' && /mac|iphone|ipad|ipod/i.test(navigator.platform);
 
 interface DashboardProps {
@@ -134,6 +138,16 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
   const handleCardFocus = useCallback((noteId: string) => {
     setLastFocusedCardId(noteId);
   }, []);
+  // Multi-select (#1255): the ids of the selected cards, and the card a
+  // shift-click range starts from.
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(NO_SELECTION);
+  const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null);
+  const [isBatchRunning, setIsBatchRunning] = useState(false);
+  const [showBatchDeleteForeverConfirm, setShowBatchDeleteForeverConfirm] = useState(false);
+  const clearSelection = useCallback(() => {
+    setSelectedIds(NO_SELECTION);
+    setSelectionAnchorId(null);
+  }, []);
   const user = getUser();
   const isMountedRef = useRef(true);
   const selectedLabelIdRef = useRef<string | null>(selectedLabelId);
@@ -167,6 +181,17 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
   // is false again after the update, so this settles in a single re-render.
   if (!showBin && showEmptyTrashConfirm) {
     setShowEmptyTrashConfirm(false);
+  }
+
+  // A selection belongs to the list it was made in: switching view, label or
+  // search drops it rather than carrying invisible notes into the next action.
+  const selectionScopeKey = `${listViewKey}|${debouncedSearchQuery}`;
+  const [selectionScope, setSelectionScope] = useState(selectionScopeKey);
+  if (selectionScope !== selectionScopeKey) {
+    setSelectionScope(selectionScopeKey);
+    setSelectedIds(NO_SELECTION);
+    setSelectionAnchorId(null);
+    setShowBatchDeleteForeverConfirm(false);
   }
 
   useEffect(() => {
@@ -824,6 +849,21 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleCreateNote, handleViewChange, loading, showBin]);
 
+  // Escape clears the selection. Menus and dialogs handle their own Escape
+  // first; the guards keep this one from also firing underneath them.
+  const hasSelection = selectedIds.size > 0;
+  useEffect(() => {
+    if (!hasSelection) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (isAnyModalDialogOpen() || isOverlayControlFocused()) return;
+      event.preventDefault();
+      clearSelection();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [hasSelection, clearSelection]);
+
   // Shows `note` in the modal and gives it its own /notes/{id} history entry,
   // so the URL, Back and close (restoreReturnUrl) all work.
   const showNoteInModal = (note: Note) => {
@@ -1219,6 +1259,184 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
     lastFocusedCardId !== null && orderedCardIds.includes(lastFocusedCardId)
       ? lastFocusedCardId
       : (orderedCardIds[0] ?? null);
+
+  // A selected note that leaves the list — trashed, archived or unshared from
+  // another device, or by the batch itself — drops out of the selection, so an
+  // action never applies to a note the user can no longer see.
+  if (!isViewPending && [...selectedIds].some(id => !displayedIds.has(id))) {
+    setSelectedIds(new Set([...selectedIds].filter(id => displayedIds.has(id))));
+  }
+  const selectedNotes = useMemo(
+    () => [...displayedPinned, ...displayedOther, ...displayedArchived].filter(note => selectedIds.has(note.id)),
+    [displayedPinned, displayedOther, displayedArchived, selectedIds],
+  );
+  const selectionCount = selectedNotes.length;
+
+  const handleToggleSelect = useCallback((noteId: string, range: boolean) => {
+    const rangeIds = range && selectionAnchorId ? idRange(orderedCardIds, selectionAnchorId, noteId) : null;
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (rangeIds) {
+        for (const id of rangeIds) next.add(id);
+      } else if (next.has(noteId)) {
+        next.delete(noteId);
+      } else {
+        next.add(noteId);
+      }
+      return next;
+    });
+    setSelectionAnchorId(noteId);
+  }, [orderedCardIds, selectionAnchorId]);
+
+  // Runs one action over `targets` — one request per note, in display order —
+  // then offers a single undo for the whole batch. The selection is checked
+  // against the cap before anything is sent, so a refused batch is never half
+  // applied.
+  const runBatch = async ({ targets, apply, success, failure, undo }: {
+    targets: Note[];
+    apply: (note: Note) => Promise<unknown>;
+    success: (count: number) => string;
+    failure: (count: number) => string;
+    undo?: { apply: (note: Note) => Promise<unknown>; failure: (count: number) => string };
+  }) => {
+    if (selectionCount > MAX_BATCH_NOTES) {
+      showToast(t('dashboard.selection.tooMany', { max: MAX_BATCH_NOTES, count: selectionCount }), 'error');
+      return;
+    }
+    clearSelection();
+    if (targets.length === 0) return;
+    setIsBatchRunning(true);
+    let result;
+    try {
+      result = await runSequentially(targets, apply);
+    } finally {
+      if (isMountedRef.current) setIsBatchRunning(false);
+    }
+    reloadAfterNoteWrite();
+    if (result.failed.length > 0) {
+      showErrorToast(failure(result.failed.length), result.firstError);
+    }
+    const done = result.succeeded;
+    if (done.length === 0) return;
+    showToast(success(done.length), 'success', undo ? {
+      label: t('dashboard.undo'),
+      onClick: async () => {
+        const undone = await runSequentially(done, undo.apply);
+        reloadAfterNoteWrite();
+        if (undone.failed.length > 0) {
+          showErrorToast(undo.failure(undone.failed.length), undone.firstError);
+        }
+      },
+    } : undefined);
+  };
+
+  const selectionAllPinned = selectionCount > 0 && selectedNotes.every(note => note.pinned);
+  const selectionAllArchived = selectionCount > 0 && selectedNotes.every(note => note.archived);
+  const failedUpdate = (count: number) => t('dashboard.selection.failedUpdate', { count });
+
+  const handleBatchTogglePin = () => {
+    const pinned = !selectionAllPinned;
+    void runBatch({
+      targets: selectedNotes.filter(note => note.pinned !== pinned),
+      // Send only the changed field, as NoteCard does: a card's copy can be stale.
+      apply: note => notes.update(note.id, { pinned }),
+      success: count => t(pinned ? 'dashboard.selection.pinned' : 'dashboard.selection.unpinned', { count }),
+      failure: failedUpdate,
+      undo: { apply: note => notes.update(note.id, { pinned: !pinned }), failure: failedUpdate },
+    });
+  };
+
+  const handleBatchToggleArchive = () => {
+    const archived = !selectionAllArchived;
+    void runBatch({
+      targets: selectedNotes.filter(note => note.archived !== archived),
+      apply: note => notes.update(note.id, { archived }),
+      success: count => t(archived ? 'dashboard.selection.archived' : 'dashboard.selection.unarchived', { count }),
+      failure: failedUpdate,
+      undo: { apply: note => notes.update(note.id, { archived: !archived }), failure: failedUpdate },
+    });
+  };
+
+  const handleBatchColor = (color: string) => {
+    const previousColors = new Map(selectedNotes.map(note => [note.id, note.color]));
+    void runBatch({
+      targets: selectedNotes.filter(note => note.color !== color),
+      apply: note => notes.update(note.id, { color }),
+      success: count => t('dashboard.selection.colorChanged', { count }),
+      failure: failedUpdate,
+      undo: {
+        apply: note => notes.update(note.id, { color: previousColors.get(note.id) ?? note.color }),
+        failure: failedUpdate,
+      },
+    });
+  };
+
+  // How many selected notes carry each label: a label on every selected note
+  // is removed from all of them, otherwise it is added to the ones without it.
+  const selectionLabels = useMemo(() => labelsList.map(label => {
+    const carrying = selectedNotes.filter(note => note.labels?.some(l => l.id === label.id)).length;
+    const state: SelectionLabelState = carrying === 0 ? 'none' : carrying === selectedNotes.length ? 'all' : 'some';
+    return { label, state };
+  }), [labelsList, selectedNotes]);
+
+  const handleBatchToggleLabel = (label: Label) => {
+    const remove = selectionLabels.find(entry => entry.label.id === label.id)?.state === 'all';
+    const hasLabel = (note: Note) => !!note.labels?.some(l => l.id === label.id);
+    const addLabel = (note: Note) => notes.addLabel(note.id, label.name);
+    const removeLabel = (note: Note) => notes.removeLabel(note.id, label.id);
+    void runBatch({
+      targets: selectedNotes.filter(note => hasLabel(note) === remove),
+      apply: remove ? removeLabel : addLabel,
+      success: count => t(remove ? 'dashboard.selection.labelRemoved' : 'dashboard.selection.labelAdded', { count, name: label.name }),
+      failure: failedUpdate,
+      undo: { apply: remove ? addLabel : removeLabel, failure: failedUpdate },
+    });
+  };
+
+  const handleBatchDelete = () => {
+    // Only the owner can bin a note. Leaving a shared note is a different
+    // action and must not happen as a side effect, so those are skipped.
+    const owned = selectedNotes.filter(note => note.user_id === user?.id);
+    const skipped = selectionCount - owned.length;
+    if (skipped > 0 && selectionCount <= MAX_BATCH_NOTES) {
+      showToast(t('dashboard.selection.skippedNotOwned', { count: skipped }), 'info');
+    }
+    void runBatch({
+      targets: owned,
+      apply: note => notes.delete(note.id),
+      success: count => t('dashboard.selection.trashed', { count }),
+      failure: count => t('dashboard.selection.failedTrash', { count }),
+      undo: { apply: note => notes.restore(note.id), failure: count => t('dashboard.selection.failedRestore', { count }) },
+    });
+  };
+
+  const handleBatchRestore = () => {
+    void runBatch({
+      targets: selectedNotes,
+      apply: note => notes.restore(note.id),
+      success: count => t('dashboard.selection.restored', { count }),
+      failure: count => t('dashboard.selection.failedRestore', { count }),
+      undo: { apply: note => notes.delete(note.id), failure: count => t('dashboard.selection.failedTrash', { count }) },
+    });
+  };
+
+  const handleBatchDeleteForever = () => {
+    setShowBatchDeleteForeverConfirm(false);
+    void runBatch({
+      targets: selectedNotes,
+      apply: note => notes.delete(note.id, { permanent: true }),
+      success: count => t('dashboard.selection.deletedForever', { count }),
+      failure: count => t('dashboard.selection.failedDeleteForever', { count }),
+    });
+  };
+
+  const requestBatchDeleteForever = () => {
+    if (selectionCount > MAX_BATCH_NOTES) {
+      showToast(t('dashboard.selection.tooMany', { max: MAX_BATCH_NOTES, count: selectionCount }), 'error');
+      return;
+    }
+    setShowBatchDeleteForeverConfirm(true);
+  };
   const activeSortLabel = t(`dashboard.sortOption.${noteSort}`);
   const focusSearchShortcutHint = isApplePlatform() ? '⌘ + F' : t('keyboardShortcuts.focusSearchKey');
   const showCreateFirstNoteCta =
@@ -1275,8 +1493,40 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
     };
   }, [debouncedSearchQuery, selectedLabelId, showArchived, showBin, showMyTasks, t]);
 
-  // Inject the search bar into the persistent layout header
+  // The header's content while notes are selected (#1255). Built each render
+  // and handed to the layout from the effect below.
+  const selectionBar = selectionCount > 0 ? (
+    <NoteSelectionBar
+      count={selectionCount}
+      inBin={showBin}
+      busy={isBatchRunning}
+      allPinned={selectionAllPinned}
+      allArchived={selectionAllArchived}
+      labels={selectionLabels}
+      onClear={clearSelection}
+      onTogglePin={handleBatchTogglePin}
+      onToggleArchive={handleBatchToggleArchive}
+      onColor={handleBatchColor}
+      onToggleLabel={handleBatchToggleLabel}
+      onDelete={handleBatchDelete}
+      onRestore={handleBatchRestore}
+      onDeleteForever={requestBatchDeleteForever}
+    />
+  ) : null;
+  // Re-sent on every render while it shows, since its handlers close over the
+  // current selection. The layout keeps the slot outside its context value,
+  // so setting it does not re-render this page.
   useLayoutEffect(() => {
+    if (!selectionBar) return;
+    setSearchBar(selectionBar);
+    return () => setSearchBar(null);
+  });
+
+  // Inject the search bar into the persistent layout header, unless the
+  // selection bar has it.
+  const showSearchBar = selectionCount === 0;
+  useLayoutEffect(() => {
+    if (!showSearchBar) return;
     setSearchBar(
       <div className="w-full sm:max-w-7xl flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="min-w-0 flex-1">
@@ -1333,7 +1583,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
       </div>
     );
     return () => setSearchBar(null);
-  }, [searchQuery, setSearchQuery, searchInputRef, focusSearchShortcutHint, noteSort, handleNoteSortChange, showBin, trashCount, isEmptyingTrash, setShowEmptyTrashConfirm, t, setSearchBar]);
+  }, [showSearchBar, searchQuery, setSearchQuery, searchInputRef, focusSearchShortcutHint, noteSort, handleNoteSortChange, showBin, trashCount, isEmptyingTrash, setShowEmptyTrashConfirm, t, setSearchBar]);
 
   if (loading) {
     return (
@@ -1469,6 +1719,8 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
                     onLabelClick={!showBin ? handleLabelClick : undefined}
                     activeCardId={activeCardId}
                     onCardFocus={handleCardFocus}
+                    selectedIds={selectedIds}
+                    onToggleSelect={handleToggleSelect}
                   />
                 </div>
               )}
@@ -1501,6 +1753,8 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
                     onLabelClick={!showBin ? handleLabelClick : undefined}
                     activeCardId={activeCardId}
                     onCardFocus={handleCardFocus}
+                    selectedIds={selectedIds}
+                    onToggleSelect={handleToggleSelect}
                   />
                 </div>
               )}
@@ -1534,6 +1788,8 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
                     onLabelClick={!showBin ? handleLabelClick : undefined}
                     activeCardId={activeCardId}
                     onCardFocus={handleCardFocus}
+                    selectedIds={selectedIds}
+                    onToggleSelect={handleToggleSelect}
                   />
                 </div>
               )}
@@ -1552,6 +1808,19 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
             }
           }}
         />
+        <ConfirmDialog
+          open={showBatchDeleteForeverConfirm}
+          title={t('note.deleteForeverTitle')}
+          message={t('dashboard.selection.deleteForeverConfirm', { count: selectionCount })}
+          confirmLabel={t('note.deleteForever')}
+          onConfirm={handleBatchDeleteForever}
+          onCancel={() => setShowBatchDeleteForeverConfirm(false)}
+        />
+        {/* Announces the selection count (#1255). Always mounted, so a screen
+            reader hears the first selection as well as the later ones. */}
+        <div role="status" aria-live="polite" className="sr-only" data-testid="note-selection-status">
+          {selectionCount > 0 ? t('dashboard.selection.count', { count: selectionCount }) : ''}
+        </div>
         {/* Note modal */}
         {isModalOpen && (
           <NoteModal
