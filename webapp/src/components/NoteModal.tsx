@@ -27,6 +27,7 @@ import { buildMobileDeepLink } from '@/utils/deepLink';
 import { isEditableElementFocused } from '@/utils/keyboardShortcuts';
 import { canAnimate } from '@/utils/motion';
 import { findNoteCardRect, playNoteModalExit, playNoteModalOpen, stopNoteModalOpen } from '@/utils/noteZoom';
+import { NOTE_COLOR_SWATCH_CLASSES } from '@/utils/noteColors';
 import {
   applyCompletedCascade,
   changeItemIndent,
@@ -436,22 +437,10 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     };
   }, [panelRef, zoomFrom, zoomOpenedNoteId]);
 
-  const colorClasses: Record<string, string> = {
-    '#ffffff': 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600',
-    '#f28b82': 'bg-red-200 dark:bg-red-900 border-red-300 dark:border-red-700',
-    '#fbbc04': 'bg-yellow-100 dark:bg-yellow-900 border-yellow-300 dark:border-yellow-700',
-    '#ccff90': 'bg-lime-100 dark:bg-lime-900 border-lime-300 dark:border-lime-700',
-    '#a7ffeb': 'bg-teal-100 dark:bg-teal-900 border-teal-300 dark:border-teal-700',
-    '#aecbfa': 'bg-blue-100 dark:bg-blue-900 border-blue-300 dark:border-blue-700',
-    '#d7aefb': 'bg-purple-100 dark:bg-purple-900 border-purple-300 dark:border-purple-700',
-    '#fdcfe8': 'bg-pink-100 dark:bg-pink-900 border-pink-300 dark:border-pink-700',
-    '#e6c9a8': 'bg-amber-100 dark:bg-amber-900 border-amber-300 dark:border-amber-700',
-    '#e8eaed': 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600',
-  };
   const colors = NOTE_COLORS.map(value => ({
     value,
     name: NOTE_COLOR_NAME_KEYS[value] ? t(NOTE_COLOR_NAME_KEYS[value]) : value,
-    class: colorClasses[value] ?? '',
+    class: NOTE_COLOR_SWATCH_CLASSES[value] ?? '',
   }));
   // Roving tab stop of the colour picker: the selected swatch, or the first
   // one when the note's colour matches none (e.g. an old Keep import), so the
@@ -2561,7 +2550,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                     aria-pressed={color === colorOption.value}
                   >
                     {/* "No colour": the swatch already follows the theme (see
-                        colorClasses); the glyph says it is not a solid white. */}
+                        NOTE_COLOR_SWATCH_CLASSES); the glyph says it is not a solid white. */}
                     {colorOption.value === DEFAULT_NOTE_COLOR && (
                       <DropletOff className="w-4 h-4 text-gray-500 dark:text-slate-400" aria-hidden="true" />
                     )}

@@ -1,7 +1,10 @@
+import { memo } from 'react';
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
-import { Archive, ArchiveX, Check, Minus, Palette, Pin, PinOff, Tag, Trash2, Undo2, X } from 'lucide-react';
+import { Archive, ArchiveX, Check, DropletOff, Minus, Palette, Pin, PinOff, Tag, Trash2, Undo2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { NOTE_COLORS, NOTE_COLOR_NAME_KEYS, type Label } from '@jot/shared';
+import { DEFAULT_NOTE_COLOR, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, type Label } from '@jot/shared';
+import { NOTE_COLOR_SWATCH_CLASSES } from '@/utils/noteColors';
+import { ANCHORED_MENU_PANEL_CLASS } from '@/utils/menuStyles';
 
 /** How many of the selected notes carry a label. */
 export type SelectionLabelState = 'all' | 'some' | 'none';
@@ -18,23 +21,27 @@ interface NoteSelectionBarProps {
   onTogglePin: () => void;
   onToggleArchive: () => void;
   onColor: (color: string) => void;
-  onToggleLabel: (label: Label) => void;
+  onToggleLabel: (label: Label, state: SelectionLabelState) => void;
   onDelete: () => void;
   onRestore: () => void;
   onDeleteForever: () => void;
 }
 
 const BUTTON_CLASS = 'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-200 dark:hover:bg-slate-700';
-// Anchored panels render in a portal and keep inside the viewport, which a
-// right-aligned absolute panel does not on a phone-width header.
-const PANEL_CLASS = 'z-50 max-w-[calc(100vw-2rem)] origin-top-right rounded-md border border-gray-200 bg-white shadow-lg ring-1 ring-black/5 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:ring-slate-600/20';
+const DANGER_BUTTON_CLASS = `${BUTTON_CLASS} !text-red-700 dark:!text-red-300`;
+// Headless UI fixes a menu item's role to menuitem, which cannot carry
+// aria-checked, so a label's state is part of its accessible name.
+const LABEL_NAME_KEYS: Record<Exclude<SelectionLabelState, 'none'>, string> = {
+  all: 'dashboard.selection.labelOnAll',
+  some: 'dashboard.selection.labelOnSome',
+};
 
 /**
  * The dashboard header while notes are selected (#1255): the count, the
  * actions that apply to every selected note, and a way out. The trash view
  * offers restore and delete forever instead.
  */
-export default function NoteSelectionBar({
+function NoteSelectionBar({
   count,
   inBin,
   busy,
@@ -51,6 +58,8 @@ export default function NoteSelectionBar({
   onDeleteForever,
 }: NoteSelectionBarProps) {
   const { t } = useTranslation();
+  const PinIcon = allPinned ? PinOff : Pin;
+  const ArchiveIcon = allArchived ? ArchiveX : Archive;
 
   return (
     <div
@@ -78,7 +87,7 @@ export default function NoteSelectionBar({
             <Undo2 className="h-4 w-4" aria-hidden="true" />
             {t('note.restore')}
           </button>
-          <button type="button" onClick={onDeleteForever} disabled={busy} className={`${BUTTON_CLASS} !text-red-700 dark:!text-red-300`}>
+          <button type="button" onClick={onDeleteForever} disabled={busy} className={DANGER_BUTTON_CLASS}>
             <Trash2 className="h-4 w-4" aria-hidden="true" />
             {t('note.deleteForever')}
           </button>
@@ -86,11 +95,11 @@ export default function NoteSelectionBar({
       ) : (
         <>
           <button type="button" onClick={onTogglePin} disabled={busy} className={BUTTON_CLASS}>
-            {allPinned ? <PinOff className="h-4 w-4" aria-hidden="true" /> : <Pin className="h-4 w-4" aria-hidden="true" />}
+            <PinIcon className="h-4 w-4" aria-hidden="true" />
             {allPinned ? t('note.unpin') : t('note.pin')}
           </button>
           <button type="button" onClick={onToggleArchive} disabled={busy} className={BUTTON_CLASS}>
-            {allArchived ? <ArchiveX className="h-4 w-4" aria-hidden="true" /> : <Archive className="h-4 w-4" aria-hidden="true" />}
+            <ArchiveIcon className="h-4 w-4" aria-hidden="true" />
             {allArchived ? t('note.unarchive') : t('note.archive')}
           </button>
           <Menu as="div" className="relative">
@@ -98,7 +107,7 @@ export default function NoteSelectionBar({
               <Palette className="h-4 w-4" aria-hidden="true" />
               {t('dashboard.selection.color')}
             </MenuButton>
-            <MenuItems anchor={{ to: 'bottom end', gap: 4 }} className={`${PANEL_CLASS} grid w-56 grid-cols-5 gap-2 p-3`}>
+            <MenuItems anchor={{ to: 'bottom end', gap: 4 }} className={`${ANCHORED_MENU_PANEL_CLASS} grid w-56 grid-cols-5 gap-2 p-3`}>
               {NOTE_COLORS.map((color) => (
                 <MenuItem key={color}>
                   <button
@@ -106,9 +115,14 @@ export default function NoteSelectionBar({
                     onClick={() => onColor(color)}
                     aria-label={t(NOTE_COLOR_NAME_KEYS[color])}
                     title={t(NOTE_COLOR_NAME_KEYS[color])}
-                    style={{ backgroundColor: color }}
-                    className="h-8 w-8 rounded-full border border-gray-400 dark:border-slate-400 data-[focus]:ring-2 data-[focus]:ring-blue-500 data-[focus]:ring-offset-2 dark:data-[focus]:ring-offset-slate-800"
-                  />
+                    // The note modal's swatches: theme-aware, and Default carries
+                    // the "no colour" glyph rather than reading as white.
+                    className={`flex h-8 w-8 items-center justify-center rounded-full border-2 ${NOTE_COLOR_SWATCH_CLASSES[color] ?? ''} data-[focus]:ring-2 data-[focus]:ring-blue-500 data-[focus]:ring-offset-2 dark:data-[focus]:ring-offset-slate-800`}
+                  >
+                    {color === DEFAULT_NOTE_COLOR && (
+                      <DropletOff className="h-4 w-4 text-gray-500 dark:text-slate-400" aria-hidden="true" />
+                    )}
+                  </button>
                 </MenuItem>
               ))}
             </MenuItems>
@@ -121,18 +135,14 @@ export default function NoteSelectionBar({
             <MenuItems
               anchor={{ to: 'bottom end', gap: 4 }}
               data-testid="note-selection-labels"
-              className={`${PANEL_CLASS} max-h-72 w-60 overflow-y-auto py-1`}
+              className={`${ANCHORED_MENU_PANEL_CLASS} max-h-72 w-60 overflow-y-auto py-1`}
             >
               {labels.map(({ label, state }) => (
                 <MenuItem key={label.id}>
-                  {/* Headless UI fixes the role to menuitem, which cannot
-                      carry aria-checked, so the state is part of the name. */}
                   <button
                     type="button"
-                    aria-label={state === 'all'
-                      ? t('dashboard.selection.labelOnAll', { name: label.name })
-                      : state === 'some' ? t('dashboard.selection.labelOnSome', { name: label.name }) : label.name}
-                    onClick={() => onToggleLabel(label)}
+                    aria-label={state === 'none' ? label.name : t(LABEL_NAME_KEYS[state], { name: label.name })}
+                    onClick={() => onToggleLabel(label, state)}
                     className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-700 data-[focus]:bg-gray-100 dark:text-gray-200 dark:data-[focus]:bg-slate-700"
                   >
                     <span aria-hidden="true" className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-gray-500 dark:border-slate-400">
@@ -145,7 +155,7 @@ export default function NoteSelectionBar({
               ))}
             </MenuItems>
           </Menu>
-          <button type="button" onClick={onDelete} disabled={busy} className={`${BUTTON_CLASS} !text-red-700 dark:!text-red-300`}>
+          <button type="button" onClick={onDelete} disabled={busy} className={DANGER_BUTTON_CLASS}>
             <Trash2 className="h-4 w-4" aria-hidden="true" />
             {t('note.delete')}
           </button>
@@ -154,3 +164,7 @@ export default function NoteSelectionBar({
     </div>
   );
 }
+
+// Memoized: the bar lives in the layout's header slot, and the layout
+// re-renders for reasons of its own.
+export default memo(NoteSelectionBar);
