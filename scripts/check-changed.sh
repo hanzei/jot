@@ -11,6 +11,7 @@
 #   shared/**                           -> shared + webapp + mobile (clients compile it)
 #   shared/src/listToMarkdownCases.json -> also server (the Go export is pinned to it)
 #   webapp/index.html                   -> also server (share-page preview tests render it)
+#   server/docs/**                      -> also the shared tests (apiSpec.test.ts reads the spec)
 #   server/**, .golangci.yml            -> server
 #   webapp/**, mobile/**                -> that workspace
 #   README.md, CLAUDE.md, docs/**, .claude/** -> nothing
@@ -79,7 +80,7 @@ if [ -z "$files" ]; then
   exit 0
 fi
 
-server=0 shared=0 webapp=0 mobile=0 full=""
+server=0 shared=0 webapp=0 mobile=0 spec=0 full=""
 while IFS= read -r f; do
   [ -z "$f" ] && continue
   case "$f" in
@@ -87,6 +88,7 @@ while IFS= read -r f; do
     shared/src/listToMarkdownCases.json) shared=1 server=1 ;;
     webapp/index.html) webapp=1 server=1 ;;
     shared/*) shared=1 ;;
+    server/docs/*) server=1 spec=1 ;;
     server/*|.golangci.yml) server=1 ;;
     webapp/*) webapp=1
       case "$f" in webapp/e2e/tests/*.spec.ts) [ -f "$f" ] && specs+=("${f#webapp/}") ;; esac ;;
@@ -102,6 +104,9 @@ done <<<"$files"
 
 fmt=() par=()
 [ $shared -eq 1 ] && fmt+=(fmt-shared) par+=(lint-shared test-shared)
+# The spec is only an input to one shared test: no shared source changed, so
+# there is nothing to lint and the clients compile exactly what they did before.
+[ $spec -eq 1 ] && [ $shared -eq 0 ] && par+=(test-shared)
 [ $server -eq 1 ] && fmt+=(fmt-server) par+=(lint-server test-server)
 [ $webapp -eq 1 ] && fmt+=(fmt-webapp) par+=(lint-webapp test-webapp)
 [ $mobile -eq 1 ] && fmt+=(fmt-mobile) par+=(lint-mobile test-mobile test-mobile-e2e-scripts)
