@@ -1,5 +1,5 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
-import type { User } from '@jot/shared';
+import type { KnownUser, User } from '@jot/shared';
 import { withSerializedTransaction } from './transaction';
 
 interface UserRow {
@@ -26,7 +26,7 @@ function rowToUser(row: UserRow): User {
   };
 }
 
-export async function saveUsers(db: SQLiteDatabase, users: User[]): Promise<void> {
+export async function saveUsers(db: SQLiteDatabase, users: KnownUser[]): Promise<void> {
   await withSerializedTransaction(db, async () => {
     if (users.length === 0) {
       await db.runAsync('DELETE FROM users');
@@ -46,7 +46,7 @@ export async function saveUsers(db: SQLiteDatabase, users: User[]): Promise<void
 // upsertUser writes a single user without touching the rest of the table, unlike
 // saveUsers which reconciles the whole list (and deletes anyone absent from it).
 // Used to apply a live profile_icon_updated SSE event for one collaborator.
-export async function upsertUser(db: SQLiteDatabase, user: User): Promise<void> {
+export async function upsertUser(db: SQLiteDatabase, user: KnownUser): Promise<void> {
   await db.runAsync(UPSERT_USER_SQL, userUpsertParams(user));
 }
 
@@ -77,11 +77,10 @@ const UPSERT_USER_SQL = `
 
 // created_at/updated_at coerce undefined → '' so the bind never lands as NULL and
 // trips the columns' NOT NULL constraint. `GET /users` returns UserInfo, which
-// has no timestamps, so a listed collaborator's User carries `undefined` here
-// even though the shared type declares them required. '' matches the columns'
-// schema default and the rowToUser read fallback: the codebase's sentinel for an
-// unknown timestamp.
-function userUpsertParams(user: User): (string | number)[] {
+// has no timestamps, so a listed collaborator carries none here. '' matches the
+// columns' schema default and the rowToUser read fallback: the codebase's
+// sentinel for an unknown timestamp.
+function userUpsertParams(user: KnownUser): (string | number)[] {
   return [
     user.id,
     user.username,

@@ -3,14 +3,14 @@
  *
  * The share-target list endpoint (`GET /users`) returns the server's UserInfo
  * shape, which omits created_at/updated_at (server/internal/handlers/users.go),
- * so a listed collaborator's User arrives without those fields even though the
- * shared type declares them required. The upsert must not trip the columns'
- * NOT NULL constraint, and a later timestamp-less list sync must not clobber a
- * real updated_at a profile_icon_updated SSE event previously stored (issue #970).
+ * so a listed collaborator arrives without those fields. The upsert must not
+ * trip the columns' NOT NULL constraint, and a later timestamp-less list sync
+ * must not clobber a real updated_at a profile_icon_updated SSE event
+ * previously stored (issue #970).
  */
 
 import { saveUsers, upsertUser, getLocalUsers } from '../src/db/userQueries';
-import type { User } from '@jot/shared';
+import type { User, UserInfo } from '@jot/shared';
 import type { TestDatabase } from './helpers/testDb';
 
 let db: TestDatabase;
@@ -33,9 +33,8 @@ function makeUser(id: string, overrides: Partial<User> = {}): User {
   };
 }
 
-// A user as it arrives from GET /users (UserInfo): no timestamps. Cast because
-// the shared User type declares them required, but the endpoint omits them.
-function listUser(id: string): User {
+// A user as it arrives from GET /users (UserInfo): no timestamps.
+function listUser(id: string): UserInfo {
   return {
     id,
     username: `user-${id}`,
@@ -43,7 +42,7 @@ function listUser(id: string): User {
     last_name: '',
     role: 'user',
     has_profile_icon: false,
-  } as unknown as User;
+  };
 }
 
 describe('saveUsers', () => {

@@ -10,7 +10,7 @@ import {
   userDisplayName,
   type PublicLink,
   type PublicLinkExpiryChoice,
-  type User,
+  type KnownUser,
 } from '@jot/shared';
 import { useTheme } from '../../theme/ThemeContext';
 import { useConfirm } from '../../hooks/useConfirm';
@@ -28,7 +28,7 @@ interface PublicLinkSectionProps {
   publicLink: PublicLink | null | undefined;
   currentUserId: string | undefined;
   /** The user directory, to name who created the link. */
-  usersById: ReadonlyMap<string, User>;
+  usersById: ReadonlyMap<string, KnownUser>;
 }
 
 const EXPIRY_OPTIONS: FormatOption<PublicLinkExpiryChoice>[] = PUBLIC_LINK_EXPIRY_CHOICES.map((value) => ({

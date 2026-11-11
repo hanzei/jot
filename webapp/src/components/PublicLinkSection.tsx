@@ -12,7 +12,7 @@ import {
   type Note,
   type PublicLink,
   type PublicLinkExpiryChoice,
-  type User,
+  type UserInfo,
 } from '@jot/shared';
 import { notes } from '@/utils/api';
 import { apiErrorMessage } from '@/utils/apiError';
@@ -25,7 +25,7 @@ interface PublicLinkSectionProps {
   config: PublicLinksConfig;
   currentUserId?: string | undefined;
   /** The user directory, to name who created the link. */
-  users: User[];
+  users: UserInfo[];
   /** Called with the note's new link (null once revoked), to update cached copies of the note. */
   onChange?: ((noteId: string, link: PublicLink | null) => void) | undefined;
 }

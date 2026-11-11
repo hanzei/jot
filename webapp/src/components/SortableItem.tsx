@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { X, UserPlus, GripVertical } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, inlineLinks, itemSuggestions, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, inlineLinks, itemSuggestions, type KnownUser, type Collaborator } from '@jot/shared';
 import LetterAvatar from '@/components/LetterAvatar';
 import AssigneePicker from '@/components/AssigneePicker';
 import ItemLinkButton from '@/components/ItemLinkButton';
@@ -57,7 +57,7 @@ export interface SortableItemProps {
   onIndentChange?: (itemId: string, delta: 1 | -1) => void;
   isShared?: boolean | undefined;
   collaborators?: Collaborator[];
-  usersById?: Map<string, User> | undefined;
+  usersById?: Map<string, KnownUser> | undefined;
   onAssignItem?: (itemId: string, userId: string) => void;
   completedItemTexts?: string[];
   /**
