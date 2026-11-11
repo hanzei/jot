@@ -960,14 +960,17 @@ export function useDuplicateNote() {
           }
         : { ...source, ...resetFields };
 
-      const itemIds = idRemap.size > 0 ? Object.fromEntries(idRemap) : undefined;
+      // Assigned field by field, not spread: a spread key is not checked against
+      // the request type, so a renamed `item_ids` would still compile.
+      const body: DuplicateNoteRequest = { id: clientId };
+      if (idRemap.size > 0) body.item_ids = Object.fromEntries(idRemap);
       await saveNote(db, localDuplicate);
       await markNotePendingCreate(db, clientId);
       await enqueueOperation(db, {
         operation: 'duplicate',
         endpoint: apiPaths.noteDuplicate(id),
         method: 'POST',
-        body: { id: clientId, ...(itemIds ? { item_ids: itemIds } : {}) } satisfies DuplicateNoteRequest as Record<string, unknown>,
+        body: body as Record<string, unknown>,
       });
       return localDuplicate;
     },
