@@ -61,7 +61,7 @@ export async function downloadAndCacheIcon(
 // Warms the icon cache for a list of users. Called during background sync.
 // Downloads icons that are missing or stale; skips already-cached ones.
 export async function refreshIconCacheForUsers(
-  users: { id: string; has_profile_icon: boolean; updated_at: string }[],
+  users: { id: string; has_profile_icon: boolean; updated_at?: string }[],
   baseUrl: string,
 ): Promise<void> {
   for (const user of users) {

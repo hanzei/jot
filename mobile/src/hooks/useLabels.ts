@@ -25,7 +25,7 @@ import { useAuth } from '../store/AuthContext';
 import { isLocalModeActive } from '../store/localMode';
 import { isServerSwitchInProgress } from '../api/client';
 import { LocalizedError } from '../i18n/utils';
-import { apiPaths, type Label, type LabelWithCount } from '@jot/shared';
+import { apiPaths, type AddLabelRequest, type Label, type LabelWithCount, type RenameLabelRequest } from '@jot/shared';
 import {
   labelsQueryKey,
   noteLocalQueryKey,
@@ -207,7 +207,7 @@ export async function resolveLocalLabel(db: SQLiteDatabase, name: string, userId
     operation: 'createLabel',
     endpoint: apiPaths.labels,
     method: 'POST',
-    body: { id: label.id, name },
+    body: { id: label.id, name } satisfies AddLabelRequest,
   });
   await upsertLabel(db, label);
   return label;
@@ -248,7 +248,7 @@ export function useCreateLabel() {
         operation: 'createLabel',
         endpoint: apiPaths.labels,
         method: 'POST',
-        body: { id: localLabel.id, name: trimmed },
+        body: { id: localLabel.id, name: trimmed } satisfies AddLabelRequest,
       });
       await upsertLabel(db, localLabel);
       return localLabel;
@@ -305,7 +305,7 @@ export function useAddLabelToNote() {
         operation: 'addLabelToNote',
         endpoint: apiPaths.noteLabels(noteId),
         method: 'POST',
-        body: { name: trimmed },
+        body: { name: trimmed } satisfies AddLabelRequest,
       });
       return note;
     },
@@ -412,7 +412,7 @@ export function useRenameLabel() {
         operation: 'renameLabel',
         endpoint: apiPaths.label(labelId),
         method: 'PATCH',
-        body: { name: trimmed },
+        body: { name: trimmed } satisfies RenameLabelRequest,
       });
       const now = new Date().toISOString();
       return { id: labelId, user_id: user?.id ?? '', name: trimmed, created_at: now, updated_at: now };

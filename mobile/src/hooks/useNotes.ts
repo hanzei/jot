@@ -6,13 +6,20 @@ import type {
   Note,
   NoteItem,
   NoteShare,
-  User,
+  UserInfo,
   Label,
   CreateNoteRequest,
   UpdateNoteRequest,
   ConvertNoteTypeRequest,
   CreateNoteItemRequest,
   PatchNoteItemRequest,
+  ReorderNoteItemsRequest,
+  SetNoteItemsCompletedRequest,
+  DeleteNoteItemsRequest,
+  ReorderNotesRequest,
+  DuplicateNoteRequest,
+  MarkNoteViewedRequest,
+  ShareNoteRequest,
   ConvertToListCapViolation,
 } from '@jot/shared';
 import type { LocalNoteChanges } from '../db/noteQueries';
@@ -833,7 +840,7 @@ export function useReorderNoteItems() {
         operation: 'reorderItems',
         endpoint: apiPaths.noteItemsReorder(noteId),
         method: 'POST',
-        body: { item_ids: itemIds } as Record<string, unknown>,
+        body: { item_ids: itemIds } satisfies ReorderNoteItemsRequest,
       });
     },
     onSuccess: (_data, { noteId }) => {
@@ -954,14 +961,17 @@ export function useDuplicateNote() {
           }
         : { ...source, ...resetFields };
 
-      const itemIds = idRemap.size > 0 ? Object.fromEntries(idRemap) : undefined;
+      // Assigned field by field, not spread: a spread key is not checked against
+      // the request type, so a renamed `item_ids` would still compile.
+      const body: DuplicateNoteRequest = { id: clientId };
+      if (idRemap.size > 0) body.item_ids = Object.fromEntries(idRemap);
       await saveNote(db, localDuplicate);
       await markNotePendingCreate(db, clientId);
       await enqueueOperation(db, {
         operation: 'duplicate',
         endpoint: apiPaths.noteDuplicate(id),
         method: 'POST',
-        body: { id: clientId, ...(itemIds ? { item_ids: itemIds } : {}) } as Record<string, unknown>,
+        body: body as Record<string, unknown>,
       });
       return localDuplicate;
     },
@@ -1045,7 +1055,7 @@ export function useMarkNoteViewed() {
         operation: 'markViewed',
         endpoint: apiPaths.noteViewed(id),
         method: 'POST',
-        body: { viewed_at: viewedAt },
+        body: { viewed_at: viewedAt } satisfies MarkNoteViewedRequest,
       });
     },
     // Settled, not success: the local clear has already landed when a
@@ -1209,7 +1219,7 @@ export function useReorderNotes() {
           operation: 'reorder',
           endpoint: apiPaths.notesReorder,
           method: 'POST',
-          body: { note_ids: noteIds } as Record<string, unknown>,
+          body: { note_ids: noteIds } satisfies ReorderNotesRequest,
         });
       } catch (err) {
         await restorePositions();
@@ -1258,7 +1268,7 @@ export function useShareNote() {
   const { user: currentUser } = useAuth();
 
   return useMutation({
-    mutationFn: async ({ noteId, user }: { noteId: string; user: User }) => {
+    mutationFn: async ({ noteId, user }: { noteId: string; user: UserInfo }) => {
       assertSwitchWriteAllowed();
       // An offline-created note already carries a server-valid id (#475) and its
       // queued create drains FIFO before this share, so queue the share rather than
@@ -1304,7 +1314,7 @@ export function useShareNote() {
         operation: 'share',
         endpoint: apiPaths.noteShare(noteId),
         method: 'POST',
-        body: { user_id: user.id },
+        body: { user_id: user.id } satisfies ShareNoteRequest,
       });
     },
     onSuccess: (_data, { noteId }) => {
@@ -1458,7 +1468,7 @@ export function useToggleNoteItemCompleted() {
           operation: 'setItemsCompleted',
           endpoint: apiPaths.noteItemsSetCompleted(noteId),
           method: 'POST',
-          body: { item_ids: [itemId], completed } as Record<string, unknown>,
+          body: { item_ids: [itemId], completed } satisfies SetNoteItemsCompletedRequest,
         },
       });
     },
@@ -1503,7 +1513,7 @@ export function useUncheckAllItems() {
           operation: 'setItemsCompleted',
           endpoint: apiPaths.noteItemsSetCompleted(noteId),
           method: 'POST',
-          body: { item_ids: itemIds, completed: false } as Record<string, unknown>,
+          body: { item_ids: itemIds, completed: false } satisfies SetNoteItemsCompletedRequest,
         },
       });
     },
@@ -1569,7 +1579,7 @@ export function useDeleteCompletedItems() {
         operation: 'deleteCompletedItems',
         endpoint: apiPaths.noteItemsDelete(noteId),
         method: 'POST',
-        body: { item_ids: itemIds } as Record<string, unknown>,
+        body: { item_ids: itemIds } satisfies DeleteNoteItemsRequest,
       });
       return [];
     },

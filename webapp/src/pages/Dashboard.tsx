@@ -16,7 +16,7 @@ import {
   type NoteImage,
   type NoteType,
   type PublicLink,
-  type User,
+  type KnownUser,
   type SSEEvent,
   type NoteSort,
   type ConvertNoteTypeRequest,
@@ -126,7 +126,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
   const [newNoteDraft, setNewNoteDraft] = useState<{ type: NoteType; content: string } | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [sharingNote, setSharingNote] = useState<Note | null>(null);
-  const [usersById, setUsersById] = useState<Map<string, User>>(new Map());
+  const [usersById, setUsersById] = useState<Map<string, KnownUser>>(new Map());
   // Whether each grid section still has cards rendered (live or animating out),
   // so the last card can finish its exit animation before the section unmounts.
   const [sectionActive, setSectionActive] = useState({ pinned: false, other: false, archived: false });
@@ -286,7 +286,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
     return usersApi.list()
       .then(usersData => {
         if (!isMountedRef.current) return;
-        const map = new Map<string, User>();
+        const map = new Map<string, KnownUser>();
         const currentUser = getUser();
         if (currentUser) map.set(currentUser.id, currentUser);
         for (const u of usersData) map.set(u.id, u);

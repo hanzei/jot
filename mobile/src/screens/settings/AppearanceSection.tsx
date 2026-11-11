@@ -19,7 +19,7 @@ import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { SUPPORTED_LANGUAGES, getLanguagePreference, resolveLanguage, type LanguagePreference } from '../../i18n/language';
 import { displayMessage, extractApiError } from '../../i18n/utils';
 import i18n from '../../i18n';
-import { apiPaths, type ThemePreference } from '@jot/shared';
+import { apiPaths, type ThemePreference, type UpdateMeRequest } from '@jot/shared';
 import { styles } from './styles';
 import { jot } from '../../api/jot';
 
@@ -73,7 +73,7 @@ export default function AppearanceSection() {
           operation: 'updateSettings',
           endpoint: apiPaths.usersMe,
           method: 'PATCH',
-          body: { language },
+          body: { language } satisfies UpdateMeRequest,
         });
       } catch (err: unknown) {
         setLanguagePref(previousLanguage);
@@ -97,7 +97,7 @@ export default function AppearanceSection() {
           operation: 'updateSettings',
           endpoint: apiPaths.usersMe,
           method: 'PATCH',
-          body: { language },
+          body: { language } satisfies UpdateMeRequest,
         });
       } else {
         setLanguagePref(previousLanguage);
@@ -138,7 +138,7 @@ export default function AppearanceSection() {
           operation: 'updateSettings',
           endpoint: apiPaths.usersMe,
           method: 'PATCH',
-          body: { theme },
+          body: { theme } satisfies UpdateMeRequest,
         });
       } catch (err: unknown) {
         setThemePref(prev);
@@ -161,7 +161,7 @@ export default function AppearanceSection() {
           operation: 'updateSettings',
           endpoint: apiPaths.usersMe,
           method: 'PATCH',
-          body: { theme },
+          body: { theme } satisfies UpdateMeRequest,
         });
       } else {
         setThemePref(prev);

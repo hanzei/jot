@@ -1,6 +1,7 @@
 import type {
   AboutInfo,
   ActiveSession,
+  AddLabelRequest,
   AdminStatsResponse,
   AuthResponse,
   ChangePasswordRequest,
@@ -9,6 +10,8 @@ import type {
   CreateNoteRequest,
   CreatePATRequest,
   CreateUserRequest,
+  DeleteNoteItemsRequest,
+  DuplicateNoteRequest,
   EmptyTrashResponse,
   GetNotesParams,
   ImportResponse,
@@ -28,8 +31,12 @@ import type {
   PublicLink,
   PublicNote,
   RegisterRequest,
+  RenameLabelRequest,
+  ReorderNoteItemsRequest,
+  ReorderNotesRequest,
   ServerConfig,
   SessionListResponse,
+  SetNoteItemsCompletedRequest,
   SetPublicLinkRequest,
   SetUserPasswordRequest,
   ShareNoteRequest,
@@ -37,6 +44,7 @@ import type {
   UpdateNoteRequest,
   UpdateUserRoleRequest,
   User,
+  UserInfo,
   UserListResponse,
   UserSearchResponse,
 } from '../types';
@@ -144,7 +152,7 @@ export function createJotApi(http: JotHttpClient) {
 
       // Without client IDs the request has no body, as before IDs existed.
       duplicate: (id: string, opts: DuplicateNoteOptions = {}): Promise<Note> => {
-        const body: { id?: string; item_ids?: Record<string, string> } = {};
+        const body: DuplicateNoteRequest = {};
         if (opts.id) body.id = opts.id;
         if (opts.itemIds) body.item_ids = opts.itemIds;
         return data(http.post<Note>(apiPaths.noteDuplicate(id), Object.keys(body).length ? body : undefined));
@@ -159,13 +167,13 @@ export function createJotApi(http: JotHttpClient) {
       getShares: (id: string): Promise<NoteShare[]> =>
         http.get<NoteShareListResponse>(apiPaths.noteShares(id)).then(res => res.data.shares),
 
-      reorder: (noteIds: string[]): Promise<void> => done(http.post(apiPaths.notesReorder, { note_ids: noteIds })),
+      reorder: (noteIds: string[]): Promise<void> => done(http.post(apiPaths.notesReorder, { note_ids: noteIds } satisfies ReorderNotesRequest)),
 
       /** `formData` carries `import_type` plus either `file` or the usememos `url`/`token`. */
       import: (formData: unknown, config?: HttpRequestConfig): Promise<ImportResponse> =>
         data(http.post<ImportResponse>(apiPaths.notesImport, formData, config)),
 
-      addLabel: (noteId: string, name: string): Promise<Note> => data(http.post<Note>(apiPaths.noteLabels(noteId), { name })),
+      addLabel: (noteId: string, name: string): Promise<Note> => data(http.post<Note>(apiPaths.noteLabels(noteId), { name } satisfies AddLabelRequest)),
 
       removeLabel: (noteId: string, labelId: string): Promise<Note> => data(http.delete<Note>(apiPaths.noteLabel(noteId, labelId))),
 
@@ -181,7 +189,7 @@ export function createJotApi(http: JotHttpClient) {
       deleteItem: (noteId: string, itemId: string): Promise<void> => done(http.delete(apiPaths.noteItem(noteId, itemId))),
 
       reorderItems: (noteId: string, itemIds: string[]): Promise<void> =>
-        done(http.post(apiPaths.noteItemsReorder(noteId), { item_ids: itemIds })),
+        done(http.post(apiPaths.noteItemsReorder(noteId), { item_ids: itemIds } satisfies ReorderNoteItemsRequest)),
 
       // Set-completed is the one path for a single tap ([itemId]) and for bulk
       // actions over an explicit set of item IDs. Each call is one atomic server
@@ -191,10 +199,10 @@ export function createJotApi(http: JotHttpClient) {
       // caller to reconcile from a single response. Callers pass the exact set they
       // captured, so an item toggled after the click is never affected.
       setItemsCompleted: (noteId: string, itemIds: string[], completed: boolean): Promise<NoteItem[]> =>
-        data(http.post<NoteItem[]>(apiPaths.noteItemsSetCompleted(noteId), { item_ids: itemIds, completed })),
+        data(http.post<NoteItem[]>(apiPaths.noteItemsSetCompleted(noteId), { item_ids: itemIds, completed } satisfies SetNoteItemsCompletedRequest)),
 
       deleteItems: (noteId: string, itemIds: string[]): Promise<NoteItem[]> =>
-        data(http.post<NoteItem[]>(apiPaths.noteItemsDelete(noteId), { item_ids: itemIds })),
+        data(http.post<NoteItem[]>(apiPaths.noteItemsDelete(noteId), { item_ids: itemIds } satisfies DeleteNoteItemsRequest)),
 
       // Online-only one-shot operations; they never go through mobile's sync queue.
       /** Creates the link, or changes only the expiry of an active one (same token). */
@@ -214,9 +222,9 @@ export function createJotApi(http: JotHttpClient) {
       /** Every label, each with its `note_count`. */
       getAll: (): Promise<LabelWithCount[]> => http.get<LabelListResponse>(apiPaths.labels).then(res => res.data.labels),
 
-      create: (name: string): Promise<Label> => data(http.post<Label>(apiPaths.labels, { name })),
+      create: (name: string): Promise<Label> => data(http.post<Label>(apiPaths.labels, { name } satisfies AddLabelRequest)),
 
-      rename: (id: string, name: string): Promise<Label> => data(http.patch<Label>(apiPaths.label(id), { name })),
+      rename: (id: string, name: string): Promise<Label> => data(http.patch<Label>(apiPaths.label(id), { name } satisfies RenameLabelRequest)),
 
       delete: (id: string): Promise<void> => done(http.delete(apiPaths.label(id))),
     },
@@ -226,7 +234,7 @@ export function createJotApi(http: JotHttpClient) {
        * Every user but the caller. Without a search term the server does not cap
        * the list, which share pickers and avatar lookups rely on.
        */
-      list: (): Promise<User[]> => http.get<UserSearchResponse>(apiPaths.users).then(res => res.data.users),
+      list: (): Promise<UserInfo[]> => http.get<UserSearchResponse>(apiPaths.users).then(res => res.data.users),
 
       /** At most 50 matches; `truncated` is set when more users matched the query. */
       search: (query: string): Promise<UserSearchResponse> =>

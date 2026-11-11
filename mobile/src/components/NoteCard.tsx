@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { CircleAlert, CloudOff, Square } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, groupNoteItems, hasCustomNoteColor, type Note, type NoteItem, type User } from '@jot/shared';
+import { VALIDATION, groupNoteItems, hasCustomNoteColor, type Note, type NoteItem, type KnownUser } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../store/AuthContext';
 import { useFailedNoteIds } from '../store/OfflineContext';
@@ -51,7 +51,7 @@ interface AvatarData {
 function buildNoteAvatars(
   note: Note,
   currentUserId: string | undefined,
-  usersById: Map<string, User>,
+  usersById: Map<string, KnownUser>,
 ): AvatarData[] {
   const isOwner = note.user_id === currentUserId;
   const avatars: AvatarData[] = [];
@@ -76,7 +76,9 @@ function buildNoteAvatars(
         userId: s.shared_with_user_id,
         username: s.username || '?',
         hasProfileIcon: s.has_profile_icon ?? u?.has_profile_icon,
-        iconVersion: u?.updated_at ?? s.updated_at,
+        // `||`, not `??`: a user read back from SQLite carries '' for a
+        // timestamp GET /users never supplied, and that must fall back too.
+        iconVersion: u?.updated_at || s.updated_at,
       });
     });
 
