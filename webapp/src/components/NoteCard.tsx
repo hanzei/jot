@@ -9,6 +9,7 @@ import {
   Undo2,
   Copy,
   Pin,
+  Check,
 } from 'lucide-react';
 import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
@@ -324,8 +325,12 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         // once anything is selected so the state of every card is visible.
         // It sits on the card's corner, over the border, so it never covers
         // the first words of the note.
+        //
+        // A native checkbox drawn as a round tick, like the colour picker's
+        // selected badge: `appearance-none` keeps the role, Space and the
+        // checked state, and the tick is a decorative overlay.
         <span
-          className={`absolute -top-2 -left-2 z-20 flex items-center justify-center rounded-full border border-gray-200 bg-white dark:border-slate-600 dark:bg-slate-900 p-1 shadow-sm transition-opacity ${selected || selectionActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`}
+          className={`absolute -top-2.5 -left-2.5 z-20 flex transition-opacity ${selected || selectionActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`}
           onClick={(e) => e.stopPropagation()}
         >
           <input
@@ -340,7 +345,12 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
               e.stopPropagation();
               onToggleSelect(note.id, e.shiftKey);
             }}
-            className="h-4 w-4 cursor-pointer rounded border-gray-400 text-blue-600 focus:ring-2 focus:ring-blue-500 dark:border-slate-500"
+            className="peer h-6 w-6 cursor-pointer appearance-none rounded-full border-2 border-gray-500 bg-white shadow-sm checked:border-blue-600 checked:bg-blue-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:border-slate-400 dark:bg-slate-800 dark:checked:border-blue-500 dark:checked:bg-blue-500 dark:focus-visible:ring-offset-slate-900"
+          />
+          <Check
+            aria-hidden="true"
+            strokeWidth={3}
+            className="pointer-events-none absolute inset-0 m-auto h-3.5 w-3.5 text-white opacity-0 peer-checked:opacity-100"
           />
         </span>
       )}

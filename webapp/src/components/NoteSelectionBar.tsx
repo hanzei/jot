@@ -128,7 +128,7 @@ function NoteSelectionBar({
             </MenuItems>
           </Menu>
           <Menu as="div" className="relative">
-            <MenuButton disabled={busy || labels.length === 0} className={BUTTON_CLASS}>
+            <MenuButton disabled={busy} className={BUTTON_CLASS}>
               <Tag className="h-4 w-4" aria-hidden="true" />
               {t('dashboard.selection.labels')}
             </MenuButton>
@@ -137,6 +137,15 @@ function NoteSelectionBar({
               data-testid="note-selection-labels"
               className={`${ANCHORED_MENU_PANEL_CLASS} max-h-72 w-60 overflow-y-auto py-1`}
             >
+              {labels.length === 0 && (
+                // A disabled item rather than an empty menu: a menu needs at
+                // least one menuitem, and this says why there is nothing to pick.
+                <MenuItem disabled>
+                  <span className="block px-4 py-2 text-sm text-gray-600 dark:text-gray-300">
+                    {t('dashboard.selection.noLabels')}
+                  </span>
+                </MenuItem>
+              )}
               {labels.map(({ label, state }) => (
                 <MenuItem key={label.id}>
                   <button

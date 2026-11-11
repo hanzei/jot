@@ -102,6 +102,18 @@ test.describe('Note multi-select', () => {
     await dashboardPage.expectNoteVisible('Batch Keep');
   });
 
+  test('says so when there are no labels to add', async ({ page, authenticatedUser, dashboardPage }) => {
+    void authenticatedUser;
+    await createTextNotes(page.request, ['No Labels Note']);
+    await dashboardPage.goto();
+
+    await dashboardPage.toggleNoteSelection('No Labels Note');
+    await dashboardPage.selectionAction('Labels').click();
+    const empty = page.getByRole('menuitem', { name: 'No labels yet' });
+    await expect(empty).toBeVisible();
+    await expect(empty).toHaveAttribute('aria-disabled', 'true');
+  });
+
   test('trashes only owned notes from a mixed selection and reports the rest', async ({ page, request, authenticatedUser, dashboardPage, toastPage }) => {
     void authenticatedUser;
     const myId = await currentUserId(page.request);

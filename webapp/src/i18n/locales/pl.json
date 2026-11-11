@@ -145,6 +145,7 @@
     "someone": "Ktoś",
     "openNote": "Otwórz",
     "selection": {
+      "noLabels": "Brak etykiet",
       "labelOnAll": "{{name}}, na wszystkich zaznaczonych notatkach",
       "labelOnSome": "{{name}}, na niektórych zaznaczonych notatkach",
       "toolbarLabel": "Zaznaczone notatki",

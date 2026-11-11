@@ -139,6 +139,7 @@
     "someone": "Jemand",
     "openNote": "Öffnen",
     "selection": {
+      "noLabels": "Noch keine Labels",
       "labelOnAll": "{{name}}, an allen ausgewählten Notizen",
       "labelOnSome": "{{name}}, an einigen ausgewählten Notizen",
       "toolbarLabel": "Ausgewählte Notizen",
