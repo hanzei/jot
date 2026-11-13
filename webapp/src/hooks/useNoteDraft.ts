@@ -110,10 +110,9 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
   // so edits made during the save are not lost.
   const pendingSaveRef = useRef(false);
   const savingRef = useRef(false);
-  // Save passes started and finished by the autosave loop, and the callers of
+  // Save passes started by the autosave loop, and the callers of
   // waitForSavedItems() waiting on a pass to finish. See waitForSavedItems.
   const passesStartedRef = useRef(0);
-  const passesDoneRef = useRef(0);
   const saveWaitersRef = useRef<Array<{ pass: number; resolve: () => void }>>([]);
   // Which in-flight completed writes claim which items; every server item
   // snapshot's completed flags — write responses and adopted notes alike — go
@@ -325,9 +324,10 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
 
   // Resolves the waitForSavedItems() callers whose pass has finished, or all of
   // them once the loop stops (a failed pass ends it; the edits it was carrying
-  // are not coming, so there is nothing left to wait for).
+  // are not coming, so there is nothing left to wait for). Only ever called
+  // between passes, when every pass started has also finished.
   const releaseSaveWaiters = useCallback((all: boolean) => {
-    const done = passesDoneRef.current;
+    const done = passesStartedRef.current;
     const waiting: typeof saveWaitersRef.current = [];
     for (const waiter of saveWaitersRef.current) {
       if (all || waiter.pass <= done) waiter.resolve();
@@ -359,7 +359,6 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
         try {
           await flushSave();
         } finally {
-          passesDoneRef.current += 1;
           releaseSaveWaiters(false);
         }
         onRefresh?.();
