@@ -11,7 +11,7 @@ import LabelChip from '@/components/LabelChip';
 import LabelPicker from '@/components/LabelPicker';
 import NoteImageGallery from '@/components/NoteImageGallery';
 import LetterAvatar from '@/components/LetterAvatar';
-import SortableItem from '@/components/SortableItem';
+import SortableItem, { TEXT_LAYOUT_CLASSES } from '@/components/SortableItem';
 import InlineMarkdown from '@/components/InlineMarkdown';
 import MarkdownToolbar, { type MarkdownToolbarAction } from '@/components/MarkdownToolbar';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -2314,7 +2314,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                                 rows.push(
                                   <div
                                     key={`ghost-${parent.id}`}
-                                    className="flex items-start gap-2 min-w-0 text-sm opacity-60 select-none"
+                                    className="flex items-start gap-2 min-w-0 opacity-60 select-none"
                                     style={{ marginLeft: indentOf(parent) * VALIDATION.INDENT_PX_PER_LEVEL }}
                                     // The label must match the rendered text below, not the
                                     // source: aria-label replaces the element's content for
@@ -2330,11 +2330,13 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                                       disabled
                                       readOnly
                                       aria-hidden="true"
-                                      className="h-4 w-4 rounded mt-0.5 flex-shrink-0 cursor-default"
+                                      className="h-4 w-4 rounded mt-1 flex-shrink-0 cursor-default"
                                     />
                                     <InlineMarkdown
                                       text={parent.text}
-                                      className="min-w-0 whitespace-pre-wrap break-words font-semibold text-gray-500 dark:text-gray-400"
+                                      // A real row's text layout and weight, so the ghost lines up
+                                      // with the completed rows around it.
+                                      className={`${TEXT_LAYOUT_CLASSES} min-w-0 text-gray-500 dark:text-gray-400`}
                                     />
                                   </div>,
                                 );

@@ -63,6 +63,39 @@ test.describe('Grouped to-do items', () => {
     await dashboardPage.expectListItemValue(1, 'Socks');
   });
 
+  test('a ghost parent lines up with a completed top-level item', async ({ page, dashboardPage, authenticatedUser }) => {
+    void authenticatedUser;
+    await dashboardPage.createListNote('Trip', ['Packing', 'Socks', 'Passport']);
+    await dashboardPage.openNote('Trip');
+
+    // Nest "Socks" under "Packing", check it (ghost "Packing" appears), then
+    // check the top-level "Passport" so both sit in the completed section.
+    await dashboardPage.listItemInput(1).focus();
+    await page.keyboard.press('Tab');
+    await rowCheckbox(page, 1).check();
+    await expect(page.getByLabel('Group: Packing')).toBeVisible();
+    await rowCheckbox(page, 1).check();
+    await expect(page.getByText('Completed items (2)')).toBeVisible();
+
+    const ghost = page.getByLabel('Group: Packing');
+    const passport = page.locator('[data-testid="list-item-row"]').filter({ hasText: 'Passport' });
+    // Where a row's text starts: its text element's box plus its left padding.
+    const textStart = (el: Element) =>
+      el.getBoundingClientRect().left + parseFloat(getComputedStyle(el).paddingLeft);
+
+    const ghostBox = await ghost.locator('input[type="checkbox"]').boundingBox();
+    const realBox = await passport.locator('input[type="checkbox"]').boundingBox();
+    expect(ghostBox).not.toBeNull();
+    expect(realBox).not.toBeNull();
+    expect(ghostBox!.x).toBe(realBox!.x);
+    const ghostText = await ghost.locator('.markdown-inline').evaluate(textStart);
+    const realText = await passport.locator('textarea').evaluate(textStart);
+    expect(ghostText).toBe(realText);
+    const ghostFont = await ghost.locator('.markdown-inline').evaluate((el) => getComputedStyle(el).font);
+    const realFont = await passport.locator('textarea').evaluate((el) => getComputedStyle(el).font);
+    expect(ghostFont).toBe(realFont);
+  });
+
   test('a child nested under a later item shows under it on the card', async ({ page, dashboardPage, authenticatedUser }) => {
     void authenticatedUser;
     await dashboardPage.createListNote('Einkaufsliste', ['Kaffee', 'Bandnudeln', 'Trockenwaren']);
