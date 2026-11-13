@@ -110,6 +110,11 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
   // so edits made during the save are not lost.
   const pendingSaveRef = useRef(false);
   const savingRef = useRef(false);
+  // Save passes started and finished by the autosave loop, and the callers of
+  // waitForSavedItems() waiting on a pass to finish. See waitForSavedItems.
+  const passesStartedRef = useRef(0);
+  const passesDoneRef = useRef(0);
+  const saveWaitersRef = useRef<Array<{ pass: number; resolve: () => void }>>([]);
   // Which in-flight completed writes claim which items; every server item
   // snapshot's completed flags — write responses and adopted notes alike — go
   // through it (see completedWrites in @jot/shared), and the save diff leaves
@@ -318,6 +323,19 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
     }
   }, [persistItemDiff, setConflict]);
 
+  // Resolves the waitForSavedItems() callers whose pass has finished, or all of
+  // them once the loop stops (a failed pass ends it; the edits it was carrying
+  // are not coming, so there is nothing left to wait for).
+  const releaseSaveWaiters = useCallback((all: boolean) => {
+    const done = passesDoneRef.current;
+    const waiting: typeof saveWaitersRef.current = [];
+    for (const waiter of saveWaitersRef.current) {
+      if (all || waiter.pass <= done) waiter.resolve();
+      else waiting.push(waiter);
+    }
+    saveWaitersRef.current = waiting;
+  }, []);
+
   // Persists local edits to the server as granular operations. The latest state
   // is always read from itemsRef/autoSaveDraftRef, so queued saves pick up the
   // most recent edits.
@@ -337,7 +355,13 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
     try {
       do {
         pendingSaveRef.current = false;
-        await flushSave();
+        passesStartedRef.current += 1;
+        try {
+          await flushSave();
+        } finally {
+          passesDoneRef.current += 1;
+          releaseSaveWaiters(false);
+        }
         onRefresh?.();
         flashSaved();
       } while (pendingSaveRef.current);
@@ -345,8 +369,29 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
       reportSaveFailure('Failed to auto-save note:', error);
     } finally {
       savingRef.current = false;
+      releaseSaveWaiters(true);
     }
-  }, [cancelPendingSave, flashSaved, flushSave, markDirty, onRefresh, reportSaveFailure]);
+  }, [cancelPendingSave, flashSaved, flushSave, markDirty, onRefresh, releaseSaveWaiters, reportSaveFailure]);
+
+  // Resolves once the autosave loop has sent every item edit already made, or
+  // at once when no save is running. A request that the server answers from
+  // the note's current structure — set-completed cascades to the item's
+  // children *as the server has them* — must wait for this, or it overtakes a
+  // queued indent: Tab then tick the parent, and the server checks the group
+  // without the new child, then un-checks the parent when the child's
+  // re-parent lands under it.
+  //
+  // Waits for the pass in flight and, when another is queued, that one too
+  // (the pass in flight may have read the items before the latest edit) — but
+  // not for passes queued by edits made after this call, so typing elsewhere
+  // can't hold the caller back indefinitely.
+  const waitForSavedItems = useCallback((): Promise<void> => {
+    if (!savingRef.current) return Promise.resolve();
+    const pass = passesStartedRef.current + (pendingSaveRef.current ? 1 : 0);
+    return new Promise(resolve => {
+      saveWaitersRef.current.push({ pass, resolve });
+    });
+  }, []);
 
   // The banner's Overwrite action: re-reads the note's current version and
   // re-sends the local edits against it, knowingly replacing the other change.
@@ -386,7 +431,8 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
 
   const endExclusiveSave = useCallback(() => {
     savingRef.current = false;
-  }, []);
+    releaseSaveWaiters(true);
+  }, [releaseSaveWaiters]);
 
   const isSaving = useCallback((): boolean => savingRef.current, []);
   const isMounted = useCallback((): boolean => mountedRef.current, []);
@@ -446,7 +492,7 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
     // Save pipeline
     reportSaveFailure,
     autoSaveNote, scheduleAutoSave, cancelPendingSave, flushSave,
-    beginExclusiveSave, endExclusiveSave, isSaving, requestAnotherSavePass,
+    beginExclusiveSave, endExclusiveSave, isSaving, requestAnotherSavePass, waitForSavedItems,
     isMounted,
   };
 }

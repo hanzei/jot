@@ -42,6 +42,9 @@ interface UseCompletedItemsOptions {
   // Cancels any pending debounced autosave, so a stale write can't race a
   // bulk operation that has already been sent.
   cancelPendingSave: () => void;
+  // Resolves once the autosave loop has sent the item edits already made
+  // (useNoteDraft's waitForSavedItems).
+  waitForSavedItems: () => Promise<void>;
   markDirty: () => void;
   flashSaved: () => void;
   showError: (message: string) => void;
@@ -65,6 +68,7 @@ export function useCompletedItems({
   baseline,
   completedWrites,
   cancelPendingSave,
+  waitForSavedItems,
   markDirty,
   flashSaved,
   showError,
@@ -202,8 +206,15 @@ export function useCompletedItems({
     // A new write restarts the settle delay.
     clearTimeout(refreshState.timeoutId);
     refreshState.timeoutId = undefined;
+    // Claim the flags before waiting, so the save pass waited on leaves them to
+    // this write instead of sending the optimistic values itself.
     const write = completedWrites.begin(priorById);
     try {
+      // The server cascades over the item's children as it has them, so a
+      // re-parent still queued in the autosave loop (Tab, then tick the
+      // parent) must land first; otherwise the group is checked without the
+      // new child, and the child's move then un-checks the parent.
+      await waitForSavedItems();
       const serverItems = await request(noteId);
       const completedById = completedWrites.accept(write, serverItems);
       commitCompleted(completedById);
@@ -224,7 +235,7 @@ export function useCompletedItems({
         else refreshState.timeoutId = setTimeout(runRefresh, COMPLETED_REFRESH_SETTLE_MS);
       }
     }
-  }, [baseline, cancelPendingSave, commitCompleted, completedWrites, flashSaved, markDirty, noteId, refreshIfSettled, runRefresh, showError, t]);
+  }, [baseline, cancelPendingSave, commitCompleted, completedWrites, flashSaved, markDirty, noteId, refreshIfSettled, runRefresh, showError, t, waitForSavedItems]);
 
   // Sets completed on the given items in one bulk request. Resolves false when
   // the request failed and the local state was rolled back, so callers don't

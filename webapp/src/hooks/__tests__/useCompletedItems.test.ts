@@ -74,6 +74,7 @@ const useHarness = ({ note = null, initialItems, onRefresh, showError = vi.fn() 
     baseline,
     completedWrites: useState(createCompletedWriteTracker)[0],
     cancelPendingSave: useCallback(() => {}, []),
+    waitForSavedItems: useCallback(() => Promise.resolve(), []),
     markDirty: useCallback(() => {}, []),
     flashSaved: useCallback(() => {}, []),
     showError,

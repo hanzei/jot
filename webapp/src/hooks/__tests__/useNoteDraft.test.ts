@@ -444,6 +444,110 @@ describe('useNoteDraft', () => {
     });
   });
 
+  describe('waitForSavedItems', () => {
+    // Each notes.update call stays pending until its resolver is called.
+    const deferUpdates = () => {
+      const resolvers: Array<(note: Note) => void> = [];
+      vi.mocked(notes.update).mockImplementation(() => new Promise((resolve) => { resolvers.push(resolve); }));
+      return resolvers;
+    };
+
+    // Tracks whether a waitForSavedItems() promise has resolved yet.
+    const track = (promise: Promise<void>) => {
+      const state = { settled: false };
+      void promise.then(() => { state.settled = true; });
+      return state;
+    };
+
+    it('resolves at once when no save is running', async () => {
+      const note = createMockNote({ id: '1', content: 'hello' });
+      const { result } = renderDraft({ note });
+      adopt(result.current, note);
+
+      const waited = track(result.current.waitForSavedItems());
+      await act(async () => {});
+
+      expect(waited.settled).toBe(true);
+    });
+
+    it('waits for the pass in flight and the one already queued, not for passes queued later', async () => {
+      const resolvers = deferUpdates();
+      const note = createMockNote({ id: '1', content: 'hello' });
+      const { result } = renderDraft({ note });
+      adopt(result.current, note);
+
+      act(() => result.current.setContent('first'));
+      let savePromise!: Promise<void>;
+      act(() => {
+        savePromise = result.current.autoSaveNote();
+      });
+      // An edit queued behind the pass in flight, then the wait.
+      act(() => result.current.setContent('second'));
+      await act(async () => {
+        await result.current.autoSaveNote();
+      });
+      const waited = track(result.current.waitForSavedItems());
+
+      await act(async () => resolvers[0]!({ version: 2 } as Note));
+      expect(waited.settled).toBe(false);
+
+      // An edit made while the second pass is in flight queues a third.
+      act(() => result.current.setContent('third'));
+      await act(async () => {
+        await result.current.autoSaveNote();
+      });
+
+      await act(async () => resolvers[1]!({ version: 3 } as Note));
+      expect(waited.settled).toBe(true);
+      expect(result.current.isSaving()).toBe(true);
+
+      await act(async () => {
+        resolvers[2]!({ version: 4 } as Note);
+        await savePromise;
+      });
+      expect(notes.update).toHaveBeenCalledTimes(3);
+    });
+
+    it('resolves when a failed pass stops the loop', async () => {
+      let rejectUpdate: (error: Error) => void = () => {};
+      vi.mocked(notes.update).mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectUpdate = reject; }));
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const note = createMockNote({ id: '1', content: 'hello' });
+      const { result } = renderDraft({ note });
+      adopt(result.current, note);
+
+      act(() => result.current.setContent('first'));
+      let savePromise!: Promise<void>;
+      act(() => {
+        savePromise = result.current.autoSaveNote();
+      });
+      act(() => result.current.requestAnotherSavePass());
+      const waited = track(result.current.waitForSavedItems());
+
+      await act(async () => {
+        rejectUpdate(new Error('offline'));
+        await savePromise;
+      });
+
+      expect(waited.settled).toBe(true);
+    });
+
+    it('resolves when an exclusive save releases the lock', async () => {
+      const note = createMockNote({ id: '1' });
+      const { result } = renderDraft({ note });
+
+      act(() => {
+        result.current.beginExclusiveSave();
+      });
+      const waited = track(result.current.waitForSavedItems());
+      await act(async () => {});
+      expect(waited.settled).toBe(false);
+
+      await act(async () => result.current.endExclusiveSave());
+      expect(waited.settled).toBe(true);
+    });
+  });
+
   describe('exclusive save lock', () => {
     it('beginExclusiveSave claims the lock and isSaving reflects it', () => {
       const note = createMockNote({ id: '1' });
