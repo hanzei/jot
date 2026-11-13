@@ -118,6 +118,11 @@ const DRAG_HANDLE_MARGIN_RIGHT = 4;
 // aligned with the active rows above.
 export const DRAG_HANDLE_WIDTH = DRAG_HANDLE_ICON_SIZE + DRAG_HANDLE_PADDING * 2 + DRAG_HANDLE_MARGIN_RIGHT;
 
+// Size of the checkbox icon. Exported, with CHECKBOX_STYLE below, so the
+// completed section's ghost parent can draw the same box and line up with a
+// real level-0 row, checkbox and label alike.
+export const CHECKBOX_ICON_SIZE = 22;
+
 // Delete (x) button geometry, mirroring the drag handle above: the button only
 // renders while a row is focused, so its width is reserved with a same-sized
 // spacer the rest of the time. Without that, focusing a row would shrink the
@@ -470,9 +475,9 @@ function ListItem({
       >
         <Animated.View style={{ transform: [{ scale: checkScale }] }}>
           {completed ? (
-            <SquareCheck size={22} color={effectiveIcon} />
+            <SquareCheck size={CHECKBOX_ICON_SIZE} color={effectiveIcon} />
           ) : (
-            <Square size={22} color={effectiveIcon} />
+            <Square size={CHECKBOX_ICON_SIZE} color={effectiveIcon} />
           )}
         </Animated.View>
       </TouchableOpacity>
@@ -829,5 +834,7 @@ const styles = StyleSheet.create({
     lineHeight: SUGGESTION_LINE_HEIGHT,
   },
 });
+
+export const CHECKBOX_STYLE = styles.checkbox;
 
 export default React.memo(ListItem);

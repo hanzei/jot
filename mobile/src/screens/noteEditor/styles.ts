@@ -252,12 +252,8 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 4,
   },
-  // Mirrors ListItem's `checkbox` style (padding 4, marginRight 8 around a
-  // 22px icon) so the ghost's checkbox and label sit exactly where a real
-  // level-0 row's do.
+  // Layered over ListItem's CHECKBOX_STYLE, which supplies the box geometry.
   ghostCheckbox: {
-    padding: 4,
-    marginRight: 8,
     flexShrink: 0,
   },
   ghostParentText: {
@@ -265,6 +261,9 @@ export const styles = StyleSheet.create({
     // parent label reads like the items below it — same size, no bold — but in
     // the muted ghost tone so it's lighter, matching the ghost checkbox.
     fontSize: 16,
+    // ListItem's itemText pins 22 as well; with the row centred on the 30px
+    // checkbox box, that puts the label on the same line as a real row's.
+    lineHeight: 22,
     color: GHOST_PARENT_COLOR,
     flex: 1,
   },

@@ -39,7 +39,7 @@ export const ROW_REVEAL_CLASSES =
 // construction on any platform. It also costs each row the descender space it
 // used to carry, so list rows are that much tighter than before — accidental
 // spacing, not designed, and now gone in both states rather than one.
-const TEXT_LAYOUT_CLASSES = 'block w-full pt-0 pb-1 pl-1 pr-0 whitespace-pre-wrap break-words';
+export const TEXT_LAYOUT_CLASSES = 'block w-full pt-0 pb-1 pl-1 pr-0 whitespace-pre-wrap break-words';
 
 export interface SortableItemProps {
   id: string;

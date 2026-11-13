@@ -5,7 +5,12 @@ import { useTranslation } from 'react-i18next';
 import type { Collaborator } from '@jot/shared';
 import { useTheme } from '../../theme/ThemeContext';
 import { getEffectiveColors } from '../../theme/colors';
-import ListItem, { DRAG_HANDLE_WIDTH, type ListItemSelectionHandle } from '../../components/ListItem';
+import ListItem, {
+  CHECKBOX_ICON_SIZE,
+  CHECKBOX_STYLE,
+  DRAG_HANDLE_WIDTH,
+  type ListItemSelectionHandle,
+} from '../../components/ListItem';
 import { styles, GHOST_PARENT_COLOR } from './styles';
 import type { LocalItem } from './listItemModel';
 import type { RevealTarget } from './revealInScrollView';
@@ -102,8 +107,8 @@ export default function CheckedItemsSection({
             >
               {/* Same icon and box as ListItem's checkbox, so the ghost lines up
                   with a real level-0 row: checkbox and label alike. */}
-              <View style={styles.ghostCheckbox}>
-                <Square size={22} color={GHOST_PARENT_COLOR} />
+              <View style={[CHECKBOX_STYLE, styles.ghostCheckbox]}>
+                <Square size={CHECKBOX_ICON_SIZE} color={GHOST_PARENT_COLOR} />
               </View>
               <Text style={styles.ghostParentText} numberOfLines={1}>
                 {parent.text}

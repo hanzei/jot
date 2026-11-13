@@ -11,7 +11,7 @@ import LabelChip from '@/components/LabelChip';
 import LabelPicker from '@/components/LabelPicker';
 import NoteImageGallery from '@/components/NoteImageGallery';
 import LetterAvatar from '@/components/LetterAvatar';
-import SortableItem from '@/components/SortableItem';
+import SortableItem, { TEXT_LAYOUT_CLASSES } from '@/components/SortableItem';
 import InlineMarkdown from '@/components/InlineMarkdown';
 import MarkdownToolbar, { type MarkdownToolbarAction } from '@/components/MarkdownToolbar';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -2334,10 +2334,9 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                                     />
                                     <InlineMarkdown
                                       text={parent.text}
-                                      // Same size, weight and left padding as a real row's text
-                                      // (SortableItem's TEXT_LAYOUT_CLASSES), so the ghost lines
-                                      // up with the completed rows around it.
-                                      className="min-w-0 pl-1 whitespace-pre-wrap break-words text-gray-500 dark:text-gray-400"
+                                      // A real row's text layout and weight, so the ghost lines up
+                                      // with the completed rows around it.
+                                      className={`${TEXT_LAYOUT_CLASSES} min-w-0 text-gray-500 dark:text-gray-400`}
                                     />
                                   </div>,
                                 );

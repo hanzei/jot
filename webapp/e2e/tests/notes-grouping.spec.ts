@@ -85,7 +85,9 @@ test.describe('Grouped to-do items', () => {
 
     const ghostBox = await ghost.locator('input[type="checkbox"]').boundingBox();
     const realBox = await passport.locator('input[type="checkbox"]').boundingBox();
-    expect(ghostBox?.x).toBe(realBox?.x);
+    expect(ghostBox).not.toBeNull();
+    expect(realBox).not.toBeNull();
+    expect(ghostBox!.x).toBe(realBox!.x);
     const ghostText = await ghost.locator('.markdown-inline').evaluate(textStart);
     const realText = await passport.locator('textarea').evaluate(textStart);
     expect(ghostText).toBe(realText);
