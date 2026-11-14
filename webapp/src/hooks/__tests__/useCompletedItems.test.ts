@@ -394,6 +394,30 @@ describe('useCompletedItems', () => {
       expect(result.current.completedWrites.claimed().has('a')).toBe(false);
     });
 
+    // The save it waited on failed, so the re-parent it was ordered behind
+    // never landed: sending now would race it again on the next save.
+    it('reverts unsent, without its own toast, when the save it waits on fails', async () => {
+      const showError = vi.fn();
+      const { result } = renderHook(() => useHarness({
+        note: noteWithCheckedItems(),
+        // 'a' as the caller leaves it: optimistically checked.
+        initialItems: activeAndDoneItems().map(item => item.id === 'a' ? { ...item, completed: true } : item),
+        showError,
+        waitForSavedItems: () => Promise.reject(new Error('save failed')),
+      }));
+
+      let ok = true;
+      await act(async () => {
+        ok = await result.current.writeCompleted(new Map([['a', false]]), id => notes.setItemsCompleted(id, ['a'], true));
+      });
+
+      expect(ok).toBe(false);
+      expect(notes.setItemsCompleted).not.toHaveBeenCalled();
+      expect(result.current.items.find(item => item.id === 'a')?.completed).toBe(false);
+      // The failed save has already reported itself.
+      expect(showError).not.toHaveBeenCalled();
+    });
+
     // Text typed just before a tick has a debounced save pending. The write
     // holds it back until it settles, then re-arms it rather than dropping it.
     it.each([

@@ -508,7 +508,7 @@ describe('useNoteDraft', () => {
       expect(notes.update).toHaveBeenCalledTimes(3);
     });
 
-    it('resolves when a failed pass stops the loop', async () => {
+    it('rejects with the error when a pass it waits on fails', async () => {
       let rejectUpdate: (error: Error) => void = () => {};
       vi.mocked(notes.update).mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectUpdate = reject; }));
       vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -522,14 +522,18 @@ describe('useNoteDraft', () => {
         savePromise = result.current.autoSaveNote();
       });
       act(() => result.current.requestAnotherSavePass());
-      const waited = track(result.current.waitForSavedItems());
+      const offline = new Error('offline');
+      let waitError: unknown = null;
+      const waited = result.current.waitForSavedItems().catch((error: unknown) => { waitError = error; });
 
       await act(async () => {
-        rejectUpdate(new Error('offline'));
+        rejectUpdate(offline);
         await savePromise;
+        await waited;
       });
 
-      expect(waited.settled).toBe(true);
+      // The edits it waited on did not land, so the caller must not go ahead.
+      expect(waitError).toBe(offline);
     });
 
     it('resolves when an exclusive save releases the lock', async () => {

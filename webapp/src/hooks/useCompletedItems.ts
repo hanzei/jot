@@ -216,12 +216,17 @@ export function useCompletedItems({
     // Claim the flags before waiting, so the save pass waited on leaves them to
     // this write instead of sending the optimistic values itself.
     const write = completedWrites.begin(priorById);
+    // Set once the save waited on has landed; a failure before that is the
+    // save's, which has already reported itself.
+    let saveLanded = false;
     try {
       // The server cascades over the item's children as it has them, so a
       // re-parent still queued in the autosave loop (Tab, then tick the
       // parent) must land first; otherwise the group is checked without the
-      // new child, and the child's move then un-checks the parent.
+      // new child, and the child's move then un-checks the parent. If that
+      // save fails, this write is reverted unsent rather than sent out of order.
       await waitForSavedItems();
+      saveLanded = true;
       const serverItems = await request(noteId);
       const completedById = completedWrites.accept(write, serverItems);
       commitCompleted(completedById);
@@ -230,9 +235,11 @@ export function useCompletedItems({
       flashSaved();
       return true;
     } catch (error) {
-      console.error('Failed to save completed items:', error);
       commitCompleted(completedWrites.fail(write));
-      showError(t('note.failedSaveChanges'));
+      if (saveLanded) {
+        console.error('Failed to save completed items:', error);
+        showError(t('note.failedSaveChanges'));
+      }
       return false;
     } finally {
       completedWrites.end(write);

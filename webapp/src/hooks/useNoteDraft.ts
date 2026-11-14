@@ -113,7 +113,7 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
   // Save passes started by the autosave loop, and the callers of
   // waitForSavedItems() waiting on a pass to finish. See waitForSavedItems.
   const passesStartedRef = useRef(0);
-  const saveWaitersRef = useRef<Array<{ pass: number; resolve: () => void }>>([]);
+  const saveWaitersRef = useRef<Array<{ pass: number; resolve: () => void; reject: (error: unknown) => void }>>([]);
   // Which in-flight completed writes claim which items; every server item
   // snapshot's completed flags — write responses and adopted notes alike — go
   // through it (see completedWrites in @jot/shared), and the save diff leaves
@@ -324,9 +324,9 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
   }, [persistItemDiff, setConflict]);
 
   // Resolves the waitForSavedItems() callers whose pass has finished, or all of
-  // them once the loop stops (a failed pass ends it; the edits it was carrying
-  // are not coming, so there is nothing left to wait for). Only ever called
-  // between passes, when every pass started has also finished.
+  // them once the save holding the lock ends (a failed pass has rejected them
+  // first; see rejectSaveWaiters). Only ever called between passes, when every
+  // pass started has also finished.
   const releaseSaveWaiters = useCallback((all: boolean) => {
     const done = passesStartedRef.current;
     const waiting: typeof saveWaitersRef.current = [];
@@ -335,6 +335,15 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
       else waiting.push(waiter);
     }
     saveWaitersRef.current = waiting;
+  }, []);
+
+  // Rejects every waitForSavedItems() caller when a pass fails: the edits they
+  // were waiting on did not land, and a later pass will send them after
+  // whatever the caller sends now.
+  const rejectSaveWaiters = useCallback((error: unknown) => {
+    const waiters = saveWaitersRef.current;
+    saveWaitersRef.current = [];
+    for (const waiter of waiters) waiter.reject(error);
   }, []);
 
   // Persists local edits to the server as granular operations. The latest state
@@ -359,9 +368,11 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
         passesStartedRef.current += 1;
         try {
           await flushSave();
-        } finally {
-          releaseSaveWaiters(false);
+        } catch (error) {
+          rejectSaveWaiters(error);
+          throw error;
         }
+        releaseSaveWaiters(false);
         onRefresh?.();
         flashSaved();
       } while (pendingSaveRef.current);
@@ -371,10 +382,11 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
       savingRef.current = false;
       releaseSaveWaiters(true);
     }
-  }, [cancelPendingSave, flashSaved, flushSave, markDirty, onRefresh, releaseSaveWaiters, reportSaveFailure]);
+  }, [cancelPendingSave, flashSaved, flushSave, markDirty, onRefresh, rejectSaveWaiters, releaseSaveWaiters, reportSaveFailure]);
 
   // Resolves once the autosave loop has sent every item edit already made, or
-  // at once when no save is running. A request that the server answers from
+  // at once when no save is running; rejects with the save's error when a pass
+  // it waits on fails. A request that the server answers from
   // the note's current structure — set-completed cascades to the item's
   // children *as the server has them* — must wait for this, or it overtakes a
   // queued indent: Tab then tick the parent, and the server checks the group
@@ -388,8 +400,8 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
   const waitForSavedItems = useCallback((): Promise<void> => {
     if (!savingRef.current) return Promise.resolve();
     const pass = passesStartedRef.current + (pendingSaveRef.current ? 1 : 0);
-    return new Promise(resolve => {
-      saveWaitersRef.current.push({ pass, resolve });
+    return new Promise((resolve, reject) => {
+      saveWaitersRef.current.push({ pass, resolve, reject });
     });
   }, []);
 
