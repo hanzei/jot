@@ -36,6 +36,50 @@ test.describe('Grouped to-do items', () => {
     await expect(page.getByText('Completed items (3)')).toBeVisible();
   });
 
+  // The check is answered from the server's view of the group, so it must not
+  // overtake an indent still being saved: the server would check the group
+  // without the new child, then un-check the parent once the child's
+  // re-parent landed under it.
+  test('checking a parent right after indenting checks the whole group', async ({ page, dashboardPage, authenticatedUser }) => {
+    void authenticatedUser;
+    await dashboardPage.createListNote('Groceries', ['Produce', 'Apples', 'Bananas']);
+    await dashboardPage.openNote('Groceries');
+
+    // Hold every item PATCH (the indents) until released, as a slow
+    // connection would.
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let patchesHeld = 0;
+    await page.route('**/api/v1/notes/*/items/*', async route => {
+      if (route.request().method() === 'PATCH') {
+        patchesHeld += 1;
+        await gate;
+      }
+      await route.fallback();
+    });
+
+    await dashboardPage.listItemInput(1).focus();
+    await page.keyboard.press('Tab');
+    await expect.poll(() => patchesHeld).toBe(1);
+    await dashboardPage.listItemInput(2).focus();
+    await page.keyboard.press('Tab');
+    // One click, as a user would: .check() clicks again if the box bounces
+    // back, which would hide a check the server undid.
+    await rowCheckbox(page, 0).click();
+    await expect(page.getByText('Completed items (3)')).toBeVisible();
+
+    // Had the check overtaken the indents, the server would end up with the
+    // parent un-checked and at least one child left unchecked.
+    release();
+    await expect.poll(async () => {
+      const resp = await page.request.get('/api/v1/notes');
+      const note = ((await resp.json()).notes as Array<{ title: string; items: Array<{ text: string; completed: boolean }> }>)
+        .find(candidate => candidate.title === 'Groceries');
+      return note?.items.map(item => `${item.text}:${item.completed}`).sort();
+    }).toEqual(['Apples:true', 'Bananas:true', 'Produce:true']);
+    await expect(page.getByText('Completed items (3)')).toBeVisible();
+  });
+
   test('unchecking a child returns it to its group', async ({ page, dashboardPage, authenticatedUser }) => {
     expect(authenticatedUser.username).toBeTruthy();
     await dashboardPage.createListNote('Trip', ['Packing', 'Socks']);

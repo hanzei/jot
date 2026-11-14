@@ -157,4 +157,25 @@ test.describe('Concurrent list editing', () => {
     await expect(page.getByText(`Completed items (${itemTexts.length})`)).toBeVisible();
     await expect(activeCheckbox).toHaveCount(0);
   });
+  // Ticking an item holds back the debounced save of text typed just before
+  // it, so the uncheck of an accepted suggestion goes out first. It must re-arm
+  // that save once the tick settles, not drop it until the next edit.
+  test('text typed just before ticking another item is still saved', async ({ page, dashboardPage, authenticatedUser }) => {
+    void authenticatedUser;
+    await dashboardPage.createListNote('Errands', ['Bank', 'Post office']);
+    await dashboardPage.openNote('Errands');
+
+    await dashboardPage.listItemInput(0).fill('Bank before noon');
+    // Inside the debounce window, so the text's save is still pending.
+    // eslint-disable-next-line playwright/no-force-option -- one forced click checks exactly one item before it reflows into the completed section
+    await page.locator('[data-testid="list-item-row"] input[type="checkbox"]').nth(1).click({ force: true });
+    await expect(page.getByText('Completed items (1)')).toBeVisible();
+
+    await expect.poll(async () => {
+      const resp = await page.request.get('/api/v1/notes');
+      const note = ((await resp.json()).notes as Array<{ title: string; items: Array<{ text: string; completed: boolean }> }>)
+        .find(candidate => candidate.title === 'Errands');
+      return note?.items.map(item => `${item.text}:${item.completed}`).sort();
+    }).toEqual(['Bank before noon:false', 'Post office:true']);
+  });
 });

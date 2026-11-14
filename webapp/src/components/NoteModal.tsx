@@ -228,7 +228,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     conflict, overwriteConflict,
     setSavedBaseline, markScalarSaved, applyDraftScalars, isDirty, hasUnflushedWork, baseline, completedWrites,
     reportSaveFailure, autoSaveNote, scheduleAutoSave, cancelPendingSave, flushSave,
-    beginExclusiveSave, endExclusiveSave, isSaving, requestAnotherSavePass, isMounted,
+    beginExclusiveSave, endExclusiveSave, isSaving, requestAnotherSavePass, waitForSavedItems, isMounted,
   } = useNoteDraft({ note, onRefresh, showError });
 
   useEffect(() => {
@@ -365,6 +365,8 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
     baseline,
     completedWrites,
     cancelPendingSave,
+    scheduleAutoSave,
+    waitForSavedItems,
     markDirty,
     flashSaved,
     showError,
