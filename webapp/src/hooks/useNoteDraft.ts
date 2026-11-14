@@ -158,12 +158,13 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
   }, []);
 
   // Cancels a pending debounced text-save so it can't fire a duplicate pass
-  // after an immediate save has already been sent.
-  const cancelPendingSave = useCallback(() => {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = undefined;
-    }
+  // after an immediate save has already been sent. Returns whether one was
+  // pending, for a caller that cancels without saving and has to re-arm it.
+  const cancelPendingSave = useCallback((): boolean => {
+    if (!saveTimeoutRef.current) return false;
+    clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = undefined;
+    return true;
   }, []);
 
   const flashSaved = useCallback(() => {

@@ -35,6 +35,8 @@ interface HarnessOptions {
   onRefresh?: () => void;
   showError?: (message: string) => void;
   waitForSavedItems?: () => Promise<void>;
+  cancelPendingSave?: () => boolean;
+  scheduleAutoSave?: () => void;
 }
 
 // Minimal stand-in for the slice of useNoteDraft that useCompletedItems
@@ -43,7 +45,13 @@ interface HarnessOptions {
 // the autosave engine.
 const resolvedWait = () => Promise.resolve();
 
-const useHarness = ({ note = null, initialItems, onRefresh, showError = vi.fn(), waitForSavedItems = resolvedWait }: HarnessOptions) => {
+const noPendingSave = () => false;
+const noop = () => {};
+
+const useHarness = ({
+  note = null, initialItems, onRefresh, showError = vi.fn(), waitForSavedItems = resolvedWait,
+  cancelPendingSave = noPendingSave, scheduleAutoSave = noop,
+}: HarnessOptions) => {
   const [items, setItems] = useState<ListItem[]>(initialItems);
   const itemsRef = useRef<ListItem[]>(initialItems);
   const commitItems = useCallback((next: ListItem[]) => {
@@ -77,7 +85,8 @@ const useHarness = ({ note = null, initialItems, onRefresh, showError = vi.fn(),
     commitItems,
     baseline,
     completedWrites,
-    cancelPendingSave: useCallback(() => {}, []),
+    cancelPendingSave,
+    scheduleAutoSave,
     waitForSavedItems,
     markDirty: useCallback(() => {}, []),
     flashSaved: useCallback(() => {}, []),
@@ -383,6 +392,48 @@ describe('useCompletedItems', () => {
       });
       expect(notes.setItemsCompleted).toHaveBeenCalledWith('1', ['a'], true);
       expect(result.current.completedWrites.claimed().has('a')).toBe(false);
+    });
+
+    // Text typed just before a tick has a debounced save pending. The write
+    // holds it back until it settles, then re-arms it rather than dropping it.
+    it.each([
+      ['succeeds', () => Promise.resolve([] as NoteItem[])],
+      ['fails', () => Promise.reject(new Error('offline'))],
+    ])('re-arms a debounced save it held back once the write %s', async (_label, request) => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const scheduleAutoSave = vi.fn();
+      let settled = false;
+      const { result } = renderHook(() => useHarness({
+        note: noteWithCheckedItems(),
+        initialItems: activeAndDoneItems(),
+        cancelPendingSave: () => true,
+        scheduleAutoSave,
+      }));
+
+      await act(async () => {
+        const done = result.current.writeCompleted(new Map([['a', false]]), () => request());
+        expect(scheduleAutoSave).not.toHaveBeenCalled();
+        await done;
+        settled = true;
+      });
+
+      expect(settled).toBe(true);
+      expect(scheduleAutoSave).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not schedule a save when none was pending', async () => {
+      const scheduleAutoSave = vi.fn();
+      const { result } = renderHook(() => useHarness({
+        note: noteWithCheckedItems(),
+        initialItems: activeAndDoneItems(),
+        scheduleAutoSave,
+      }));
+
+      await act(async () => {
+        await result.current.writeCompleted(new Map([['a', false]]), () => Promise.resolve([]));
+      });
+
+      expect(scheduleAutoSave).not.toHaveBeenCalled();
     });
   });
 

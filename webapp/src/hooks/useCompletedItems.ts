@@ -40,8 +40,10 @@ interface UseCompletedItemsOptions {
   // The draft's completed-write gate, which every server snapshot passes through.
   completedWrites: CompletedWriteTracker;
   // Cancels any pending debounced autosave, so a stale write can't race a
-  // bulk operation that has already been sent.
-  cancelPendingSave: () => void;
+  // bulk operation that has already been sent. Returns whether one was pending.
+  cancelPendingSave: () => boolean;
+  // Re-arms the debounced autosave (useNoteDraft's scheduleAutoSave).
+  scheduleAutoSave: () => void;
   // Resolves once the autosave loop has sent the item edits already made
   // (useNoteDraft's waitForSavedItems).
   waitForSavedItems: () => Promise<void>;
@@ -68,6 +70,7 @@ export function useCompletedItems({
   baseline,
   completedWrites,
   cancelPendingSave,
+  scheduleAutoSave,
   waitForSavedItems,
   markDirty,
   flashSaved,
@@ -199,7 +202,11 @@ export function useCompletedItems({
       markDirty();
       return true;
     }
-    cancelPendingSave();
+    // Hold back a debounced save until this write settles: accepting a
+    // suggestion relies on the typed row's removal not going out before the
+    // uncheck does. The save is re-armed below, not dropped — text typed just
+    // before the tick would otherwise stay unsaved until the next edit.
+    const heldSave = cancelPendingSave();
 
     const refreshState = completedRefreshRef.current;
     refreshState.inFlight += 1;
@@ -234,8 +241,11 @@ export function useCompletedItems({
         if (refreshState.closed) refreshIfSettled();
         else refreshState.timeoutId = setTimeout(runRefresh, COMPLETED_REFRESH_SETTLE_MS);
       }
+      // Debounced rather than immediate, so a failed revive can put the typed
+      // row back before anything is sent.
+      if (heldSave) scheduleAutoSave();
     }
-  }, [baseline, cancelPendingSave, commitCompleted, completedWrites, flashSaved, markDirty, noteId, refreshIfSettled, runRefresh, showError, t, waitForSavedItems]);
+  }, [baseline, cancelPendingSave, commitCompleted, completedWrites, flashSaved, markDirty, noteId, refreshIfSettled, runRefresh, scheduleAutoSave, showError, t, waitForSavedItems]);
 
   // Sets completed on the given items in one bulk request. Resolves false when
   // the request failed and the local state was rolled back, so callers don't
