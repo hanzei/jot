@@ -40,8 +40,13 @@ interface UseCompletedItemsOptions {
   // The draft's completed-write gate, which every server snapshot passes through.
   completedWrites: CompletedWriteTracker;
   // Cancels any pending debounced autosave, so a stale write can't race a
-  // bulk operation that has already been sent.
-  cancelPendingSave: () => void;
+  // bulk operation that has already been sent. Returns whether one was pending.
+  cancelPendingSave: () => boolean;
+  // Re-arms the debounced autosave (useNoteDraft's scheduleAutoSave).
+  scheduleAutoSave: () => void;
+  // Resolves once the autosave loop has sent the item edits already made
+  // (useNoteDraft's waitForSavedItems).
+  waitForSavedItems: () => Promise<void>;
   markDirty: () => void;
   flashSaved: () => void;
   showError: (message: string) => void;
@@ -65,6 +70,8 @@ export function useCompletedItems({
   baseline,
   completedWrites,
   cancelPendingSave,
+  scheduleAutoSave,
+  waitForSavedItems,
   markDirty,
   flashSaved,
   showError,
@@ -195,15 +202,31 @@ export function useCompletedItems({
       markDirty();
       return true;
     }
-    cancelPendingSave();
+    // Hold back a debounced save until this write settles: accepting a
+    // suggestion relies on the typed row's removal not going out before the
+    // uncheck does. The save is re-armed below, not dropped — text typed just
+    // before the tick would otherwise stay unsaved until the next edit.
+    const heldSave = cancelPendingSave();
 
     const refreshState = completedRefreshRef.current;
     refreshState.inFlight += 1;
     // A new write restarts the settle delay.
     clearTimeout(refreshState.timeoutId);
     refreshState.timeoutId = undefined;
+    // Claim the flags before waiting, so the save pass waited on leaves them to
+    // this write instead of sending the optimistic values itself.
     const write = completedWrites.begin(priorById);
+    // Set once the save waited on has landed; a failure before that is the
+    // save's, which has already reported itself.
+    let saveLanded = false;
     try {
+      // The server cascades over the item's children as it has them, so a
+      // re-parent still queued in the autosave loop (Tab, then tick the
+      // parent) must land first; otherwise the group is checked without the
+      // new child, and the child's move then un-checks the parent. If that
+      // save fails, this write is reverted unsent rather than sent out of order.
+      await waitForSavedItems();
+      saveLanded = true;
       const serverItems = await request(noteId);
       const completedById = completedWrites.accept(write, serverItems);
       commitCompleted(completedById);
@@ -212,9 +235,11 @@ export function useCompletedItems({
       flashSaved();
       return true;
     } catch (error) {
-      console.error('Failed to save completed items:', error);
       commitCompleted(completedWrites.fail(write));
-      showError(t('note.failedSaveChanges'));
+      if (saveLanded) {
+        console.error('Failed to save completed items:', error);
+        showError(t('note.failedSaveChanges'));
+      }
       return false;
     } finally {
       completedWrites.end(write);
@@ -223,8 +248,11 @@ export function useCompletedItems({
         if (refreshState.closed) refreshIfSettled();
         else refreshState.timeoutId = setTimeout(runRefresh, COMPLETED_REFRESH_SETTLE_MS);
       }
+      // Debounced rather than immediate, so a failed revive can put the typed
+      // row back before anything is sent.
+      if (heldSave) scheduleAutoSave();
     }
-  }, [baseline, cancelPendingSave, commitCompleted, completedWrites, flashSaved, markDirty, noteId, refreshIfSettled, runRefresh, showError, t]);
+  }, [baseline, cancelPendingSave, commitCompleted, completedWrites, flashSaved, markDirty, noteId, refreshIfSettled, runRefresh, scheduleAutoSave, showError, t, waitForSavedItems]);
 
   // Sets completed on the given items in one bulk request. Resolves false when
   // the request failed and the local state was rolled back, so callers don't
