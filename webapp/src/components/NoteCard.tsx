@@ -9,6 +9,7 @@ import {
   Undo2,
   Copy,
   Pin,
+  Check,
 } from 'lucide-react';
 import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
@@ -62,6 +63,20 @@ interface NoteCardProps {
    * drag handle and the overflow menu alike without wiring each separately.
    */
   onCardFocus?: ((noteId: string) => void) | undefined;
+  /** Whether the card is part of the dashboard's multi-select (#1255). */
+  selected?: boolean;
+  /**
+   * Whether any card on the dashboard is selected. While it is, the checkbox
+   * stays visible on every card and a click on a card toggles it instead of
+   * opening the note.
+   */
+  selectionActive?: boolean;
+  /**
+   * Toggles this card in the selection. `range` is true for a shift-click,
+   * which selects every card between the last toggled one and this one.
+   * Omitted, the card renders no checkbox.
+   */
+  onToggleSelect?: ((noteId: string, range: boolean) => void) | undefined;
 }
 
 function MenuKbd({ children }: { children: React.ReactNode }) {
@@ -72,7 +87,7 @@ function MenuKbd({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare, onRestore, onPermanentlyDelete, currentUserId, usersById, inBin = false, onRefresh, onLabelClick, dragHandle, isActive = true, onCardFocus }: NoteCardProps) {
+export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare, onRestore, onPermanentlyDelete, currentUserId, usersById, inBin = false, onRefresh, onLabelClick, dragHandle, isActive = true, onCardFocus, selected = false, selectionActive = false, onToggleSelect }: NoteCardProps) {
   const { t } = useTranslation();
   const unreadBadgeId = useId();
   const { showToast, showErrorToast } = useToast();
@@ -86,6 +101,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
   }>({ open: false, title: '', message: '', confirmLabel: '', onConfirm: () => {} });
 
   const openButtonRef = useRef<HTMLButtonElement>(null);
+  const cardName = (note.note_type === 'list' ? note.title : note.content?.slice(0, 50)) || t('share.untitledNote');
 
   const isOwner = note.user_id === currentUserId;
   const coverImage = note.images?.[0];
@@ -228,8 +244,19 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       data-testid="note-card"
       // What the note modal looks the card up by to zoom back onto it.
       data-note-id={note.id}
-      className={`note-card ${getColorClass(note.color)} p-4 relative group ${isUpdating ? 'opacity-50' : ''}`}
+      data-selected={selected ? 'true' : undefined}
+      className={`note-card ${getColorClass(note.color)} p-4 relative group ${isUpdating ? 'opacity-50' : ''} ${selected ? 'ring-2 ring-blue-600 dark:ring-blue-400' : ''}`}
       onClick={(e) => {
+        // While anything is selected a click adds or removes the card rather
+        // than opening it, as in Keep — a stray click must not drop the user
+        // out of a selection they spent a while building. A shift-click
+        // selects a range even before anything is selected.
+        if (onToggleSelect && (selectionActive || e.shiftKey)) {
+          e.preventDefault();
+          openButtonRef.current?.focus();
+          onToggleSelect(note.id, e.shiftKey);
+          return;
+        }
         // Hand focus to the card's own control before opening. A click used to
         // focus the card itself, because the card div carried tabIndex={0};
         // now it is a plain container and the button over it takes no pointer
@@ -279,7 +306,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         ref={openButtonRef}
         data-note-card="true"
         data-testid="note-card-open"
-        aria-label={(note.note_type === 'list' ? note.title : note.content?.slice(0, 50)) || t('share.untitledNote')}
+        aria-label={cardName}
         aria-describedby={note.unread ? unreadBadgeId : undefined}
         // Roving tabindex (#950): the grid's one Tab stop lives on whichever
         // card's open button is currently active; every other card's is
@@ -287,6 +314,46 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         tabIndex={isActive ? 0 : -1}
         className="absolute inset-0 rounded-lg pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
       />
+      {onToggleSelect && (
+        // Multi-select (#1255). A separate control rather than a state of the
+        // open button: the card's one stretched button opens the note, and a
+        // second meaning for it would leave a screen reader user no way to
+        // tell which one Enter is about to do. A sibling of the open button,
+        // never inside it, for the same nested-interactive reason as the menu.
+        //
+        // Hidden until the card is hovered or holds focus, then always shown
+        // once anything is selected so the state of every card is visible.
+        // It sits on the card's corner, over the border, so it never covers
+        // the first words of the note.
+        //
+        // A native checkbox drawn as a round tick, like the colour picker's
+        // selected badge: `appearance-none` keeps the role, Space and the
+        // checked state, and the tick is a decorative overlay.
+        <span
+          className={`absolute -top-2.5 -left-2.5 z-20 flex transition-opacity ${selected || selectionActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <input
+            type="checkbox"
+            data-testid="note-card-select"
+            checked={selected}
+            aria-label={t('dashboard.selection.selectNote', { name: cardName })}
+            // Same roving tab stop as the open button and the menu (#950).
+            tabIndex={isActive ? 0 : -1}
+            onChange={() => {}}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSelect(note.id, e.shiftKey);
+            }}
+            className="peer h-6 w-6 cursor-pointer appearance-none rounded-full border-2 border-gray-500 bg-white shadow-sm checked:border-blue-600 checked:bg-blue-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:border-slate-400 dark:bg-slate-800 dark:checked:border-blue-500 dark:checked:bg-blue-500 dark:focus-visible:ring-offset-slate-900"
+          />
+          <Check
+            aria-hidden="true"
+            strokeWidth={3}
+            className="pointer-events-none absolute inset-0 m-auto h-3.5 w-3.5 text-white opacity-0 peer-checked:opacity-100"
+          />
+        </span>
+      )}
       {coverImage && (
         <div className="relative -mx-4 -mt-4 mb-2 rounded-t-lg overflow-hidden" data-testid="note-card-cover">
           <img

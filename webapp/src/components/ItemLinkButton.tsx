@@ -3,6 +3,7 @@ import { ExternalLink } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import type { InlineLink } from '@jot/shared';
+import { ANCHORED_MENU_PANEL_CLASS } from '@/utils/menuStyles';
 
 interface ItemLinkButtonProps {
   /** The row's links, from `inlineLinks`. Renders nothing when empty. */
@@ -71,7 +72,7 @@ function ItemLinkButton({ links }: ItemLinkButtonProps) {
         data-testid="list-item-links-menu"
         // The panel classes match the note's other menus (NoteModal's overflow
         // menu), entrance transition and dark ring included.
-        className="z-50 w-64 max-w-[calc(100vw-2rem)] origin-top-right rounded-md border border-gray-200 bg-white py-1 shadow-lg ring-1 ring-black/5 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:ring-slate-600/20 transition duration-100 ease-out starting:scale-95 starting:opacity-0 motion-reduce:transition-none"
+        className={`${ANCHORED_MENU_PANEL_CLASS} w-64 py-1`}
       >
         {links.map((link) => (
           <MenuItem key={link.href}>

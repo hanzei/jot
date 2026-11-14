@@ -455,6 +455,50 @@ test.describe('List rows with rendered Markdown', () => {
   });
 });
 
+test.describe('Note multi-select', () => {
+  test('selects a card from its keyboard-reachable checkbox, announces the count, and acts from the action bar', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Keyboard Select Alpha');
+    await dashboardPage.createNote('Keyboard Select Beta');
+
+    // The checkbox shares the card's roving tab stop (#950): the next Tab stop
+    // after the active card, and out of the sequence on every other card.
+    const checkboxes = page.getByTestId('note-card-select');
+    await expect(checkboxes).toHaveCount(2);
+    await expect(checkboxes.nth(1)).toHaveAttribute('tabIndex', '-1');
+
+    await dashboardPage.noteCardButton('Keyboard Select Alpha').focus();
+    await page.keyboard.press('Tab');
+    const checkbox = dashboardPage.noteCardCheckbox('Keyboard Select Alpha');
+    await expect(checkbox).toBeFocused();
+    await expect(checkbox).toHaveAccessibleName('Select note: Keyboard Select Alpha');
+    await page.keyboard.press('Space');
+    await expect(checkbox).toBeChecked();
+
+    // The count is announced through a polite live region that is mounted
+    // before the first selection, so that one is heard too.
+    const status = page.getByTestId('note-selection-status');
+    await expect(status).toHaveAttribute('role', 'status');
+    await expect(status).toHaveAttribute('aria-live', 'polite');
+    await expect(status).toHaveText('1 selected');
+
+    // Escape clears, from the card as from anywhere else on the page.
+    await page.keyboard.press('Escape');
+    await expect(checkbox).not.toBeChecked();
+    await expect(dashboardPage.selectionBar()).toHaveCount(0);
+
+    // The action bar is a toolbar of ordinary buttons, operable with Enter.
+    await checkbox.focus();
+    await page.keyboard.press('Space');
+    await expect(dashboardPage.selectionBar()).toHaveAttribute('role', 'toolbar');
+    await dashboardPage.selectionAction('Pin').focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('toast').filter({ hasText: '1 note pinned' })).toBeVisible();
+    await expect(dashboardPage.pinnedSectionHeading()).toBeVisible();
+  });
+});
+
 test.describe('Toast announcements', () => {
   test('announces an undoable action in a polite live region with a reachable undo', async ({ authenticatedUser, page, dashboardPage }) => {
     void authenticatedUser;

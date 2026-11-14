@@ -7,6 +7,7 @@ import { failRequests } from '../fixtures/apiErrors';
 import {
   createListNote,
   createTextNote,
+  currentUserId,
   revokePublicLink,
   setPublicLink,
   shareNote,
@@ -337,10 +338,10 @@ test.describe('Public link section of the share dialog', () => {
   });
 
   test("shows a collaborator the owner's link, and its revocation as it happens", async ({ page, request, authenticatedUser, dashboardPage, publicLinkSection }) => {
-    const me = (await (await page.request.get('/api/v1/users/me')).json()) as { user: { id: string } };
+    const myId = await currentUserId(page.request);
     const owner = await signUp(request, 'publinkowner');
     const noteId = await createTextNote(request, 'Owned elsewhere');
-    await shareNote(request, noteId, me.user.id);
+    await shareNote(request, noteId, myId);
     await setPublicLink(request, noteId);
 
     await dashboardPage.goto();

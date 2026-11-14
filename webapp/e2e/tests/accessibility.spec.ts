@@ -105,6 +105,25 @@ for (const theme of THEMES) {
       await expectNoViolations(page);
     });
 
+    test('dashboard with selected notes has no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage }) => {
+      void authenticatedUser;
+      await dashboardPage.goto();
+      await dashboardPage.createNoteWithLabels('A11y Selected Note', '', ['a11y-select-label']);
+      await dashboardPage.createListNote('A11y Unselected Note', ['first item']);
+      await expectTheme(page, theme);
+
+      // The selected state: the checkbox shown on every card, the selected
+      // card's ring, and the action bar in the header.
+      await dashboardPage.toggleNoteSelection('A11y Selected Note');
+      await dashboardPage.expectSelectionCount(1);
+      await expectNoViolations(page);
+
+      // The labels menu.
+      await dashboardPage.selectionAction('Labels').click();
+      await expect(page.getByTestId('note-selection-labels')).toBeVisible();
+      await expectNoViolations(page);
+    });
+
     test('error fallbacks have no WCAG A/AA violations', async ({ page, authenticatedUser, errorFallbackPage }) => {
       void authenticatedUser;
       await errorFallbackPage.breakNoteList();
