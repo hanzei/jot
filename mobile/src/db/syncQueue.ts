@@ -655,7 +655,7 @@ export interface DrainResult {
   /**
    * The canonical server note returned for each drained create/duplicate
    * operation whose response was applied locally — that is, no later op for the
-   * note was still queued (see {@link applyReplayedNoteResponse}).
+   * note was still queued (see {@link saveServerResponseNote}).
    */
   idMappings: Array<{ localId: string; serverNote: Note }>;
   /** Operations that were discarded because the server returned a permanent (non-transient 4xx) error. */
@@ -773,7 +773,7 @@ async function recordDeadLetter(
  * succeeds, the server echoes back the client-supplied ID unchanged. The canonical
  * server note (with authoritative fields like `updated_at`, version, item IDs) is
  * adopted locally — once no later op for the note is queued, see
- * applyReplayedNoteResponse — and the pending-create marker is cleared.
+ * saveServerResponseNote — and the pending-create marker is cleared.
  *
  * Returns an array of {localId, serverNote} pairs for any create operations that
  * succeeded, so callers can update their caches.
@@ -794,34 +794,34 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
   // "Keep my version" fork rebuilds from the note's *local* content, which still
   // carries the whole chained edit (issue #714 cascade).
   const abandonedCreateNoteIds = new Set<string>();
-  // Notes whose replay landed but whose server response was held back because
-  // later ops for them were still queued, and that no later response has
-  // settled yet. Pulled from the server once the drain ends (#1262).
-  const unsettledNoteIds = new Set<string>();
+  // Notes a landed replay touched whose local row no response has settled
+  // since: an op that returns no note, or a response held back because other
+  // ops were queued or a failed change is unresolved. Pulled from the server
+  // once the drain ends (#1262, spec §8.3).
+  const pullNoteIds = new Set<string>();
+  // Notes the current entry's response was saved to in full.
+  let settledThisEntry = new Set<string>();
   // Set when the drain stops on a connectivity failure: the post-drain pull
   // would only time out against the same unreachable server.
   let stoppedOnConnectivity = false;
   let syncedSettings = false;
 
-  // Applies a replayed write's note response (see applyReplayedNoteResponse)
-  // and tracks whether the note is left unsettled.
+  // Applies a replayed write's note response (see saveServerResponseNote).
+  // Returns the note when it was saved in full.
   const applyResponse = async (
     entryId: number,
     data: unknown,
-    versionIsOurs: boolean,
+    ownVersion: boolean,
   ): Promise<Note | null> => {
     if (!hasStringId(data)) return null;
     const note = data as Note;
-    const applied = await applyReplayedNoteResponse(db, entryId, note, versionIsOurs);
-    if (applied) {
-      unsettledNoteIds.delete(note.id);
-      return note;
-    }
-    unsettledNoteIds.add(note.id);
-    return null;
+    if (!(await saveServerResponseNote(db, note, { exceptEntryId: entryId, ownVersion }))) return null;
+    settledThisEntry.add(note.id);
+    return note;
   };
 
   for (const entry of entries) {
+    settledThisEntry = new Set<string>();
     // Declared outside the try so the catch can dead-letter using the *effective*
     // (id-remapped) endpoint/body that were actually sent to the server.
     let endpoint = entry.endpoint;
@@ -961,9 +961,6 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           // The server returns the updated note; persist it so the local
           // labels_json drops the removed label and stays consistent.
           await applyResponse(entry.id, response?.data, false);
-        } else if (entry.operation === 'delete' || entry.operation === 'permanentDelete') {
-          // A trashed or deleted note has nothing left to pull.
-          for (const noteId of affectedNoteIds(endpoint, body)) unsettledNoteIds.delete(noteId);
         } else if (entry.operation === 'unshare') {
           // Unshare returns 204 (no body); re-fetch so shared_with/is_shared
           // reflect the server state after the removal.
@@ -978,6 +975,11 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
       // no-op for the common (already-synced) case.
       for (const noteId of affectedNoteIds(endpoint, body)) {
         await clearNoteSyncFailed(db, noteId);
+        // A trashed or deleted note has nothing left to pull; one this
+        // response settled is already current.
+        const gone = entry.operation === 'delete' || entry.operation === 'permanentDelete';
+        if (gone || settledThisEntry.has(noteId)) pullNoteIds.delete(noteId);
+        else pullNoteIds.add(noteId);
       }
     } catch (err) {
       if (requestLanded) {
@@ -1173,18 +1175,17 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
     }
   }
 
-  if (unsettledNoteIds.size > 0 && !stoppedOnConnectivity) {
-    await pullUnsettledNotes(db, unsettledNoteIds);
+  if (pullNoteIds.size > 0 && !stoppedOnConnectivity) {
+    await pullTouchedNotes(db, pullNoteIds);
   }
 
   return { idMappings, discardedOperations, syncedSettings };
 }
 
 /**
- * Most notes {@link pullUnsettledNotes} fetches after one drain. They are
- * fetched concurrently, so a drain after a long offline session must not turn
- * into a burst of hundreds of requests; the rest converge on the next list sync
- * or SSE event.
+ * Most notes {@link pullTouchedNotes} fetches after one drain. Each is a
+ * sequential GET, so a drain after a long offline session must not turn into
+ * hundreds of requests; the rest converge on the next list sync or SSE event.
  */
 export const MAX_POST_DRAIN_NOTE_PULLS = 20;
 
@@ -1210,12 +1211,12 @@ function isOwnVersion(data: unknown, baseVersion: number | null): boolean {
 async function hasOtherQueuedOpForNote(
   db: SQLiteDatabase,
   noteId: string,
-  exceptEntryId: number,
+  exceptEntryId: number | undefined,
 ): Promise<boolean> {
   const rows = await db.getAllAsync<Pick<QueueEntry, 'endpoint' | 'body'>>(
     `SELECT endpoint, body FROM sync_queue
-     WHERE id != ? AND (instr(endpoint, ?) > 0 OR instr(COALESCE(body, ''), ?) > 0)`,
-    [exceptEntryId, noteId, noteId],
+     WHERE id IS NOT ? AND (instr(endpoint, ?) > 0 OR instr(COALESCE(body, ''), ?) > 0)`,
+    [exceptEntryId ?? null, noteId, noteId],
   );
   for (const row of rows) {
     const ids = new Set<string>();
@@ -1226,80 +1227,116 @@ async function hasOtherQueuedOpForNote(
 }
 
 /**
- * Apply the note a replayed write returned (#1262). Returns true when the note
- * was saved in full.
- *
- * - **No further op queued for the note:** the response is the server's state
- *   after every local edit landed, so save it whole. That also brings in any
- *   collaborator edit made while the note was protected from server snapshots.
- * - **Further ops queued:** the response predates them (a create holds the
- *   content as of the first autosave), so saving it would revert the local
- *   content to that point. Leave the content alone, and advance only the
- *   version, and only when `versionIsOurs` — so the next queued content edit
- *   replays against the version this client's own write produced (#489), while
- *   a version that may hold a collaborator's edit is not adopted without its
- *   content, and that edit still conflicts instead of being overwritten.
+ * Whether the note has a failed change the user has not resolved (spec §8.4):
+ * it is flagged `failed`, or a dead letter still names it. The dead letter
+ * counts on its own because a later landed write clears the flag.
  */
-async function applyReplayedNoteResponse(
+async function hasUnresolvedFailure(
   db: SQLiteDatabase,
-  entryId: number,
-  note: Note,
-  versionIsOurs: boolean,
+  noteId: string,
+  exceptDeadLetterId: number | undefined,
 ): Promise<boolean> {
-  if (!(await hasOtherQueuedOpForNote(db, note.id, entryId))) {
-    await saveServerResponseNote(db, note);
-    return true;
-  }
-  if (versionIsOurs && typeof note.version === 'number') {
-    await setLocalNoteVersion(db, note.id, note.version);
-  }
-  return false;
+  const row = await db.getFirstAsync<{ failed: number }>(
+    `SELECT 1 AS failed FROM notes WHERE id = ? AND sync_state = 'failed'
+     UNION ALL
+     SELECT 1 FROM dead_letter WHERE note_id = ? AND id IS NOT ?
+     LIMIT 1`,
+    [noteId, noteId, exceptDeadLetterId ?? null],
+  );
+  return row !== null;
+}
+
+/** IDs of notes a dead letter still names (see {@link hasUnresolvedFailure}). */
+async function getDeadLetteredNoteIds(db: SQLiteDatabase): Promise<Set<string>> {
+  const rows = await db.getAllAsync<{ note_id: string }>(
+    'SELECT DISTINCT note_id FROM dead_letter WHERE note_id IS NOT NULL',
+  );
+  return new Set(rows.map((r) => r.note_id));
 }
 
 /**
- * Fetch the notes whose drained response was held back and that no later
- * response settled (#1262), so the device converges without depending on a
- * list sync or SSE event happening to run after the drain. saveServerNote
- * still skips a note that has gained a queued op or a failure since. Best
- * effort: a failed fetch leaves the note for the next background sync.
+ * Fetch the notes a drain touched whose local row no response settled
+ * (#1262, spec §8.3). The device gets no SSE echo of its own writes, so
+ * without this a row that fell behind stays behind until an unrelated sync
+ * runs. Notes that are protected (queued op or failed flag) or still named by
+ * a dead letter are skipped. Fetched one at a time: a batch would hold early
+ * results while a newer snapshot lands, and its slowest timeout would finish
+ * last and mark the server unreachable. Best effort: a failed fetch leaves the
+ * note for the next background sync.
  */
-async function pullUnsettledNotes(db: SQLiteDatabase, noteIds: Set<string>): Promise<void> {
-  const protectedIds = await getProtectedNoteIds(db);
-  const toPull = [...noteIds].filter((id) => !protectedIds.has(id));
+async function pullTouchedNotes(db: SQLiteDatabase, noteIds: Set<string>): Promise<void> {
+  const [protectedIds, deadLettered] = await Promise.all([getProtectedNoteIds(db), getDeadLetteredNoteIds(db)]);
+  const toPull = [...noteIds].filter((id) => !protectedIds.has(id) && !deadLettered.has(id));
   if (toPull.length > MAX_POST_DRAIN_NOTE_PULLS) {
     console.info(
       `Pulling ${MAX_POST_DRAIN_NOTE_PULLS} of ${toPull.length} notes after the queue drain; the next sync reconciles the rest.`,
     );
   }
-  // Fetch concurrently so the drain (and the image-upload drain and cache
-  // refresh queued behind it) waits one round trip rather than one per note,
-  // then save one at a time: concurrent saveNote transactions would interleave.
-  const batch = toPull.slice(0, MAX_POST_DRAIN_NOTE_PULLS);
-  const results = await Promise.allSettled(batch.map((noteId) => jot.notes.getById(noteId)));
-  for (const [i, result] of results.entries()) {
-    const noteId = batch[i]!; // results has one entry per batch element
+  for (const noteId of toPull.slice(0, MAX_POST_DRAIN_NOTE_PULLS)) {
     try {
-      if (result.status === 'rejected') throw result.reason;
-      await saveServerNote(db, result.value);
+      const note = await jot.notes.getById(noteId);
+      await saveServerNote(db, note);
     } catch (err) {
       console.warn(`Failed to pull note id=${noteId} after the queue drain: ${errorSummary(err)}`);
     }
   }
 }
 
+export interface ServerResponseOptions {
+  /** The queue entry this response answers, during a drain: not a later op. */
+  exceptEntryId?: number;
+  /** The dead letter being resolved: not an unresolved failure. */
+  exceptDeadLetterId?: number;
+  /**
+   * The response version reflects only this client's write (see
+   * isOwnVersion), so it is adopted even while the content is held back.
+   */
+  ownVersion?: boolean;
+}
+
 /**
  * Persist a note the server returned in answer to this client's own write on it
- * — an online hook's request, or the queue drain's replay. Unlike
- * saveServerNote it skips no note with a pending op: the writer owns the note
- * here (#487), so the skip would refuse the server's authoritative response for
- * the very note just written. Its completed flags still go through
- * localCompletedWrites like any server snapshot.
+ * — an online hook's request, or the queue drain's replay (spec §8.3, #1262).
+ * Returns true when the note was saved in full.
+ *
+ * - **Unresolved failed change:** take neither content nor version; the local
+ *   row is what "Keep my version" forks from.
+ * - **Another op queued for the note:** the response predates that edit (a
+ *   create holds the content as of the first autosave), so take no content.
+ *   Take the version only with `ownVersion`, so a chain of queued edits replays
+ *   against the versions its own writes produced (#489) — a temporary
+ *   exception to §8.3 until queued ops are merged (§8.5, #1268). A version that
+ *   may carry a collaborator's edit is never adopted without its content.
+ * - **Otherwise:** save it whole, which also brings in any collaborator edit
+ *   made while the note was protected from snapshots. Its completed flags still
+ *   go through localCompletedWrites like any server snapshot.
+ *
+ * The checks and the write share one transaction (saveNote's `guard`), so a
+ * write serialized behind it cannot slip in between.
  */
-export async function saveServerResponseNote(db: SQLiteDatabase, note: Note): Promise<void> {
+export async function saveServerResponseNote(
+  db: SQLiteDatabase,
+  note: Note,
+  options: ServerResponseOptions = {},
+): Promise<boolean> {
+  let saved = false;
   await saveNote(db, note, {
+    // No keepLocalCompletedIds: the guard only lets the save through when no
+    // other op, a queued completed op included, is waiting for the note.
     serverSnapshot: true,
-    keepLocalCompletedIds: await getQueuedCompletedItemIds(db, note.id),
+    guard: async () => {
+      if (await hasUnresolvedFailure(db, note.id, options.exceptDeadLetterId)) return false;
+      if (await hasOtherQueuedOpForNote(db, note.id, options.exceptEntryId)) {
+        if (options.ownVersion && typeof note.version === 'number') {
+          await setLocalNoteVersion(db, note.id, note.version);
+        }
+        return false;
+      }
+      saved = true;
+      return true;
+    },
   });
+  return saved;
 }
 
 /**
@@ -1339,7 +1376,7 @@ async function reconcileItemsFromResponse(db: SQLiteDatabase, noteId: string, it
  * row, or a row the unshare removed): a GET reconciles it to the server-assigned
  * share ids. Only the share columns are written (not a full saveNote) so a content
  * edit still queued for the same note isn't clobbered (the reason
- * applyReplayedNoteResponse holds back a response while later ops are queued).
+ * saveServerResponseNote holds back a response while later ops are queued).
  * Best-effort: a failed fetch leaves the optimistic state for the next
  * background sync to reconcile.
  */

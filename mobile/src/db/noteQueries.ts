@@ -330,6 +330,11 @@ interface SaveNoteOptions {
   serverSnapshot?: boolean;
   /** Items that keep their local completed value whatever the snapshot says. */
   keepLocalCompletedIds?: ReadonlySet<string>;
+  /**
+   * Runs in the save's transaction, before the write; false skips the write.
+   * For a caller whose decision must not go stale before the write lands.
+   */
+  guard?: () => Promise<boolean>;
 }
 
 /**
@@ -367,7 +372,10 @@ export async function saveNote(db: SQLiteDatabase, note: Note, options?: SaveNot
     await saveSkippedNote(db, note, options);
     return;
   }
-  await withSerializedTransaction(db, () => saveNoteInTx(db, note, options?.serverSnapshot, options?.keepLocalCompletedIds));
+  await withSerializedTransaction(db, async () => {
+    if (options?.guard && !(await options.guard())) return;
+    await saveNoteInTx(db, note, options?.serverSnapshot, options?.keepLocalCompletedIds);
+  });
 }
 
 /**

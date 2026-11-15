@@ -326,17 +326,6 @@ handling and loop safety are two halves of the same system.)
   (surface it), a network error is *transient* (queue it). This transient vs.
   permanent split (`rethrowIfNotQueueable` / `isQueueableError`) is the same line
   used everywhere else.
-- A replayed write's **response is applied only once no later op for its note
-  is queued**; until then the drain leaves the note's content alone (the
-  response predates those edits). It advances the local version only when that
-  version reflects nothing but this client's own write — a create, or a
-  version-guarded edit the server accepted at `base_version` or one above — so
-  a chain of offline edits replays against its own versions, while a version
-  that may carry a collaborator's edit is never adopted without that edit's
-  content (which would let the next edit pass the guard and overwrite it). A
-  note left with a held-back response that no later response settled is pulled
-  once the drain ends (capped per drain), so convergence does not depend on a
-  list sync or SSE event happening to run afterwards.
 
 The rest of this section is about consistency: what the local copy of a note
 means, and which writes may change it. §3–§7 decide *when* to talk to the
@@ -482,10 +471,10 @@ its own edit times. Merging (§8.5) therefore loses nothing history would keep.
 | Rule | Issue |
 |---|---|
 | §8.2 a write to a note with a queued op or a write in flight is queued behind it; local edit and queue row commit together | #1261 |
-| §8.3 own-write responses (checked in the write's transaction), and the pull after a drain | #1262 |
 | §8.3 protected check in the write's transaction; refusing older snapshots | #1265 |
 | §8.4 protection lasts until the dead letter is resolved | #1263 |
 | §8.5 merging queued ops | #1268 |
+| §8.3 "take neither content nor version" while other ops are queued. Until queued ops are merged, a chain of queued edits to one note would conflict with itself, so the drain still adopts a response's version without its content when the version can only be its own write's: a create, or a version-guarded edit the server accepted at `base_version` or one above (`saveServerResponseNote`'s `ownVersion`). Remove the exception with #1268. | #1268 |
 | §8.6 account ownership, logout wipe and warning | #1264 |
 
 ---
