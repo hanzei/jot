@@ -1181,9 +1181,10 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
 }
 
 /**
- * Most notes {@link pullUnsettledNotes} fetches after one drain. Each is a
- * sequential GET, so a drain after a long offline session must not turn into
- * hundreds of requests; the rest converge on the next list sync or SSE event.
+ * Most notes {@link pullUnsettledNotes} fetches after one drain. They are
+ * fetched concurrently, so a drain after a long offline session must not turn
+ * into a burst of hundreds of requests; the rest converge on the next list sync
+ * or SSE event.
  */
 export const MAX_POST_DRAIN_NOTE_PULLS = 20;
 
@@ -1270,10 +1271,16 @@ async function pullUnsettledNotes(db: SQLiteDatabase, noteIds: Set<string>): Pro
       `Pulling ${MAX_POST_DRAIN_NOTE_PULLS} of ${toPull.length} notes after the queue drain; the next sync reconciles the rest.`,
     );
   }
-  for (const noteId of toPull.slice(0, MAX_POST_DRAIN_NOTE_PULLS)) {
+  // Fetch concurrently so the drain (and the image-upload drain and cache
+  // refresh queued behind it) waits one round trip rather than one per note,
+  // then save one at a time: concurrent saveNote transactions would interleave.
+  const batch = toPull.slice(0, MAX_POST_DRAIN_NOTE_PULLS);
+  const results = await Promise.allSettled(batch.map((noteId) => jot.notes.getById(noteId)));
+  for (const [i, result] of results.entries()) {
+    const noteId = batch[i]!; // results has one entry per batch element
     try {
-      const note = await jot.notes.getById(noteId);
-      await saveServerNote(db, note);
+      if (result.status === 'rejected') throw result.reason;
+      await saveServerNote(db, result.value);
     } catch (err) {
       console.warn(`Failed to pull note id=${noteId} after the queue drain: ${errorSummary(err)}`);
     }
