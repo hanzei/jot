@@ -32,6 +32,16 @@ export class PublicNotePage {
     return this.page.getByTestId('public-note-completed-items');
   }
 
+  /** The bar offering a signed-in owner or collaborator a link to the note. */
+  accessBar() {
+    return this.page.getByTestId('public-note-access-bar');
+  }
+
+  /** The bar's link: "Edit note" for the owner, "Open note" for a collaborator. */
+  accessLink(name: 'Edit note' | 'Open note') {
+    return this.accessBar().getByRole('link', { name });
+  }
+
   notFound() {
     return this.page.getByRole('heading', { name: 'Note not found' });
   }

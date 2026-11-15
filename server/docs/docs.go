@@ -4962,6 +4962,9 @@ const docTemplate = `{
                     "description": "Content is present for text notes only.",
                     "type": "string"
                 },
+                "id": {
+                    "type": "string"
+                },
                 "images": {
                     "description": "Images lists the note's images in upload order; fetch each through\n/public/notes/{token}/images/{id} (or .../thumbnail).",
                     "type": "array",

@@ -584,7 +584,11 @@
     "errorTitle": "No se pudo cargar esta nota",
     "errorBody": "Algo salió mal. Vuelve a intentarlo en un momento.",
     "imageAlt": "Imagen {{number}}",
-    "footer": "Copia de solo lectura · Última actualización: {{date}}"
+    "footer": "Copia de solo lectura · Última actualización: {{date}}",
+    "ownerBody": "Así ven otros tu nota.",
+    "ownerAction": "Editar nota",
+    "collaboratorBody": "Esta nota está compartida contigo.",
+    "collaboratorAction": "Abrir nota"
   },
   "publicLink": {
     "heading": "Enlace público",

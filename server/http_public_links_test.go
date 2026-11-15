@@ -245,6 +245,14 @@ func TestPublicLinkAccess(t *testing.T) {
 		err = outsider.Client.DeletePublicLink(t.Context(), note.ID)
 		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
 
+		// The public view names the note's ID, but knowing it opens nothing:
+		// the note itself is the same 404 as for any note one cannot see.
+		pub, err := outsider.Client.GetPublicNote(t.Context(), link.Token)
+		require.NoError(t, err)
+		require.Equal(t, note.ID, pub.ID)
+		_, err = outsider.Client.GetNote(t.Context(), pub.ID)
+		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
+
 		// Nothing changed.
 		current, err := owner.Client.GetNote(t.Context(), note.ID)
 		require.NoError(t, err)
@@ -340,11 +348,14 @@ func TestPublicNoteShape(t *testing.T) {
 
 		var raw map[string]any
 		require.NoError(t, json.Unmarshal(body, &raw))
-		assert.ElementsMatch(t, []string{"note_type", "title", "updated_at", "images", "content"}, keysOf(raw))
+		assert.ElementsMatch(t, []string{"id", "note_type", "title", "updated_at", "images", "content"}, keysOf(raw))
+		// The note ID is not a secret (every note endpoint checks access); it
+		// lets the viewer offer a signed-in visitor a link into the app.
+		assert.Equal(t, note.ID, raw["id"])
 		assert.Equal(t, "text", raw["note_type"])
 		assert.Equal(t, "hello", raw["content"])
 		assert.Equal(t, []any{}, raw["images"])
-		for _, leak := range []string{owner.User.ID, collaborator.User.ID, "plshapeowner", "plshapecollab", "secret-label", "#ff0000", note.ID} {
+		for _, leak := range []string{owner.User.ID, collaborator.User.ID, "plshapeowner", "plshapecollab", "secret-label", "#ff0000"} {
 			assert.NotContains(t, string(body), leak)
 		}
 	})
@@ -388,7 +399,7 @@ func TestPublicNoteShape(t *testing.T) {
 		require.Equal(t, http.StatusOK, status, "body: %s", body)
 		var raw map[string]any
 		require.NoError(t, json.Unmarshal(body, &raw))
-		assert.ElementsMatch(t, []string{"note_type", "title", "updated_at", "images", "items", "checked_items_collapsed"}, keysOf(raw))
+		assert.ElementsMatch(t, []string{"id", "note_type", "title", "updated_at", "images", "items", "checked_items_collapsed"}, keysOf(raw))
 		items, ok := raw["items"].([]any)
 		require.True(t, ok)
 		require.Len(t, items, 3)
@@ -400,6 +411,7 @@ func TestPublicNoteShape(t *testing.T) {
 
 		pub, err := ts.newClient().GetPublicNote(t.Context(), link.Token)
 		require.NoError(t, err)
+		assert.Equal(t, note.ID, pub.ID)
 		assert.Equal(t, client.NoteTypeList, pub.NoteType)
 		assert.Equal(t, "Groceries", pub.Title)
 		assert.Nil(t, pub.Content)

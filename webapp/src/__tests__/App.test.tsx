@@ -1,14 +1,16 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import App from '../App';
-import { serverConfig, auth, publicNotes } from '@/utils/api';
-import type { SSOConfig } from '@jot/shared';
+import { serverConfig, auth, publicNotes, getNoteIfAccessible } from '@/utils/api';
+import { getUser } from '@/utils/auth';
+import type { Note, SSOConfig, User } from '@jot/shared';
 
 vi.mock('@/utils/api', () => ({
   serverConfig: { get: vi.fn() },
   auth: { me: vi.fn(), login: vi.fn(), register: vi.fn() },
   SSO_LOGIN_URL: '/api/v1/auth/oidc/login',
   publicNotes: { get: vi.fn() },
+  getNoteIfAccessible: vi.fn(),
   publicNoteImages: () => ({ url: (id: string) => id, thumbnailUrl: (id: string) => id }),
 }));
 
@@ -63,20 +65,24 @@ describe('App routing — /register vs SSO', () => {
   });
 });
 
+const publicTextNote = {
+  id: 'Ab3dEf6hIj9kLm2nOp5qRs',
+  note_type: 'text' as const,
+  title: '',
+  content: 'Hello from a public link',
+  updated_at: '2026-11-09T12:00:00Z',
+  images: [],
+};
+
 describe('App routing — public note links', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getUser).mockReturnValue(null);
     window.history.pushState({}, '', '/share/q3XvT0b9Lr2Kp8WmZcE1yN4hUa7sDfGj6oBtYiR5lMw');
   });
 
   it('renders the viewer without checking the session or fetching config', async () => {
-    vi.mocked(publicNotes.get).mockResolvedValue({
-      note_type: 'text',
-      title: '',
-      content: 'Hello from a public link',
-      updated_at: '2026-11-09T12:00:00Z',
-      images: [],
-    });
+    vi.mocked(publicNotes.get).mockResolvedValue(publicTextNote);
 
     render(<App />);
 
@@ -86,6 +92,41 @@ describe('App routing — public note links', () => {
     expect(auth.me).not.toHaveBeenCalled();
     expect(serverConfig.get).not.toHaveBeenCalled();
     expect(window.location.pathname).toMatch(/^\/share\//);
+    // Nothing signed in is stored, so access to the note is not even asked.
+    expect(getNoteIfAccessible).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('public-note-access-bar')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { who: 'owner', userId: 'ownerUserId', text: 'This is how others see your note.', action: 'Edit note' },
+    { who: 'collaborator', userId: 'collabUserId', text: 'This note is shared with you.', action: 'Open note' },
+  ])('offers the $who a link to the note', async ({ userId, text, action }) => {
+    vi.mocked(getUser).mockReturnValue({ id: userId } as User);
+    vi.mocked(getNoteIfAccessible).mockResolvedValue({ id: publicTextNote.id, user_id: 'ownerUserId' } as Note);
+    vi.mocked(publicNotes.get).mockResolvedValue(publicTextNote);
+
+    render(<App />);
+
+    const link = await screen.findByRole('link', { name: action });
+    expect(link).toHaveAttribute('href', '/notes/Ab3dEf6hIj9kLm2nOp5qRs');
+    expect(screen.getByTestId('public-note-access-bar')).toHaveTextContent(text);
+    expect(getNoteIfAccessible).toHaveBeenCalledWith('Ab3dEf6hIj9kLm2nOp5qRs');
+    expect(screen.getByText('Hello from a public link')).toBeInTheDocument();
+    expect(auth.me).not.toHaveBeenCalled();
+  });
+
+  it('shows no link to a signed-in visitor who cannot open the note', async () => {
+    vi.mocked(getUser).mockReturnValue({ id: 'strangerUserId' } as User);
+    vi.mocked(getNoteIfAccessible).mockResolvedValue(null);
+    vi.mocked(publicNotes.get).mockResolvedValue(publicTextNote);
+
+    render(<App />);
+
+    expect(await screen.findByText('Hello from a public link')).toBeInTheDocument();
+    await vi.waitFor(() => expect(getNoteIfAccessible).toHaveBeenCalled());
+    // Let the check's answer land before asserting nothing was rendered for it.
+    await act(() => vi.mocked(getNoteIfAccessible).mock.results[0]!.value);
+    expect(screen.queryByTestId('public-note-access-bar')).not.toBeInTheDocument();
   });
 
   it('shows the not-found state for a dead link', async () => {

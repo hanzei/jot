@@ -78,7 +78,12 @@ Public note links (`/share/{token}`, #1135) are deliberately **not** handed off
 and stay outside the `jot://` URL shape: they are meant for people without an
 account on the instance, so the read-only viewer in the browser is the
 destination, not a step on the way to the app. `deepLink.ts` has no mapping for
-them and `MobileAppHandoff` only matches `/notes/:id`; keep it that way.
+them and `MobileAppHandoff` only matches `/notes/:id`; keep it that way. A
+signed-in visitor who can open the note is offered a link to `/notes/{id}`
+(**Edit note** for the owner, **Open note** for a collaborator) above the public
+view rather than redirected,
+so the owner can still check what outsiders see; following it goes through the
+normal `/notes/:id` handoff above.
 
 ### Learning whether the app is installed
 

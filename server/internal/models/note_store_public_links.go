@@ -29,6 +29,7 @@ type PublicLink struct {
 // public link. It deliberately carries nothing about who owns or shares the
 // note: no collaborators, labels, color, owner, or creator.
 type PublicNote struct {
+	ID       string   `json:"id"`
 	NoteType NoteType `json:"note_type" enums:"text,list"`
 	// Title is always empty for a text note.
 	Title     string    `json:"title"`
@@ -241,7 +242,7 @@ func (s *noteStore) GetPublicNote(ctx context.Context, token string) (*PublicNot
 
 	// checked_items_collapsed is per-user state; the owner's is the one the
 	// public view mirrors.
-	var noteID, content string
+	var content string
 	var collapsed bool
 	var note PublicNote
 	err := s.db.QueryRowContext(ctx,
@@ -251,7 +252,7 @@ func (s *noteStore) GetPublicNote(ctx context.Context, token string) (*PublicNot
 		 INNER JOIN note_user_state nus ON nus.note_id = n.id AND nus.user_id = n.user_id
 		 WHERE l.token = ? AND `+activePublicLinkCond),
 		token, Timestamp(Now()),
-	).Scan(&noteID, &note.NoteType, &note.Title, &content, &note.UpdatedAt, &collapsed)
+	).Scan(&note.ID, &note.NoteType, &note.Title, &content, &note.UpdatedAt, &collapsed)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrPublicLinkNotFound
@@ -261,7 +262,7 @@ func (s *noteStore) GetPublicNote(ctx context.Context, token string) (*PublicNot
 
 	note.Title = note.NoteType.visibleTitle(note.Title)
 	if note.NoteType == NoteTypeList {
-		items, itemsErr := s.getItemsByNoteID(ctx, noteID)
+		items, itemsErr := s.getItemsByNoteID(ctx, note.ID)
 		if itemsErr != nil {
 			return nil, fmt.Errorf("get public note items: %w", itemsErr)
 		}
@@ -276,7 +277,7 @@ func (s *noteStore) GetPublicNote(ctx context.Context, token string) (*PublicNot
 		note.Content = &content
 	}
 
-	images, err := s.GetNoteImagesByNoteID(ctx, noteID)
+	images, err := s.GetNoteImagesByNoteID(ctx, note.ID)
 	if err != nil {
 		return nil, fmt.Errorf("get public note images: %w", err)
 	}

@@ -577,7 +577,11 @@
     "errorTitle": "Kan deze notitie niet laden",
     "errorBody": "Er is iets misgegaan. Probeer het zo meteen opnieuw.",
     "imageAlt": "Afbeelding {{number}}",
-    "footer": "Alleen-lezen kopie · Laatst bijgewerkt {{date}}"
+    "footer": "Alleen-lezen kopie · Laatst bijgewerkt {{date}}",
+    "ownerBody": "Zo zien anderen je notitie.",
+    "ownerAction": "Notitie bewerken",
+    "collaboratorBody": "Deze notitie is met je gedeeld.",
+    "collaboratorAction": "Notitie openen"
   },
   "publicLink": {
     "heading": "Openbare link",
