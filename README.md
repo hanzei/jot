@@ -38,7 +38,8 @@ compiled web app, while SQLite keeps the default deployment small and portable.
   link does not remove its title and image from messages already sent.
   Opening a link while signed in shows the same read-only copy; the owner is
   told this is how others see their note and a collaborator that it is shared
-  with them, each with a button to the note itself. Operators can switch the feature off with `JOT_PUBLIC_LINKS_ENABLED`.
+  with them, each with a button to the note itself. Operators can switch the
+  feature off with `JOT_PUBLIC_LINKS_ENABLED`.
 - **Unread badges**: Note cards mark a note shared with you as "New" until you
   open it, and as "Updated" when a collaborator changed it since you last
   looked.
