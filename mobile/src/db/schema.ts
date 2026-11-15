@@ -328,53 +328,57 @@ const migration10 = async (db: SQLiteDatabase): Promise<void> => {
 // real client id and point every reference to the placeholder — later queued ops,
 // the label store, notes' labels — at it, so the row replays as a normal create.
 // Idempotent: rows already in the `id` form are not touched.
+// All-or-nothing: each rewrite mints a fresh id, so an interrupted run must leave
+// nothing behind or the retry would treat a half-rewritten id as a new placeholder.
 const migration11 = async (db: SQLiteDatabase): Promise<void> => {
-  const seen = new Set<string>();
-  for (const table of ['sync_queue', 'dead_letter']) {
-    const rows = await db.getAllAsync<{ id: number; body: string | null }>(
-      `SELECT id, body FROM ${table} WHERE operation = 'createLabel' AND body LIKE '%"local_id"%'`,
-    );
-    for (const row of rows) {
-      let body: { local_id?: unknown; name?: unknown } | null;
-      try {
-        body = JSON.parse(row.body ?? 'null') as { local_id?: unknown; name?: unknown } | null;
-      } catch {
-        continue;
+  await db.withTransactionAsync(async () => {
+    const seen = new Set<string>();
+    for (const table of ['sync_queue', 'dead_letter']) {
+      const rows = await db.getAllAsync<{ id: number; body: string | null }>(
+        `SELECT id, body FROM ${table} WHERE operation = 'createLabel' AND body LIKE '%"local_id"%'`,
+      );
+      for (const row of rows) {
+        let body: { local_id?: unknown; name?: unknown } | null;
+        try {
+          body = JSON.parse(row.body ?? 'null') as { local_id?: unknown; name?: unknown } | null;
+        } catch {
+          continue;
+        }
+        if (!body || typeof body.local_id !== 'string' || typeof body.name !== 'string') continue;
+        const placeholder = body.local_id;
+        const newId = generateClientId();
+        if (!seen.has(placeholder)) {
+          seen.add(placeholder);
+          const now = new Date().toISOString();
+          const stored = await db.getFirstAsync<{ user_id: string; created_at: string }>(
+            'SELECT user_id, created_at FROM labels WHERE id = ?',
+            [placeholder],
+          );
+          await rewriteLabelId(db, placeholder, newId, {
+            id: newId,
+            user_id: stored?.user_id ?? '',
+            name: body.name,
+            created_at: stored?.created_at ?? now,
+            updated_at: now,
+          });
+        }
+        // rewriteLabelId swapped the placeholder only where it was a whole value;
+        // the row's own `local_id` key is what turns it into an `id` create.
+        const current = await db.getFirstAsync<{ body: string | null }>(`SELECT body FROM ${table} WHERE id = ?`, [row.id]);
+        let parsed: Record<string, unknown> = {};
+        try {
+          parsed = JSON.parse(current?.body ?? '{}') as Record<string, unknown>;
+        } catch {
+          continue;
+        }
+        const { local_id: replaced, ...rest } = parsed;
+        await db.runAsync(`UPDATE ${table} SET body = ? WHERE id = ?`, [
+          JSON.stringify({ id: replaced, ...rest }),
+          row.id,
+        ]);
       }
-      if (!body || typeof body.local_id !== 'string' || typeof body.name !== 'string') continue;
-      const placeholder = body.local_id;
-      const newId = generateClientId();
-      if (!seen.has(placeholder)) {
-        seen.add(placeholder);
-        const now = new Date().toISOString();
-        const stored = await db.getFirstAsync<{ user_id: string; created_at: string }>(
-          'SELECT user_id, created_at FROM labels WHERE id = ?',
-          [placeholder],
-        );
-        await rewriteLabelId(db, placeholder, newId, {
-          id: newId,
-          user_id: stored?.user_id ?? '',
-          name: body.name,
-          created_at: stored?.created_at ?? now,
-          updated_at: now,
-        });
-      }
-      // rewriteLabelId swapped the placeholder only where it was a whole value;
-      // the row's own `local_id` key is what turns it into an `id` create.
-      const current = await db.getFirstAsync<{ body: string | null }>(`SELECT body FROM ${table} WHERE id = ?`, [row.id]);
-      let parsed: Record<string, unknown> = {};
-      try {
-        parsed = JSON.parse(current?.body ?? '{}') as Record<string, unknown>;
-      } catch {
-        continue;
-      }
-      const { local_id: replaced, ...rest } = parsed;
-      await db.runAsync(`UPDATE ${table} SET body = ? WHERE id = ?`, [
-        JSON.stringify({ id: replaced, ...rest }),
-        row.id,
-      ]);
     }
-  }
+  });
 };
 
 export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11];
