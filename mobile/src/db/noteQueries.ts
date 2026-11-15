@@ -697,6 +697,8 @@ export async function getLocalNoteVersion(db: SQLiteDatabase, id: string): Promi
  * drain. Only the version is touched (not content) so a later same-note edit
  * still pending in the queue keeps its optimistic content; the bumped version
  * lets the next queued edit to this note replay against the right base (#489).
+ * The drain calls it only with a version that reflects this client's own write
+ * (#1262).
  */
 export async function setLocalNoteVersion(db: SQLiteDatabase, id: string, version: number): Promise<void> {
   await db.runAsync('UPDATE notes SET version = ? WHERE id = ?', [version, id]);
@@ -706,9 +708,10 @@ export async function setLocalNoteVersion(db: SQLiteDatabase, id: string, versio
  * Update only a note's share columns (`is_shared` + `shared_with`) from a server
  * snapshot, leaving title/content/items/version untouched. Used by the queue
  * drain to reconcile optimistic share rows after a share/unshare without
- * clobbering a content edit that may still be queued for the same note: the
- * `update` drain only bumps the version (see {@link setLocalNoteVersion}), so a
- * full saveNote here would revert that pending edit until the next background sync.
+ * clobbering a content edit that may still be queued for the same note: while
+ * later ops are queued the drain advances at most the version (see
+ * {@link setLocalNoteVersion}), so a full saveNote here would revert that pending
+ * edit until the next background sync.
  */
 export async function updateLocalNoteShares(
   db: SQLiteDatabase,
