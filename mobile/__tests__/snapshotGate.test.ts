@@ -7,7 +7,6 @@
 import { applyServerRemoval, getSnapshotSkipNoteIds, saveServerNote, saveServerNotes, saveServerNotesScope } from '../src/db/syncQueue';
 import { notesWrittenSince, recordWriteLanded, recordWriteResponse, snapshotMark } from '../src/db/snapshotGate';
 import { removeLocalNotesNotIn, saveNote } from '../src/db/noteQueries';
-import * as fsUtils from '../src/utils/fs';
 import { withSerializedTransaction } from '../src/db/transaction';
 import { makeTextNote } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
@@ -248,15 +247,19 @@ describe('applyServerRemoval (#1265)', () => {
     });
 
     it('removes the copied upload files of notes a prune deletes', async () => {
-      const spy = jest.spyOn(fsUtils, 'deleteFileIfExists').mockImplementation(() => {});
+      const path = 'file:///docs/pending-image-uploads/up-2';
+      globalThis.mockFileSystem.files.set(path, 'png-bytes');
       await saveNote(db, makeTextNote({ id: 'gone-note' }));
-      await seedUpload('up-2', 'gone-note', 'queued');
+      await db.runAsync(
+        `INSERT INTO pending_image_uploads (id, note_id, local_path, filename, mime_type, status, created_at)
+         VALUES ('up-2', 'gone-note', ?, 'a.png', 'image/png', 'queued', '2026-01-01T00:00:00.000Z')`,
+        [path],
+      );
 
       await removeLocalNotesNotIn(db, new Set());
 
       expect(await noteExists('gone-note')).toBe(false);
-      expect(spy).toHaveBeenCalledWith('/tmp/up-2');
-      spy.mockRestore();
+      expect(globalThis.mockFileSystem.files.has(path)).toBe(false);
     });
   });
 });
