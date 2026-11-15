@@ -109,6 +109,24 @@ truth, and the network is a background reconciler. Rationale and code map:
   (`src/store/resyncEvents.ts`) — a bare foreground does not flip `isConnected`,
   so the `isConnected`-keyed refresh alone misses events.
 
+## Local Data Consistency
+
+What the device may believe after a sync (spec §8). These are the target; spec
+§8.8 lists the rules the code does not follow yet, each with its issue.
+
+- **`version` and content move together.** Never store a server version without
+  the content it belongs to, or the reverse.
+- **Writes to one note stay in order.** Send online only when the note has no
+  queued op; otherwise queue behind it.
+- **A protected note** (queued op, or an unresolved failed change) takes no
+  server content, from a snapshot or from the response to another write. Check
+  and write in one transaction.
+- **Never apply a snapshot older than the local row** (`updated_at`).
+- **After a replay,** apply the response in full when nothing else is queued for
+  the note; otherwise take neither content nor version.
+- **Local data belongs to one account.** A deliberate logout wipes it, after a
+  warning when changes are unsynced; a 401 keeps it.
+
 ## Sync Loop Safety
 
 - Exponential backoff on every retry (start ≥ 1 s, cap 60 s); never a tight loop.
