@@ -1534,12 +1534,12 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (event_type, deployment_environment) (rate(sse_events_dropped_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
-          "legendFormat": "dropped ({{event_type}}) [{{deployment_environment}}]",
+          "expr": "sum by (event_type, deployment_environment) (rate(sse_subscribers_evicted_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
+          "legendFormat": "evicted on {{event_type}} [{{deployment_environment}}]",
           "refId": "A"
         }
       ],
-      "title": "SSE Events Dropped",
+      "title": "SSE Subscribers Evicted",
       "type": "timeseries"
     },
     {

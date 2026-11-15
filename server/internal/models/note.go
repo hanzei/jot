@@ -62,6 +62,7 @@ var (
 	ErrNoteItemExists       = errors.New("note item already exists")
 	ErrNoteItemCapExceeded  = fmt.Errorf("note cannot have more than %d items", NoteItemsMaxCount)
 	ErrInvalidParentRef     = errors.New("invalid parent reference")
+	ErrNoteImageExists      = errors.New("note image already exists")
 	ErrNoteImageNotFound    = errors.New("note image not found")
 	ErrNoteImageCapExceeded = errors.New("note image limit reached")
 	ErrNoteTypeUnchanged    = errors.New("note is already of the requested type")

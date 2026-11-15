@@ -271,12 +271,12 @@ func (s *NoteStore) MarkViewed(ctx context.Context, noteID, userID string, viewe
 	return s.inner.MarkViewed(ctx, noteID, userID, viewedAt)
 }
 
-func (s *NoteStore) CreateNoteImage(ctx context.Context, noteID, uploaderID, filename, contentType string, sizeBytes int64, sha256 string, width, height, maxImages int) (_ *NoteImage, err error) {
+func (s *NoteStore) CreateNoteImage(ctx context.Context, noteID, uploaderID, imageID, filename, contentType string, sizeBytes int64, sha256 string, width, height, maxImages int) (_ *NoteImage, err error) {
 	ctx, end := startSpan(ctx, s.instr, "NoteStore.CreateNoteImage", &err,
 		attribute.String("note.id", noteID),
 	)
 	defer end()
-	return s.inner.CreateNoteImage(ctx, noteID, uploaderID, filename, contentType, sizeBytes, sha256, width, height, maxImages)
+	return s.inner.CreateNoteImage(ctx, noteID, uploaderID, imageID, filename, contentType, sizeBytes, sha256, width, height, maxImages)
 }
 
 func (s *NoteStore) GetNoteImageByID(ctx context.Context, imageID string) (_ *NoteImage, err error) {

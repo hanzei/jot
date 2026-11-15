@@ -173,6 +173,10 @@ mode" for the write paths.
   reconnect (not the first connect — that's covered by the mount-time sync). This
   closes the gap a bare foreground leaves: foregrounding on a stable network does
   not flip `isConnected`, so the `isConnected`-keyed refresh alone would miss it.
+  The server relies on this too: a subscriber that falls too far behind is
+  disconnected rather than sent an incomplete stream, so the reconnect resync is
+  what recovers the events it missed. On mobile that close is noticed only by the
+  stall watchdog (`src/api/events.ts`), so recovery takes up to its timeout.
 - A refresh must never roll back this device's own writes; §8.3 has the rules
   for applying a snapshot.
 - A failed background read is **not** an error dialog — it's a *staleness*
@@ -320,10 +324,10 @@ handling and loop safety are two halves of the same system.)
   queued create is idempotent on replay (a duplicate `id` → 409, treated as
   already-applied — no second copy). The online attempt sends those same IDs,
   so a create that times out after the server committed it replays as that 409
-  rather than as a second entity. Note-image uploads are the exception:
-  `POST /notes/{id}/images` takes no client ID, so an upload whose response was
-  lost after the server stored it is replayed as a second image. Accepted until
-  the endpoint has an idempotency key.
+  rather than as a second entity. Note-image uploads follow the same rule
+  with a different status: `POST /notes/{id}/images` takes an optional `id` form
+  field (the upload queue's row ID), and a repeated ID on the same note returns
+  the existing image with 200 (409 if it belongs to another note).
 - Writes are **partial/field-level** where possible so a replayed op doesn't
   clobber fields another device changed concurrently.
 - Content edits are **version-guarded** (`base_version`); a 409 is *permanent*

@@ -70,6 +70,23 @@ describe('uploadNoteImage', () => {
     );
   });
 
+  it('sends the client-generated image ID as the `id` form field (#1286)', async () => {
+    mockAxiosInstance.post.mockResolvedValueOnce({ data: mockImage });
+
+    await uploadNoteImage('note-1', file, undefined, undefined, 'abcdefghijklmnopqrstuv');
+
+    const form = mockAxiosInstance.post.mock.calls[0][1] as FormData;
+    expect(form.get('id')).toBe('abcdefghijklmnopqrstuv');
+  });
+
+  it('omits the `id` field when no image ID is given', async () => {
+    mockAxiosInstance.post.mockResolvedValueOnce({ data: mockImage });
+
+    await uploadNoteImage('note-1', file);
+
+    expect((mockAxiosInstance.post.mock.calls[0][1] as FormData).has('id')).toBe(false);
+  });
+
   it('rejects with the underlying cancellation error when aborted', async () => {
     const cancelError = Object.assign(new Error('canceled'), { code: 'ERR_CANCELED' });
     mockAxiosInstance.post.mockRejectedValueOnce(cancelError);

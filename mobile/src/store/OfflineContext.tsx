@@ -260,14 +260,13 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     isDrainingRef.current = true;
     let stalled = false;
     try {
-      const { idMappings, syncedSettings } = await drainQueue(db);
-      for (const { localId, serverNote } of idMappings) {
-        queryClient.setQueryData(noteLocalQueryKey(localId), serverNote);
+      const { syncedNotes, syncedSettings } = await drainQueue(db);
+      for (const serverNote of syncedNotes) {
+        queryClient.setQueryData(noteLocalQueryKey(serverNote.id), serverNote);
       }
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
-      // Drained label ops may have reconciled local label ids (offline-created
-      // labels) to server ids, so refresh the label list/counts too.
+      // A drained createLabel name conflict rewrites the local label id, so refresh the label list/counts too.
       queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
       // Drained creates may have cleared their pending-create marker (#475).
       refreshPendingNoteIds();

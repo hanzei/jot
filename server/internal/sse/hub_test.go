@@ -162,36 +162,83 @@ func TestHubPublish(t *testing.T) {
 			t.Fatal("expected event in channel but got none")
 		}
 	})
+}
 
-	t.Run("drops events without blocking when channel buffer is full", func(t *testing.T) {
+func TestHubEviction(t *testing.T) {
+	event := Event{
+		Type:         EventNoteCreated,
+		SourceUserID: "user1",
+		Data:         NoteEventData{NoteID: "note1"},
+	}
+
+	t.Run("evicts a subscriber whose buffer is full without blocking", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			h, err := NewHub()
 			require.NoError(t, err)
-			_, unsub := h.Subscribe(t.Context(), "user1")
-			defer unsub()
+			slow, unsubSlow := h.Subscribe(t.Context(), "user1")
+			defer unsubSlow()
+			fast, unsubFast := h.Subscribe(t.Context(), "user1")
+			defer unsubFast()
 
-			// Fill the channel buffer (capacity 16).
-			for range 16 {
+			for range subscriberBufferSize {
 				h.Publish(t.Context(), []string{"user1"}, event)
+				<-fast // keep the other subscriber drained
 			}
 
-			// 17th publish must not block; Publish uses a non-blocking select internally.
+			// The overflowing publish must not block.
 			done := make(chan struct{})
 			go func() {
 				h.Publish(t.Context(), []string{"user1"}, event)
 				close(done)
 			}()
-
-			// Block until all goroutines in the bubble are idle.
 			synctest.Wait()
-
 			select {
 			case <-done:
-				// good — Publish returned without blocking
 			default:
 				t.Fatal("Publish blocked on full channel")
 			}
+
+			// The slow subscriber's backlog is discarded (its client resyncs
+			// in full on reconnect), so its channel reads as closed at once.
+			_, ok := <-slow
+			assert.False(t, ok, "slow subscriber's channel should be closed with nothing left buffered")
+
+			// The healthy subscriber is unaffected and stays registered.
+			got, ok := <-fast
+			require.True(t, ok)
+			assert.Equal(t, event, got)
+			assert.Equal(t, 1, h.SubscriberCount())
+
+			// Publishing again neither panics on the closed channel nor
+			// reaches the evicted subscriber.
+			h.Publish(t.Context(), []string{"user1"}, event)
+			<-fast
 		})
+	})
+
+	t.Run("unsubscribe after eviction does not double-close", func(t *testing.T) {
+		h, err := NewHub()
+		require.NoError(t, err)
+		_, unsub := h.Subscribe(t.Context(), "user1")
+		for range subscriberBufferSize + 1 {
+			h.Publish(t.Context(), []string{"user1"}, event)
+		}
+		assert.NotPanics(t, unsub)
+		h.mu.RLock()
+		_, present := h.clients["user1"]
+		h.mu.RUnlock()
+		assert.False(t, present)
+	})
+
+	t.Run("Close after eviction does not double-close", func(t *testing.T) {
+		h, err := NewHub()
+		require.NoError(t, err)
+		_, unsub := h.Subscribe(t.Context(), "user1")
+		for range subscriberBufferSize + 1 {
+			h.Publish(t.Context(), []string{"user1"}, event)
+		}
+		assert.NotPanics(t, h.Close)
+		assert.NotPanics(t, unsub)
 	})
 }
 

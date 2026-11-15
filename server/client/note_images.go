@@ -10,8 +10,19 @@ import (
 // UploadNoteImage uploads an image to a note. data is read fully; filename is
 // used only for the multipart header.
 func (c *Client) UploadNoteImage(ctx context.Context, noteID, filename string, data io.Reader) (*NoteImage, error) {
+	return c.UploadNoteImageWithID(ctx, noteID, "", filename, data)
+}
+
+// UploadNoteImageWithID is UploadNoteImage with a client-supplied image ID,
+// which makes a replayed upload return the existing image instead of storing
+// a second one. An empty imageID lets the server generate one.
+func (c *Client) UploadNoteImageWithID(ctx context.Context, noteID, imageID, filename string, data io.Reader) (*NoteImage, error) {
+	var fields map[string]string
+	if imageID != "" {
+		fields = map[string]string{"id": imageID}
+	}
 	var img NoteImage
-	if err := c.doMultipartUpload(ctx, fmt.Sprintf("/api/v1/notes/%s/images", noteID), filename, data, &img); err != nil {
+	if err := c.doMultipartUpload(ctx, fmt.Sprintf("/api/v1/notes/%s/images", noteID), filename, data, fields, &img); err != nil {
 		return nil, err
 	}
 	return &img, nil

@@ -174,14 +174,17 @@ func (h *NotesHandler) storeNoteImage(ctx context.Context, img inspectedNoteImag
 //	@Security	CookieAuth
 //	@Accept		multipart/form-data
 //	@Produce	json
-//	@Param		id		path		string	true	"Note ID"
-//	@Param		file	formData	file	true	"Image file (PNG, JPEG, WebP, or GIF)"
+//	@Param		id		path		string				true	"Note ID"
+//	@Param		file	formData	file				true	"Image file (PNG, JPEG, WebP, or GIF)"
+//	@Param		id		formData	string				false	"Client-supplied image ID. If an image with this ID already exists on the note it is returned with 200 instead of storing a second one; if it exists on another note the response is 409."
+//	@Success	200		{object}	models.NoteImage	"image with this ID already existed on the note"
 //	@Success	201		{object}	models.NoteImage
 //	@Failure	400		{object}	apierr.ErrorResponse	"bad request, unsupported_image_type, or invalid_image"
 //	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
 //	@Failure	404		{object}	apierr.ErrorResponse	"not found"
 //	@Failure	413		{object}	apierr.ErrorResponse	"file too large"
 //	@Failure	422		{object}	apierr.ErrorResponse	"note image cap exceeded (image_limit_reached)"
+//	@Failure	409		{object}	apierr.ErrorResponse	"image ID already exists on another note"
 //	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/images [post]
 func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -203,6 +206,24 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 		return http.StatusNotFound, nil, models.ErrNoteNotFound
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, h.uploadMaxBytes+multipartOverheadBytes)
+	//nolint:gosec // r.Body is already bounded by the MaxBytesReader above
+	if parseErr := r.ParseMultipartForm(h.uploadMaxBytes); parseErr != nil {
+		// wrapHandler promotes a wrapped *http.MaxBytesError to 413 regardless
+		// of the status returned here.
+		return http.StatusBadRequest, nil, fmt.Errorf("parse multipart upload: %w", parseErr)
+	}
+
+	// An optional client-supplied ID makes a replayed upload idempotent (the
+	// same contract as note, item and label IDs). The lookup runs before the
+	// cap pre-check so a replay into a full note still returns its image.
+	imageID := r.FormValue("id")
+	if imageID != "" {
+		if status, existing, idErr := h.resolveClientImageID(r.Context(), noteID, imageID); status != 0 {
+			return status, existing, idErr
+		}
+	}
+
 	// Fast-path pre-check: reject a note that's already at capacity before
 	// doing any upload work (hashing, decoding, blob storage) for it. This is
 	// only an optimization — CreateNoteImage enforces the cap atomically
@@ -213,15 +234,7 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 		return http.StatusInternalServerError, nil, fmt.Errorf("count note images: %w", err)
 	}
 	if existingCount >= imageMaxPerNote {
-		return http.StatusUnprocessableEntity, nil, errImageLimitReached
-	}
-
-	r.Body = http.MaxBytesReader(w, r.Body, h.uploadMaxBytes+multipartOverheadBytes)
-	//nolint:gosec // r.Body is already bounded by the MaxBytesReader above
-	if parseErr := r.ParseMultipartForm(h.uploadMaxBytes); parseErr != nil {
-		// wrapHandler promotes a wrapped *http.MaxBytesError to 413 regardless
-		// of the status returned here.
-		return http.StatusBadRequest, nil, fmt.Errorf("parse multipart upload: %w", parseErr)
+		return h.capRejection(r.Context(), noteID, imageID)
 	}
 
 	file, header, err := r.FormFile("file")
@@ -246,7 +259,7 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 	}
 	defer releasePin()
 
-	img, err := h.noteStore.CreateNoteImage(r.Context(), noteID, user.ID, header.Filename, inspected.contentType, int64(len(data)), inspected.sha, inspected.width, inspected.height, imageMaxPerNote)
+	img, err := h.noteStore.CreateNoteImage(r.Context(), noteID, user.ID, imageID, header.Filename, inspected.contentType, int64(len(data)), inspected.sha, inspected.width, inspected.height, imageMaxPerNote)
 	releasePin() // committed or failed: the row, not the pin, decides now
 	if err != nil {
 		// The blob was already written by storeNoteImage; if the row never got
@@ -256,7 +269,11 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 		// references this hash (dedup).
 		h.reclaimNoteImageBlob(r.Context(), inspected.sha)
 		if errors.Is(err, models.ErrNoteImageCapExceeded) {
-			return http.StatusUnprocessableEntity, nil, errImageLimitReached
+			return h.capRejection(r.Context(), noteID, imageID)
+		}
+		if errors.Is(err, models.ErrNoteImageExists) {
+			// Lost a race with a concurrent upload of the same ID.
+			return h.existingImageResponse(r.Context(), noteID, imageID)
 		}
 		return storeError(err, "create note image")
 	}
@@ -264,6 +281,56 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 	h.publishNoteImageEvent(r.Context(), noteID, sse.EventNoteImageAdded, sse.NoteImageEventData{NoteID: noteID, Image: img}, user.ID)
 
 	return http.StatusCreated, img, nil
+}
+
+// resolveClientImageID answers an upload that carries a client-supplied
+// image ID. A zero status means the ID is unused and the upload proceeds.
+func (h *NotesHandler) resolveClientImageID(ctx context.Context, noteID, imageID string) (int, *models.NoteImage, error) {
+	if !models.IsValidID(imageID) {
+		return http.StatusBadRequest, nil, errors.New("invalid image ID format")
+	}
+	existing, err := h.noteStore.GetNoteImageByID(ctx, imageID)
+	if errors.Is(err, models.ErrNoteImageNotFound) {
+		return 0, nil, nil
+	}
+	return replayResponse(noteID, existing, err)
+}
+
+// capRejection answers an upload the note's image cap turned away. When the
+// upload carries a client-supplied ID, a concurrent upload of that same ID may
+// be what filled the note, so the ID is resolved again and that image wins
+// over the 422 (the replay contract of resolveClientImageID).
+func (h *NotesHandler) capRejection(ctx context.Context, noteID, imageID string) (int, any, error) {
+	if imageID != "" {
+		if status, existing, err := h.resolveClientImageID(ctx, noteID, imageID); status != 0 {
+			if existing == nil {
+				return status, nil, err
+			}
+			return status, existing, err
+		}
+	}
+	return http.StatusUnprocessableEntity, nil, errImageLimitReached
+}
+
+// existingImageResponse answers an upload that lost a race for its
+// client-supplied ID, like resolveClientImageID does for a taken one.
+func (h *NotesHandler) existingImageResponse(ctx context.Context, noteID, imageID string) (int, *models.NoteImage, error) {
+	existing, err := h.noteStore.GetNoteImageByID(ctx, imageID)
+	return replayResponse(noteID, existing, err)
+}
+
+// replayResponse is the answer to an upload whose client-supplied ID is
+// taken: the image itself (200) when it is on this note, 409 when it is
+// elsewhere. A failed lookup is reported as such.
+func replayResponse(noteID string, existing *models.NoteImage, lookupErr error) (int, *models.NoteImage, error) {
+	if lookupErr != nil {
+		status, _, err := storeError(lookupErr, "get note image")
+		return status, nil, err
+	}
+	if existing.NoteID != noteID {
+		return http.StatusConflict, nil, errors.New("image ID already exists")
+	}
+	return http.StatusOK, existing, nil
 }
 
 // GetNoteImage godoc

@@ -6,7 +6,7 @@
  * the SQL text passed to a mock.
  */
 
-import { generateClientNoteId, isUnsyncedNoteId, removeLocalNotesNotIn, getLocalLabelCounts, saveNote, addLabelToLocalNote, removeLabelFromLocalNote, getLocalNotes } from '../src/db/noteQueries';
+import { generateClientNoteId, isUnsyncedNoteId, removeLocalNotesNotIn, getLocalLabelCounts, saveNote, addLabelToLocalNote, removeLabelFromLocalNote, getLocalNotes, upsertLabel, getStoredLabels } from '../src/db/noteQueries';
 import { drainQueue, getSyncQueueStats, isTransientHttpStatus, getDeadLetteredOperations, MAX_ENTRY_DRAIN_ATTEMPTS, PROCESSING_ERROR_STATUS, QUEUED_WRITE_TIMEOUT_MS } from '../src/db/syncQueue';
 import api from '../src/api/client';
 import { makeLabel, makeListNote, makeNoteItem, makeTextNote, remainingQueueIds, seedQueueEntry } from './helpers/fixtures';
@@ -641,7 +641,7 @@ describe('drainQueue', () => {
     });
     mockApi.post.mockResolvedValueOnce({ data: serverNote } as never);
 
-    const { idMappings } = await drainQueue(db);
+    const { syncedNotes } = await drainQueue(db);
 
     // The id never changes — adopt the canonical note and clear the pending-create marker.
     expect(await db.getFirstAsync('SELECT id, sync_state FROM notes WHERE id = ?', [clientId])).toEqual({
@@ -649,7 +649,7 @@ describe('drainQueue', () => {
       sync_state: 'synced',
     });
     expect(await remainingQueueIds(db)).toEqual([]);
-    expect(idMappings).toEqual([{ localId: clientId, serverNote }]);
+    expect(syncedNotes).toEqual([serverNote]);
   });
 
   it('clears the pending marker when a replayed create returns 409 (#475)', async () => {
@@ -676,9 +676,8 @@ describe('drainQueue', () => {
   });
 
   it('adopts the server note and clears pending-create when duplicate uses a client-supplied id', async () => {
-    // New-style offline duplicate: client sends { id } instead of { local_id }.
-    // The server keeps the client-supplied id, so serverNote.id === clientId →
-    // the stable-id path runs (saveNote + clearNotePendingCreate), no remap needed.
+    // New-style offline duplicate: client sends { id }. The server keeps it, so
+    // serverNote.id === clientId (saveNote + clearNotePendingCreate).
     const clientId = 'DupClientId000000000Ab';
     const serverNote = makeTextNote({ id: clientId, content: 'body' });
     await seedQueueEntry(db, {
@@ -689,7 +688,7 @@ describe('drainQueue', () => {
     });
     mockApi.post.mockResolvedValueOnce({ data: serverNote } as never);
 
-    const { idMappings } = await drainQueue(db);
+    const { syncedNotes } = await drainQueue(db);
 
     expect(mockApi.post).toHaveBeenCalledWith('/notes/src-123/duplicate', { id: clientId }, REPLAY_CONFIG);
     // The canonical note is saved locally and carries no pending marker.
@@ -699,30 +698,7 @@ describe('drainQueue', () => {
       sync_state: 'synced',
     });
     expect(await remainingQueueIds(db)).toEqual([]);
-    expect(idMappings).toEqual([{ localId: clientId, serverNote }]);
-  });
-
-  it('reconciles a createLabel local id and remaps it for later queued ops', async () => {
-    await seedQueueEntry(db, {
-      operation: 'createLabel',
-      endpoint: '/labels',
-      method: 'POST',
-      body: { local_id: 'local_lbl_1', name: 'Work' },
-    });
-    await seedQueueEntry(db, {
-      operation: 'deleteLabel',
-      endpoint: '/labels/local_lbl_1',
-      method: 'DELETE',
-    });
-    mockApi.post.mockResolvedValueOnce({ data: { id: 'srv_lbl_1', name: 'Work' } } as never);
-    mockApi.delete.mockResolvedValueOnce({ data: {} } as never);
-
-    await drainQueue(db);
-
-    // The label is created first, then the delete endpoint is remapped to the server id.
-    expect(mockApi.post).toHaveBeenCalledWith('/labels', { local_id: 'local_lbl_1', name: 'Work' }, REPLAY_CONFIG);
-    expect(mockApi.delete).toHaveBeenCalledWith('/labels/srv_lbl_1', REPLAY_CONFIG);
-    expect(await remainingQueueIds(db)).toEqual([]);
+    expect(syncedNotes).toEqual([serverNote]);
   });
 
   it('resolves a createLabel 409 as idempotent when the server label has the same ID (replay)', async () => {
@@ -745,7 +721,7 @@ describe('drainQueue', () => {
     expect(discardedOperations).toEqual([{ operation: 'createLabel', endpoint: '/labels', status: 409 }]);
   });
 
-  it('remaps a createLabel 409 to the server ID when there is a name collision', async () => {
+  it('persists the server ID for a createLabel 409 name collision, across drains', async () => {
     const clientId = 'ClientLblId00000000002';
     const serverLblId = 'ServerLblId0000000002';
     await seedQueueEntry(db, {
@@ -760,7 +736,7 @@ describe('drainQueue', () => {
       method: 'DELETE',
     });
     mockApi.post.mockRejectedValueOnce(makeAxiosError(409) as never);
-    mockApi.get.mockResolvedValueOnce({ data: { labels: [{ id: serverLblId, name: 'Home' }] } } as never);
+    mockApi.get.mockResolvedValueOnce({ data: { labels: [makeLabel({ id: serverLblId, name: 'Home' })] } } as never);
     mockApi.delete.mockResolvedValueOnce({ data: {} } as never);
 
     const { discardedOperations } = await drainQueue(db);
@@ -769,6 +745,27 @@ describe('drainQueue', () => {
     expect(mockApi.delete).toHaveBeenCalledWith(`/labels/${serverLblId}`, REPLAY_CONFIG);
     expect(await remainingQueueIds(db)).toEqual([]);
     expect(discardedOperations).toEqual([{ operation: 'createLabel', endpoint: '/labels', status: 409 }]);
+  });
+
+  it('rewrites the label id in later queued ops, the label store and local notes on a name collision', async () => {
+    const clientId = 'ClientLblId00000000003';
+    const serverLabel = { id: 'ServerLblId0000000003', user_id: 'u1', name: 'Home', created_at: 't', updated_at: 't' };
+    await upsertLabel(db, { ...serverLabel, id: clientId });
+    await saveNote(db, makeTextNote({ id: 'n1', labels: [{ ...serverLabel, id: clientId }] }));
+    await seedQueueEntry(db, { operation: 'createLabel', endpoint: '/labels', method: 'POST', body: { id: clientId, name: 'Home' } });
+    // The drain stops after the create, so the op behind it is replayed in a later drain.
+    await seedQueueEntry(db, { operation: 'renameLabel', endpoint: `/labels/${clientId}`, method: 'PATCH', body: { name: 'Haus' } });
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(409) as never);
+    mockApi.get.mockResolvedValueOnce({ data: { labels: [serverLabel] } } as never);
+    mockApi.patch.mockRejectedValueOnce(makeAxiosError(503) as never);
+
+    await drainQueue(db);
+
+    const queued = await db.getAllAsync<{ endpoint: string }>('SELECT endpoint FROM sync_queue');
+    expect(queued).toEqual([{ endpoint: `/labels/${serverLabel.id}` }]);
+    expect((await getStoredLabels(db)).map((l) => l.id)).toEqual([serverLabel.id]);
+    const row = await db.getFirstAsync<{ labels_json: string }>("SELECT labels_json FROM notes WHERE id = 'n1'");
+    expect((JSON.parse(row!.labels_json) as { id: string }[]).map((l) => l.id)).toEqual([serverLabel.id]);
   });
 
   it('dead-letters a createLabel 409 when the label is not found via GET /labels', async () => {
@@ -1205,12 +1202,12 @@ describe('drainQueue', () => {
       mockApi.post.mockResolvedValueOnce({ data: makeTextNote({ id: 'n1', content: 'A', version: 1 }) } as never);
       mockApi.patch.mockResolvedValueOnce({ data: makeTextNote({ id: 'n1', content: 'AB', version: 2 }) } as never);
 
-      const { idMappings } = await drainQueue(db);
+      const { syncedNotes } = await drainQueue(db);
 
       expect(mockApi.patch).toHaveBeenCalledWith('/notes/n1', { content: 'AB', base_version: 1 }, REPLAY_CONFIG);
       expect(await localNote()).toEqual({ content: 'AB', version: 2 });
       // The held-back create response is not handed to the UI cache either.
-      expect(idMappings).toEqual([]);
+      expect(syncedNotes).toEqual([]);
       // The last response settled the note, so nothing is pulled.
       expect(mockApi.get).not.toHaveBeenCalled();
     });

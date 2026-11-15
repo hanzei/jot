@@ -389,6 +389,7 @@ export default function NoteEditorScreen() {
     markDirtyAndScheduleUpdate,
     runMetadataUpdate,
     commitMetadataBaseline,
+    savedVersionRef,
     isHydratingRef,
     intentionalExitRef,
     isClosingRef,
@@ -1191,7 +1192,7 @@ export default function NoteEditorScreen() {
 
     try {
       await withPendingIndicator(async () => {
-        await convertMutation.mutateAsync(currentNoteId);
+        await convertMutation.mutateAsync({ id: currentNoteId, baseVersion: savedVersionRef.current });
         intentionalExitRef.current = true;
         navigation.replace('NoteEditor', { noteId: currentNoteId });
         showToast(t('note.converted'));
@@ -1205,7 +1206,7 @@ export default function NoteEditorScreen() {
         Alert.alert(t('common.error'), t('note.failedConvert'));
       }
     }
-  }, [cancelScheduledSave, confirm, convertMutation, flushSave, handleToggleNoteType, intentionalExitRef, itemsRef, navigation, noteIdRef, noteTypeRef, showToast, t, withPendingIndicator]);
+  }, [cancelScheduledSave, confirm, convertMutation, flushSave, handleToggleNoteType, intentionalExitRef, savedVersionRef, itemsRef, navigation, noteIdRef, noteTypeRef, showToast, t, withPendingIndicator]);
 
   // Disable inputs while waiting for existing note to hydrate
   const isHydrating = initialNoteId !== null && !existingNote;
