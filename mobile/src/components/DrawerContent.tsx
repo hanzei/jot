@@ -91,17 +91,18 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
       void logout();
       return;
     }
+    // Wipe before ending the session: if the app dies in between, the user is
+    // still signed in with nothing left to lose. The other order would keep the
+    // changes the user just agreed to discard, and the next sign-in by the same
+    // user would drain them. The wipe leaves the data ownerless, so anything a
+    // write in flight stores afterwards goes at the next sign-in.
+    await wipeLocalData(db).catch((error: unknown) => {
+      console.warn('Failed to wipe local data on logout:', error);
+    });
     try {
       await logout();
     } catch (error) {
       console.warn('Logout failed:', error);
-    } finally {
-      // After the session is cleared, so nothing signed in reads the emptied
-      // cache. A write in flight can still land afterwards; the owner check at
-      // the next sign-in wipes that too.
-      await wipeLocalData(db).catch((error: unknown) => {
-        console.warn('Failed to wipe local data on logout:', error);
-      });
     }
   }, [confirm, db, isLocalMode, logout, t]);
 

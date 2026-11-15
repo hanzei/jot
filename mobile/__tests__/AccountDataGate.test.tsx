@@ -5,7 +5,7 @@
 
 import { useEffect } from 'react';
 import { Text } from 'react-native';
-import { render, screen, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { User } from '@jot/shared';
 import { AccountDataGate } from '../src/store/AccountDataGate';
 import { claimLocalData, getAccountOwner } from '../src/db/accountOwner';
@@ -13,6 +13,7 @@ import { saveNote } from '../src/db/noteQueries';
 import { makeTextNote, seedQueueEntry } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
 import { silenceConsole } from './helpers/consoleGuard';
+import * as accountOwner from '../src/db/accountOwner';
 
 interface MockAuth {
   user: Pick<User, 'id'> | null;
@@ -130,6 +131,25 @@ describe('AccountDataGate', () => {
     expect(screen.getByTestId('probe')).toBeTruthy();
     await waitFor(() => expect(firstReads).toEqual([1]));
     expect(await getAccountOwner(db)).toBe('user-a');
+  });
+
+  it('keeps everything below held back when the check fails, until a retry succeeds', async () => {
+    await seedOwnedBy('user-a');
+    mockAuth = signedIn('user-b');
+    silenceConsole('warn', /Failed to check which account owns the local data/);
+    const claim = jest.spyOn(accountOwner, 'claimLocalData').mockRejectedValueOnce(new Error('disk I/O error'));
+
+    await render(gate());
+
+    await waitFor(() => expect(screen.getByTestId('account-data-gate-retry')).toBeTruthy());
+    expect(screen.queryByTestId('probe')).toBeNull();
+    expect(await getAccountOwner(db)).toBe('user-a');
+
+    await fireEvent.press(screen.getByTestId('account-data-gate-retry'));
+
+    await waitFor(() => expect(firstReads).toEqual([0]));
+    expect(claim).toHaveBeenCalledTimes(2);
+    claim.mockRestore();
   });
 
   it('never gates local mode', async () => {
