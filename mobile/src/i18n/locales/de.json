@@ -19,6 +19,8 @@
     "logout": "Abmelden",
     "logoutConfirmTitle": "Abmelden",
     "logoutConfirmMessage": "Möchtest du dich wirklich abmelden?",
+    "logoutUnsyncedMessage_one": "Du hast {{count}} Änderung, die noch nicht mit dem Server synchronisiert ist. Beim Abmelden wird sie von diesem Gerät gelöscht.",
+    "logoutUnsyncedMessage_other": "Du hast {{count}} Änderungen, die noch nicht mit dem Server synchronisiert sind. Beim Abmelden werden sie von diesem Gerät gelöscht.",
     "openMenu": "Menü öffnen"
   },
   "auth": {

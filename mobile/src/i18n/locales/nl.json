@@ -19,6 +19,8 @@
     "logout": "Uitloggen",
     "logoutConfirmTitle": "Uitloggen",
     "logoutConfirmMessage": "Weet je zeker dat je wilt uitloggen?",
+    "logoutUnsyncedMessage_one": "Je hebt {{count}} wijziging die nog niet met de server is gesynchroniseerd. Bij uitloggen wordt deze van dit apparaat verwijderd.",
+    "logoutUnsyncedMessage_other": "Je hebt {{count}} wijzigingen die nog niet met de server zijn gesynchroniseerd. Bij uitloggen worden ze van dit apparaat verwijderd.",
     "openMenu": "Menu openen"
   },
   "serverPicker": {

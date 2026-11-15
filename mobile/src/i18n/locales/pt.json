@@ -19,6 +19,9 @@
     "logout": "Sair",
     "logoutConfirmTitle": "Sair",
     "logoutConfirmMessage": "Tem certeza de que deseja sair?",
+    "logoutUnsyncedMessage_one": "Você tem {{count}} alteração que ainda não foi sincronizada com o servidor. Sair vai excluí-la deste dispositivo.",
+    "logoutUnsyncedMessage_many": "Você tem {{count}} alterações que ainda não foram sincronizadas com o servidor. Sair vai excluí-las deste dispositivo.",
+    "logoutUnsyncedMessage_other": "Você tem {{count}} alterações que ainda não foram sincronizadas com o servidor. Sair vai excluí-las deste dispositivo.",
     "openMenu": "Abrir menu"
   },
   "serverPicker": {

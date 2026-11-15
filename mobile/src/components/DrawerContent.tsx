@@ -6,7 +6,9 @@ import { CommonActions } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Archive, ChevronRight, Clipboard, FileText, LogOut, Settings, Trash2, type LucideIcon } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
+import { useSQLiteContext } from 'expo-sqlite';
 import { useAuth } from '../store/AuthContext';
+import { getUnsyncedChangeCount, wipeLocalData } from '../db/accountOwner';
 import { useCreateLabel, useDeleteLabel, useLabels, useRenameLabel } from '../hooks/useLabels';
 import { useTheme } from '../theme/ThemeContext';
 import UserAvatar from './UserAvatar';
@@ -42,6 +44,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const { confirm } = useConfirm();
+  const db = useSQLiteContext();
   const insets = useSafeAreaInsets();
   const topItems: NavItem[] = [
     { name: 'Notes', label: t('dashboard.tabNotes'), icon: FileText },
@@ -67,15 +70,40 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     | { labelId?: string } | undefined;
   const activeLabelId = activeRoute === 'Notes' ? activeParams?.labelId : undefined;
 
+  // A deliberate logout from a server account wipes this server's local data
+  // (spec §8.6, #1264), so changes the server has not accepted would be lost:
+  // say how many before the user commits. Local mode keeps its own rules.
   const handleLogout = useCallback(async () => {
+    const unsynced = isLocalMode
+      ? 0
+      : await getUnsyncedChangeCount(db).catch((error: unknown) => {
+        console.warn('Failed to count unsynced changes before logout:', error);
+        return 0;
+      });
     const confirmed = await confirm({
       title: t('nav.logoutConfirmTitle'),
-      message: t('nav.logoutConfirmMessage'),
+      message: unsynced > 0 ? t('nav.logoutUnsyncedMessage', { count: unsynced }) : t('nav.logoutConfirmMessage'),
       confirmLabel: t('nav.logout'),
       destructive: true,
     });
-    if (confirmed) logout();
-  }, [confirm, logout, t]);
+    if (!confirmed) return;
+    if (isLocalMode) {
+      void logout();
+      return;
+    }
+    try {
+      await logout();
+    } catch (error) {
+      console.warn('Logout failed:', error);
+    } finally {
+      // After the session is cleared, so nothing signed in reads the emptied
+      // cache. A write in flight can still land afterwards; the owner check at
+      // the next sign-in wipes that too.
+      await wipeLocalData(db).catch((error: unknown) => {
+        console.warn('Failed to wipe local data on logout:', error);
+      });
+    }
+  }, [confirm, db, isLocalMode, logout, t]);
 
   const handleNavPress = useCallback((name: keyof MainDrawerParamList) => {
     if (name === 'Notes') {

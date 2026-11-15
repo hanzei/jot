@@ -482,6 +482,12 @@ The local database and its queue belong to the account that produced them.
 - A **401** keeps the local data, so the same user can sign back in and the
   queue drains. If a different user signs in instead, the first rule applies.
 
+The database records its owner (`account_owner`). Each sign-in checks it
+before anything reads the cache or drains the queue, and wipes on a mismatch.
+A logout wipe leaves no owner, so the next sign-in wipes again whatever a
+write in flight at logout managed to store. A database from before the record
+existed is stamped with the next signed-in user rather than wiped.
+
 ### 8.7 Version history
 
 When the server keeps note revisions (#1129), a revision of an offline edit is
@@ -497,7 +503,6 @@ its own edit times. Merging (§8.5) therefore loses nothing history would keep.
 | §8.4 protection lasts until the dead letter is resolved | #1263 |
 | §8.5 merging queued ops | #1268 |
 | §8.3 "take neither content nor version" while other ops are queued. Until queued ops are merged, a chain of queued edits to one note would conflict with itself, so the drain still adopts a response's version without its content when the version can only be its own write's: a create, or a version-guarded edit the server accepted at `base_version` or one above (`saveServerResponseNote`'s `ownVersion`). Remove the exception with #1268. | #1268 |
-| §8.6 account ownership, logout wipe and warning | #1264 |
 
 ---
 
@@ -510,6 +515,7 @@ its own edit times. Merging (§8.5) therefore loses nothing history would keep.
 | Timeouts + interceptors + reachability wiring | `src/api/client.ts` |
 | Local note rows, snapshot and response writes (§8.1, §8.3) | `src/db/noteQueries.ts`, `src/db/syncQueue.ts` (`saveServerNote`, `saveServerResponseNote`, `getProtectedNoteIds`, `getSnapshotSkipNoteIds`) |
 | Failed-change review and resolution (§8.4) | `src/hooks/useSyncFailures.ts` |
+| Local-data ownership, logout wipe, unsynced count (§8.6) | `src/db/accountOwner.ts`, `src/store/AccountDataGate.tsx` (wired in `App.tsx`), `src/components/DrawerContent.tsx` |
 | Sync queue + transient/permanent split + head-of-line dead-lettering | `src/db/syncQueue.ts` (`rethrowIfNotQueueable`, `isQueueableError`, `isGlobalDrainFailure`, `MAX_ENTRY_DRAIN_ATTEMPTS`, `getSyncQueueStats`) |
 | Snapshot gate (own writes landed after a fetch started) | `src/db/snapshotGate.ts`, wired in `src/api/client.ts` |
 | Bounded read retries | `src/utils/retryWithBackoff.ts` (`retrySync`) |

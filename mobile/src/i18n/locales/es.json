@@ -19,6 +19,9 @@
     "logout": "Cerrar sesión",
     "logoutConfirmTitle": "Cerrar sesión",
     "logoutConfirmMessage": "¿Seguro que quieres cerrar sesión?",
+    "logoutUnsyncedMessage_one": "Tienes {{count}} cambio que aún no se ha sincronizado con el servidor. Al cerrar sesión se eliminará de este dispositivo.",
+    "logoutUnsyncedMessage_many": "Tienes {{count}} cambios que aún no se han sincronizado con el servidor. Al cerrar sesión se eliminarán de este dispositivo.",
+    "logoutUnsyncedMessage_other": "Tienes {{count}} cambios que aún no se han sincronizado con el servidor. Al cerrar sesión se eliminarán de este dispositivo.",
     "openMenu": "Abrir menú"
   },
   "serverPicker": {
