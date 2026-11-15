@@ -453,8 +453,8 @@ export async function getPendingNoteIds(db: SQLiteDatabase): Promise<Set<string>
 
 /**
  * Notes that server-sourced writes must leave untouched: those with a pending
- * queue op (#487) plus those marked `sync_state = 'failed'` after a dead-lettered
- * op (#492). A dead-lettered note no longer has a queue row, so the failed flag
+ * queue op (#487), those with a queued or errored image upload (#1279), plus
+ * those marked `sync_state = 'failed'` after a dead-lettered op (#492). A dead-lettered note no longer has a queue row, so the failed flag
  * is what keeps its preserved local content from being overwritten or pruned by
  * a later background fetch / SSE event.
  */
