@@ -6,7 +6,8 @@
 
 import { applyServerRemoval, getSnapshotSkipNoteIds, saveServerNote, saveServerNotes, saveServerNotesScope } from '../src/db/syncQueue';
 import { notesWrittenSince, recordWriteLanded, recordWriteResponse, snapshotMark } from '../src/db/snapshotGate';
-import { saveNote } from '../src/db/noteQueries';
+import { removeLocalNotesNotIn, saveNote } from '../src/db/noteQueries';
+import * as fsUtils from '../src/utils/fs';
 import { withSerializedTransaction } from '../src/db/transaction';
 import { makeTextNote } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
@@ -220,5 +221,42 @@ describe('applyServerRemoval (#1265)', () => {
 
     expect(await removal).toBe(false);
     expect(await deletedAt('x')).toEqual({ deleted_at: null });
+  });
+
+  describe('queued image uploads (#1279)', () => {
+    const seedUpload = (id: string, noteId: string, status: 'queued' | 'error') =>
+      db.runAsync(
+        `INSERT INTO pending_image_uploads (id, note_id, local_path, filename, mime_type, status, created_at)
+         VALUES (?, ?, ?, 'a.png', 'image/png', ?, '2026-01-01T00:00:00.000Z')`,
+        [id, noteId, `/tmp/${id}`, status],
+      );
+    const noteExists = async (id: string) =>
+      (await db.getFirstAsync('SELECT id FROM notes WHERE id = ?', [id])) !== null;
+    const uploadExists = async (id: string) =>
+      (await db.getFirstAsync('SELECT id FROM pending_image_uploads WHERE id = ?', [id])) !== null;
+
+    it.each(['queued', 'error'] as const)('keeps a note with a %s upload when a scope sync omits it', async (status) => {
+      await saveNote(db, makeTextNote({ id: 'photo-note' }));
+      await saveNote(db, makeTextNote({ id: 'plain-note' }));
+      await seedUpload('up-1', 'photo-note', status);
+
+      await saveServerNotesScope(db, [], undefined, snapshotMark());
+
+      expect(await noteExists('photo-note')).toBe(true);
+      expect(await uploadExists('up-1')).toBe(true);
+      expect(await noteExists('plain-note')).toBe(false);
+    });
+
+    it('removes the copied upload files of notes a prune deletes', async () => {
+      const spy = jest.spyOn(fsUtils, 'deleteFileIfExists').mockImplementation(() => {});
+      await saveNote(db, makeTextNote({ id: 'gone-note' }));
+      await seedUpload('up-2', 'gone-note', 'queued');
+
+      await removeLocalNotesNotIn(db, new Set());
+
+      expect(await noteExists('gone-note')).toBe(false);
+      expect(spy).toHaveBeenCalledWith('/tmp/up-2');
+      spy.mockRestore();
+    });
   });
 });

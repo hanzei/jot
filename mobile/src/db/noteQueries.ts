@@ -1076,6 +1076,7 @@ async function removeLocalNotesNotInTx(
     }
 
     const placeholders = candidateIds.map(() => '?').join(', ');
+    await deleteUploadFilesWhere(db, `note_id IN (${placeholders})`, candidateIds);
     await db.runAsync(`DELETE FROM notes WHERE id IN (${placeholders})`, candidateIds);
     return;
   }
@@ -1092,7 +1093,25 @@ async function removeLocalNotesNotInTx(
     args.push(...protectedIds);
   }
 
+  await deleteUploadFilesWhere(db, `note_id IN (SELECT id FROM notes WHERE ${sql.slice('DELETE FROM notes WHERE '.length)})`, args);
   await db.runAsync(sql, args);
+}
+
+/**
+ * Best-effort removal of the copied files of `pending_image_uploads` rows
+ * matching `where`, ahead of a raw `DELETE FROM notes` whose cascade would drop
+ * the rows but leak the files (#1279). Mirrors {@link permanentDeleteLocalNote}.
+ */
+async function deleteUploadFilesWhere(
+  db: SQLiteDatabase,
+  where: string,
+  args: (string | number | null)[],
+): Promise<void> {
+  const rows = await db.getAllAsync<{ local_path: string }>(
+    `SELECT local_path FROM pending_image_uploads WHERE ${where}`,
+    args,
+  );
+  for (const row of rows) deleteFileIfExists(row.local_path);
 }
 
 /**

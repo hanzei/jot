@@ -459,9 +459,27 @@ export async function getPendingNoteIds(db: SQLiteDatabase): Promise<Set<string>
  * a later background fetch / SSE event.
  */
 export async function getProtectedNoteIds(db: SQLiteDatabase): Promise<Set<string>> {
-  const [pending, failed] = await Promise.all([getPendingNoteIds(db), getFailedNoteIds(db)]);
+  const [pending, failed, uploads] = await Promise.all([
+    getPendingNoteIds(db),
+    getFailedNoteIds(db),
+    getNoteIdsWithPendingUploads(db),
+  ]);
   for (const id of failed) pending.add(id);
+  for (const id of uploads) pending.add(id);
   return pending;
+}
+
+/**
+ * Notes with a `queued` or `error` row in `pending_image_uploads`. A queued photo
+ * is an unsynced local change that has no `sync_queue` row, and the upload row
+ * cascade-deletes with its note, so pruning the note would drop the photo
+ * unuploaded (#1279).
+ */
+async function getNoteIdsWithPendingUploads(db: SQLiteDatabase): Promise<Set<string>> {
+  const rows = await db.getAllAsync<{ note_id: string }>(
+    `SELECT DISTINCT note_id FROM pending_image_uploads WHERE status IN ('queued', 'error')`,
+  );
+  return new Set(rows.map((r) => r.note_id));
 }
 
 /**
