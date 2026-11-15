@@ -117,13 +117,17 @@ What the device may believe after a sync (spec §8). These are the target; spec
 - **`version` and content move together.** Never store a server version without
   the content it belongs to, or the reverse.
 - **Writes to one note stay in order.** Send online only when the note has no
-  queued op; otherwise queue behind it.
-- **A protected note** (queued op, or an unresolved failed change) takes no
-  server content, from a snapshot or from the response to another write. Check
-  and write in one transaction.
+  queued op and no write in flight; otherwise queue behind it. One request per
+  note at a time, the drain's included.
+- **A queued write commits its local edit and its queue row in one
+  transaction.**
+- **A protected note** (queued op, write in flight, or an unresolved failed
+  change) takes no server content, from a snapshot or from the response to
+  another write. Check and write in one transaction.
 - **Never apply a snapshot older than the local row** (`updated_at`).
-- **After a replay,** apply the response in full when nothing else is queued for
-  the note; otherwise take neither content nor version.
+- **After a write lands,** apply the response in full only when nothing else is
+  queued for the note and it has no unresolved failed change; otherwise take
+  neither content nor version.
 - **Local data belongs to one account.** A deliberate logout wipes it, after a
   warning when changes are unsynced; a 401 keeps it.
 

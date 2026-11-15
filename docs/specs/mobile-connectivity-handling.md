@@ -353,6 +353,14 @@ Writes to the same note reach the server in the order the user made them.
   one, the write is queued behind it. This is the pending-create rule (#475)
   applied to every queued op, not only a queued create.
 - The drain is the only sender of queued ops, in FIFO order.
+- **At most one request per note is in flight**, counting online sends and the
+  drain's sends alike. A write made while another write to the same note is in
+  flight is queued, and the drain does not send an op for that note until the
+  in-flight request has finished. The "no queued op" check alone does not give
+  the order: two writes can both pass it while neither has a queue row.
+- A write that goes to the queue commits **its local edit and its queue row in
+  one transaction**. Committed separately, a snapshot that lands between the
+  two finds nothing queued and replaces the edit.
 
 Without this, a queued save replays after a newer online save and replaces it
 (the drain stamps the replay with the current local version, so the server
@@ -360,8 +368,9 @@ accepts it), or the online save is sent with a version the replay has just made
 stale and is rejected as a conflict with itself.
 
 **Known limit.** An online write has no queue row while its request is in
-flight. If the app is killed in that window, the edit is in SQLite but nothing
-will replay it, and the next server snapshot replaces it. Closing this means
+flight. The in-flight marker lives in memory, so it protects the note (§8.3)
+only while the app runs. If the app is killed in that window, the edit is in
+SQLite but nothing will replay it, and the next server snapshot replaces it. Closing this means
 writing the queue row in the same transaction as the local edit and sending
 everything through the drain (a transactional outbox). That is not planned
 yet; revisit it when background sync is.
@@ -373,8 +382,8 @@ SSE event) and the response to this device's own write.
 
 **Snapshots**
 
-- A **protected** note is one with a queued op or an unresolved failed change
-  (§8.4). A snapshot is not applied to a protected note. The one exception is a
+- A **protected** note is one with a queued op, a write in flight (§8.2), or
+  an unresolved failed change (§8.4). A snapshot is not applied to a protected note. The one exception is a
   field only the server owns and no local edit can touch (the public link).
 - The protected check and the write happen in **one transaction**. Reading the
   protected set first and writing afterwards lets a write slip in between.
@@ -382,14 +391,27 @@ SSE event) and the response to this device's own write.
   item changes do not bump `version`. An equal `updated_at` is applied, since
   some changes (images) leave it alone. This covers a list response built
   before a queued write landed and saved after its queue row was removed.
+- **Known limit:** because image changes leave `updated_at` alone, a snapshot
+  built before an image upload and saved after it ties with the local row and
+  replaces the newer image list. The image disappears from the local cache
+  until the next sync; the server copy is unaffected. Keeping the local images
+  on a tie is not the fix: a remote image removal whose SSE event was missed
+  would then never apply. Closing this needs a server change marker that
+  covers images.
 
 **Responses to our own writes**
 
-- When **no other op is queued** for the note, apply the response in full:
-  content and version together.
+- When **no other op is queued** for the note and it has **no unresolved
+  failed change**, apply the response in full: content and version together.
 - When **other ops are still queued**, take neither content nor version. The
   local row already holds the later edits, and adopting only the version breaks
   §8.1.
+- When the note has an **unresolved failed change**, take neither content nor
+  version; per-user fields may be applied (§8.4).
+- The check and the write happen in **one transaction**, as for snapshots. A
+  later edit queued between the two would otherwise be replaced by the
+  response. This relies on §8.2: an edit and its queue row commit together, so
+  the check cannot see an edit without its row.
 
 **Convergence.** After a drain that sent anything, pull the notes it touched.
 The device does not receive the SSE echo of its own writes, so without the pull
@@ -448,8 +470,8 @@ its own edit times. Merging (§8.5) therefore loses nothing history would keep.
 
 | Rule | Issue |
 |---|---|
-| §8.2 a write to a note with a queued op is queued behind it | #1261 |
-| §8.3 own-write responses, and the pull after a drain | #1262 |
+| §8.2 a write to a note with a queued op or a write in flight is queued behind it; local edit and queue row commit together | #1261 |
+| §8.3 own-write responses (checked in the write's transaction), and the pull after a drain | #1262 |
 | §8.3 protected check in the write's transaction; refusing older snapshots | #1265 |
 | §8.4 protection lasts until the dead letter is resolved | #1263 |
 | §8.5 merging queued ops | #1268 |
