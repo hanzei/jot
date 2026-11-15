@@ -13,11 +13,13 @@ import (
 // touchNoteTx bumps a note's updated_at so item and image changes are reflected
 // in note ordering (updated_at sort) and client freshness checks, and records
 // the change by actorID for unread tracking (see markViewedTx). Callers invoke
-// it only when an item or image actually changed.
+// it only when an item or image actually changed. Like content_changed_at,
+// updated_at never moves backward: two concurrent writes can commit in the
+// opposite order to the one they sampled now in.
 func touchNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, actorID, now string) error {
 	if _, err := tx.ExecContext(ctx,
-		d.RewritePlaceholders(`UPDATE notes SET updated_at = ?, `+contentChangedSet+` WHERE id = ?`),
-		append(appendContentChangedArgs([]any{now}, now, actorID), noteID)...,
+		d.RewritePlaceholders(`UPDATE notes SET updated_at = CASE WHEN updated_at < ? THEN ? ELSE updated_at END, `+contentChangedSet+` WHERE id = ?`),
+		append(appendContentChangedArgs([]any{now, now}, now, actorID), noteID)...,
 	); err != nil {
 		return fmt.Errorf("failed to touch note: %w", err)
 	}

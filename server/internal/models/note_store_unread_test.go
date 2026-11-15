@@ -176,6 +176,17 @@ func TestNoteUnreadState(t *testing.T) {
 				return convErr
 			},
 		}
+		// touchNoteTx keeps the newer updated_at too. Checked before the loop,
+		// since the other stale writers set updated_at unconditionally.
+		updatedAtOf := func() string {
+			var updatedAt string
+			require.NoError(t, store.db.QueryRowContext(ctx,
+				store.d.RewritePlaceholders(`SELECT updated_at FROM notes WHERE id = ?`), note.ID).Scan(&updatedAt))
+			return updatedAt
+		}
+		updatedBefore := updatedAtOf()
+		require.NoError(t, inTx(ctx, store, staleWriters["touchNoteTx"]))
+		assert.Equal(t, updatedBefore, updatedAtOf(), "touchNoteTx never moves updated_at backward")
 		for name, write := range staleWriters {
 			require.NoError(t, inTx(ctx, store, write), name)
 			var by string
