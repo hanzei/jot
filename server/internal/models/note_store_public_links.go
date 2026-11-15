@@ -29,9 +29,7 @@ type PublicLink struct {
 // public link. It deliberately carries nothing about who owns or shares the
 // note: no collaborators, labels, color, owner, or creator.
 type PublicNote struct {
-	// ID is the note's ID. It is not a secret — every note endpoint checks
-	// access itself — and lets a signed-in visitor who can open the note be
-	// offered a link to it in the app.
+	// ID is not a secret: note endpoints check access themselves.
 	ID       string   `json:"id"`
 	NoteType NoteType `json:"note_type" enums:"text,list"`
 	// Title is always empty for a text note.

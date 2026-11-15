@@ -4963,7 +4963,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "id": {
-                    "description": "ID is the note's ID. It is not a secret — every note endpoint checks\naccess itself — and lets a signed-in visitor who can open the note be\noffered a link to it in the app.",
+                    "description": "ID is not a secret: note endpoints check access themselves.",
                     "type": "string"
                 },
                 "images": {
