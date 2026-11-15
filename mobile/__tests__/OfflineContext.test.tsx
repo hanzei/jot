@@ -20,7 +20,7 @@ import { silenceConsole } from './helpers/consoleGuard';
 let enqueueListener: (() => void) | null = null;
 
 jest.mock('../src/db/syncQueue', () => ({
-  drainQueue: jest.fn().mockResolvedValue({ idMappings: [], discardedOperations: [], syncedSettings: false }),
+  drainQueue: jest.fn().mockResolvedValue({ syncedNotes: [], discardedOperations: [], syncedSettings: false }),
   getPendingCount: jest.fn().mockResolvedValue(0),
   getDeadLetterCount: jest.fn().mockResolvedValue(0),
   subscribeToEnqueue: jest.fn((listener: () => void) => {
@@ -100,7 +100,7 @@ describe('OfflineProvider queue draining', () => {
     lastSyncedAt = null;
     lastConsecutiveFailureCount = 0;
     mockRevalidate.mockResolvedValue(true);
-    mockDrainQueue.mockResolvedValue({ idMappings: [], discardedOperations: [], syncedSettings: false });
+    mockDrainQueue.mockResolvedValue({ syncedNotes: [], discardedOperations: [], syncedSettings: false });
     mockGetPendingCount.mockResolvedValue(0);
     mockGetQueuedImageUploadCount.mockResolvedValue(0);
     jest.spyOn(AppState, 'addEventListener');
@@ -178,7 +178,7 @@ describe('OfflineProvider queue draining', () => {
     // The note/settings queue (sync_queue) is empty, but an independent image
     // upload is still queued — that backlog must not hold the settings
     // revalidation hostage; it has nothing to do with the settings write.
-    mockDrainQueue.mockResolvedValue({ idMappings: [], discardedOperations: [], syncedSettings: true });
+    mockDrainQueue.mockResolvedValue({ syncedNotes: [], discardedOperations: [], syncedSettings: true });
     mockGetPendingCount.mockResolvedValue(0);
     mockGetQueuedImageUploadCount.mockResolvedValue(2);
     await renderProvider();
@@ -197,7 +197,7 @@ describe('OfflineProvider queue draining', () => {
   });
 
   it('does not revalidate the session after a settings drain while the note queue itself is still pending', async () => {
-    mockDrainQueue.mockResolvedValue({ idMappings: [], discardedOperations: [], syncedSettings: true });
+    mockDrainQueue.mockResolvedValue({ syncedNotes: [], discardedOperations: [], syncedSettings: true });
     mockGetPendingCount.mockResolvedValue(1);
     mockGetQueuedImageUploadCount.mockResolvedValue(0);
     await renderProvider();
@@ -235,7 +235,7 @@ describe('OfflineProvider queue draining', () => {
     mockDrainQueue.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
-          resolveFirst = () => resolve({ idMappings: [], discardedOperations: [], syncedSettings: false });
+          resolveFirst = () => resolve({ syncedNotes: [], discardedOperations: [], syncedSettings: false });
         }),
     );
 
@@ -515,7 +515,7 @@ describe('OfflineProvider queue draining', () => {
 
     // A slow drain is in flight and a write queued during it requests a rerun.
     mockDrainQueue.mockImplementationOnce(() => new Promise((resolve) => {
-      setTimeout(() => resolve({ idMappings: [], discardedOperations: [], syncedSettings: false }), 5000);
+      setTimeout(() => resolve({ syncedNotes: [], discardedOperations: [], syncedSettings: false }), 5000);
     }));
     await act(() => {
       enqueueListener?.();
@@ -604,7 +604,7 @@ describe('OfflineProvider queue draining', () => {
     const drainsAfterMount = mockDrainQueue.mock.calls.length;
 
     mockDrainQueue.mockImplementationOnce(() => new Promise((resolve) => {
-      setTimeout(() => resolve({ idMappings: [], discardedOperations: [], syncedSettings: false }), 5000);
+      setTimeout(() => resolve({ syncedNotes: [], discardedOperations: [], syncedSettings: false }), 5000);
     }));
     await act(() => {
       enqueueListener?.();

@@ -345,8 +345,7 @@ export function useRemoveLabelFromNote() {
       }
 
       // Offline (or a transient online failure): drop the label from the local
-      // note and queue the server op. If the label id is a local one (added while
-      // offline), it is remapped to the server id on replay (see drainQueue).
+      // note and queue the server op.
       const note = await getLocalNote(db, noteId);
       if (!note) throw new Error(`Note ${noteId} not found in local cache`);
 
@@ -406,8 +405,8 @@ export function useRenameLabel() {
       }
 
       // Offline (or a transient online failure): rename locally and queue. A
-      // local label id (offline-created, not yet synced) is remapped to the
-      // server id on replay (see drainQueue).
+      // label created offline carries a server-valid id (#546), so replay
+      // needs no remap.
       await renameStoredLabel(db, labelId, trimmed);
       await renameLabelInLocalNotes(db, labelId, trimmed);
       await enqueueOperation(db, {
@@ -463,8 +462,8 @@ export function useDeleteLabel() {
       }
 
       // Offline (or a transient online failure): delete locally and queue. A
-      // local label id (offline-created, not yet synced) is remapped to the
-      // server id on replay (see drainQueue).
+      // label created offline carries a server-valid id (#546), so replay
+      // needs no remap.
       await deleteStoredLabel(db, labelId);
       await deleteLabelFromLocalNotes(db, labelId);
       await enqueueOperation(db, {

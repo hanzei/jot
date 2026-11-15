@@ -89,7 +89,7 @@ describe('getPendingNoteIds', () => {
   });
 
   it('ignores label-only endpoints that are not tied to a single note', async () => {
-    await queue('/labels', { local_id: 'local_l', name: 'Work' });
+    await queue('/labels', { id: 'l0', name: 'Work' });
     await queue('/labels/l1', { name: 'Renamed' });
 
     expect((await getPendingNoteIds(db)).size).toBe(0);

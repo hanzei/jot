@@ -324,16 +324,6 @@ export function useNoteEditorSync({
     }
   }, [existingNote?.labels]); // eslint-disable-line react-hooks/exhaustive-deps -- resync only when the server note's labels change; doc is a stable ref
 
-  // When the queue drains, OfflineContext sets the React Query cache for the old local
-  // ID to hold the server note. Detect this by checking whether the cached note's id
-  // now differs from the local ID we hold, and update noteId + route params accordingly.
-  useEffect(() => {
-    if (existingNote && noteId && existingNote.id !== noteId) {
-      doc.setNoteId(existingNote.id);
-      navigation.setParams({ noteId: existingNote.id });
-    }
-  }, [existingNote?.id, noteId, navigation]); // eslint-disable-line react-hooks/exhaustive-deps -- runs only when the adopted server id diverges; doc is a stable ref
-
   // Persists list-item changes as the granular create/patch/delete/reorder ops
   // diffItems computes against the saved baseline.
   const persistItemDiff = useCallback(async (currentNoteId: string, currentItems: LocalItem[]) => {

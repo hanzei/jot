@@ -275,6 +275,37 @@ describe('migrateDatabase', () => {
     });
   });
 
+  describe('legacy createLabel local_id rewrite', () => {
+    it('gives placeholder-id createLabel rows a real id and re-points later ops', async () => {
+      const db = createTestDb();
+      for (let i = 0; i < 10; i++) {
+        await MIGRATIONS[i]!(db);
+        await db.runAsync(`PRAGMA user_version = ${i + 1}`);
+      }
+      const seed = (table: string, operation: string, endpoint: string, method: string, body: string) =>
+        db.runAsync(
+          `INSERT INTO ${table} (operation, endpoint, method, body, ${table === 'sync_queue' ? 'created_at' : 'status, created_at, failed_at'})
+           VALUES (?, ?, ?, ?, ${table === 'sync_queue' ? "'2026-01-01T00:00:00Z'" : "409, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'"})`,
+          [operation, endpoint, method, body],
+        );
+      await seed('sync_queue', 'createLabel', '/labels', 'POST', '{"local_id":"local_1","name":"Work"}');
+      await seed('sync_queue', 'deleteLabel', '/labels/local_1', 'DELETE', 'null');
+      await seed('sync_queue', 'createLabel', '/labels', 'POST', '{"id":"Real0000000000000000A","name":"Home"}');
+
+      await migrateDatabase(db);
+
+      const rows = await db.getAllAsync<{ operation: string; endpoint: string; body: string }>(
+        'SELECT operation, endpoint, body FROM sync_queue ORDER BY id',
+      );
+      const create = JSON.parse(rows[0]!.body) as { id: string; local_id?: string; name: string };
+      expect(create.local_id).toBeUndefined();
+      expect(create.name).toBe('Work');
+      expect(create.id).not.toBe('local_1');
+      expect(rows[1]!.endpoint).toBe(`/labels/${create.id}`);
+      expect(rows[2]!.body).toBe('{"id":"Real0000000000000000A","name":"Home"}');
+    });
+  });
+
   describe('queue attempt reset (502/503/504 no longer charged)', () => {
     it('starts queued entries over and leaves errored uploads and dead-letter rows alone', async () => {
       const db = createTestDb();
