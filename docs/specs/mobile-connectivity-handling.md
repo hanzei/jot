@@ -4,7 +4,8 @@ Status: **Living guide** — describes the intended behavior the mobile app shou
 converge on. Owner: TBD · Target: Jot mobile (`mobile/`)
 
 This is the rationale behind the condensed rules in `mobile/CLAUDE.md` →
-*Connectivity & Offline Handling*. When the two disagree, the CLAUDE.md rules
+*Connectivity & Offline Handling*, *Local Data Consistency* and *Sync Loop
+Safety*. When the two disagree, the CLAUDE.md rules
 win (they are the enforced summary); update both together.
 
 ---
@@ -20,7 +21,8 @@ by default instead of re-deriving (or violating) them per handler.
 
 The reference implementation of most of this already ships: a local-first SQLite
 store, a replay queue, optimistic writes, a server-reachability signal, and
-backoff. The open work is the set of places that deviate from it (see §10).
+backoff. The open work is the set of places that deviate from it (see §8.8
+and §10).
 
 ---
 
@@ -142,7 +144,8 @@ mode" for the write paths.
 
 - Commit optimistically to local state and the DB, enqueue for replay, return.
   The UI reflects the change instantly regardless of connectivity.
-- Attempt the network only when `isOnlineWriteAllowed(isConnected)` is true;
+- Attempt the network only when `isOnlineWriteAllowed(isConnected)` is true
+  *and the note has no queued op* (§8.2);
   otherwise skip straight to the queue. On a *transient* online failure, catch and fall through
   to the same queue path (`rethrowIfNotQueueable` draws the transient/permanent
   line).
@@ -156,6 +159,9 @@ mode" for the write paths.
 - The list/detail queries read from local SQLite and render instantly; the
   network refresh is a separate background effect, never a precondition for
   showing content.
+- What a refresh may write, and what it must leave alone, is §8.3: a note with
+  an unsynced local change is not overwritten, and neither is a row newer than
+  the snapshot.
 - Background refresh (`retrySync`) uses bounded attempts + backoff and should
   consult `isServerReachable()` so it fast-fails a known-down server instead of
   burning the full retry budget against it.
@@ -193,6 +199,9 @@ mode" for the write paths.
   the session/profile locally and land on the login screen immediately, firing
   `POST /logout` in the background best-effort (server-side invalidation is
   best-effort regardless; the raw token only ever lived in the client).
+  Logout also wipes the local data, and its confirmation names unsynced
+  changes when there are any (§8.6). That check is local, so it does not put
+  the network on the path.
 - **Public links** (share screen) are offered only while
   `isOnlineWriteAllowed()` holds; otherwise the section says a connection is
   needed instead of queueing. The link is server-owned and shared by everyone
@@ -238,7 +247,9 @@ The user should always be able to answer three questions without doing anything:
 1. **Am I connected?** — one persistent, unobtrusive indicator (offline /
    reconnecting), not a modal.
 2. **Is my work safe?** — "saved locally" the instant they act, distinct from
-   "synced." They must never wonder whether a note survived.
+   "synced." They must never wonder whether a note survived. (One known
+   gap: an edit whose online request is still in flight when the app is
+   killed; §8.2.)
 3. **Did something fail to sync?** — a passive surface (the failed-note badge /
    sync-failures screen), not a blocking dialog.
 
@@ -315,13 +326,166 @@ handling and loop safety are two halves of the same system.)
 
 - Offline-created entities get a **server-valid client ID up front** so the
   queued create is idempotent on replay (a duplicate `id` → 409, treated as
-  already-applied — no second copy).
+  already-applied — no second copy). Note-image uploads are the exception:
+  `POST /notes/{id}/images` takes no client ID, so an upload whose response was
+  lost after the server stored it is replayed as a second image. Accepted until
+  the endpoint has an idempotency key.
 - Writes are **partial/field-level** where possible so a replayed op doesn't
   clobber fields another device changed concurrently.
 - Content edits are **version-guarded** (`base_version`); a 409 is *permanent*
   (surface it), a network error is *transient* (queue it). This transient vs.
   permanent split (`rethrowIfNotQueueable` / `isQueueableError`) is the same line
   used everywhere else.
+
+The rest of this section is about consistency: what the local copy of a note
+means, and which writes may change it. §3–§7 decide *when* to talk to the
+server; these rules decide what the device may believe afterwards. They are the
+target. §8.8 lists where the code does not follow them yet.
+
+### 8.1 What the local note means
+
+A local note row is the last server state this device applied, plus the local
+edits the server has not confirmed yet.
+
+- **`version` is the server version of the content in the row.** The two are
+  written together or not at all. A row must never hold a version newer than
+  its content (the next edit would pass the server's `base_version` check and
+  overwrite a change the user never saw) or older than it (the next edit would
+  get a conflict against the device's own earlier write).
+- **`base_version` therefore means "the version of the text the user was
+  looking at".** That is the only reading under which a 409 is a real conflict.
+
+### 8.2 Writes to one note stay in order
+
+Writes to the same note reach the server in the order the user made them.
+
+- A write goes out online only when the note has **no queued op**. If it has
+  one, the write is queued behind it. This is the pending-create rule (#475)
+  applied to every queued op, not only a queued create.
+- The drain is the only sender of queued ops, in FIFO order.
+- **At most one request per note is in flight**, counting online sends and the
+  drain's sends alike. A write made while another write to the same note is in
+  flight is queued, and the drain does not send an op for that note until the
+  in-flight request has finished. The "no queued op" check alone does not give
+  the order: two writes can both pass it while neither has a queue row.
+- A write that goes to the queue commits **its local edit and its queue row in
+  one transaction**. Committed separately, a snapshot that lands between the
+  two finds nothing queued and replaces the edit.
+
+Without this, a queued save replays after a newer online save and replaces it
+(the drain stamps the replay with the current local version, so the server
+accepts it), or the online save is sent with a version the replay has just made
+stale and is rejected as a conflict with itself.
+
+**Known limit.** An online write has no queue row while its request is in
+flight. The in-flight marker lives in memory, so it protects the note (§8.3)
+only while the app runs. If the app is killed in that window, the edit is in
+SQLite but nothing will replay it, and the next server snapshot replaces it. Closing this means
+writing the queue row in the same transaction as the local edit and sending
+everything through the drain (a transactional outbox). That is not planned
+yet; revisit it when background sync is.
+
+### 8.3 Applying server state
+
+Server state reaches the local database two ways: a snapshot (background fetch,
+SSE event) and the response to this device's own write.
+
+**Snapshots**
+
+- A **protected** note is one with a queued op, a write in flight (§8.2), or
+  an unresolved failed change (§8.4). A snapshot is not applied to a protected note. The one exception is a
+  field only the server owns and no local edit can touch (the public link).
+- The protected check and the write happen in **one transaction**. Reading the
+  protected set first and writing afterwards lets a write slip in between.
+- A snapshot **older than the local row** is not applied. Compare `updated_at`:
+  item changes do not bump `version`. An equal `updated_at` is applied, since
+  some changes (images) leave it alone. This covers a list response built
+  before a queued write landed and saved after its queue row was removed.
+- **Known limit:** because image changes leave `updated_at` alone, a snapshot
+  built before an image upload and saved after it ties with the local row and
+  replaces the newer image list. The image disappears from the local cache
+  until the next sync; the server copy is unaffected. Keeping the local images
+  on a tie is not the fix: a remote image removal whose SSE event was missed
+  would then never apply. Closing this needs a server change marker that
+  covers images.
+
+**Responses to our own writes**
+
+- When **no other op is queued** for the note and it has **no unresolved
+  failed change**, apply the response in full: content and version together.
+- When **other ops are still queued**, take neither content nor version. The
+  local row already holds the later edits, and adopting only the version breaks
+  §8.1.
+- When the note has an **unresolved failed change**, take neither content nor
+  version; per-user fields may be applied (§8.4).
+- The check and the write happen in **one transaction**, as for snapshots. A
+  later edit queued between the two would otherwise be replaced by the
+  response. This relies on §8.2: an edit and its queue row commit together, so
+  the check cannot see an edit without its row.
+
+**Convergence.** After a drain that sent anything, pull the notes it touched.
+The device does not receive the SSE echo of its own writes, so without the pull
+a row that fell behind stays behind until some unrelated sync happens to run.
+
+### 8.4 Failed changes
+
+A dead-lettered op (§7) keeps the user's edit in the local row so "Keep my
+version" can recover it.
+
+- The note stays protected for **as long as a dead letter refers to it**. Only
+  resolving that dead letter lifts the protection; a later op that succeeds
+  does not.
+- **No write path may replace the preserved content**: not a snapshot, not the
+  response to a later online write (a pin or colour change), not a later replay.
+  Per-user fields from such a response may be applied; content may not.
+
+### 8.5 Merging queued ops
+
+Ops that supersede each other are merged when they are queued, so a long
+offline session replays as a few requests and one conflict produces one failed
+change.
+
+- **Merge:** consecutive content saves of one note; edits to a note whose
+  create is still queued (folded into the create); repeated per-user changes;
+  repeated reorders; repeated edits or check-offs of the same item.
+- **Do not merge:** opposite pairs (add/remove a label, share/unshare), ops of
+  different types, ops on different notes.
+- Merge only into the **last** queued op for that note, so the order relative
+  to everything else is unchanged. Folding into a queued create is the one
+  exception.
+- Never merge into a row the drain is sending.
+- Keep **content and per-user fields in separate rows**. Content is
+  version-guarded and per-user fields are not; in one request a content
+  conflict would take the pin down with it.
+
+### 8.6 Local data belongs to one account
+
+The local database and its queue belong to the account that produced them.
+
+- A signed-in user never sees another account's cached notes, and the drain
+  never sends another account's queued ops.
+- A **deliberate logout** wipes the local data. If there are unsynced or failed
+  changes, the confirmation says so first and can be cancelled.
+- A **401** keeps the local data, so the same user can sign back in and the
+  queue drains. If a different user signs in instead, the first rule applies.
+
+### 8.7 Version history
+
+When the server keeps note revisions (#1129), a revision of an offline edit is
+dated when it synced, not when it was written, and a whole replayed session
+from one user becomes one revision. Both are accepted: the client does not send
+its own edit times. Merging (§8.5) therefore loses nothing history would keep.
+
+### 8.8 Not implemented yet
+
+| Rule | Issue |
+|---|---|
+| §8.2 a write to a note with a queued op or a write in flight is queued behind it; local edit and queue row commit together | #1261 |
+| §8.3 own-write responses (checked in the write's transaction), and the pull after a drain | #1262 |
+| §8.3 protected check in the write's transaction; refusing older snapshots | #1265 |
+| §8.4 protection lasts until the dead letter is resolved | #1263 |
+| §8.5 merging queued ops | #1268 |
+| §8.6 account ownership, logout wipe and warning | #1264 |
 
 ---
 
@@ -332,6 +496,8 @@ handling and loop safety are two halves of the same system.)
 | Device connectivity + queue drain | `src/store/OfflineContext.tsx` |
 | Server-reachability belief + write gate | `src/api/serverReachability.ts` (`isServerReachable`, `isOnlineWriteAllowed`) |
 | Timeouts + interceptors + reachability wiring | `src/api/client.ts` |
+| Local note rows, snapshot and response writes (§8.1, §8.3) | `src/db/noteQueries.ts`, `src/db/syncQueue.ts` (`saveServerNote`, `saveServerResponseNote`, `getProtectedNoteIds`) |
+| Failed-change review and resolution (§8.4) | `src/hooks/useSyncFailures.ts` |
 | Sync queue + transient/permanent split + head-of-line dead-lettering | `src/db/syncQueue.ts` (`rethrowIfNotQueueable`, `isQueueableError`, `isGlobalDrainFailure`, `MAX_ENTRY_DRAIN_ATTEMPTS`, `getSyncQueueStats`) |
 | Snapshot gate (own writes landed after a fetch started) | `src/db/snapshotGate.ts`, wired in `src/api/client.ts` |
 | Bounded read retries | `src/utils/retryWithBackoff.ts` (`retrySync`) |
