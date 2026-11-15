@@ -211,7 +211,7 @@ describe('useSSE', () => {
     // The list/detail queries read from SQLite (staleTime: Infinity), so the note
     // must be written before invalidation or the new note wouldn't appear until the
     // next reconnect-triggered resync.
-    await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), note));
+    await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), note, expect.any(Number)));
     expect(mockGetNote).not.toHaveBeenCalled();
     await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() }));
     // The row is really in SQLite — the queries read from there, not from the event.
@@ -238,7 +238,7 @@ describe('useSSE', () => {
     });
 
     await waitFor(() => expect(mockGetNote).toHaveBeenCalledWith('new-note'));
-    await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), fetched));
+    await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), fetched, expect.any(Number)));
   });
 
   it('invalidates notes list and specific note on note_updated event', async () => {
@@ -429,7 +429,7 @@ describe('useSSE', () => {
     // saveServerNote defers to any pending local edit on the note, so the server
     // version can't overwrite an unsynced optimistic edit (gating verified in
     // pendingNoteSync.test.ts).
-    await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), note));
+    await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), note, expect.any(Number)));
   });
 
   it('persists the note to SQLite before invalidating queries so the refetch reads fresh data', async () => {
@@ -459,7 +459,7 @@ describe('useSSE', () => {
 
     // While the write is in flight, queries must not be invalidated yet.
     await flushMicrotasks();
-    expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), note);
+    expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), note, expect.any(Number));
     expect(invalidateSpy).not.toHaveBeenCalled();
 
     // Once the write lands, both the single note and the dashboard list refresh.
@@ -581,7 +581,7 @@ describe('useSSE', () => {
 
     await waitFor(() => expect(onNotify).toHaveBeenCalledWith(event));
     // The toast's Open action reads the note from SQLite, so the write lands first.
-    expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), note);
+    expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), note, expect.any(Number));
     expect(mockSaveServerNote.mock.invocationCallOrder[0]).toBeLessThan(onNotify.mock.invocationCallOrder[0]!);
   });
 
@@ -791,7 +791,7 @@ describe('useSSE', () => {
 
     expect(mockPermanentDeleteLocalNote).not.toHaveBeenCalled();
     await waitFor(() => expect(mockGetNote).toHaveBeenCalledWith('note-123'));
-    await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), fetched));
+    await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), fetched, expect.any(Number)));
     await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') }));
     await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() }));
   });

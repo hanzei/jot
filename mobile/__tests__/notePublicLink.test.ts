@@ -5,6 +5,7 @@
 import type { PublicLink } from '@jot/shared';
 import { getAllLocalNotes, getLocalNote, getLocalNotes, saveNote, setLocalNotePublicLink } from '../src/db/noteQueries';
 import { saveServerNote, saveServerNotesScope } from '../src/db/syncQueue';
+import { snapshotMark } from '../src/db/snapshotGate';
 import { migrateDatabase, MIGRATIONS } from '../src/db/schema';
 import { makeListNote, makeTextNote } from './helpers/fixtures';
 import { createTestDb, type TestDatabase } from './helpers/testDb';
@@ -32,7 +33,7 @@ describe('note public link', () => {
   });
 
   it('is read back by the list queries too', async () => {
-    await saveServerNotesScope(db, [makeTextNote({ id: 'n1', public_link: link })]);
+    await saveServerNotesScope(db, [makeTextNote({ id: 'n1', public_link: link })], undefined, snapshotMark());
 
     expect((await getLocalNotes(db)).find((n) => n.id === 'n1')?.public_link).toEqual(link);
     expect((await getAllLocalNotes(db)).find((n) => n.id === 'n1')?.public_link).toEqual(link);
@@ -47,8 +48,8 @@ describe('note public link', () => {
   });
 
   it('takes the server value on the next snapshot, revoked included', async () => {
-    await saveServerNote(db, makeTextNote({ id: 'n1', public_link: link }));
-    await saveServerNote(db, makeTextNote({ id: 'n1', public_link: null }));
+    await saveServerNote(db, makeTextNote({ id: 'n1', public_link: link }), snapshotMark());
+    await saveServerNote(db, makeTextNote({ id: 'n1', public_link: null }), snapshotMark());
 
     expect((await getLocalNote(db, 'n1'))?.public_link).toBeNull();
   });
@@ -59,11 +60,11 @@ describe('note public link', () => {
       `INSERT INTO sync_queue (operation, endpoint, method, body, created_at) VALUES ('update', '/notes/n1', 'PATCH', '{}', '')`,
     );
 
-    await saveServerNote(db, makeTextNote({ id: 'n1', content: 'server copy', public_link: link }));
-    await saveServerNotesScope(db, [makeTextNote({ id: 'n1', content: 'server copy', public_link: null })]);
+    await saveServerNote(db, makeTextNote({ id: 'n1', content: 'server copy', public_link: link }), snapshotMark());
+    await saveServerNotesScope(db, [makeTextNote({ id: 'n1', content: 'server copy', public_link: null })], undefined, snapshotMark());
     expect(await getLocalNote(db, 'n1')).toMatchObject({ content: 'local edit', public_link: null });
 
-    await saveServerNote(db, makeTextNote({ id: 'n1', content: 'server copy', public_link: link }));
+    await saveServerNote(db, makeTextNote({ id: 'n1', content: 'server copy', public_link: link }), snapshotMark());
     expect(await getLocalNote(db, 'n1')).toMatchObject({ content: 'local edit', public_link: link });
   });
 

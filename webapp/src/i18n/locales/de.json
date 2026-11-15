@@ -577,7 +577,11 @@
     "errorTitle": "Notiz konnte nicht geladen werden",
     "errorBody": "Etwas ist schiefgelaufen. Bitte versuche es gleich noch einmal.",
     "imageAlt": "Bild {{number}}",
-    "footer": "Schreibgeschützte Ansicht · Zuletzt aktualisiert {{date}}"
+    "footer": "Schreibgeschützte Ansicht · Zuletzt aktualisiert {{date}}",
+    "ownerBody": "So sehen andere deine Notiz.",
+    "ownerAction": "Notiz bearbeiten",
+    "collaboratorBody": "Diese Notiz ist mit dir geteilt.",
+    "collaboratorAction": "Notiz öffnen"
   },
   "publicLink": {
     "heading": "Öffentlicher Link",

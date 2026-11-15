@@ -5,8 +5,10 @@ import { jot } from '../api/jot';
 import { completedCascadeScope, type GetNotesParams, type Note, type NoteItem } from '@jot/shared';
 import {
   getLocalNote,
+  markLocalNoteDeleted,
+  permanentDeleteLocalNote,
   saveNote,
-  saveNotes,
+  saveServerSnapshotNotes,
   saveLabels,
   reconcileLocalItems,
   reconcileServerNotesScope,
@@ -20,6 +22,9 @@ import {
   updateLocalNoteShares,
 } from './noteQueries';
 import { isLocalModeActive } from '../store/localMode';
+import { collectNoteIds } from './affectedNoteIds';
+import { withSerializedTransaction } from './transaction';
+import { notesWrittenSince, recordWriteLanded, snapshotMark, type SnapshotMark } from './snapshotGate';
 import type { Label } from '@jot/shared';
 
 export type QueueOperation =
@@ -407,54 +412,6 @@ function parseQueueBody(body: string | null): Record<string, unknown> | null {
   }
 }
 
-/**
- * Add the note IDs touched by a single queued op (identified by its endpoint and
- * already-parsed body) to `ids`. Note IDs are recovered from the endpoint shapes
- * enqueued by useNotes/useLabels (see the per-branch comments below). Label-only
- * endpoints (/labels/…) aren't tied to a single note and contribute nothing.
- */
-function collectNoteIds(
-  endpoint: string,
-  body: Record<string, unknown> | null,
-  ids: Set<string>,
-): void {
-  // Drop any query string (e.g. "/notes/{id}?permanent=true") before splitting,
-  // and filter out the empty segment from the leading slash.
-  const segments = endpoint.split('?')[0]!.split('/').filter(Boolean);
-  if (segments[0] === 'images') {
-    // DELETE /images/{id}: the endpoint has no note id in it, so `removeImage`
-    // ops (see useNoteImages.ts) carry it in the body purely for this
-    // bookkeeping — it is never sent to the server (DELETE has no body).
-    const noteId = body?.note_id;
-    if (typeof noteId === 'string') ids.add(noteId);
-    return;
-  }
-  if (segments[0] !== 'notes') return;
-
-  if (segments.length === 1) {
-    // POST /notes (create): the affected note is the offline-created note, identified
-    // by the client-supplied `id` (issue #475).
-    const createId = body?.id;
-    if (typeof createId === 'string') ids.add(createId);
-  } else if (segments[1] === 'reorder') {
-    // POST /notes/reorder: body.note_ids lists every note whose position moved.
-    const noteIds = body?.note_ids;
-    if (Array.isArray(noteIds)) {
-      for (const id of noteIds) if (typeof id === 'string') ids.add(id);
-    }
-  } else {
-    // POST /notes/{id}/duplicate creates a local clone: the write belongs to the
-    // clone, not the source note (which it only reads), so track just the new
-    // note id via the client-supplied `id`.
-    if (segments.length === 3 && segments[2] === 'duplicate') {
-      const dupId = body?.id;
-      if (typeof dupId === 'string') ids.add(dupId);
-    } else {
-      ids.add(segments[1]!);
-    }
-  }
-}
-
 /** The note IDs a single queued op touches, as an array (see {@link collectNoteIds}). */
 function affectedNoteIds(endpoint: string, body: Record<string, unknown> | undefined): string[] {
   const ids = new Set<string>();
@@ -507,14 +464,67 @@ export async function getProtectedNoteIds(db: SQLiteDatabase): Promise<Set<strin
 }
 
 /**
+ * Notes a server snapshot taken at `since` must leave untouched: the
+ * {@link getProtectedNoteIds} set plus every note one of this device's writes
+ * landed on after `since`. The snapshot may predate that write, and its queue
+ * row (if it had one) is already gone, so only the landing record still knows
+ * (#1265; see snapshotGate.ts).
+ */
+export async function getSnapshotSkipNoteIds(db: SQLiteDatabase, since: SnapshotMark): Promise<Set<string>> {
+  return (await readSnapshotSkips(db, since)).skipNoteIds;
+}
+
+/**
+ * Apply the server's report that `noteId` is gone (a 404/410 on fetch, an SSE
+ * delete or unshare) unless the note is in the {@link getSnapshotSkipNoteIds}
+ * set for `since`: a queued or failed change, or a write of this device's
+ * (say a restore) that landed after the report was taken. `tombstone` marks
+ * it deleted; `delete` removes the row. The check and the write run in one
+ * serialized transaction, so a write cannot slip in between (#1265, spec
+ * §8.3). `shouldApply` is consulted in the same step, for a caller whose
+ * reason to write may lapse while it waits. Returns whether the note was
+ * removed.
+ */
+export async function applyServerRemoval(
+  db: SQLiteDatabase,
+  noteId: string,
+  since: SnapshotMark,
+  kind: 'tombstone' | 'delete',
+  shouldApply: () => boolean = () => true,
+): Promise<boolean> {
+  let removed = false;
+  await withSerializedTransaction(db, async () => {
+    const { skipNoteIds } = await readSnapshotSkips(db, since);
+    if (skipNoteIds.has(noteId) || !shouldApply()) return;
+    if (kind === 'tombstone') await markLocalNoteDeleted(db, noteId);
+    else await permanentDeleteLocalNote(db, noteId);
+    removed = true;
+  });
+  return removed;
+}
+
+/** {@link getSnapshotSkipNoteIds}, keeping the notes written since `since` apart. */
+async function readSnapshotSkips(
+  db: SQLiteDatabase,
+  since: SnapshotMark,
+): Promise<{ skipNoteIds: Set<string>; writtenNoteIds: Set<string> }> {
+  const skipNoteIds = await getProtectedNoteIds(db);
+  const writtenNoteIds = notesWrittenSince(since);
+  for (const id of writtenNoteIds) skipNoteIds.add(id);
+  return { skipNoteIds, writtenNoteIds };
+}
+
+/**
  * Persist a note fetched from the server (background fetch, SSE, post-import sync),
  * leaving notes with a pending or failed local op untouched (see
- * {@link getProtectedNoteIds} for the rationale, #487/#492). Once the queue drains
- * and any failure is resolved the gate is empty, so the next server fetch or SSE
- * event re-applies canonical server state normally.
+ * {@link getProtectedNoteIds} for the rationale, #487/#492), and notes this
+ * device wrote after `since`, the {@link snapshotMark} taken before the fetch
+ * (#1265). Once the queue drains and any failure is resolved the gate is empty,
+ * so the next server fetch or SSE event re-applies canonical server state
+ * normally.
  */
-export async function saveServerNote(db: SQLiteDatabase, note: Note): Promise<void> {
-  await saveNote(db, note, { skipNoteIds: await getProtectedNoteIds(db), serverSnapshot: true });
+export async function saveServerNote(db: SQLiteDatabase, note: Note, since: SnapshotMark): Promise<void> {
+  await saveServerNotes(db, [note], since);
 }
 
 /**
@@ -560,9 +570,12 @@ export async function getQueuedCompletedItemIds(
   return ids;
 }
 
-/** Batch counterpart of {@link saveServerNote}; reads the protected set once. */
-export async function saveServerNotes(db: SQLiteDatabase, notes: Note[]): Promise<void> {
-  await saveNotes(db, notes, { skipNoteIds: await getProtectedNoteIds(db), serverSnapshot: true });
+/**
+ * Batch counterpart of {@link saveServerNote}. The skip set is read once,
+ * inside the write's transaction.
+ */
+export async function saveServerNotes(db: SQLiteDatabase, notes: Note[], since: SnapshotMark): Promise<void> {
+  await saveServerSnapshotNotes(db, notes, () => readSnapshotSkips(db, since));
 }
 
 /**
@@ -595,17 +608,18 @@ export async function saveServerLabels(db: SQLiteDatabase, labels: Label[]): Pro
 }
 
 /**
- * Reconcile a scoped server note list into local SQLite. Reads the protected-id set
- * once (notes with an unsynced pending/failed local edit, #487/#492) and delegates to
- * {@link reconcileServerNotesScope}, which applies the save and the prune atomically.
+ * Reconcile a scoped server note list, fetched after `since` was taken, into
+ * local SQLite. Delegates to {@link reconcileServerNotesScope}, which reads the
+ * skip set (see {@link getSnapshotSkipNoteIds}) and applies the save and the
+ * prune in one transaction.
  */
 export async function saveServerNotesScope(
   db: SQLiteDatabase,
   serverNotes: Note[],
-  params?: GetNotesParams,
+  params: GetNotesParams | undefined,
+  since: SnapshotMark,
 ): Promise<void> {
-  const skipNoteIds = await getProtectedNoteIds(db);
-  await reconcileServerNotesScope(db, serverNotes, params, { skipNoteIds, serverSnapshot: true });
+  await reconcileServerNotesScope(db, serverNotes, params, () => readSnapshotSkips(db, since));
 }
 
 function remapValue(value: unknown, idMap: Map<string, string>): unknown {
@@ -968,6 +982,11 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         }
       }
 
+      // The API client already recorded this landing from the request, except
+      // for a removeImage replay: it sends no body, so its note id is only
+      // here (#1265). Recording a landing twice would skip a snapshot fetched
+      // between the two.
+      if (entry.operation === 'removeImage') recordWriteLanded(affectedNoteIds(endpoint, body));
       await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
 
       // The write landed: if this note was carrying a prior failure, clear it so
@@ -990,6 +1009,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // reconciled by the next server fetch / SSE event. Attempt counting is
         // reserved for failures *before* the request lands (issue #714).
         console.warn(`Queue entry id=${entry.id} landed server-side; post-response reconciliation failed:`, err);
+        if (entry.operation === 'removeImage') recordWriteLanded(affectedNoteIds(endpoint, body));
         await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
         continue;
       }
@@ -1104,6 +1124,12 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           console.info(
             `Dropping queued operation id=${entry.id} ${entry.operation} ${endpoint} (HTTP ${status}): no replay needed`,
           );
+          // The end state is already on the server (an earlier attempt landed
+          // unseen, or the target is gone), and the row that gated snapshots is
+          // about to go: a snapshot in flight may predate it (#1265). The API
+          // client records only 2xx responses, so this one is ours to record.
+          // A viewed ping changes no content (see recordWriteResponse).
+          if (entry.operation !== 'markViewed') recordWriteLanded(affectedNoteIds(endpoint, body));
         }
 
         await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
@@ -1274,8 +1300,9 @@ async function pullTouchedNotes(db: SQLiteDatabase, noteIds: Set<string>): Promi
   }
   for (const noteId of toPull.slice(0, MAX_POST_DRAIN_NOTE_PULLS)) {
     try {
+      const since = snapshotMark();
       const note = await jot.notes.getById(noteId);
-      await saveServerNote(db, note);
+      await saveServerNote(db, note, since);
     } catch (err) {
       console.warn(`Failed to pull note id=${noteId} after the queue drain: ${errorSummary(err)}`);
     }

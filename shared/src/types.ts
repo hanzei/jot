@@ -252,6 +252,7 @@ export interface PublicNoteItem {
 }
 
 interface BasePublicNote {
+  id: string;
   note_type: NoteType;
   updated_at: string;
   /** Fetch each through `apiPaths.publicNoteImage` / `publicNoteImageThumbnail`. */

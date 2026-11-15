@@ -7,6 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '../../theme/ThemeContext';
 import { importFile } from '../../api/notes';
 import { saveServerLabels, saveServerNotes } from '../../db/syncQueue';
+import { snapshotMark } from '../../db/snapshotGate';
 import {
   labelsQueryKey,
   noteLocalQueryScopeKey,
@@ -96,8 +97,9 @@ export default function ImportSection() {
         // An import creates labels as well as notes, and every cache below reads
         // local SQLite — so both have to be pulled before the invalidations, or
         // the re-read just re-serves the pre-import rows.
+        const since = snapshotMark();
         const [latestNotes, latestLabels] = await Promise.all([jot.notes.getAll(), jot.labels.getAll()]);
-        await saveServerNotes(db, latestNotes);
+        await saveServerNotes(db, latestNotes, since);
         await saveServerLabels(db, latestLabels);
       } catch (syncErr) {
         console.warn('Post-import sync failed:', syncErr);

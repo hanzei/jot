@@ -4,6 +4,7 @@ import type { AddLabelRequest, GetNotesParams, UpdateMeRequest } from '@jot/shar
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { getAllLocalNotes } from '../db/noteQueries';
 import { drainQueue, getPendingCount, getDeadLetterCount, insertQueueEntry, saveServerNotesScope } from '../db/syncQueue';
+import { snapshotMark } from '../db/snapshotGate';
 import type { LocalIdentity } from './localMode';
 import { disableLocalMode, setLocalModeActive } from './localMode';
 import { initializeServerContext, switchActiveServer } from '../api/client';
@@ -526,7 +527,8 @@ const RECONCILE_SCOPES: (GetNotesParams | undefined)[] = [
  */
 export async function runBackgroundReconcileScopes(db: SQLiteDatabase): Promise<void> {
   for (const scope of RECONCILE_SCOPES) {
+    const since = snapshotMark();
     const notes = await jot.notes.getAll(scope);
-    await saveServerNotesScope(db, notes, scope);
+    await saveServerNotesScope(db, notes, scope, since);
   }
 }

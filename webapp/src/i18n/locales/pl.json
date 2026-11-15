@@ -591,7 +591,11 @@
     "errorTitle": "Nie udało się wczytać notatki",
     "errorBody": "Coś poszło nie tak. Spróbuj ponownie za chwilę.",
     "imageAlt": "Obraz {{number}}",
-    "footer": "Kopia tylko do odczytu · Ostatnia aktualizacja: {{date}}"
+    "footer": "Kopia tylko do odczytu · Ostatnia aktualizacja: {{date}}",
+    "ownerBody": "Tak inni widzą Twoją notatkę.",
+    "ownerAction": "Edytuj notatkę",
+    "collaboratorBody": "Ta notatka jest Ci udostępniona.",
+    "collaboratorAction": "Otwórz notatkę"
   },
   "publicLink": {
     "heading": "Link publiczny",

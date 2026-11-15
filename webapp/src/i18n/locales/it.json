@@ -584,7 +584,11 @@
     "errorTitle": "Impossibile caricare questa nota",
     "errorBody": "Qualcosa è andato storto. Riprova tra un momento.",
     "imageAlt": "Immagine {{number}}",
-    "footer": "Copia di sola lettura · Ultimo aggiornamento: {{date}}"
+    "footer": "Copia di sola lettura · Ultimo aggiornamento: {{date}}",
+    "ownerBody": "Ecco come gli altri vedono la tua nota.",
+    "ownerAction": "Modifica nota",
+    "collaboratorBody": "Questa nota è condivisa con te.",
+    "collaboratorAction": "Apri nota"
   },
   "publicLink": {
     "heading": "Link pubblico",

@@ -45,7 +45,7 @@ jest.mock('../src/db/syncQueue', () => {
     ...actual,
     saveServerNotesScope: jest.fn(actual.saveServerNotesScope),
     saveServerNote: jest.fn(actual.saveServerNote),
-    getProtectedNoteIds: jest.fn(actual.getProtectedNoteIds),
+    applyServerRemoval: jest.fn(actual.applyServerRemoval),
   };
 });
 
@@ -101,6 +101,7 @@ describe('useOfflineNotes background sync (#487)', () => {
       expect.anything(),
       expect.any(Array),
       params,
+      expect.any(Number),
     );
     // The fetched notes really landed in SQLite.
     await waitFor(async () =>
@@ -189,6 +190,7 @@ describe('useOfflineNote background fetch (#487)', () => {
     expect(mockSyncQueue.saveServerNote).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ id: 'note-1' }),
+      expect.any(Number),
     );
     await waitFor(async () =>
       expect(await db.getFirstAsync('SELECT id, content FROM notes WHERE id = ?', ['note-1'])).toEqual({
@@ -230,7 +232,7 @@ describe('useOfflineNote background fetch (#487)', () => {
 
     await renderHook(() => useOfflineNote('racing'), { wrapper: createWrapper() });
 
-    await waitFor(() => expect(mockSyncQueue.getProtectedNoteIds).toHaveBeenCalled());
+    await waitFor(() => expect(mockSyncQueue.applyServerRemoval).toHaveBeenCalled());
     await flushMicrotasks();
     expect(mockNoteQueries.markLocalNoteDeleted).not.toHaveBeenCalled();
     expect(await db.getFirstAsync('SELECT deleted_at FROM notes WHERE id = ?', ['racing'])).toEqual({

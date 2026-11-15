@@ -100,6 +100,7 @@ type PublicLink struct {
 // Content is set for text notes only; Items and CheckedItemsCollapsed for
 // list notes only.
 type PublicNote struct {
+	ID                    string            `json:"id"`
 	NoteType              NoteType          `json:"note_type"`
 	Title                 string            `json:"title"`
 	UpdatedAt             time.Time         `json:"updated_at"`

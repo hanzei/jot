@@ -377,6 +377,18 @@ for (const theme of THEMES) {
       await expectNoViolations(page);
     });
 
+    test('public note viewer access bar has no WCAG A/AA violations', async ({ page, authenticatedUser, publicNotePage }) => {
+      // The bar only renders for a signed-in owner or collaborator, so the
+      // anonymous scan above never reaches it.
+      void authenticatedUser;
+      const token = await setPublicLink(page.request, await createTextNote(page.request, 'A11y access bar'));
+
+      await publicNotePage.goto(token);
+      await expect(publicNotePage.accessLink('Edit note')).toBeVisible();
+      await expectTheme(page, theme);
+      await expectNoViolations(page, { include: ['[data-testid="public-note-access-bar"]'] });
+    });
+
     test('share dialog with a public link has no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage, publicLinkSection }) => {
       void authenticatedUser;
       await dashboardPage.goto();
