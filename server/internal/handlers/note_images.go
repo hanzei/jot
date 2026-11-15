@@ -234,7 +234,7 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 		return http.StatusInternalServerError, nil, fmt.Errorf("count note images: %w", err)
 	}
 	if existingCount >= imageMaxPerNote {
-		return http.StatusUnprocessableEntity, nil, errImageLimitReached
+		return h.capRejection(r.Context(), noteID, imageID)
 	}
 
 	file, header, err := r.FormFile("file")
@@ -269,7 +269,7 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 		// references this hash (dedup).
 		h.reclaimNoteImageBlob(r.Context(), inspected.sha)
 		if errors.Is(err, models.ErrNoteImageCapExceeded) {
-			return http.StatusUnprocessableEntity, nil, errImageLimitReached
+			return h.capRejection(r.Context(), noteID, imageID)
 		}
 		if errors.Is(err, models.ErrNoteImageExists) {
 			// Lost a race with a concurrent upload of the same ID.
@@ -294,6 +294,22 @@ func (h *NotesHandler) resolveClientImageID(ctx context.Context, noteID, imageID
 		return 0, nil, nil
 	}
 	return replayResponse(noteID, existing, err)
+}
+
+// capRejection answers an upload the note's image cap turned away. When the
+// upload carries a client-supplied ID, a concurrent upload of that same ID may
+// be what filled the note, so the ID is resolved again and that image wins
+// over the 422 (the replay contract of resolveClientImageID).
+func (h *NotesHandler) capRejection(ctx context.Context, noteID, imageID string) (int, any, error) {
+	if imageID != "" {
+		if status, existing, err := h.resolveClientImageID(ctx, noteID, imageID); status != 0 {
+			if existing == nil {
+				return status, nil, err
+			}
+			return status, existing, err
+		}
+	}
+	return http.StatusUnprocessableEntity, nil, errImageLimitReached
 }
 
 // existingImageResponse answers an upload that lost a race for its
