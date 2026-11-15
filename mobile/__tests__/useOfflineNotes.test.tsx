@@ -45,7 +45,7 @@ jest.mock('../src/db/syncQueue', () => {
     ...actual,
     saveServerNotesScope: jest.fn(actual.saveServerNotesScope),
     saveServerNote: jest.fn(actual.saveServerNote),
-    getSnapshotSkipNoteIds: jest.fn(actual.getSnapshotSkipNoteIds),
+    applyServerRemoval: jest.fn(actual.applyServerRemoval),
   };
 });
 
@@ -232,7 +232,7 @@ describe('useOfflineNote background fetch (#487)', () => {
 
     await renderHook(() => useOfflineNote('racing'), { wrapper: createWrapper() });
 
-    await waitFor(() => expect(mockSyncQueue.getSnapshotSkipNoteIds).toHaveBeenCalled());
+    await waitFor(() => expect(mockSyncQueue.applyServerRemoval).toHaveBeenCalled());
     await flushMicrotasks();
     expect(mockNoteQueries.markLocalNoteDeleted).not.toHaveBeenCalled();
     expect(await db.getFirstAsync('SELECT deleted_at FROM notes WHERE id = ?', ['racing'])).toEqual({

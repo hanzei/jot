@@ -11,12 +11,10 @@ import { isNoteSharedWithUser, type SSEEvent } from '@jot/shared';
 import { useNetworkStatus } from './useNetworkStatus';
 import {
   getLocalNoteUpdatedAt,
-  markLocalNoteDeleted,
-  permanentDeleteLocalNote,
   patchLocalNoteImages,
   upsertLabel,
 } from '../db/noteQueries';
-import { getSnapshotSkipNoteIds, saveServerNote } from '../db/syncQueue';
+import { applyServerRemoval, saveServerNote } from '../db/syncQueue';
 import { snapshotMark } from '../db/snapshotGate';
 import { isSseQuiesced, subscribeToServerSwitchLifecycle } from '../store/serverSwitchLifecycle';
 import { publishProfileIconUpdate } from '../store/profileIconEvents';
@@ -144,10 +142,8 @@ export function useSSE(
             // the optimistic edit (#487/#492). The drain replaying against a server-deleted
             // note gets a 404 and dead-letters the op, so this can't wedge the queue.
             try {
-              const protectedNoteIds = await getSnapshotSkipNoteIds(db, since);
-              if (!protectedNoteIds.has(note_id)) {
+              if (await applyServerRemoval(db, note_id, since, 'tombstone')) {
                 queryClient.removeQueries({ queryKey: noteLocalQueryKey(note_id) });
-                await markLocalNoteDeleted(db, note_id);
               }
             } catch (err) {
               console.warn(`Failed to persist SSE ${event.type} for note id=${note_id}:`, err);
@@ -198,10 +194,8 @@ export function useSSE(
               // tombstone — it must not linger in their trash view). Defer to a
               // pending/failed local op (#487/#492).
               try {
-                const protectedNoteIds = await getSnapshotSkipNoteIds(db, since);
-                if (!protectedNoteIds.has(note_id)) {
+                if (await applyServerRemoval(db, note_id, since, 'delete')) {
                   queryClient.removeQueries({ queryKey: noteLocalQueryKey(note_id) });
-                  await permanentDeleteLocalNote(db, note_id);
                 }
               } catch (err) {
                 console.warn(`Failed to persist SSE ${event.type} for note id=${note_id}:`, err);

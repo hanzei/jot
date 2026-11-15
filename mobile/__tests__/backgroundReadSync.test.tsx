@@ -30,7 +30,7 @@ jest.mock('../src/db/syncQueue', () => ({
   ...jest.requireActual('../src/db/syncQueue'),
   saveServerNotesScope: jest.fn().mockResolvedValue(undefined),
   saveServerNote: jest.fn().mockResolvedValue(undefined),
-  getSnapshotSkipNoteIds: jest.fn().mockResolvedValue(new Set()),
+  applyServerRemoval: jest.fn().mockResolvedValue(true),
   saveServerLabels: jest.fn().mockResolvedValue(undefined),
 }));
 
@@ -53,7 +53,7 @@ const mockUserQueries = userQueriesModule as jest.Mocked<typeof userQueriesModul
 const mockSyncQueue = jest.requireMock('../src/db/syncQueue') as {
   saveServerNotesScope: jest.Mock;
   saveServerNote: jest.Mock;
-  getSnapshotSkipNoteIds: jest.Mock;
+  applyServerRemoval: jest.Mock;
 };
 
 function makeAxiosError(status: number) {
@@ -90,7 +90,7 @@ describe('background read-sync retry', () => {
     mockUserQueries.getLocalUsers.mockResolvedValue([]);
     mockSyncQueue.saveServerNotesScope.mockResolvedValue(undefined);
     mockSyncQueue.saveServerNote.mockResolvedValue(undefined);
-    mockSyncQueue.getSnapshotSkipNoteIds.mockResolvedValue(new Set());
+    mockSyncQueue.applyServerRemoval.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -162,7 +162,7 @@ describe('background read-sync retry', () => {
 
     await act(async () => { await jest.advanceTimersByTimeAsync(60000); });
     expect(mockJot.notes.getById).toHaveBeenCalledTimes(1);
-    expect(mockNoteQueries.markLocalNoteDeleted).toHaveBeenCalledWith(expect.anything(), 'n1');
+    expect(mockSyncQueue.applyServerRemoval).toHaveBeenCalledWith(expect.anything(), 'n1', expect.any(Number), 'tombstone', expect.any(Function));
   });
 
   // ── useOfflineNote → notes list (issue: stale dashboard cards) ──────────────
@@ -210,9 +210,10 @@ describe('background read-sync retry', () => {
     mockNoteQueries.getLocalNote.mockResolvedValue(sampleNote as never);
     mockJot.notes.getAll.mockReturnValue(new Promise(() => {}) as never);
     mockJot.notes.getById.mockRejectedValue(makeAxiosError(404));
-    mockNoteQueries.markLocalNoteDeleted.mockImplementation(async () => {
+    mockSyncQueue.applyServerRemoval.mockImplementation(async () => {
       mockNoteQueries.getLocalNotes.mockResolvedValue([]);
       mockNoteQueries.getLocalNote.mockResolvedValue(null);
+      return true;
     });
 
     const wrapper = createWrapper();
@@ -223,7 +224,7 @@ describe('background read-sync retry', () => {
 
     await act(async () => { await jest.advanceTimersByTimeAsync(0); });
 
-    expect(mockNoteQueries.markLocalNoteDeleted).toHaveBeenCalledWith(expect.anything(), 'n1');
+    expect(mockSyncQueue.applyServerRemoval).toHaveBeenCalledWith(expect.anything(), 'n1', expect.any(Number), 'tombstone', expect.any(Function));
     await waitFor(() => expect(result.current.list.data).toEqual([]));
   });
 

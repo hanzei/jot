@@ -4,7 +4,7 @@
  * write's queue row is gone (issue #1265).
  */
 
-import { getSnapshotSkipNoteIds, saveServerNote, saveServerNotes, saveServerNotesScope } from '../src/db/syncQueue';
+import { applyServerRemoval, getSnapshotSkipNoteIds, saveServerNote, saveServerNotes, saveServerNotesScope } from '../src/db/syncQueue';
 import { notesWrittenSince, recordWriteLanded, recordWriteResponse, snapshotMark } from '../src/db/snapshotGate';
 import { saveNote } from '../src/db/noteQueries';
 import { withSerializedTransaction } from '../src/db/transaction';
@@ -155,5 +155,70 @@ describe('server snapshot writers (#1265)', () => {
     await save;
 
     expect(await contentOf('x')).toMatchObject({ content: 'local' });
+  });
+});
+
+describe('applyServerRemoval (#1265)', () => {
+  const deletedAt = async (id: string) =>
+    (await db.getFirstAsync<{ deleted_at: string | null }>('SELECT deleted_at FROM notes WHERE id = ?', [id]));
+  const queueUpdate = (id: string) =>
+    db.runAsync(
+      `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
+       VALUES ('update', ?, 'PATCH', NULL, '')`,
+      [`/notes/${id}`],
+    );
+
+  it('tombstones or deletes a note nothing protects', async () => {
+    await saveNote(db, makeTextNote({ id: 'gone' }));
+    await saveNote(db, makeTextNote({ id: 'unshared' }));
+
+    expect(await applyServerRemoval(db, 'gone', snapshotMark(), 'tombstone')).toBe(true);
+    expect(await applyServerRemoval(db, 'unshared', snapshotMark(), 'delete')).toBe(true);
+
+    expect((await deletedAt('gone'))?.deleted_at).not.toBeNull();
+    expect(await deletedAt('unshared')).toBeNull();
+  });
+
+  it('keeps a note this device wrote after the report was taken', async () => {
+    // A restore landed after the 404 or the delete event was produced.
+    await saveNote(db, makeTextNote({ id: 'restored' }));
+    const since = snapshotMark();
+    recordWriteLanded(['restored']);
+
+    expect(await applyServerRemoval(db, 'restored', since, 'tombstone')).toBe(false);
+
+    expect(await deletedAt('restored')).toEqual({ deleted_at: null });
+  });
+
+  it('reads the skip set when its transaction runs, not when it is called', async () => {
+    await saveNote(db, makeTextNote({ id: 'x' }));
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const held = withSerializedTransaction(db, () => gate);
+
+    const removal = applyServerRemoval(db, 'x', snapshotMark(), 'delete');
+    // A local edit is queued while the removal waits its turn.
+    await queueUpdate('x');
+    release();
+    await held;
+
+    expect(await removal).toBe(false);
+    expect(await deletedAt('x')).toEqual({ deleted_at: null });
+  });
+
+  it('writes nothing when shouldApply turns false while it waits', async () => {
+    await saveNote(db, makeTextNote({ id: 'x' }));
+    let cancelled = false;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const held = withSerializedTransaction(db, () => gate);
+
+    const removal = applyServerRemoval(db, 'x', snapshotMark(), 'tombstone', () => !cancelled);
+    cancelled = true;
+    release();
+    await held;
+
+    expect(await removal).toBe(false);
+    expect(await deletedAt('x')).toEqual({ deleted_at: null });
   });
 });

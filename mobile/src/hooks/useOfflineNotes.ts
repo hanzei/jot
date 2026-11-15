@@ -2,9 +2,9 @@ import { useEffect, useCallback, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext } from 'expo-sqlite';
 import axios from 'axios';
-import { getLocalNotes, getLocalNote, markLocalNoteDeleted } from '../db/noteQueries';
+import { getLocalNotes, getLocalNote } from '../db/noteQueries';
 import { isClosedDatabaseError } from '../db/errors';
-import { getSnapshotSkipNoteIds, saveServerNote, saveServerNotesScope } from '../db/syncQueue';
+import { applyServerRemoval, saveServerNote, saveServerNotesScope } from '../db/syncQueue';
 import { snapshotMark } from '../db/snapshotGate';
 import type { GetNotesParams, Note } from '@jot/shared';
 import { useNetworkStatus } from './useNetworkStatus';
@@ -176,11 +176,9 @@ export function useOfflineNote(id: string | null) {
         // escape the fire-and-forget effect as an unhandled rejection; the local
         // cache remains as fallback and a later sync retries.
         try {
-          const protectedNoteIds = await getSnapshotSkipNoteIds(db, since);
-          // Re-check cancelled: the effect may have torn down (id change/unmount)
-          // during the await above, in which case we must not write.
-          if (!canceller.cancelled && !protectedNoteIds.has(id)) {
-            await markLocalNoteDeleted(db, id);
+          // Re-check cancelled where the write happens: the effect may have torn
+          // down (id change/unmount) while the fetch or the write chain waited.
+          if (await applyServerRemoval(db, id, since, 'tombstone', () => !canceller.cancelled)) {
             invalidateNoteReads();
           }
         } catch (tombstoneErr) {

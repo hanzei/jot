@@ -5,6 +5,7 @@ import NotesListScreen from '../src/screens/NotesListScreen';
 import { lightColors } from '../src/theme/colors';
 import { ConfirmContext } from '../src/hooks/useConfirm';
 import { markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
+import { notesWrittenSince, snapshotMark } from '../src/db/snapshotGate';
 import type { Label, NoteSort } from '@jot/shared';
 
 jest.mock('../src/api/jot', () => ({
@@ -752,6 +753,27 @@ describe('NotesListScreen empty trash', () => {
     await waitFor(() => {
       expect(mockEmptyTrash).toHaveBeenCalled();
     });
+    alertSpy.mockRestore();
+  });
+
+  it('records the purged notes it read before the request, so a fetch in flight cannot restore them (#1265)', async () => {
+    // A sync that prunes the trashed rows while the request is out must not
+    // leave the purge unrecorded.
+    let purged = false;
+    mockGetLocalNotes.mockImplementation(async () => (purged ? [] : [{ id: 'trashed-1' }]));
+    mockEmptyTrash.mockImplementation(async () => {
+      purged = true;
+      return { deleted_count: 1 };
+    });
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+    const since = snapshotMark();
+
+    await renderTrashScreen();
+
+    await waitFor(() => expect(screen.getByTestId('empty-trash-button')).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('empty-trash-button'));
+
+    await waitFor(() => expect(notesWrittenSince(since)).toEqual(new Set(['trashed-1'])));
     alertSpy.mockRestore();
   });
 });

@@ -5,6 +5,8 @@ import { jot } from '../api/jot';
 import { completedCascadeScope, type GetNotesParams, type Note, type NoteItem } from '@jot/shared';
 import {
   getLocalNote,
+  markLocalNoteDeleted,
+  permanentDeleteLocalNote,
   saveNote,
   saveServerSnapshotNotes,
   saveLabels,
@@ -21,6 +23,7 @@ import {
 } from './noteQueries';
 import { isLocalModeActive } from '../store/localMode';
 import { collectNoteIds } from './affectedNoteIds';
+import { withSerializedTransaction } from './transaction';
 import { notesWrittenSince, recordWriteLanded, snapshotMark, type SnapshotMark } from './snapshotGate';
 import type { Label } from '@jot/shared';
 
@@ -469,6 +472,35 @@ export async function getProtectedNoteIds(db: SQLiteDatabase): Promise<Set<strin
  */
 export async function getSnapshotSkipNoteIds(db: SQLiteDatabase, since: SnapshotMark): Promise<Set<string>> {
   return (await readSnapshotSkips(db, since)).skipNoteIds;
+}
+
+/**
+ * Apply the server's report that `noteId` is gone (a 404/410 on fetch, an SSE
+ * delete or unshare) unless the note is in the {@link getSnapshotSkipNoteIds}
+ * set for `since`: a queued or failed change, or a write of this device's
+ * (say a restore) that landed after the report was taken. `tombstone` marks
+ * it deleted; `delete` removes the row. The check and the write run in one
+ * serialized transaction, so a write cannot slip in between (#1265, spec
+ * §8.3). `shouldApply` is consulted in the same step, for a caller whose
+ * reason to write may lapse while it waits. Returns whether the note was
+ * removed.
+ */
+export async function applyServerRemoval(
+  db: SQLiteDatabase,
+  noteId: string,
+  since: SnapshotMark,
+  kind: 'tombstone' | 'delete',
+  shouldApply: () => boolean = () => true,
+): Promise<boolean> {
+  let removed = false;
+  await withSerializedTransaction(db, async () => {
+    const { skipNoteIds } = await readSnapshotSkips(db, since);
+    if (skipNoteIds.has(noteId) || !shouldApply()) return;
+    if (kind === 'tombstone') await markLocalNoteDeleted(db, noteId);
+    else await permanentDeleteLocalNote(db, noteId);
+    removed = true;
+  });
+  return removed;
 }
 
 /** {@link getSnapshotSkipNoteIds}, keeping the notes written since `since` apart. */
