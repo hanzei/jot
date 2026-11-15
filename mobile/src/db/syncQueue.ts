@@ -1023,37 +1023,35 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           const clientLabelId = body?.id as string | undefined;
           const labelName = body?.name as string | undefined;
           if (clientLabelId && labelName) {
-            try {
-              const serverLabels = await jot.labels.getAll();
-              const serverLabel = serverLabels.find(
-                (l) => l.name.toLowerCase() === labelName.toLowerCase(),
-              );
-              if (serverLabel) {
-                if (serverLabel.id !== clientLabelId) {
-                  // Name conflict: another label owns this name under a different
-                  // id, so the client id never reaches the server. Persist the
-                  // resolution so every later op (and local copy) uses that label.
-                  await withSerializedTransaction(db, () =>
-                    rewriteLabelId(db, clientLabelId, serverLabel.id, serverLabel),
-                  );
-                  // The drain snapshot predates the rewrite: refresh the rows behind this one.
-                  const rewritten = new Map(
-                    (await db.getAllAsync<QueueEntry>('SELECT * FROM sync_queue WHERE id > ?', [entry.id]))
-                      .map((row) => [row.id, row]),
-                  );
-                  for (const later of entries) {
-                    const fresh = rewritten.get(later.id);
-                    if (fresh) {
-                      later.endpoint = fresh.endpoint;
-                      later.body = fresh.body;
-                    }
+            // GET /labels failing, or no label by that name, falls through to dead-letter.
+            const serverLabel = await jot.labels
+              .getAll()
+              .then((labels) => labels.find((l) => l.name.toLowerCase() === labelName.toLowerCase()))
+              .catch(() => undefined);
+            if (serverLabel) {
+              if (serverLabel.id !== clientLabelId) {
+                // Name conflict: another label owns this name under a different
+                // id, so the client id never reaches the server. Persist the
+                // resolution so every later op (and local copy) uses that label.
+                // A failure here is a local processing error and propagates as
+                // one rather than dead-lettering a create the server did resolve.
+                await withSerializedTransaction(db, () =>
+                  rewriteLabelId(db, clientLabelId, serverLabel.id, serverLabel),
+                );
+                // The drain snapshot predates the rewrite: refresh the rows behind this one.
+                const rewritten = new Map(
+                  (await db.getAllAsync<QueueEntry>('SELECT * FROM sync_queue WHERE id > ?', [entry.id]))
+                    .map((row) => [row.id, row]),
+                );
+                for (const later of entries) {
+                  const fresh = rewritten.get(later.id);
+                  if (fresh) {
+                    later.endpoint = fresh.endpoint;
+                    later.body = fresh.body;
                   }
                 }
-                idempotentConflict = true;
               }
-              // serverLabel not found: fall through to dead-letter
-            } catch {
-              // GET /labels failed: fall through to dead-letter
+              idempotentConflict = true;
             }
           }
         }
