@@ -141,7 +141,7 @@ export function useDeleteNoteImage() {
       // now (matching the online path's effect) and queue the hard-delete for
       // replay. `/images/{id}` has no note id of its own, so it's carried in
       // the body purely for the queue's note-id bookkeeping (see
-      // collectNoteIds in syncQueue.ts) — DELETE sends no body to the server.
+      // collectNoteIds in affectedNoteIds.ts) — DELETE sends no body to the server.
       await hideImageLocally(db, noteId, imageId);
       await enqueueOperation(db, {
         operation: 'removeImage',

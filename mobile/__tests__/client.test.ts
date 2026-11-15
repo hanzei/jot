@@ -15,6 +15,7 @@ import {
 } from '../src/api/client';
 import { getActiveServer, getServerScopedStorageKey } from '../src/store/serverAccounts';
 import { isServerReachable, markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
+import { notesWrittenSince, snapshotMark } from '../src/db/snapshotGate';
 import { apiErrorBody } from './helpers/apiError';
 
 jest.mock('axios', () => {
@@ -565,6 +566,21 @@ describe('API Client', () => {
 
       expect((staleConfig.signal as AbortSignal).aborted).toBe(true);
       expect(() => responseSuccessInterceptor({ config: staleConfig })).toThrow('Discarded stale response after server switch.');
+    });
+  });
+
+  describe('write landing record (#1265)', () => {
+    it('records the notes a successful write touched, and nothing for a read', async () => {
+      const responseUse = mockAxiosInstance.interceptors.response.use;
+      const responseSuccessInterceptor = responseUse.mock.calls[0]?.[0] as (
+        response: { config: Record<string, unknown> },
+      ) => unknown;
+      const mark = snapshotMark();
+
+      responseSuccessInterceptor({ config: { method: 'patch', url: '/notes/n1', data: '{"content":"x"}' } });
+      responseSuccessInterceptor({ config: { method: 'get', url: '/notes/n2' } });
+
+      expect(notesWrittenSince(mark)).toEqual(new Set(['n1']));
     });
   });
 

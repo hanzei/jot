@@ -4,6 +4,7 @@ import type { AuthResponse, LoginRequest, NativeExchangeRequest, RegisterRequest
 import { apiPaths, apiRequestId, apiUrl, createJotApi, canonicalizeServerOrigin, isServerError } from '@jot/shared';
 import { randomUUID } from '../utils/random';
 import { markServerReachable, markServerUnreachable } from './serverReachability';
+import { recordWriteResponse } from '../db/snapshotGate';
 import {
   addServer,
   ensureServerRegistryMigrated,
@@ -505,6 +506,9 @@ api.interceptors.response.use(
     markServerReachable();
     const config = response.config as SwitchAwareAxiosRequestConfig;
     releaseInflightController(config.__serverSwitchGenerationId, config.__serverSwitchAbortController);
+    // The write landed, even if the response is discarded below: a snapshot
+    // fetched before now must not roll its notes back (#1265).
+    recordWriteResponse(config.method, config.url, config.data);
     if (!isCurrentRequestGeneration(config.__serverSwitchGenerationId)) {
       throw new CanceledError('Discarded stale response after server switch.');
     }

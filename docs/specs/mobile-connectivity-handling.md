@@ -167,6 +167,16 @@ mode" for the write paths.
   reconnect (not the first connect — that's covered by the mount-time sync). This
   closes the gap a bare foreground leaves: foregrounding on a stable network does
   not flip `isConnected`, so the `isConnected`-keyed refresh alone would miss it.
+- A refresh must never roll back this device's own writes. Server snapshots go
+  through the `saveServerNote*` writers in `src/db/syncQueue.ts`, which skip a
+  note while it has a queued or failed op (`getProtectedNoteIds`), and also any
+  note one of this device's writes landed on after the snapshot's request
+  started: the snapshot may predate that write even though its queue row is
+  gone (#1265). The API client records each landed write
+  (`src/db/snapshotGate.ts`); every snapshot writer takes a `snapshotMark()`
+  before it fetches and passes it to the save. The skip set is read inside the
+  save's own transaction. The gate compares a local counter, never server
+  timestamps against the device clock.
 - A failed background read is **not** an error dialog — it's a *staleness*
   signal. The user keeps seeing cached data; ideally the UI can show when data
   was last synced (a diagnostic surface exists; a user-facing one is future
@@ -323,6 +333,7 @@ handling and loop safety are two halves of the same system.)
 | Server-reachability belief + write gate | `src/api/serverReachability.ts` (`isServerReachable`, `isOnlineWriteAllowed`) |
 | Timeouts + interceptors + reachability wiring | `src/api/client.ts` |
 | Sync queue + transient/permanent split + head-of-line dead-lettering | `src/db/syncQueue.ts` (`rethrowIfNotQueueable`, `isQueueableError`, `isGlobalDrainFailure`, `MAX_ENTRY_DRAIN_ATTEMPTS`, `getSyncQueueStats`) |
+| Snapshot gate (own writes landed after a fetch started) | `src/db/snapshotGate.ts`, wired in `src/api/client.ts` |
 | Bounded read retries | `src/utils/retryWithBackoff.ts` (`retrySync`) |
 | Optimistic writes + offline fallback | `src/hooks/useNotes.ts`, `useLabels.ts`, `useNoteImages.ts` |
 | Local-first read queries | `src/hooks/useOfflineNotes.ts` |

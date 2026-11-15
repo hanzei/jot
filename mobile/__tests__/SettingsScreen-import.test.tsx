@@ -4,7 +4,7 @@ import { useAuth } from '../src/store/AuthContext';
 import { importFile } from '../src/api/notes';
 import * as DocumentPicker from 'expo-document-picker';
 import i18n from '../src/i18n';
-import { saveLabels, saveNotes } from '../src/db/noteQueries';
+import { saveLabels, saveServerSnapshotNotes } from '../src/db/noteQueries';
 import { apiErrorBody } from './helpers/apiError';
 import { jot } from '../src/api/jot';
 
@@ -53,7 +53,7 @@ jest.mock('../src/api/notes', () => ({
 
 
 jest.mock('../src/db/noteQueries', () => ({
-  saveNotes: jest.fn(),
+  saveServerSnapshotNotes: jest.fn(),
   saveLabels: jest.fn(),
   getFailedNoteIds: jest.fn().mockResolvedValue(new Set()),
 }));
@@ -108,7 +108,7 @@ const mockImportFile = importFile as jest.MockedFunction<typeof importFile>;
 const mockGetNotes = jest.mocked(jot.notes.getAll);
 const mockGetLabels = jest.mocked(jot.labels.getAll);
 const mockGetDocumentAsync = DocumentPicker.getDocumentAsync as jest.MockedFunction<typeof DocumentPicker.getDocumentAsync>;
-const mockSaveNotes = saveNotes as jest.MockedFunction<typeof saveNotes>;
+const mockSaveServerSnapshotNotes = saveServerSnapshotNotes as jest.MockedFunction<typeof saveServerSnapshotNotes>;
 const mockSaveLabels = saveLabels as jest.MockedFunction<typeof saveLabels>;
 
 const user = {
@@ -136,7 +136,7 @@ describe('SettingsScreen import section', () => {
     mockInvalidateQueries.mockClear();
     mockListSessions.mockResolvedValue([]);
     mockGetNotes.mockResolvedValue([]);
-    mockSaveNotes.mockResolvedValue(undefined);
+    mockSaveServerSnapshotNotes.mockResolvedValue(undefined);
     mockGetLabels.mockResolvedValue([]);
     mockSaveLabels.mockResolvedValue(undefined);
     await i18n.changeLanguage('en');
@@ -185,7 +185,7 @@ describe('SettingsScreen import section', () => {
     });
     await waitFor(() => {
       expect(mockGetNotes).toHaveBeenCalled();
-      expect(mockSaveNotes).toHaveBeenCalled();
+      expect(mockSaveServerSnapshotNotes).toHaveBeenCalled();
     });
     // An import creates labels as well as notes, so the drawer's label list and
     // its per-label counts have to be re-pulled and refreshed alongside the notes.

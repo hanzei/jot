@@ -17,6 +17,7 @@ import {
   upsertLabel,
 } from '../db/noteQueries';
 import { getProtectedNoteIds, saveServerNote } from '../db/syncQueue';
+import { snapshotMark } from '../db/snapshotGate';
 import { isSseQuiesced, subscribeToServerSwitchLifecycle } from '../store/serverSwitchLifecycle';
 import { publishProfileIconUpdate } from '../store/profileIconEvents';
 import { publishReconnectResync } from '../store/resyncEvents';
@@ -86,6 +87,11 @@ export function useSSE(
       // useOfflineNote's background-fetch ordering.
       void (async () => {
         const db = dbRef.current;
+        // Marks the snapshot for saveServerNote: a write of ours landing after
+        // this point (e.g. during a getById below) may be missing from it (#1265).
+        // An event payload was built server-side before it got here, so this
+        // mark is only as good as the receipt time.
+        const since = snapshotMark();
         // The drawer's label list and per-label counts (useLabels)
         // are derived from notes' labels_json in SQLite, so any note mutation can
         // change them. Invalidate them right after the note write lands (a local
@@ -112,7 +118,7 @@ export function useSSE(
               // Persist the updated note to SQLite so offline reads stay current
               // (deferring to a pending local edit on this note; see #487).
               try {
-                await saveServerNote(db, note);
+                await saveServerNote(db, note, since);
               } catch (err) {
                 console.warn(`Failed to persist SSE ${event.type} for note id=${note_id}:`, err);
               }
@@ -164,9 +170,9 @@ export function useSSE(
             let persisted = false;
             try {
               if (note) {
-                await saveServerNote(db, note);
+                await saveServerNote(db, note, since);
               } else {
-                await saveServerNote(db, await jot.notes.getById(note_id));
+                await saveServerNote(db, await jot.notes.getById(note_id), since);
               }
               persisted = true;
             } catch (err) {
@@ -207,7 +213,7 @@ export function useSSE(
               // bare invalidation, so fetch the canonical note to refresh
               // shared_with/is_shared (deferring to a pending local edit; #487).
               try {
-                await saveServerNote(db, await jot.notes.getById(note_id));
+                await saveServerNote(db, await jot.notes.getById(note_id), since);
               } catch (err) {
                 console.warn(`Failed to persist SSE ${event.type} for note id=${note_id}:`, err);
               }

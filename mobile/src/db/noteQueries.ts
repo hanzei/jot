@@ -1062,20 +1062,38 @@ async function removeLocalNotesNotInTx(
  * list. Wrapping both in one transaction makes a reader see either the full
  * pre-state or the full post-state, never a partial one.
  *
- * Both steps share a single `skipNoteIds` set so notes with an unsynced (pending
- * or failed) local edit are neither overwritten nor pruned (#487/#492).
+ * Both steps share a single skip set so notes with an unsynced (pending or
+ * failed) local edit are neither overwritten nor pruned (#487/#492).
+ * `readSkipNoteIds` runs inside the transaction, so the set is read in the same
+ * step as the write it gates rather than ahead of it (#1265).
  */
 export async function reconcileServerNotesScope(
   db: SQLiteDatabase,
   serverNotes: Note[],
-  params?: GetNotesParams,
-  options?: SaveNoteOptions,
+  params: GetNotesParams | undefined,
+  readSkipNoteIds: () => Promise<ReadonlySet<string>>,
 ): Promise<void> {
-  const skipNoteIds = options?.skipNoteIds;
   const serverIds = new Set(serverNotes.map((n) => n.id));
   await withSerializedTransaction(db, async () => {
-    await saveNotesInTx(db, serverNotes, options);
+    const skipNoteIds = await readSkipNoteIds();
+    await saveNotesInTx(db, serverNotes, { skipNoteIds, serverSnapshot: true });
     await removeLocalNotesNotInTx(db, serverIds, params, skipNoteIds);
+  });
+}
+
+/**
+ * Persist server snapshot notes without pruning, skipping the notes
+ * `readSkipNoteIds` returns. Like {@link reconcileServerNotesScope}, the skip
+ * set is read inside the write's own transaction (#1265).
+ */
+export async function saveServerSnapshotNotes(
+  db: SQLiteDatabase,
+  serverNotes: Note[],
+  readSkipNoteIds: () => Promise<ReadonlySet<string>>,
+): Promise<void> {
+  await withSerializedTransaction(db, async () => {
+    const skipNoteIds = await readSkipNoteIds();
+    await saveNotesInTx(db, serverNotes, { skipNoteIds, serverSnapshot: true });
   });
 }
 

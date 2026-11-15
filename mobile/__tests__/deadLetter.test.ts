@@ -14,6 +14,7 @@ import {
   saveServerNote,
   QUEUED_WRITE_TIMEOUT_MS,
 } from '../src/db/syncQueue';
+import { snapshotMark } from '../src/db/snapshotGate';
 import { getFailedNoteIds, saveNote } from '../src/db/noteQueries';
 import api from '../src/api/client';
 import { makeTextNote as buildTextNote, remainingQueueIds, seedQueueEntry } from './helpers/fixtures';
@@ -472,7 +473,7 @@ describe('saveServerNote failed-note protection', () => {
     await saveNote(db, buildTextNote({ id: 'n1', content: 'unsent local edit' }));
     await db.runAsync(`UPDATE notes SET sync_state = 'failed' WHERE id = ?`, ['n1']);
 
-    await saveServerNote(db, buildTextNote({ id: 'n1', content: 'server copy' }));
+    await saveServerNote(db, buildTextNote({ id: 'n1', content: 'server copy' }), snapshotMark());
 
     expect(await db.getFirstAsync('SELECT content FROM notes WHERE id = ?', ['n1'])).toEqual({
       content: 'unsent local edit',
@@ -483,7 +484,7 @@ describe('saveServerNote failed-note protection', () => {
     await saveNote(db, buildTextNote({ id: 'other' }));
     await db.runAsync(`UPDATE notes SET sync_state = 'failed' WHERE id = ?`, ['other']);
 
-    await saveServerNote(db, buildTextNote({ id: 'n1', content: 'server copy' }));
+    await saveServerNote(db, buildTextNote({ id: 'n1', content: 'server copy' }), snapshotMark());
 
     expect(await db.getFirstAsync('SELECT content FROM notes WHERE id = ?', ['n1'])).toEqual({
       content: 'server copy',
