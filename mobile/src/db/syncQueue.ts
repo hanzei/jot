@@ -24,6 +24,7 @@ import {
 import { isLocalModeActive } from '../store/localMode';
 import { collectNoteIds } from './affectedNoteIds';
 import { withSerializedTransaction } from './transaction';
+import { rewriteLabelId } from './labelIdRewrite';
 import { notesWrittenSince, recordWriteLanded, snapshotMark, type SnapshotMark } from './snapshotGate';
 import type { Label } from '@jot/shared';
 
@@ -622,31 +623,6 @@ export async function saveServerNotesScope(
   await reconcileServerNotesScope(db, serverNotes, params, () => readSnapshotSkips(db, since));
 }
 
-function remapValue(value: unknown, idMap: Map<string, string>): unknown {
-  if (typeof value === 'string') {
-    return idMap.get(value) ?? value;
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => remapValue(item, idMap));
-  }
-  if (value !== null && typeof value === 'object') {
-    const result: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      result[k] = remapValue(v, idMap);
-    }
-    return result;
-  }
-  return value;
-}
-
-function remapIdsInBody(
-  body: Record<string, unknown>,
-  idMap: Map<string, string>,
-): Record<string, unknown> {
-  if (idMap.size === 0) return body;
-  return remapValue(body, idMap) as Record<string, unknown>;
-}
-
 /** Narrow an unknown API response to something carrying a string `id` (a note or label). */
 function hasStringId(data: unknown): data is { id: string } {
   return data !== null && typeof data === 'object' && typeof (data as { id?: unknown }).id === 'string';
@@ -671,7 +647,7 @@ export interface DrainResult {
    * operation whose response was applied locally — that is, no later op for the
    * note was still queued (see {@link saveServerResponseNote}).
    */
-  idMappings: Array<{ localId: string; serverNote: Note }>;
+  syncedNotes: Note[];
   /** Operations that were discarded because the server returned a permanent (non-transient 4xx) error. */
   discardedOperations: DiscardedOperation[];
   /** True if at least one `updateSettings` operation was successfully drained. */
@@ -728,8 +704,7 @@ export async function deleteDeadLetter(db: SQLiteDatabase, id: number): Promise<
 /**
  * Preserve a dead-lettered op (its full body + metadata) in the `dead_letter`
  * table so a permanently-rejected optimistic edit is never silently dropped
- * (issue #492). `endpoint`/`body` are the *effective* (id-remapped) values that
- * were actually sent; `noteId` links the row to the affected note when there is
+ * (issue #492). `endpoint`/`body` are the values that were actually sent; `noteId` links the row to the affected note when there is
  * a single clear one.
  */
 async function recordDeadLetter(
@@ -789,17 +764,15 @@ async function recordDeadLetter(
  * adopted locally — once no later op for the note is queued, see
  * saveServerResponseNote — and the pending-create marker is cleared.
  *
- * Returns an array of {localId, serverNote} pairs for any create operations that
- * succeeded, so callers can update their caches.
+ * Returns the canonical notes of the creates that succeeded, so callers can
+ * update their caches.
  */
 export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
   const entries = await db.getAllAsync<QueueEntry>(
     'SELECT * FROM sync_queue ORDER BY id ASC',
   );
 
-  // Maps offline label IDs → server IDs as createLabel ops are processed
-  const idMap = new Map<string, string>();
-  const idMappings: Array<{ localId: string; serverNote: Note }> = [];
+  const syncedNotes: Note[] = [];
   const discardedOperations: DiscardedOperation[] = [];
   // Notes whose offline `create`/`duplicate` was dead-lettered this drain: the
   // note never reached the server, so every later queued op for it would 404 and
@@ -836,8 +809,8 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
 
   for (const entry of entries) {
     settledThisEntry = new Set<string>();
-    // Declared outside the try so the catch can dead-letter using the *effective*
-    // (id-remapped) endpoint/body that were actually sent to the server.
+    // Declared outside the try so the catch can dead-letter using the endpoint
+    // and body that were actually sent to the server.
     let endpoint = entry.endpoint;
     let body: Record<string, unknown> | undefined;
     // Flipped true the instant the server request returns 2xx. After that point a
@@ -848,7 +821,6 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
     try {
       if (entry.body) {
         body = JSON.parse(entry.body) as Record<string, unknown>;
-        body = remapIdsInBody(body, idMap);
       }
 
       // If this op targets a note whose create was just dead-lettered, replaying
@@ -863,15 +835,6 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
           continue;
         }
-      }
-
-      // Remap local IDs in the endpoint path, matching only complete path segments
-      // to avoid corrupting URLs where the ID appears as a substring.
-      for (const [localId, serverId] of idMap) {
-        endpoint = endpoint
-          .split('/')
-          .map((seg) => (seg === localId ? serverId : seg))
-          .join('/');
       }
 
       // The base_version this replay was sent with, if it was version-guarded.
@@ -893,24 +856,14 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         if (entry.operation === 'create' || entry.operation === 'duplicate') {
           // The server keeps the client-supplied `id`, so the id is stable —
           // adopt the canonical note (server item ids etc.) and clear the
-          // pending-create marker. No id remap is needed. Nobody else can have
+          // pending-create marker. Nobody else can have
           // edited a note the server only just created, so its version is ours.
           const clientId = body?.id as string | undefined;
           const data = response?.data;
           if (clientId && hasStringId(data)) {
             const serverNote = await applyResponse(entry.id, data, true);
-            if (serverNote) idMappings.push({ localId: clientId, serverNote });
+            if (serverNote) syncedNotes.push(serverNote);
             await clearNotePendingCreate(db, clientId);
-          }
-        } else if (entry.operation === 'createLabel' && body?.local_id) {
-          // Backward compat: ops queued before issue #546 carried a `local_*`
-          // placeholder id that the server replaced with a new server id. Remap
-          // so later ops (rename/delete) reference the correct id. New ops carry
-          // a client-supplied `id` (the server id) and skip this block entirely.
-          const localId = body.local_id as string;
-          const data = response?.data;
-          if (hasStringId(data) && data.id !== localId) {
-            idMap.set(localId, data.id);
           }
         } else if (entry.operation === 'addLabelToNote') {
           // The server returns the updated note; persist it so labels_json
@@ -1022,8 +975,6 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // Permanent client error (e.g. 400/403/404/409/422) — replaying will
         // never succeed, so discard the entry and continue rather than letting one
         // bad operation wedge the whole queue indefinitely.
-        // Report the effective (id-remapped) endpoint so it agrees with the
-        // dead_letter row recorded below.
         discardedOperations.push({ operation: entry.operation, endpoint, status });
 
         // A 409 from a create/duplicate replay is an idempotent already-applied
@@ -1039,10 +990,11 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // createLabel 409s require special handling: the conflict response body
         // doesn't include the canonical label ID, so we resolve it via GET /labels.
         // If the server label ID differs from the client-supplied body.id (name
-        // conflict vs. a different label), we remap it so downstream rename/delete
-        // ops reference the correct server ID. If the lookup fails or the label
-        // isn't found, dead-letter instead of silently dropping a potentially
-        // broken id-mapping.
+        // conflict vs. a different label), the id is rewritten in the queue, the
+        // label store and the local notes (see rewriteLabelId), so ops behind it
+        // — in this drain or a later one — reference the surviving label. If the
+        // lookup fails or the label isn't found, dead-letter instead of silently
+        // dropping a potentially broken id mapping.
         //
         // A permanently-rejected image delete (404: image or its cascade-deleted
         // parent note already gone; 403: access revoked; etc.) always resolves
@@ -1078,9 +1030,24 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
               );
               if (serverLabel) {
                 if (serverLabel.id !== clientLabelId) {
-                  // Name conflict: another label owns this name with a different server
-                  // ID. Remap so downstream rename/delete ops use the correct ID.
-                  idMap.set(clientLabelId, serverLabel.id);
+                  // Name conflict: another label owns this name under a different
+                  // id, so the client id never reaches the server. Persist the
+                  // resolution so every later op (and local copy) uses that label.
+                  await withSerializedTransaction(db, () =>
+                    rewriteLabelId(db, clientLabelId, serverLabel.id, serverLabel),
+                  );
+                  // The drain snapshot predates the rewrite: refresh the rows behind this one.
+                  const rewritten = new Map(
+                    (await db.getAllAsync<QueueEntry>('SELECT * FROM sync_queue WHERE id > ?', [entry.id]))
+                      .map((row) => [row.id, row]),
+                  );
+                  for (const later of entries) {
+                    const fresh = rewritten.get(later.id);
+                    if (fresh) {
+                      later.endpoint = fresh.endpoint;
+                      later.body = fresh.body;
+                    }
+                  }
                 }
                 idempotentConflict = true;
               }
@@ -1174,8 +1141,8 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           continue;
         }
 
-        // Cap reached — dead-letter and continue. Use the effective (id-remapped)
-        // endpoint/body so the row agrees with what was actually sent. HTTP 5xx
+        // Cap reached — dead-letter and continue. Record the
+        // endpoint/body that was actually sent. HTTP 5xx
         // keeps its status; a non-HTTP throw or a client timeout records
         // PROCESSING_ERROR_STATUS (0).
         const deadLetterStatus = status ?? PROCESSING_ERROR_STATUS;
@@ -1205,7 +1172,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
     await pullTouchedNotes(db, pullNoteIds);
   }
 
-  return { idMappings, discardedOperations, syncedSettings };
+  return { syncedNotes, discardedOperations, syncedSettings };
 }
 
 /**

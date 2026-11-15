@@ -1,5 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { DEFAULT_NOTE_COLOR } from '@jot/shared';
+import { generateClientId } from './clientId';
+import { rewriteLabelId } from './labelIdRewrite';
 
 // Migration 1: creates initial schema; idempotent via IF NOT EXISTS and column probing.
 const migration1 = async (db: SQLiteDatabase): Promise<void> => {
@@ -320,7 +322,62 @@ const migration10 = async (db: SQLiteDatabase): Promise<void> => {
   await addColumnIfMissing(db, 'notes', 'public_link_json', 'public_link_json TEXT');
 };
 
-export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10];
+// Migration 11: queue replay no longer remaps ids. Before #546 a `createLabel`
+// row carried a placeholder `local_id` (not an `id`) that the drain swapped for
+// the server's id as it replayed. Give each such row (queued or dead-lettered) a
+// real client id and point every reference to the placeholder — later queued ops,
+// the label store, notes' labels — at it, so the row replays as a normal create.
+// Idempotent: rows already in the `id` form are not touched.
+const migration11 = async (db: SQLiteDatabase): Promise<void> => {
+  const seen = new Set<string>();
+  for (const table of ['sync_queue', 'dead_letter']) {
+    const rows = await db.getAllAsync<{ id: number; body: string | null }>(
+      `SELECT id, body FROM ${table} WHERE operation = 'createLabel' AND body LIKE '%"local_id"%'`,
+    );
+    for (const row of rows) {
+      let body: { local_id?: unknown; name?: unknown } | null;
+      try {
+        body = JSON.parse(row.body ?? 'null') as { local_id?: unknown; name?: unknown } | null;
+      } catch {
+        continue;
+      }
+      if (!body || typeof body.local_id !== 'string' || typeof body.name !== 'string') continue;
+      const placeholder = body.local_id;
+      const newId = generateClientId();
+      if (!seen.has(placeholder)) {
+        seen.add(placeholder);
+        const now = new Date().toISOString();
+        const stored = await db.getFirstAsync<{ user_id: string; created_at: string }>(
+          'SELECT user_id, created_at FROM labels WHERE id = ?',
+          [placeholder],
+        );
+        await rewriteLabelId(db, placeholder, newId, {
+          id: newId,
+          user_id: stored?.user_id ?? '',
+          name: body.name,
+          created_at: stored?.created_at ?? now,
+          updated_at: now,
+        });
+      }
+      // rewriteLabelId swapped the placeholder only where it was a whole value;
+      // the row's own `local_id` key is what turns it into an `id` create.
+      const current = await db.getFirstAsync<{ body: string | null }>(`SELECT body FROM ${table} WHERE id = ?`, [row.id]);
+      let parsed: Record<string, unknown> = {};
+      try {
+        parsed = JSON.parse(current?.body ?? '{}') as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      const { local_id: replaced, ...rest } = parsed;
+      await db.runAsync(`UPDATE ${table} SET body = ? WHERE id = ?`, [
+        JSON.stringify({ id: replaced, ...rest }),
+        row.id,
+      ]);
+    }
+  }
+};
+
+export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11];
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   // Run PRAGMAs separately: sqlite3_exec (used by execAsync) stops on the

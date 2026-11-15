@@ -260,9 +260,9 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     isDrainingRef.current = true;
     let stalled = false;
     try {
-      const { idMappings, syncedSettings } = await drainQueue(db);
-      for (const { localId, serverNote } of idMappings) {
-        queryClient.setQueryData(noteLocalQueryKey(localId), serverNote);
+      const { syncedNotes, syncedSettings } = await drainQueue(db);
+      for (const serverNote of syncedNotes) {
+        queryClient.setQueryData(noteLocalQueryKey(serverNote.id), serverNote);
       }
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
