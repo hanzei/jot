@@ -68,7 +68,7 @@ type Event struct {
 // ordinary bursts (a collaborator's replayed offline session, a bulk item
 // change) and evict only a client that has genuinely stopped reading. It is
 // kept bounded so such a client is resynced promptly rather than left stale.
-const subscriberBufferSize = 64
+const subscriberBufferSize = 128
 
 // Hub manages per-user SSE subscriber channels.
 type Hub struct {
