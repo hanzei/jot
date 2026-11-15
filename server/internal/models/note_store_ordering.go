@@ -10,10 +10,10 @@ import (
 	"github.com/hanzei/jot/server/internal/logutil"
 )
 
-// touchNoteTx bumps a note's updated_at so item-level changes are reflected in
-// note ordering (updated_at sort) and client freshness checks, and records the
-// change by actorID for unread tracking (see markViewedTx). Callers invoke it
-// only when an item actually changed.
+// touchNoteTx bumps a note's updated_at so item and image changes are reflected
+// in note ordering (updated_at sort) and client freshness checks, and records
+// the change by actorID for unread tracking (see markViewedTx). Callers invoke
+// it only when an item or image actually changed.
 func touchNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, actorID, now string) error {
 	if _, err := tx.ExecContext(ctx,
 		d.RewritePlaceholders(`UPDATE notes SET updated_at = ?, `+contentChangedSet+` WHERE id = ?`),

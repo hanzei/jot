@@ -252,6 +252,21 @@ describe('useNoteImages hooks', () => {
       expect(await updatedAtOf('note-1')).toBe('2026-06-01T12:00:00.123456Z');
     });
 
+    it('never moves the note\'s updated_at backward past a newer snapshot (#1275)', async () => {
+      // A collaborator's later edit reached the cache (over SSE) before this
+      // upload's response was applied.
+      await saveNote(db, makeTextNote({ id: 'note-1', updated_at: '2026-06-01T12:00:00.5Z' }));
+      const image = makeImage({ created_at: '2026-06-01T12:00:00.123456Z' });
+      mockImagesApi.uploadNoteImage.mockResolvedValueOnce(image);
+
+      const { result } = await renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
+      const file = { uri: 'file:///photo.png', name: 'photo.png', mimeType: 'image/png' };
+      await result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file });
+
+      expect(await imagesOf('note-1')).toEqual([image]);
+      expect(await updatedAtOf('note-1')).toBe('2026-06-01T12:00:00.5Z');
+    });
+
     it('rejects and leaves the local cache untouched when the server switch is in progress', async () => {
       mockClientModule.isServerSwitchInProgress.mockReturnValue(true);
       const { result } = await renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });

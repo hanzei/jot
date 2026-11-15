@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { deleteFileIfExists } from '../utils/fs';
-import { apiPaths, type Note, type NoteItem, type NoteUnread, type GetNotesParams, type Label, type NoteShare, type NoteImage, type PublicLink, type ShareHistorySource } from '@jot/shared';
+import { apiPaths, compareServerTimestamps, type Note, type NoteItem, type NoteUnread, type GetNotesParams, type Label, type NoteShare, type NoteImage, type PublicLink, type ShareHistorySource } from '@jot/shared';
 import { getStrongRandomBytes } from '../utils/random';
 import { withSerializedTransaction } from './transaction';
 import { localCompletedWrites } from './localCompletedWrites';
@@ -487,7 +487,8 @@ export async function getLocalNote(db: SQLiteDatabase, id: string): Promise<Note
  * `touchedAt` is for this device's own uploads and deletes, whose SSE echo is
  * dropped: the server bumps the note's updated_at for an image change (#1275),
  * so the local row takes `touchedAt` as its updated_at too, but only when the
- * image list actually changed, matching the server's no-op rule. SSE patches
+ * image list actually changed, matching the server's no-op rule, and never
+ * backward past a newer value a snapshot already stored. SSE patches
  * omit it, since the note_updated that follows them carries the server's value.
  */
 export async function patchLocalNoteImages(
@@ -500,8 +501,8 @@ export async function patchLocalNoteImages(
   // two back-to-back SSE events (e.g. two rapid note_image_added) interleave
   // and have the second write clobber the first's change.
   await withSerializedTransaction(db, async () => {
-    const row = await db.getFirstAsync<Pick<NoteRow, 'images_json'>>(
-      'SELECT images_json FROM notes WHERE id = ?',
+    const row = await db.getFirstAsync<Pick<NoteRow, 'images_json' | 'updated_at'>>(
+      'SELECT images_json, updated_at FROM notes WHERE id = ?',
       [noteId],
     );
     if (!row) return;
@@ -510,16 +511,15 @@ export async function patchLocalNoteImages(
     const nextImages = updater(images);
     const changed = nextImages.length !== images.length
       || nextImages.some((img, i) => img.id !== images[i]?.id);
-    if (touchedAt !== undefined && changed) {
-      await db.runAsync(
-        'UPDATE notes SET images_json = ?, updated_at = ? WHERE id = ?',
-        [JSON.stringify(nextImages), touchedAt, noteId],
-      );
-      return;
-    }
+    // Never move updated_at backward: a newer snapshot (a collaborator's edit
+    // over SSE) can land before this device's own upload response is applied.
+    const updatedAt = touchedAt !== undefined && changed
+      && (compareServerTimestamps(touchedAt, row.updated_at) ?? 1) > 0
+      ? touchedAt
+      : row.updated_at;
     await db.runAsync(
-      'UPDATE notes SET images_json = ? WHERE id = ?',
-      [JSON.stringify(nextImages), noteId],
+      'UPDATE notes SET images_json = ?, updated_at = ? WHERE id = ?',
+      [JSON.stringify(nextImages), updatedAt, noteId],
     );
   });
 }
