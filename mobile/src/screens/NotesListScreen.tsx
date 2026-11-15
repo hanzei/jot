@@ -332,15 +332,18 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
     setIsEmptyingTrash(true);
     let serverTrashEmptied = false;
     try {
-      // DELETE /notes/trash names none of the notes it purges, so read them
-      // first and record them once it lands: a trash fetch already in flight
-      // must not write them back (#1265). Read before the request, since a
-      // sync may prune the rows while it is out.
-      const trashedNotes = await getLocalNotes(db, { trashed: true });
+      // DELETE /notes/trash names none of the notes it purges, so record them
+      // once it lands: a trash fetch already in flight must not write them
+      // back (#1265). Read the trash before the request too, since a sync may
+      // prune the rows while it is out.
+      const trashedBefore = await getLocalNotes(db, { trashed: true });
       await jot.notes.emptyTrash();
       serverTrashEmptied = true;
-      recordWriteLanded(trashedNotes.map((note) => note.id));
-      await Promise.all(trashedNotes.map((note) => permanentDeleteLocalNote(db, note.id)));
+      // Delete only what is still trashed now: a restore that landed while
+      // the request was out left the trash, and the server kept that note.
+      const trashedAfter = await getLocalNotes(db, { trashed: true });
+      recordWriteLanded([...trashedBefore, ...trashedAfter].map((note) => note.id));
+      await Promise.all(trashedAfter.map((note) => permanentDeleteLocalNote(db, note.id)));
       Alert.alert(t('dashboard.emptyTrash'), t('dashboard.trashEmptied'));
     } catch {
       if (serverTrashEmptied) {

@@ -150,6 +150,7 @@ const mockUseServerConfig = jest.requireMock('../src/hooks/useServerConfig').use
 const mockUpdateMe = jest.requireMock('../src/api/jot').jot.users.updateMe as jest.Mock;
 const mockEmptyTrash = jest.requireMock('../src/api/jot').jot.notes.emptyTrash as jest.Mock;
 const mockGetLocalNotes = jest.requireMock('../src/db/noteQueries').getLocalNotes as jest.Mock;
+const mockPermanentDeleteLocalNote = jest.requireMock('../src/db/noteQueries').permanentDeleteLocalNote as jest.Mock;
 const mockEnqueueOperation = jest.requireMock('../src/db/syncQueue').enqueueOperation as jest.Mock;
 
 const mockMutateAsync = jest.fn();
@@ -774,6 +775,28 @@ describe('NotesListScreen empty trash', () => {
     await fireEvent.press(screen.getByTestId('empty-trash-button'));
 
     await waitFor(() => expect(notesWrittenSince(since)).toEqual(new Set(['trashed-1'])));
+    alertSpy.mockRestore();
+  });
+
+  it('keeps a note restored while the purge was out (#1265)', async () => {
+    // The restore landed first, so the server kept the note; it left the
+    // local trash before the purge answered.
+    let restored = false;
+    mockGetLocalNotes.mockImplementation(async () =>
+      (restored ? [{ id: 'trashed-1' }] : [{ id: 'trashed-1' }, { id: 'restored-1' }]));
+    mockEmptyTrash.mockImplementation(async () => {
+      restored = true;
+      return { deleted_count: 1 };
+    });
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+
+    await renderTrashScreen();
+
+    await waitFor(() => expect(screen.getByTestId('empty-trash-button')).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('empty-trash-button'));
+
+    await waitFor(() => expect(mockPermanentDeleteLocalNote).toHaveBeenCalledWith(expect.anything(), 'trashed-1'));
+    expect(mockPermanentDeleteLocalNote).not.toHaveBeenCalledWith(expect.anything(), 'restored-1');
     alertSpy.mockRestore();
   });
 });
