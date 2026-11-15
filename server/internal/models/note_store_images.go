@@ -84,6 +84,11 @@ func (s *noteStore) CreateNoteImage(ctx context.Context, noteID, uploaderID, ima
 		imageID, noteID, uploaderID, filename, contentType, sizeBytes, sha256, width, height, now,
 	).Scan(&img.CreatedAt)
 	if err != nil {
+		// Concurrent uploads with the same client-supplied ID can both pass the
+		// existence check above; map the constraint violation to ErrNoteImageExists.
+		if s.d.IsUniqueConstraintError(err) {
+			return nil, ErrNoteImageExists
+		}
 		return nil, fmt.Errorf("failed to create note image: %w", err)
 	}
 
