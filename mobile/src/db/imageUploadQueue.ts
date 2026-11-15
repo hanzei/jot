@@ -211,7 +211,7 @@ export async function drainImageUploadQueue(db: SQLiteDatabase): Promise<ImageUp
         name: entry.filename,
         mimeType: entry.mime_type,
         sizeBytes: entry.size_bytes ?? undefined,
-      });
+      }, undefined, undefined, entry.id);
     } catch (err) {
       const status = axios.isAxiosError(err) ? err.response?.status : undefined;
       if (status !== undefined && !isTransientHttpStatus(status)) {
@@ -264,7 +264,7 @@ export async function drainImageUploadQueue(db: SQLiteDatabase): Promise<ImageUp
     // queue entry is done regardless of what happens next — a local-cache
     // patch failure below (e.g. a transient SQLite lock) must not leave the
     // entry `queued`, or the next drain would upload the same file again and
-    // create a duplicate image (uploadNoteImage has no idempotency key).
+    // upload the same file again (harmless: the entry id is the image's client ID, so the server returns the existing image).
     await discardEntry(db, entry);
     uploadedNoteIds.push(entry.note_id);
     try {

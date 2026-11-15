@@ -68,7 +68,7 @@ export function useUploadNoteImage() {
       const pendingCreate = await isNotePendingCreate(db, noteId);
       if (isLocalModeActive() || (isOnlineWriteAllowed(isConnected) && !pendingCreate)) {
         try {
-          const image = await uploadNoteImage(noteId, file, onProgress, signal);
+          const image = await uploadNoteImage(noteId, file, onProgress, signal, uploadId);
           // The SSE echo of this upload is dropped for the client that triggered
           // it (self-echo suppression in useSSE, keyed on the same X-Client-Id
           // header this upload just sent), so the local cache needs patching here

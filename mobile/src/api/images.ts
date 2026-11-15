@@ -36,8 +36,15 @@ export async function uploadNoteImage(
   file: ImageUploadFile,
   onUploadProgress?: (percent: number) => void,
   signal?: AbortSignal,
+  /**
+   * Client-generated image ID. The server returns the existing image for a
+   * repeated ID instead of storing a second one, so an upload whose response
+   * was lost is safe to send again.
+   */
+  imageId?: string,
 ): Promise<NoteImage> {
   const formData = new FormData();
+  if (imageId) formData.append('id', imageId);
   formData.append('file', rnFilePart(file.uri, file.name, file.mimeType));
 
   return jot.images.upload(noteId, formData, {

@@ -103,6 +103,12 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
   // for a screen reader or axe to trip over.
   const [isEditing, setIsEditing] = useState(false);
   const suggestionsRef = useRef<HTMLDivElement>(null);
+  // The blur handler's delayed dropdown close. Cleared on unmount so it cannot
+  // fire into a torn-down component (or test environment).
+  const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (blurTimeoutRef.current !== null) clearTimeout(blurTimeoutRef.current);
+  }, []);
   const listItemTextRef = useRef<HTMLTextAreaElement | null>(null);
   const renderedRef = useRef<HTMLSpanElement>(null);
   const textColumnRef = useRef<HTMLDivElement>(null);
@@ -362,7 +368,9 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
               setIsEditing(false);
               onEditingChange?.(item.id, false);
               // Delay to allow touch tap on suggestion to fire click first
-              setTimeout(() => {
+              if (blurTimeoutRef.current !== null) clearTimeout(blurTimeoutRef.current);
+              blurTimeoutRef.current = setTimeout(() => {
+                blurTimeoutRef.current = null;
                 setShowSuggestions(false);
                 setSelectedSuggestionIndex(-1);
               }, 150);
