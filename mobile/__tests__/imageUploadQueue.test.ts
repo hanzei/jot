@@ -232,7 +232,7 @@ describe('drainImageUploadQueue', () => {
       name: entry.filename,
       mimeType: entry.mime_type,
       sizeBytes: entry.size_bytes,
-    });
+    }, undefined, undefined, entry.id); // the row ID is the image's client ID, so a replay is idempotent (#1286)
     // The uploaded image lands on the note's cached metadata.
     // ...and the note takes the server's bumped updated_at, the image's created_at (#1275).
     expect(await db.getFirstAsync('SELECT images_json, updated_at FROM notes WHERE id = ?', ['note-1'])).toEqual({
@@ -537,7 +537,7 @@ describe('pending uploads survive a re-save of their note', () => {
     await saveNote(db, makeTextNote({ id: 'note-1' }));
     const result = await drainImageUploadQueue(db);
 
-    expect(mockUploadNoteImage).toHaveBeenCalledWith('note-1', expect.objectContaining({ uri: entry.local_path }));
+    expect(mockUploadNoteImage).toHaveBeenCalledWith('note-1', expect.objectContaining({ uri: entry.local_path }), undefined, undefined, entry.id);
     expect(result).toEqual({ uploadedNoteIds: ['note-1'], discardedCount: 0 });
     expect(await getPendingImageUploads(db, 'note-1')).toEqual([]);
   });

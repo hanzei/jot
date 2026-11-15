@@ -12,6 +12,7 @@ import (
 
 	"github.com/hanzei/jot/server/client"
 	"github.com/hanzei/jot/server/internal/config"
+	"github.com/hanzei/jot/server/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -465,5 +466,61 @@ func TestNoteImageThumbnailAccessControl(t *testing.T) {
 	t.Run("non-shared user cannot download the thumbnail", func(t *testing.T) {
 		_, _, err := stranger.Client.GetNoteImageThumbnail(t.Context(), img.ID)
 		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
+	})
+}
+
+func TestUploadNoteImageClientIDIsIdempotent(t *testing.T) {
+	t.Parallel()
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "imgclientid", "password123", false)
+
+	note, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "note"})
+	require.NoError(t, err)
+	other, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "other"})
+	require.NoError(t, err)
+
+	imageID, err := models.GenerateID()
+	require.NoError(t, err)
+	data := testPNG(t, 6, 6)
+
+	first, err := user.Client.UploadNoteImageWithID(t.Context(), note.ID, imageID, "a.png", bytes.NewReader(data))
+	require.NoError(t, err)
+	assert.Equal(t, imageID, first.ID)
+
+	t.Run("replay returns the same image", func(t *testing.T) {
+		again, err := user.Client.UploadNoteImageWithID(t.Context(), note.ID, imageID, "a.png", bytes.NewReader(data))
+		require.NoError(t, err)
+		assert.Equal(t, first.ID, again.ID)
+		assert.Equal(t, first.CreatedAt, again.CreatedAt)
+
+		fetched, err := user.Client.GetNote(t.Context(), note.ID)
+		require.NoError(t, err)
+		assert.Len(t, fetched.Images, 1)
+	})
+
+	t.Run("same ID on another note is a conflict", func(t *testing.T) {
+		_, err := user.Client.UploadNoteImageWithID(t.Context(), other.ID, imageID, "a.png", bytes.NewReader(data))
+		assert.Equal(t, http.StatusConflict, client.StatusCode(err))
+
+		fetched, err := user.Client.GetNote(t.Context(), other.ID)
+		require.NoError(t, err)
+		assert.Empty(t, fetched.Images)
+	})
+
+	t.Run("malformed ID is rejected", func(t *testing.T) {
+		_, err := user.Client.UploadNoteImageWithID(t.Context(), note.ID, "not a valid id!", "a.png", bytes.NewReader(data))
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	})
+
+	t.Run("replay into a full note still succeeds", func(t *testing.T) {
+		for i := range 9 {
+			img := image.NewRGBA(image.Rect(0, 0, 4, 4))
+			img.Set(0, 0, color.RGBA{R: uint8(i), A: 255})
+			_, err := user.Client.UploadNoteImage(t.Context(), note.ID, "f.png", bytes.NewReader(encodePNG(t, img)))
+			require.NoError(t, err)
+		}
+		again, err := user.Client.UploadNoteImageWithID(t.Context(), note.ID, imageID, "a.png", bytes.NewReader(data))
+		require.NoError(t, err)
+		assert.Equal(t, imageID, again.ID)
 	})
 }

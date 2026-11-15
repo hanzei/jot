@@ -142,6 +142,7 @@ var sentinels = []struct {
 	{models.ErrLabelNotFoundOrNotOwned, http.StatusNotFound, ""},
 	{models.ErrNoteExists, http.StatusConflict, ""},
 	{models.ErrNoteItemExists, http.StatusConflict, ""},
+	{models.ErrNoteImageExists, http.StatusConflict, ""},
 	{models.ErrNoteVersionConflict, http.StatusConflict, ""},
 	{models.ErrInvalidParentRef, http.StatusBadRequest, ""},
 	{models.ErrNoteFieldNotAllowed, http.StatusBadRequest, ""},

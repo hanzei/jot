@@ -1927,9 +1927,21 @@ const docTemplate = `{
                         "name": "file",
                         "in": "formData",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Client-supplied image ID. If an image with this ID already exists on the note it is returned with 200 instead of storing a second one; if it exists on another note the response is 409.",
+                        "name": "id",
+                        "in": "formData"
                     }
                 ],
                 "responses": {
+                    "200": {
+                        "description": "image with this ID already existed on the note",
+                        "schema": {
+                            "$ref": "#/definitions/models.NoteImage"
+                        }
+                    },
                     "201": {
                         "description": "Created",
                         "schema": {
@@ -1950,6 +1962,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "not found",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "image ID already exists on another note",
                         "schema": {
                             "$ref": "#/definitions/apierr.ErrorResponse"
                         }

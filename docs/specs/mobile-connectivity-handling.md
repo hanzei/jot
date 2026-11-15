@@ -318,10 +318,10 @@ handling and loop safety are two halves of the same system.)
 
 - Offline-created entities get a **server-valid client ID up front** so the
   queued create is idempotent on replay (a duplicate `id` → 409, treated as
-  already-applied — no second copy). Note-image uploads are the exception:
-  `POST /notes/{id}/images` takes no client ID, so an upload whose response was
-  lost after the server stored it is replayed as a second image. Accepted until
-  the endpoint has an idempotency key.
+  already-applied — no second copy). Note-image uploads follow the same rule
+  with a different status: `POST /notes/{id}/images` takes an optional `id` form
+  field (the upload queue's row ID), and a repeated ID on the same note returns
+  the existing image with 200 (409 if it belongs to another note).
 - Writes are **partial/field-level** where possible so a replayed op doesn't
   clobber fields another device changed concurrently.
 - Content edits are **version-guarded** (`base_version`); a 409 is *permanent*

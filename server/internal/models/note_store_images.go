@@ -19,7 +19,8 @@ func scanNoteImage(rows *sql.Rows) (NoteImage, error) {
 }
 
 // CreateNoteImage inserts a new note_images row and returns the created
-// image. When maxImages > 0 the note's image count is checked inside the
+// image. An empty imageID is generated; a caller-supplied one that is already
+// taken returns ErrNoteImageExists. When maxImages > 0 the note's image count is checked inside the
 // same transaction as the insert and ErrNoteImageCapExceeded is returned if
 // adding the image would exceed the cap — atomic, so concurrent uploads to
 // the same note cannot race past it (mirrors CreateItemWithID's maxItems
@@ -27,10 +28,12 @@ func scanNoteImage(rows *sql.Rows) (NoteImage, error) {
 // transaction to fail fast before doing upload work (hashing, decoding,
 // blob storage) for a note that is already at capacity; that pre-check is
 // just an optimization and this one is authoritative.
-func (s *noteStore) CreateNoteImage(ctx context.Context, noteID, uploaderID, filename, contentType string, sizeBytes int64, sha256 string, width, height, maxImages int) (*NoteImage, error) {
-	imageID, err := generateID()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate note image ID: %w", err)
+func (s *noteStore) CreateNoteImage(ctx context.Context, noteID, uploaderID, imageID, filename, contentType string, sizeBytes int64, sha256 string, width, height, maxImages int) (*NoteImage, error) {
+	var err error
+	if imageID == "" {
+		if imageID, err = generateID(); err != nil {
+			return nil, fmt.Errorf("failed to generate note image ID: %w", err)
+		}
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -38,6 +41,17 @@ func (s *noteStore) CreateNoteImage(ctx context.Context, noteID, uploaderID, fil
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	var exists int
+	if err = tx.QueryRowContext(ctx,
+		s.d.RewritePlaceholders(`SELECT COUNT(*) FROM note_images WHERE id = ?`),
+		imageID,
+	).Scan(&exists); err != nil {
+		return nil, fmt.Errorf("failed to check note image existence: %w", err)
+	}
+	if exists > 0 {
+		return nil, ErrNoteImageExists
+	}
 
 	if maxImages > 0 {
 		var count int

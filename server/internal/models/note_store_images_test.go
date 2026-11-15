@@ -37,7 +37,7 @@ func TestNoteImageStore(t *testing.T) {
 			store, userID, noteID := newTestNoteImageStore(t, driver)
 			ctx := t.Context()
 
-			img, err := store.CreateNoteImage(ctx, noteID, userID, "cat.png", "image/png", 1234, "deadbeef", 100, 200, 0)
+			img, err := store.CreateNoteImage(ctx, noteID, userID, "", "cat.png", "image/png", 1234, "deadbeef", 100, 200, 0)
 			require.NoError(t, err)
 			assert.True(t, IsValidID(img.ID))
 			assert.Equal(t, noteID, img.NoteID)
@@ -55,9 +55,9 @@ func TestNoteImageStore(t *testing.T) {
 			store, userID, noteID := newTestNoteImageStore(t, driver)
 			ctx := t.Context()
 
-			first, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1, 0)
+			first, err := store.CreateNoteImage(ctx, noteID, userID, "", "a.png", "image/png", 1, "sha-a", 1, 1, 0)
 			require.NoError(t, err)
-			second, err := store.CreateNoteImage(ctx, noteID, userID, "b.png", "image/png", 1, "sha-b", 1, 1, 0)
+			second, err := store.CreateNoteImage(ctx, noteID, userID, "", "b.png", "image/png", 1, "sha-b", 1, 1, 0)
 			require.NoError(t, err)
 
 			images, err := store.GetNoteImagesByNoteID(ctx, noteID)
@@ -71,7 +71,7 @@ func TestNoteImageStore(t *testing.T) {
 			store, userID, noteID := newTestNoteImageStore(t, driver)
 			ctx := t.Context()
 
-			created, err := store.CreateNoteImage(ctx, noteID, userID, "cat.png", "image/png", 1234, "deadbeef", 100, 200, 0)
+			created, err := store.CreateNoteImage(ctx, noteID, userID, "", "cat.png", "image/png", 1234, "deadbeef", 100, 200, 0)
 			require.NoError(t, err)
 
 			fetched, err := store.GetNoteImageByID(ctx, created.ID)
@@ -99,7 +99,7 @@ func TestNoteImageStore(t *testing.T) {
 			store, userID, noteID := newTestNoteImageStore(t, driver)
 			ctx := t.Context()
 
-			img, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1, 0)
+			img, err := store.CreateNoteImage(ctx, noteID, userID, "", "a.png", "image/png", 1, "sha-a", 1, 1, 0)
 			require.NoError(t, err)
 
 			deleted, err := store.DeleteNoteImage(ctx, img.ID, userID)
@@ -124,7 +124,7 @@ func TestNoteImageStore(t *testing.T) {
 			_, err := store.DeleteNoteImage(ctx, "doesnotexist0000000000", userID)
 			require.ErrorIs(t, err, ErrNoteImageNotFound)
 
-			img, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1, 0)
+			img, err := store.CreateNoteImage(ctx, noteID, userID, "", "a.png", "image/png", 1, "sha-a", 1, 1, 0)
 			require.NoError(t, err)
 			_, err = store.DeleteNoteImage(ctx, img.ID, userID)
 			require.NoError(t, err)
@@ -141,12 +141,12 @@ func TestNoteImageStore(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, 0, count)
 
-			img1, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "shared-hash", 1, 1, 0)
+			img1, err := store.CreateNoteImage(ctx, noteID, userID, "", "a.png", "image/png", 1, "shared-hash", 1, 1, 0)
 			require.NoError(t, err)
 
 			_, err = store.db.ExecContext(ctx, store.d.RewritePlaceholders(`INSERT INTO notes (id, user_id, note_type) VALUES ('note000000000000000im2', ?, 'text')`), userID)
 			require.NoError(t, err)
-			img2, err := store.CreateNoteImage(ctx, "note000000000000000im2", userID, "a-dup.png", "image/png", 1, "shared-hash", 1, 1, 0)
+			img2, err := store.CreateNoteImage(ctx, "note000000000000000im2", userID, "", "a-dup.png", "image/png", 1, "shared-hash", 1, 1, 0)
 			require.NoError(t, err)
 
 			count, err = store.GetNoteImageRefCount(ctx, "shared-hash")
@@ -176,11 +176,11 @@ func TestNoteImageStore(t *testing.T) {
 			require.NoError(t, err)
 			assert.Empty(t, counts)
 
-			_, err = store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "hash-a", 1, 1, 0)
+			_, err = store.CreateNoteImage(ctx, noteID, userID, "", "a.png", "image/png", 1, "hash-a", 1, 1, 0)
 			require.NoError(t, err)
-			_, err = store.CreateNoteImage(ctx, noteID, userID, "a-dup.png", "image/png", 1, "hash-a", 1, 1, 0)
+			_, err = store.CreateNoteImage(ctx, noteID, userID, "", "a-dup.png", "image/png", 1, "hash-a", 1, 1, 0)
 			require.NoError(t, err)
-			_, err = store.CreateNoteImage(ctx, noteID, userID, "b.png", "image/png", 1, "hash-b", 1, 1, 0)
+			_, err = store.CreateNoteImage(ctx, noteID, userID, "", "b.png", "image/png", 1, "hash-b", 1, 1, 0)
 			require.NoError(t, err)
 
 			counts, err = store.GetNoteImageRefCounts(ctx)
@@ -195,12 +195,12 @@ func TestNoteImageStore(t *testing.T) {
 			_, err := store.db.ExecContext(ctx, store.d.RewritePlaceholders(`INSERT INTO notes (id, user_id, note_type) VALUES ('note000000000000000im2', ?, 'text')`), userID)
 			require.NoError(t, err)
 
-			img1, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1, 0)
+			img1, err := store.CreateNoteImage(ctx, noteID, userID, "", "a.png", "image/png", 1, "sha-a", 1, 1, 0)
 			require.NoError(t, err)
-			img2, err := store.CreateNoteImage(ctx, "note000000000000000im2", userID, "b.png", "image/png", 1, "sha-b", 1, 1, 0)
+			img2, err := store.CreateNoteImage(ctx, "note000000000000000im2", userID, "", "b.png", "image/png", 1, "sha-b", 1, 1, 0)
 			require.NoError(t, err)
 			// A deleted image must not appear in the batch load either.
-			deletedImg, err := store.CreateNoteImage(ctx, noteID, userID, "c.png", "image/png", 1, "sha-c", 1, 1, 0)
+			deletedImg, err := store.CreateNoteImage(ctx, noteID, userID, "", "c.png", "image/png", 1, "sha-c", 1, 1, 0)
 			require.NoError(t, err)
 			_, err = store.DeleteNoteImage(ctx, deletedImg.ID, userID)
 			require.NoError(t, err)
@@ -220,11 +220,11 @@ func TestNoteImageStore(t *testing.T) {
 			ctx := t.Context()
 
 			for i := range 3 {
-				_, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, fmt.Sprintf("sha-%d", i), 1, 1, 3)
+				_, err := store.CreateNoteImage(ctx, noteID, userID, "", "a.png", "image/png", 1, fmt.Sprintf("sha-%d", i), 1, 1, 3)
 				require.NoError(t, err)
 			}
 
-			_, err := store.CreateNoteImage(ctx, noteID, userID, "over.png", "image/png", 1, "sha-over", 1, 1, 3)
+			_, err := store.CreateNoteImage(ctx, noteID, userID, "", "over.png", "image/png", 1, "sha-over", 1, 1, 3)
 			require.ErrorIs(t, err, ErrNoteImageCapExceeded)
 
 			images, err := store.GetNoteImagesByNoteID(ctx, noteID)
@@ -237,7 +237,7 @@ func TestNoteImageStore(t *testing.T) {
 			ctx := t.Context()
 
 			for i := range 5 {
-				_, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, fmt.Sprintf("sha-%d", i), 1, 1, 0)
+				_, err := store.CreateNoteImage(ctx, noteID, userID, "", "a.png", "image/png", 1, fmt.Sprintf("sha-%d", i), 1, 1, 0)
 				require.NoError(t, err)
 			}
 
@@ -260,7 +260,7 @@ func TestNoteImageEmbeddedInNote(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, note.Images)
 
-		img, err := store.CreateNoteImage(ctx, noteID, userID, "cat.png", "image/png", 1234, "deadbeef", 100, 200, 0)
+		img, err := store.CreateNoteImage(ctx, noteID, userID, "", "cat.png", "image/png", 1234, "deadbeef", 100, 200, 0)
 		require.NoError(t, err)
 
 		note, err = store.GetByID(ctx, noteID, userID)
@@ -297,7 +297,7 @@ func TestNoteHardDeletePathsReturnImageHashes(t *testing.T) {
 			store, userID, noteID := newTestNoteImageStore(t, driver)
 			ctx := t.Context()
 
-			_, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1, 0)
+			_, err := store.CreateNoteImage(ctx, noteID, userID, "", "a.png", "image/png", 1, "sha-a", 1, 1, 0)
 			require.NoError(t, err)
 			require.NoError(t, store.MoveToTrash(ctx, noteID, userID))
 
@@ -315,11 +315,11 @@ func TestNoteHardDeletePathsReturnImageHashes(t *testing.T) {
 
 			// "shared-hash" is attached to both notes (dedup); "sha-only1" only to
 			// the first. The returned set must be deduped, not a raw concatenation.
-			_, err = store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "shared-hash", 1, 1, 0)
+			_, err = store.CreateNoteImage(ctx, noteID, userID, "", "a.png", "image/png", 1, "shared-hash", 1, 1, 0)
 			require.NoError(t, err)
-			_, err = store.CreateNoteImage(ctx, noteID, userID, "b.png", "image/png", 1, "sha-only1", 1, 1, 0)
+			_, err = store.CreateNoteImage(ctx, noteID, userID, "", "b.png", "image/png", 1, "sha-only1", 1, 1, 0)
 			require.NoError(t, err)
-			_, err = store.CreateNoteImage(ctx, "note00000000000empty2", userID, "c.png", "image/png", 1, "shared-hash", 1, 1, 0)
+			_, err = store.CreateNoteImage(ctx, "note00000000000empty2", userID, "", "c.png", "image/png", 1, "shared-hash", 1, 1, 0)
 			require.NoError(t, err)
 
 			require.NoError(t, store.MoveToTrash(ctx, noteID, userID))
@@ -338,9 +338,9 @@ func TestNoteHardDeletePathsReturnImageHashes(t *testing.T) {
 			_, err := store.db.ExecContext(ctx, store.d.RewritePlaceholders(`INSERT INTO notes (id, user_id, note_type) VALUES ('note0000000000allbyu2', ?, 'text')`), userID)
 			require.NoError(t, err)
 
-			_, err = store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1, 0)
+			_, err = store.CreateNoteImage(ctx, noteID, userID, "", "a.png", "image/png", 1, "sha-a", 1, 1, 0)
 			require.NoError(t, err)
-			_, err = store.CreateNoteImage(ctx, "note0000000000allbyu2", userID, "b.png", "image/png", 1, "sha-b", 1, 1, 0)
+			_, err = store.CreateNoteImage(ctx, "note0000000000allbyu2", userID, "", "b.png", "image/png", 1, "sha-b", 1, 1, 0)
 			require.NoError(t, err)
 
 			deletedCount, shas, err := store.DeleteAllByUser(ctx, userID)
@@ -356,9 +356,9 @@ func TestNoteHardDeletePathsReturnImageHashes(t *testing.T) {
 			_, err := store.db.ExecContext(ctx, store.d.RewritePlaceholders(`INSERT INTO notes (id, user_id, note_type) VALUES ('note00000000000recent', ?, 'text')`), userID)
 			require.NoError(t, err)
 
-			_, err = store.CreateNoteImage(ctx, noteID, userID, "old.png", "image/png", 1, "sha-old", 1, 1, 0)
+			_, err = store.CreateNoteImage(ctx, noteID, userID, "", "old.png", "image/png", 1, "sha-old", 1, 1, 0)
 			require.NoError(t, err)
-			_, err = store.CreateNoteImage(ctx, "note00000000000recent", userID, "recent.png", "image/png", 1, "sha-recent", 1, 1, 0)
+			_, err = store.CreateNoteImage(ctx, "note00000000000recent", userID, "", "recent.png", "image/png", 1, "sha-recent", 1, 1, 0)
 			require.NoError(t, err)
 
 			require.NoError(t, store.MoveToTrash(ctx, noteID, userID))
@@ -408,11 +408,11 @@ func TestGetNoteImageSHA256sForUserTx(t *testing.T) {
 		sharedUploaderID := "user0000000shareduser"
 
 		// Image the owner attached to their own note.
-		_, err = store.CreateNoteImage(ctx, ownedNoteID, ownerID, "owned.png", "image/png", 1, "sha-owned", 1, 1, 0)
+		_, err = store.CreateNoteImage(ctx, ownedNoteID, ownerID, "", "owned.png", "image/png", 1, "sha-owned", 1, 1, 0)
 		require.NoError(t, err)
 		// Image sharedUploaderID uploaded onto the owner's note (a collaborator
 		// upload) — reachable via uploader_id, not via owning any note.
-		_, err = store.CreateNoteImage(ctx, ownedNoteID, sharedUploaderID, "uploaded.png", "image/png", 1, "sha-uploaded", 1, 1, 0)
+		_, err = store.CreateNoteImage(ctx, ownedNoteID, sharedUploaderID, "", "uploaded.png", "image/png", 1, "sha-uploaded", 1, 1, 0)
 		require.NoError(t, err)
 
 		tx, err := store.db.BeginTx(ctx, nil)
@@ -438,9 +438,9 @@ func TestGetNoteImageCountByNoteID(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 0, count)
 
-		_, err = store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1, 0)
+		_, err = store.CreateNoteImage(ctx, noteID, userID, "", "a.png", "image/png", 1, "sha-a", 1, 1, 0)
 		require.NoError(t, err)
-		_, err = store.CreateNoteImage(ctx, noteID, userID, "b.png", "image/png", 1, "sha-b", 1, 1, 0)
+		_, err = store.CreateNoteImage(ctx, noteID, userID, "", "b.png", "image/png", 1, "sha-b", 1, 1, 0)
 		require.NoError(t, err)
 
 		count, err = store.GetNoteImageCountByNoteID(ctx, noteID)
