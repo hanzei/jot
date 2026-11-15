@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
@@ -226,9 +227,21 @@ export function useCreateLabel() {
       assertSwitchWriteAllowed();
       const trimmed = name.trim();
       if (!trimmed) throw new LocalizedError('labels.nameRequired', 'Label name must not be empty');
+      // Mint the ID before the online attempt so a create that times out after the
+      // server committed it is replayed under the same ID (a 409 the drain treats
+      // as already applied) rather than minting a second label (#1278).
+      const localLabel = buildLocalLabel(trimmed, user?.id ?? '');
       if (isOnlineWriteAllowed(isConnected)) {
         try {
-          const serverLabel = await jot.labels.create(trimmed);
+          let serverLabel: Label;
+          try {
+            serverLabel = await jot.labels.create(trimmed, localLabel.id);
+          } catch (err) {
+            // An ID'd create is strict: a 409 means the name already exists.
+            // Resolve it by name, as a create without an ID always did.
+            if (!(axios.isAxiosError(err) && err.response?.status === 409)) throw err;
+            serverLabel = await jot.labels.create(trimmed);
+          }
           // Persist to the canonical label store so the new (empty) label shows in
           // the drawer immediately — it isn't attached to any note yet (#691).
           await upsertLabel(db, serverLabel);
@@ -245,7 +258,6 @@ export function useCreateLabel() {
       // as the label's primary key (#546), so no ID reconciliation is needed on
       // replay. The label is written to the local store so an empty label survives
       // regardless of note state (#691).
-      const localLabel = buildLocalLabel(trimmed, user?.id ?? '');
       await enqueueOperation(db, {
         operation: 'createLabel',
         endpoint: apiPaths.labels,

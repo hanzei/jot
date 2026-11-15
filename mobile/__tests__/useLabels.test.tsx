@@ -171,7 +171,7 @@ describe('useLabels write hooks', () => {
       await result.current.mutateAsync({ name: 'Work' });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockJot.labels.create).toHaveBeenCalledWith('Work');
+      expect(mockJot.labels.create).toHaveBeenCalledWith('Work', expect.any(String));
       expect(await queuedOperations()).toEqual([]);
     });
   });
@@ -185,12 +185,37 @@ describe('useLabels write hooks', () => {
       await result.current.mutateAsync({ name: '  Work  ' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(mockJot.labels.create).toHaveBeenCalledWith('Work');
+      expect(mockJot.labels.create).toHaveBeenCalledWith('Work', expect.any(String));
       expect(result.current.data).toEqual(serverLabel);
       // The new label is persisted to the store so an empty label (no notes yet)
       // shows in the drawer immediately (#691).
       expect(mockNoteQueries.upsertLabel).toHaveBeenCalledWith(expect.anything(), serverLabel);
       expect(await noteQueriesModule.getStoredLabels(db)).toEqual([serverLabel]);
+      expect(await queuedOperations()).toEqual([]);
+    });
+
+    it('queues the ID the timed-out online request carried (#1278)', async () => {
+      mockJot.labels.create.mockRejectedValueOnce(makeNetworkError());
+
+      const { result } = await renderHook(() => useCreateLabel(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ name: 'Work' });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      const sentId = mockJot.labels.create.mock.calls[0]![1];
+      expect(result.current.data?.id).toBe(sentId);
+      expect(await queuedOperations()).toEqual(['createLabel']);
+    });
+
+    it('falls back to get-or-create by name when the ID create hits an existing name (409)', async () => {
+      const existing = { id: 'srv1', user_id: 'u1', name: 'Work', created_at: '', updated_at: '' };
+      mockJot.labels.create.mockRejectedValueOnce(makeAxiosError(409)).mockResolvedValueOnce(existing as never);
+
+      const { result } = await renderHook(() => useCreateLabel(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ name: 'Work' });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockJot.labels.create).toHaveBeenLastCalledWith('Work');
+      expect(result.current.data).toEqual(existing);
       expect(await queuedOperations()).toEqual([]);
     });
 
