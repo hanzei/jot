@@ -643,13 +643,7 @@ export async function markLocalNoteRestored(db: SQLiteDatabase, id: string): Pro
  * circular import (that module already imports from this one).
  */
 export async function permanentDeleteLocalNote(db: SQLiteDatabase, id: string): Promise<void> {
-  const pendingUploads = await db.getAllAsync<{ local_path: string }>(
-    'SELECT local_path FROM pending_image_uploads WHERE note_id = ?',
-    [id],
-  );
-  for (const row of pendingUploads) {
-    deleteFileIfExists(row.local_path);
-  }
+  await deleteUploadFilesWhere(db, 'note_id = ?', [id]);
   await db.runAsync('DELETE FROM notes WHERE id = ?', [id]);
 }
 
@@ -1074,11 +1068,12 @@ async function removeLocalNotesNotInTx(
     }
 
     const placeholders = candidateIds.map(() => '?').join(', ');
+    await deleteUploadFilesWhere(db, `note_id IN (${placeholders})`, candidateIds);
     await db.runAsync(`DELETE FROM notes WHERE id IN (${placeholders})`, candidateIds);
     return;
   }
 
-  let sql = `DELETE FROM notes WHERE ${scopedWhereSql}`;
+  let whereSql = scopedWhereSql;
   const args = [...scopeArgs];
 
   // Protect both notes still on the server and notes with a pending op:
@@ -1086,11 +1081,29 @@ async function removeLocalNotesNotInTx(
   const protectedIds = new Set([...serverIds, ...(skipNoteIds ?? [])]);
   if (protectedIds.size > 0) {
     const placeholders = Array.from(protectedIds).map(() => '?').join(', ');
-    sql += ` AND id NOT IN (${placeholders})`;
+    whereSql += ` AND id NOT IN (${placeholders})`;
     args.push(...protectedIds);
   }
 
-  await db.runAsync(sql, args);
+  await deleteUploadFilesWhere(db, `note_id IN (SELECT id FROM notes WHERE ${whereSql})`, args);
+  await db.runAsync(`DELETE FROM notes WHERE ${whereSql}`, args);
+}
+
+/**
+ * Best-effort removal of the copied files of `pending_image_uploads` rows
+ * matching `where`, ahead of a raw `DELETE FROM notes` whose cascade would drop
+ * the rows but leak the files (#1279). Mirrors {@link permanentDeleteLocalNote}.
+ */
+async function deleteUploadFilesWhere(
+  db: SQLiteDatabase,
+  where: string,
+  args: (string | number | null)[],
+): Promise<void> {
+  const rows = await db.getAllAsync<{ local_path: string }>(
+    `SELECT local_path FROM pending_image_uploads WHERE ${where}`,
+    args,
+  );
+  for (const row of rows) deleteFileIfExists(row.local_path);
 }
 
 /**

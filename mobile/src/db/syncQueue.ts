@@ -453,15 +453,33 @@ export async function getPendingNoteIds(db: SQLiteDatabase): Promise<Set<string>
 
 /**
  * Notes that server-sourced writes must leave untouched: those with a pending
- * queue op (#487) plus those marked `sync_state = 'failed'` after a dead-lettered
- * op (#492). A dead-lettered note no longer has a queue row, so the failed flag
+ * queue op (#487), those with a queued or errored image upload (#1279), plus
+ * those marked `sync_state = 'failed'` after a dead-lettered op (#492). A dead-lettered note no longer has a queue row, so the failed flag
  * is what keeps its preserved local content from being overwritten or pruned by
  * a later background fetch / SSE event.
  */
 export async function getProtectedNoteIds(db: SQLiteDatabase): Promise<Set<string>> {
-  const [pending, failed] = await Promise.all([getPendingNoteIds(db), getFailedNoteIds(db)]);
+  const [pending, failed, uploads] = await Promise.all([
+    getPendingNoteIds(db),
+    getFailedNoteIds(db),
+    getNoteIdsWithPendingUploads(db),
+  ]);
   for (const id of failed) pending.add(id);
+  for (const id of uploads) pending.add(id);
   return pending;
+}
+
+/**
+ * Notes with a `queued` or `error` row in `pending_image_uploads`. A queued photo
+ * is an unsynced local change that has no `sync_queue` row, and the upload row
+ * cascade-deletes with its note, so pruning the note would drop the photo
+ * unuploaded (#1279).
+ */
+async function getNoteIdsWithPendingUploads(db: SQLiteDatabase): Promise<Set<string>> {
+  const rows = await db.getAllAsync<{ note_id: string }>(
+    `SELECT DISTINCT note_id FROM pending_image_uploads WHERE status IN ('queued', 'error')`,
+  );
+  return new Set(rows.map((r) => r.note_id));
 }
 
 /**
