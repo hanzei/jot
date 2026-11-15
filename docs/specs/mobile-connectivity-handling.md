@@ -318,7 +318,9 @@ handling and loop safety are two halves of the same system.)
 
 - Offline-created entities get a **server-valid client ID up front** so the
   queued create is idempotent on replay (a duplicate `id` → 409, treated as
-  already-applied — no second copy). Note-image uploads are the exception:
+  already-applied — no second copy). The online attempt sends those same IDs,
+  so a create that times out after the server committed it replays as that 409
+  rather than as a second entity. Note-image uploads are the exception:
   `POST /notes/{id}/images` takes no client ID, so an upload whose response was
   lost after the server stored it is replayed as a second image. Accepted until
   the endpoint has an idempotency key.

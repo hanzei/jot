@@ -204,6 +204,8 @@ describe('useLabels write hooks', () => {
       const sentId = mockJot.labels.create.mock.calls[0]![1];
       expect(result.current.data?.id).toBe(sentId);
       expect(await queuedOperations()).toEqual(['createLabel']);
+      const row = await db.getFirstAsync<{ body: string }>('SELECT body FROM sync_queue');
+      expect(JSON.parse(row!.body)).toEqual({ id: sentId, name: 'Work' });
     });
 
     it('falls back to get-or-create by name when the ID create hits an existing name (409)', async () => {
