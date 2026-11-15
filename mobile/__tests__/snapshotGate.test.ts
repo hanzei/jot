@@ -43,8 +43,12 @@ describe('snapshotGate', () => {
     expect(notesWrittenSince(mark)).toEqual(new Set(['patched', 'created', 'item-note', 'gone']));
   });
 
-  it('ignores reads and writes that touch no note', () => {
+  it('ignores reads, writes that touch no note, and viewed pings', () => {
     const mark = snapshotMark();
+
+    // Marking a note read changes no content, and it fires as the editor opens
+    // alongside the note's own refresh.
+    recordWriteResponse('post', '/notes/opened/viewed', undefined);
 
     recordWriteResponse('get', '/notes/read', undefined);
     recordWriteResponse('post', '/labels', JSON.stringify({ name: 'x' }));
@@ -103,6 +107,23 @@ describe('server snapshot writers (#1265)', () => {
 
     expect(await contentOf('written')).toMatchObject({ content: 'local' });
     expect(await contentOf('other')).toMatchObject({ content: 'server' });
+  });
+
+  it("does not apply a stale snapshot's public link to a note this device wrote since", async () => {
+    // A link this device created landed while the list was in flight; the
+    // list still shows the note without one.
+    const link = { token: 'tok', created_by: 'u1', created_at: '', expires_at: null };
+    await saveNote(db, makeTextNote({ id: 'linked', public_link: link }));
+    const since = snapshotMark();
+    recordWriteLanded(['linked']);
+
+    await saveServerNotesScope(db, [makeTextNote({ id: 'linked', public_link: null })], undefined, since);
+
+    const row = await db.getFirstAsync<{ public_link_json: string | null }>(
+      'SELECT public_link_json FROM notes WHERE id = ?',
+      ['linked'],
+    );
+    expect(row?.public_link_json).not.toBeNull();
   });
 
   it('getSnapshotSkipNoteIds joins the protected set with the landings', async () => {

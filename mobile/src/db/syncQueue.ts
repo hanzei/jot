@@ -468,9 +468,18 @@ export async function getProtectedNoteIds(db: SQLiteDatabase): Promise<Set<strin
  * (#1265; see snapshotGate.ts).
  */
 export async function getSnapshotSkipNoteIds(db: SQLiteDatabase, since: SnapshotMark): Promise<Set<string>> {
-  const ids = await getProtectedNoteIds(db);
-  for (const id of notesWrittenSince(since)) ids.add(id);
-  return ids;
+  return (await readSnapshotSkips(db, since)).skipNoteIds;
+}
+
+/** {@link getSnapshotSkipNoteIds}, keeping the notes written since `since` apart. */
+async function readSnapshotSkips(
+  db: SQLiteDatabase,
+  since: SnapshotMark,
+): Promise<{ skipNoteIds: Set<string>; writtenNoteIds: Set<string> }> {
+  const skipNoteIds = await getProtectedNoteIds(db);
+  const writtenNoteIds = notesWrittenSince(since);
+  for (const id of writtenNoteIds) skipNoteIds.add(id);
+  return { skipNoteIds, writtenNoteIds };
 }
 
 /**
@@ -534,7 +543,7 @@ export async function getQueuedCompletedItemIds(
  * inside the write's transaction.
  */
 export async function saveServerNotes(db: SQLiteDatabase, notes: Note[], since: SnapshotMark): Promise<void> {
-  await saveServerSnapshotNotes(db, notes, () => getSnapshotSkipNoteIds(db, since));
+  await saveServerSnapshotNotes(db, notes, () => readSnapshotSkips(db, since));
 }
 
 /**
@@ -578,7 +587,7 @@ export async function saveServerNotesScope(
   params: GetNotesParams | undefined,
   since: SnapshotMark,
 ): Promise<void> {
-  await reconcileServerNotesScope(db, serverNotes, params, () => getSnapshotSkipNoteIds(db, since));
+  await reconcileServerNotesScope(db, serverNotes, params, () => readSnapshotSkips(db, since));
 }
 
 function remapValue(value: unknown, idMap: Map<string, string>): unknown {
@@ -941,9 +950,11 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         }
       }
 
-      // The API client records the landing too, but only from what was sent:
-      // a removeImage replay sends no body, so its note id is only here (#1265).
-      recordWriteLanded(affectedNoteIds(endpoint, body));
+      // The API client already recorded this landing from the request, except
+      // for a removeImage replay: it sends no body, so its note id is only
+      // here (#1265). Recording a landing twice would skip a snapshot fetched
+      // between the two.
+      if (entry.operation === 'removeImage') recordWriteLanded(affectedNoteIds(endpoint, body));
       await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
 
       // The write landed: if this note was carrying a prior failure, clear it so
@@ -966,7 +977,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // reconciled by the next server fetch / SSE event. Attempt counting is
         // reserved for failures *before* the request lands (issue #714).
         console.warn(`Queue entry id=${entry.id} landed server-side; post-response reconciliation failed:`, err);
-        recordWriteLanded(affectedNoteIds(endpoint, body));
+        if (entry.operation === 'removeImage') recordWriteLanded(affectedNoteIds(endpoint, body));
         await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
         continue;
       }
@@ -1083,8 +1094,10 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           );
           // The end state is already on the server (an earlier attempt landed
           // unseen, or the target is gone), and the row that gated snapshots is
-          // about to go: a snapshot in flight may predate it (#1265).
-          recordWriteLanded(affectedNoteIds(endpoint, body));
+          // about to go: a snapshot in flight may predate it (#1265). The API
+          // client records only 2xx responses, so this one is ours to record.
+          // A viewed ping changes no content (see recordWriteResponse).
+          if (entry.operation !== 'markViewed') recordWriteLanded(affectedNoteIds(endpoint, body));
         }
 
         await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);

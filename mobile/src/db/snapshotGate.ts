@@ -46,6 +46,9 @@ export function notesWrittenSince(mark: SnapshotMark): Set<string> {
  */
 export function recordWriteResponse(method: string | undefined, url: string | undefined, data: unknown): void {
   if (!url || !method || method.toLowerCase() === 'get') return;
+  // POST /notes/{id}/viewed only marks the note read. It fires as the editor
+  // opens, alongside the note's own refresh, which it must not hold back.
+  if (url.split('?')[0]!.endsWith('/viewed')) return;
   const ids = new Set<string>();
   collectNoteIds(url, parseRequestBody(data), ids);
   if (ids.size > 0) recordWriteLanded(ids);

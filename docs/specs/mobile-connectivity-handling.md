@@ -387,6 +387,8 @@ SSE event) and the response to this device's own write.
 - A **protected** note is one with a queued op, a write in flight (§8.2), or
   an unresolved failed change (§8.4). A snapshot is not applied to a protected note. The one exception is a
   field only the server owns and no local edit can touch (the public link).
+  It does not extend to a note skipped as older than this device's own write
+  (below): that write may be the link change itself.
 - The protected check and the write happen in **one transaction**. Reading the
   protected set first and writing afterwards lets a write slip in between.
 - A snapshot **older than one of this device's writes** is not applied to the

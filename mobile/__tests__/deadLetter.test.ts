@@ -298,6 +298,39 @@ describe('drainQueue dead-letter persistence', () => {
     expect(notesWrittenSince(since)).toEqual(new Set(['created']));
   });
 
+  it('leaves a successful replay to the API client, which already recorded it (#1265)', async () => {
+    // Recording it again at row deletion would skip a snapshot fetched between
+    // the response and the delete, which already holds the write.
+    await saveNote(db, makeTextNote('n1'));
+    await seedQueueEntry(db, {
+      operation: 'update',
+      endpoint: '/notes/n1',
+      method: 'PATCH',
+      body: { pinned: true },
+    });
+    mockApi.patch.mockResolvedValueOnce({ data: buildTextNote({ id: 'n1', pinned: true }) } as never);
+    const since = snapshotMark();
+
+    await drainQueue(db);
+
+    expect(notesWrittenSince(since)).toEqual(new Set());
+  });
+
+  it('records no landing for a dropped markViewed, which changes no content (#1265)', async () => {
+    await saveNote(db, makeTextNote('n1'));
+    await seedQueueEntry(db, {
+      operation: 'markViewed',
+      endpoint: '/notes/n1/viewed',
+      method: 'POST',
+    });
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(409));
+    const since = snapshotMark();
+
+    await drainQueue(db);
+
+    expect(notesWrittenSince(since)).toEqual(new Set());
+  });
+
   it('drops a permanently-rejected markViewed without flagging the note', async () => {
     // Marking a note viewed is best-effort: a rejection (say the note was
     // unshared meanwhile) only leaves a badge the next server fetch reconciles.
