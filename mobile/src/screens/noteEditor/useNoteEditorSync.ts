@@ -14,6 +14,7 @@ import {
   type Note,
   type NoteScalars,
   type UpdateNoteRequest,
+  patchTouchesSharedContent,
 } from '@jot/shared';
 import {
   useCreateNote,
@@ -482,7 +483,10 @@ export function useNoteEditorSync({
         }, savedScalarsRef.current);
         if (scalarData) {
           const saved = await updateMutateRef.current({ id: currentNoteId, data: scalarData, baseVersion: savedVersionRef.current });
-          savedVersionRef.current = saved.version;
+          // Only a content write is version-guarded: its response carries our own
+          // write's version. A per-user-only patch (pin/colour) can return a newer
+          // note whose text the editor never applied, which must not become the baseline.
+          if (patchTouchesSharedContent(scalarData)) savedVersionRef.current = saved.version;
         }
 
         // Items are persisted as granular per-item operations.

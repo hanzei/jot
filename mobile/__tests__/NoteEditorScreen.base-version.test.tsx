@@ -1,4 +1,4 @@
-import { render, fireEvent, act } from '@testing-library/react-native';
+import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
 import {
   mockUseRoute,
   mockNavigationAddListener,
@@ -55,5 +55,33 @@ describe('NoteEditorScreen save base version (#1277)', () => {
       data: { content: 'Hello, my edit' },
       baseVersion: 5,
     });
+  });
+  it('does not adopt the version a pin-only patch returns as its baseline', async () => {
+    mockUseOfflineNote.mockReturnValue({ data: textNote() });
+    const { getByTestId } = await render(<NoteEditorScreen />);
+
+    // Pin PATCH held in flight: pinned is changed locally, baseline not committed.
+    mockUpdateMutateAsync.mockImplementationOnce(() => new Promise(() => {}));
+    await act(() => { void fireEvent.press(getByTestId('toolbar-pin-btn')); });
+
+    // Type and revert, so the flush patches only `pinned`; the server answers with
+    // a collaborator's newer version whose text the editor never applied.
+    await fireEvent.press(getByTestId('content-preview'));
+    await fireEvent.changeText(getByTestId('note-content-input'), 'Hello!');
+    await fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
+    mockUpdateMutateAsync.mockResolvedValueOnce({ version: 8 });
+    const event = { preventDefault: jest.fn(), data: { action: { type: 'GO_BACK' } } };
+    await act(() => { getBeforeRemoveHandler()!(event); });
+    expect(mockUpdateMutateAsync).toHaveBeenLastCalledWith(
+      expect.objectContaining({ data: { pinned: true } }),
+    );
+
+    await fireEvent.changeText(getByTestId('note-content-input'), 'Hello, my edit');
+    // The autosave debounce flushes the follow-up content edit.
+    await waitFor(() => expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(3), { timeout: 3000 });
+
+    expect(mockUpdateMutateAsync).toHaveBeenLastCalledWith(
+      expect.objectContaining({ data: { content: 'Hello, my edit' }, baseVersion: 5 }),
+    );
   });
 });
