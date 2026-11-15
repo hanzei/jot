@@ -4963,7 +4963,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "id": {
-                    "description": "ID is not a secret: note endpoints check access themselves.",
                     "type": "string"
                 },
                 "images": {
