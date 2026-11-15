@@ -489,7 +489,7 @@ describe('useNotes hooks', () => {
 
     it('useConvertNoteType queues the conversion', async () => {
       const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
-      await result.current.mutateAsync(PENDING_ID);
+      await result.current.mutateAsync({ id: PENDING_ID });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(mockJot.notes.convert).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
@@ -879,6 +879,28 @@ describe('useNotes hooks', () => {
       // that raced a concurrent edit (#489).
       expect(mockJot.notes.update).toHaveBeenCalledWith('123', { content: 'New body', base_version: 9 });
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+    });
+
+    it('sends the editor-supplied baseVersion instead of the row version (#1277)', async () => {
+      // A collaborator's snapshot (v9) landed in the row while the user was typing
+      // from v5: the write must carry v5 so the server answers 409.
+      mockJot.notes.update.mockResolvedValueOnce({ ...existingNote, version: 10 } as never);
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingNote as never);
+
+      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ id: '123', data: { content: 'Mine' }, baseVersion: 5 });
+
+      expect(mockJot.notes.update).toHaveBeenCalledWith('123', { content: 'Mine', base_version: 5 });
+    });
+
+    it('returns the caller baseVersion when the edit is queued, not the row version (#1277)', async () => {
+      mockJot.notes.update.mockRejectedValueOnce(makeAxiosError(503));
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingNote as never);
+
+      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+      const returned = await result.current.mutateAsync({ id: '123', data: { content: 'Mine' }, baseVersion: 5 });
+
+      expect(returned.version).toBe(5);
     });
 
     it('falls back to the local queue when a transient failure (5xx) occurs', async () => {
@@ -1796,6 +1818,16 @@ describe('useNotes hooks', () => {
       user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
     };
 
+    it('sends the editor-supplied baseVersion on convert (#1277)', async () => {
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce({ ...sourceTextNote, version: 9 } as never);
+      mockJot.notes.convert.mockResolvedValueOnce({ ...sourceTextNote, note_type: 'list', items: [], version: 10 } as never);
+
+      const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ id: '123', baseVersion: 3 });
+
+      expect(mockJot.notes.convert).toHaveBeenCalledWith('123', expect.objectContaining({ base_version: 3 }));
+    });
+
     it('converts a text note to a list via the API (precomputed items) and caches it locally', async () => {
       const converted = {
         id: '123', note_type: 'list', title: '', version: 4,
@@ -1812,7 +1844,7 @@ describe('useNotes hooks', () => {
 
       const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
-      const returned = await result.current.mutateAsync('123');
+      const returned = await result.current.mutateAsync({ id: '123' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -1839,7 +1871,7 @@ describe('useNotes hooks', () => {
 
       const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
-      await result.current.mutateAsync('123');
+      await result.current.mutateAsync({ id: '123' });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(mockJot.notes.convert).toHaveBeenCalledWith('123', {
@@ -1871,7 +1903,7 @@ describe('useNotes hooks', () => {
 
       const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
-      await result.current.mutateAsync('456');
+      await result.current.mutateAsync({ id: '456' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -1887,7 +1919,7 @@ describe('useNotes hooks', () => {
 
       const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
-      await result.current.mutateAsync('missing').catch(() => {});
+      await result.current.mutateAsync({ id: 'missing' }).catch(() => {});
 
       await waitFor(() => expect(result.current.isError).toBe(true));
       expect((result.current.error as Error).message).toMatch(/not found/i);
@@ -1900,7 +1932,7 @@ describe('useNotes hooks', () => {
 
       const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
-      await result.current.mutateAsync('123').catch(() => {});
+      await result.current.mutateAsync({ id: '123' }).catch(() => {});
 
       await waitFor(() => expect(result.current.isError).toBe(true));
       const error = result.current.error as InstanceType<typeof NoteConversionCapError>;
@@ -1917,7 +1949,7 @@ describe('useNotes hooks', () => {
 
       const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
-      await result.current.mutateAsync('123').catch(() => {});
+      await result.current.mutateAsync({ id: '123' }).catch(() => {});
 
       await waitFor(() => expect(result.current.isError).toBe(true));
       const error = result.current.error as InstanceType<typeof NoteConversionCapError>;
@@ -1943,7 +1975,7 @@ describe('useNotes hooks', () => {
 
       const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
-      const localConverted = await result.current.mutateAsync('123');
+      const localConverted = await result.current.mutateAsync({ id: '123' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -1977,7 +2009,7 @@ describe('useNotes hooks', () => {
 
       const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
-      const localConverted = await result.current.mutateAsync('123');
+      const localConverted = await result.current.mutateAsync({ id: '123' });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       const listNote = localConverted as { title: string; items: Array<{ text: string }> };
@@ -1999,7 +2031,7 @@ describe('useNotes hooks', () => {
 
       const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
-      const localConverted = await result.current.mutateAsync('123');
+      const localConverted = await result.current.mutateAsync({ id: '123' });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       const items = (localConverted as { items: Array<{ id: string; text: string; parent_id: string | null }> }).items;
@@ -2018,7 +2050,7 @@ describe('useNotes hooks', () => {
 
       const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
-      await result.current.mutateAsync('missing').catch(() => {});
+      await result.current.mutateAsync({ id: 'missing' }).catch(() => {});
 
       await waitFor(() => expect(result.current.isError).toBe(true));
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
@@ -2039,7 +2071,7 @@ describe('useNotes hooks', () => {
 
       const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
-      await result.current.mutateAsync('123');
+      await result.current.mutateAsync({ id: '123' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -2056,7 +2088,7 @@ describe('useNotes hooks', () => {
 
       const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
-      await result.current.mutateAsync('123');
+      await result.current.mutateAsync({ id: '123' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalled();
@@ -2068,7 +2100,7 @@ describe('useNotes hooks', () => {
 
       const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
-      await result.current.mutateAsync('123').catch(() => {});
+      await result.current.mutateAsync({ id: '123' }).catch(() => {});
 
       await waitFor(() => expect(result.current.isError).toBe(true));
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
