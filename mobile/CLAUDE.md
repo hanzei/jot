@@ -124,7 +124,10 @@ What the device may believe after a sync (spec §8). These are the target; spec
 - **A protected note** (queued op, write in flight, or an unresolved failed
   change) takes no server content, from a snapshot or from the response to
   another write. Check and write in one transaction.
-- **Never apply a snapshot older than the local row** (`updated_at`).
+- **Never apply a snapshot older than this device's own write to the note.**
+  Take a `snapshotMark()` before fetching and pass it to the `saveServerNote*`
+  writer (`src/db/snapshotGate.ts`); never compare `updated_at`, which mixes
+  device and server clocks.
 - **After a write lands,** apply the response in full only when nothing else is
   queued for the note and it has no unresolved failed change; otherwise take
   neither content nor version.

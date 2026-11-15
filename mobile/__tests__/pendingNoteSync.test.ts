@@ -5,6 +5,7 @@
  */
 
 import { getPendingNoteIds, saveServerNote, saveServerNotes, saveServerNotesScope } from '../src/db/syncQueue';
+import { snapshotMark } from '../src/db/snapshotGate';
 import { saveNote, saveNotes, removeLocalNotesNotIn } from '../src/db/noteQueries';
 import { makeTextNote as buildTextNote } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
@@ -159,13 +160,13 @@ describe('saveServerNote / saveServerNotes', () => {
   it('skips a single note that has a pending queue op, reading the queue itself', async () => {
     await queue('/notes/n1');
 
-    await saveServerNote(db, makeTextNote('n1'));
+    await saveServerNote(db, makeTextNote('n1'), snapshotMark());
 
     expect(await localNoteIds()).toEqual([]);
   });
 
   it('persists a single note with no pending op', async () => {
-    await saveServerNote(db, makeTextNote('n1'));
+    await saveServerNote(db, makeTextNote('n1'), snapshotMark());
 
     expect(await localNoteIds()).toEqual(['n1']);
   });
@@ -174,7 +175,7 @@ describe('saveServerNote / saveServerNotes', () => {
     await queue('/notes/pending');
     db.getAllAsync.mockClear();
 
-    await saveServerNotes(db, [makeTextNote('keep'), makeTextNote('pending')]);
+    await saveServerNotes(db, [makeTextNote('keep'), makeTextNote('pending')], snapshotMark());
 
     // The protected set is the pending-queue read plus the failed-notes read —
     // two reads total per batch, not one per note (which would be N+1).
@@ -189,7 +190,7 @@ describe('saveServerNote / saveServerNotes', () => {
     await saveNote(db, buildTextNote({ id: 'failed', content: 'unsent edit' }));
     await db.runAsync(`UPDATE notes SET sync_state = 'failed' WHERE id = ?`, ['failed']);
 
-    await saveServerNotes(db, [buildTextNote({ id: 'failed', content: 'server copy' })]);
+    await saveServerNotes(db, [buildTextNote({ id: 'failed', content: 'server copy' })], snapshotMark());
 
     expect(await db.getFirstAsync('SELECT content FROM notes WHERE id = ?', ['failed'])).toEqual({
       content: 'unsent edit',
@@ -203,7 +204,7 @@ describe('saveServerNotesScope', () => {
   it('persists fetched notes but skips ones with a pending op', async () => {
     await queue('/notes/pending');
 
-    await saveServerNotesScope(db, [makeTextNote('keep'), makeTextNote('pending')]);
+    await saveServerNotesScope(db, [makeTextNote('keep'), makeTextNote('pending')], undefined, snapshotMark());
 
     expect(await localNoteIds()).toEqual(['keep']);
   });
@@ -215,7 +216,7 @@ describe('saveServerNotesScope', () => {
     await saveNote(db, makeTextNote('stale'));
     await queue('/notes/restored/restore');
 
-    await saveServerNotesScope(db, [makeTextNote('on-server')]);
+    await saveServerNotesScope(db, [makeTextNote('on-server')], undefined, snapshotMark());
 
     // 'stale' is pruned; 'restored' survives on the strength of its queued op.
     expect(await localNoteIds()).toEqual(['on-server', 'restored']);
@@ -224,7 +225,7 @@ describe('saveServerNotesScope', () => {
   it('reads the pending queue only once for the whole reconcile', async () => {
     db.getAllAsync.mockClear();
 
-    await saveServerNotesScope(db, [makeTextNote('a')]);
+    await saveServerNotesScope(db, [makeTextNote('a')], undefined, snapshotMark());
 
     const queueReads = db.getAllAsync.mock.calls.filter((c) => String(c[0]).includes('FROM sync_queue'));
     expect(queueReads).toHaveLength(1);

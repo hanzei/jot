@@ -14,6 +14,7 @@ import {
   saveServerNote,
   QUEUED_WRITE_TIMEOUT_MS,
 } from '../src/db/syncQueue';
+import { notesWrittenSince, snapshotMark } from '../src/db/snapshotGate';
 import { getFailedNoteIds, saveNote } from '../src/db/noteQueries';
 import api from '../src/api/client';
 import { makeTextNote as buildTextNote, remainingQueueIds, seedQueueEntry } from './helpers/fixtures';
@@ -262,6 +263,74 @@ describe('drainQueue dead-letter persistence', () => {
     expect(discardedOperations).toEqual([{ operation: 'removeImage', endpoint: '/images/img1', status: 403 }]);
   });
 
+  it('records the landing of a replayed removeImage, whose request names no note (#1265)', async () => {
+    // The DELETE goes out without a body, so only the drain knows its note: a
+    // snapshot fetched before the delete must not bring the image back.
+    await seedQueueEntry(db, {
+      operation: 'removeImage',
+      endpoint: '/images/img1',
+      method: 'DELETE',
+      body: { note_id: 'n1' },
+    });
+    mockApi.delete.mockResolvedValueOnce({ data: null } as never);
+    const since = snapshotMark();
+
+    await drainQueue(db);
+
+    expect(notesWrittenSince(since)).toEqual(new Set(['n1']));
+  });
+
+  it('records the landing of a create resolved as an already-applied 409 (#1265)', async () => {
+    // The original POST landed unseen, so the API client never recorded it; the
+    // queue row was the only gate, and it is about to go.
+    await saveNote(db, makeTextNote('created'));
+    await seedQueueEntry(db, {
+      operation: 'create',
+      endpoint: '/notes',
+      method: 'POST',
+      body: { id: 'created', note_type: 'text' },
+    });
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(409));
+    const since = snapshotMark();
+
+    await drainQueue(db);
+
+    expect(notesWrittenSince(since)).toEqual(new Set(['created']));
+  });
+
+  it('leaves a successful replay to the API client, which already recorded it (#1265)', async () => {
+    // Recording it again at row deletion would skip a snapshot fetched between
+    // the response and the delete, which already holds the write.
+    await saveNote(db, makeTextNote('n1'));
+    await seedQueueEntry(db, {
+      operation: 'update',
+      endpoint: '/notes/n1',
+      method: 'PATCH',
+      body: { pinned: true },
+    });
+    mockApi.patch.mockResolvedValueOnce({ data: buildTextNote({ id: 'n1', pinned: true }) } as never);
+    const since = snapshotMark();
+
+    await drainQueue(db);
+
+    expect(notesWrittenSince(since)).toEqual(new Set());
+  });
+
+  it('records no landing for a dropped markViewed, which changes no content (#1265)', async () => {
+    await saveNote(db, makeTextNote('n1'));
+    await seedQueueEntry(db, {
+      operation: 'markViewed',
+      endpoint: '/notes/n1/viewed',
+      method: 'POST',
+    });
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(409));
+    const since = snapshotMark();
+
+    await drainQueue(db);
+
+    expect(notesWrittenSince(since)).toEqual(new Set());
+  });
+
   it('drops a permanently-rejected markViewed without flagging the note', async () => {
     // Marking a note viewed is best-effort: a rejection (say the note was
     // unshared meanwhile) only leaves a badge the next server fetch reconciles.
@@ -476,7 +545,7 @@ describe('saveServerNote failed-note protection', () => {
     await saveNote(db, buildTextNote({ id: 'n1', content: 'unsent local edit' }));
     await db.runAsync(`UPDATE notes SET sync_state = 'failed' WHERE id = ?`, ['n1']);
 
-    await saveServerNote(db, buildTextNote({ id: 'n1', content: 'server copy' }));
+    await saveServerNote(db, buildTextNote({ id: 'n1', content: 'server copy' }), snapshotMark());
 
     expect(await db.getFirstAsync('SELECT content FROM notes WHERE id = ?', ['n1'])).toEqual({
       content: 'unsent local edit',
@@ -487,7 +556,7 @@ describe('saveServerNote failed-note protection', () => {
     await saveNote(db, buildTextNote({ id: 'other' }));
     await db.runAsync(`UPDATE notes SET sync_state = 'failed' WHERE id = ?`, ['other']);
 
-    await saveServerNote(db, buildTextNote({ id: 'n1', content: 'server copy' }));
+    await saveServerNote(db, buildTextNote({ id: 'n1', content: 'server copy' }), snapshotMark());
 
     expect(await db.getFirstAsync('SELECT content FROM notes WHERE id = ?', ['n1'])).toEqual({
       content: 'server copy',

@@ -335,6 +335,20 @@ interface SaveNoteOptions {
    * For a caller whose decision must not go stale before the write lands.
    */
   guard?: () => Promise<boolean>;
+  /**
+   * Of `skipNoteIds`, the notes this device wrote after the snapshot was
+   * fetched. The snapshot is older than them in every field, so they do not
+   * take its public link either (see saveSkippedNote).
+   */
+  writtenNoteIds?: ReadonlySet<string>;
+}
+
+/** What a server snapshot skips, read in the save's transaction (#1265). */
+export interface SnapshotSkips {
+  /** Notes the snapshot leaves alone, apart from the public link. */
+  skipNoteIds: ReadonlySet<string>;
+  /** Of those, notes this device wrote after the snapshot was fetched. */
+  writtenNoteIds: ReadonlySet<string>;
 }
 
 /**
@@ -358,10 +372,13 @@ function completedBinding(
 
 /**
  * For a note `skipNoteIds` protects: a server snapshot still applies the note's
- * public link, which is server-owned and never edited locally, so a pending
- * edit can't hold back a link a collaborator created or revoked.
+ * public link, which no queued edit touches, so a pending edit can't hold back
+ * a link a collaborator created or revoked. Not for a note in `writtenNoteIds`:
+ * this device's own write landed after the snapshot was fetched, and it may be
+ * the link change itself (#1265).
  */
 async function saveSkippedNote(db: SQLiteDatabase, note: Note, options: SaveNoteOptions): Promise<void> {
+  if (options.writtenNoteIds?.has(note.id)) return;
   if (options.serverSnapshot && note.public_link !== undefined) {
     await setLocalNotePublicLink(db, note.id, note.public_link);
   }
@@ -1073,20 +1090,38 @@ async function removeLocalNotesNotInTx(
  * list. Wrapping both in one transaction makes a reader see either the full
  * pre-state or the full post-state, never a partial one.
  *
- * Both steps share a single `skipNoteIds` set so notes with an unsynced (pending
- * or failed) local edit are neither overwritten nor pruned (#487/#492).
+ * Both steps share a single skip set so notes with an unsynced (pending or
+ * failed) local edit are neither overwritten nor pruned (#487/#492).
+ * `readSkips` runs inside the transaction, so the set is read in the same
+ * step as the write it gates rather than ahead of it (#1265).
  */
 export async function reconcileServerNotesScope(
   db: SQLiteDatabase,
   serverNotes: Note[],
-  params?: GetNotesParams,
-  options?: SaveNoteOptions,
+  params: GetNotesParams | undefined,
+  readSkips: () => Promise<SnapshotSkips>,
 ): Promise<void> {
-  const skipNoteIds = options?.skipNoteIds;
   const serverIds = new Set(serverNotes.map((n) => n.id));
   await withSerializedTransaction(db, async () => {
-    await saveNotesInTx(db, serverNotes, options);
+    const { skipNoteIds, writtenNoteIds } = await readSkips();
+    await saveNotesInTx(db, serverNotes, { skipNoteIds, writtenNoteIds, serverSnapshot: true });
     await removeLocalNotesNotInTx(db, serverIds, params, skipNoteIds);
+  });
+}
+
+/**
+ * Persist server snapshot notes without pruning, skipping the notes
+ * `readSkips` returns. Like {@link reconcileServerNotesScope}, the skip
+ * set is read inside the write's own transaction (#1265).
+ */
+export async function saveServerSnapshotNotes(
+  db: SQLiteDatabase,
+  serverNotes: Note[],
+  readSkips: () => Promise<SnapshotSkips>,
+): Promise<void> {
+  await withSerializedTransaction(db, async () => {
+    const { skipNoteIds, writtenNoteIds } = await readSkips();
+    await saveNotesInTx(db, serverNotes, { skipNoteIds, writtenNoteIds, serverSnapshot: true });
   });
 }
 

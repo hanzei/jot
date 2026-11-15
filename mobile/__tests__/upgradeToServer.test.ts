@@ -1025,9 +1025,9 @@ describe('runBackgroundReconcileScopes', () => {
     expect(mockGetNotes).toHaveBeenNthCalledWith(3, { trashed: true });
 
     expect(mockSaveServerNotesScope).toHaveBeenCalledTimes(3);
-    expect(mockSaveServerNotesScope).toHaveBeenNthCalledWith(1, mockDb, [NOTE_A], undefined);
-    expect(mockSaveServerNotesScope).toHaveBeenNthCalledWith(2, mockDb, [NOTE_B], { archived: true });
-    expect(mockSaveServerNotesScope).toHaveBeenNthCalledWith(3, mockDb, [], { trashed: true });
+    expect(mockSaveServerNotesScope).toHaveBeenNthCalledWith(1, mockDb, [NOTE_A], undefined, expect.any(Number));
+    expect(mockSaveServerNotesScope).toHaveBeenNthCalledWith(2, mockDb, [NOTE_B], { archived: true }, expect.any(Number));
+    expect(mockSaveServerNotesScope).toHaveBeenNthCalledWith(3, mockDb, [], { trashed: true }, expect.any(Number));
   });
 
   it('throws when a scope fetch fails, without reconciling subsequent scopes', async () => {

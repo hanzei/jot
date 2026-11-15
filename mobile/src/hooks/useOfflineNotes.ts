@@ -2,9 +2,10 @@ import { useEffect, useCallback, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext } from 'expo-sqlite';
 import axios from 'axios';
-import { getLocalNotes, getLocalNote, markLocalNoteDeleted } from '../db/noteQueries';
+import { getLocalNotes, getLocalNote } from '../db/noteQueries';
 import { isClosedDatabaseError } from '../db/errors';
-import { getProtectedNoteIds, saveServerNote, saveServerNotesScope } from '../db/syncQueue';
+import { applyServerRemoval, saveServerNote, saveServerNotesScope } from '../db/syncQueue';
+import { snapshotMark } from '../db/snapshotGate';
 import type { GetNotesParams, Note } from '@jot/shared';
 import { useNetworkStatus } from './useNetworkStatus';
 import { isLocalModeActive } from '../store/localMode';
@@ -51,6 +52,9 @@ export function useOfflineNotes(params?: GetNotesParams, options?: { enabled?: b
     if (isSyncingRef.current) return;
     isSyncingRef.current = true;
     try {
+      // Taken before the fetch: a write of ours that lands while it is in flight
+      // may be missing from the response (#1265).
+      const since = snapshotMark();
       const serverNotes = await retrySync(() => jot.notes.getAll(paramsRef.current), {
         isConnected: () => isConnectedRef.current,
         canceller,
@@ -59,7 +63,7 @@ export function useOfflineNotes(params?: GetNotesParams, options?: { enabled?: b
       // Persist the fetched notes and prune rows that fell out of this scope
       // (e.g., archived, deleted, or label-changed on another device), both
       // deferring to notes with pending local edits so they aren't reverted.
-      await saveServerNotesScope(db, serverNotes, paramsRef.current);
+      await saveServerNotesScope(db, serverNotes, paramsRef.current, since);
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
     } catch (err) {
       // Cancelled or offline: expected; keep the local cache.
@@ -149,13 +153,14 @@ export function useOfflineNote(id: string | null) {
   const syncFromServer = useCallback(async (canceller: SyncCanceller) => {
     // Local mode is the source of truth: there is no server to refresh from (#514).
     if (!id || isLocalModeActive()) return;
+    const since = snapshotMark();
     try {
       const serverNote = await retrySync(() => jot.notes.getById(id), {
         isConnected: () => isConnectedRef.current,
         canceller,
       });
       if (canceller.cancelled) return;
-      await saveServerNote(db, serverNote);
+      await saveServerNote(db, serverNote, since);
       invalidateNoteReads();
     } catch (err) {
       // Cancelled or offline: expected; keep the local cache.
@@ -171,11 +176,9 @@ export function useOfflineNote(id: string | null) {
         // escape the fire-and-forget effect as an unhandled rejection; the local
         // cache remains as fallback and a later sync retries.
         try {
-          const protectedNoteIds = await getProtectedNoteIds(db);
-          // Re-check cancelled: the effect may have torn down (id change/unmount)
-          // during the await above, in which case we must not write.
-          if (!canceller.cancelled && !protectedNoteIds.has(id)) {
-            await markLocalNoteDeleted(db, id);
+          // Re-check cancelled where the write happens: the effect may have torn
+          // down (id change/unmount) while the fetch or the write chain waited.
+          if (await applyServerRemoval(db, id, since, 'tombstone', () => !canceller.cancelled)) {
             invalidateNoteReads();
           }
         } catch (tombstoneErr) {

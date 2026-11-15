@@ -16,6 +16,7 @@ import {
   isNotePendingCreate,
 } from '../db/noteQueries';
 import { enqueueOperation, rethrowIfNotQueueable, saveServerNotes, saveServerResponseNote, saveServerLabels, getPendingLabelIds } from '../db/syncQueue';
+import { snapshotMark } from '../db/snapshotGate';
 import { isClosedDatabaseError } from '../db/errors';
 import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from './useNetworkStatus';
@@ -66,11 +67,12 @@ async function syncLocalNotesAfterLabelMutation(db: SQLiteDatabase) {
 
   for (const scope of scopes) {
     try {
+      const since = snapshotMark();
       const notes = await jot.notes.getAll(scope);
       // saveServerNotes re-reads the pending set per scope, so an edit queued
       // mid-loop is gated by the scope saved after it, not just a stale snapshot
       // taken before the (multi-fetch) loop began (#487).
-      await saveServerNotes(db, notes);
+      await saveServerNotes(db, notes, since);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       failures.push(`${describeLabelSyncScope(scope)} scope: ${detail}`);
