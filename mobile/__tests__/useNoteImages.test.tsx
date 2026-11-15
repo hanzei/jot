@@ -211,7 +211,7 @@ describe('useNoteImages hooks', () => {
       const outcome = await result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file });
 
       expect(outcome).toEqual({ status: 'uploaded', image });
-      expect(mockImagesApi.uploadNoteImage).toHaveBeenCalledWith('note-1', file, undefined, undefined);
+      expect(mockImagesApi.uploadNoteImage).toHaveBeenCalledWith('note-1', file, undefined, undefined, 'upload-1');
       expect(mockNoteQueries.patchLocalNoteImages).toHaveBeenCalledWith(
         expect.anything(),
         'note-1',
@@ -359,7 +359,7 @@ describe('useNoteImages hooks', () => {
       const outcome = await result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file });
 
       expect(outcome).toEqual({ status: 'uploaded', image });
-      expect(mockImagesApi.uploadNoteImage).toHaveBeenCalledWith('note-1', file, undefined, undefined);
+      expect(mockImagesApi.uploadNoteImage).toHaveBeenCalledWith('note-1', file, undefined, undefined, 'upload-1');
       expect(mockEnqueueImageUpload).not.toHaveBeenCalled();
     });
 
@@ -372,7 +372,7 @@ describe('useNoteImages hooks', () => {
 
       await result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file, signal: controller.signal });
 
-      expect(mockImagesApi.uploadNoteImage).toHaveBeenCalledWith('note-1', file, undefined, controller.signal);
+      expect(mockImagesApi.uploadNoteImage).toHaveBeenCalledWith('note-1', file, undefined, controller.signal, 'upload-1');
     });
 
     it('propagates a cancelled upload without queuing it or converting it into a permanent error (issue #695)', async () => {

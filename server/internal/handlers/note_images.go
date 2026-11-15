@@ -219,17 +219,8 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 	// cap pre-check so a replay into a full note still returns its image.
 	imageID := r.FormValue("id")
 	if imageID != "" {
-		if !models.IsValidID(imageID) {
-			return http.StatusBadRequest, nil, errors.New("invalid image ID format")
-		}
-		existing, getErr := h.noteStore.GetNoteImageByID(r.Context(), imageID)
-		switch {
-		case getErr == nil && existing.NoteID == noteID:
-			return http.StatusOK, existing, nil
-		case getErr == nil:
-			return http.StatusConflict, nil, errors.New("image ID already exists")
-		case !errors.Is(getErr, models.ErrNoteImageNotFound):
-			return storeError(getErr, "get note image")
+		if status, existing, idErr := h.resolveClientImageID(r.Context(), noteID, imageID); status != 0 {
+			return status, existing, idErr
 		}
 	}
 
@@ -281,12 +272,8 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 			return http.StatusUnprocessableEntity, nil, errImageLimitReached
 		}
 		if errors.Is(err, models.ErrNoteImageExists) {
-			// Lost a race with a concurrent upload of the same ID: resolve it
-			// like the lookup above.
-			if existing, getErr := h.noteStore.GetNoteImageByID(r.Context(), imageID); getErr == nil && existing.NoteID == noteID {
-				return http.StatusOK, existing, nil
-			}
-			return http.StatusConflict, nil, errors.New("image ID already exists")
+			// Lost a race with a concurrent upload of the same ID.
+			return h.existingImageResponse(r.Context(), noteID, imageID)
 		}
 		return storeError(err, "create note image")
 	}
@@ -294,6 +281,33 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 	h.publishNoteImageEvent(r.Context(), noteID, sse.EventNoteImageAdded, sse.NoteImageEventData{NoteID: noteID, Image: img}, user.ID)
 
 	return http.StatusCreated, img, nil
+}
+
+// resolveClientImageID answers an upload that carries a client-supplied
+// image ID. A zero status means the ID is unused and the upload proceeds.
+func (h *NotesHandler) resolveClientImageID(ctx context.Context, noteID, imageID string) (int, *models.NoteImage, error) {
+	if !models.IsValidID(imageID) {
+		return http.StatusBadRequest, nil, errors.New("invalid image ID format")
+	}
+	_, err := h.noteStore.GetNoteImageByID(ctx, imageID)
+	if errors.Is(err, models.ErrNoteImageNotFound) {
+		return 0, nil, nil
+	}
+	return h.existingImageResponse(ctx, noteID, imageID)
+}
+
+// existingImageResponse answers an upload whose client-supplied ID is taken:
+// the image itself (200) when it is on this note, 409 when it is elsewhere.
+func (h *NotesHandler) existingImageResponse(ctx context.Context, noteID, imageID string) (int, *models.NoteImage, error) {
+	existing, err := h.noteStore.GetNoteImageByID(ctx, imageID)
+	if err != nil {
+		status, _, storeErr := storeError(err, "get note image")
+		return status, nil, storeErr
+	}
+	if existing.NoteID != noteID {
+		return http.StatusConflict, nil, errors.New("image ID already exists")
+	}
+	return http.StatusOK, existing, nil
 }
 
 // GetNoteImage godoc
