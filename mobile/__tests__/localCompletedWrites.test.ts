@@ -96,10 +96,11 @@ describe('completed values a queued op has yet to replay', () => {
     return out;
   }
 
-  it('a server response note keeps the queued item and its cascade, and takes everything else', async () => {
+  it('a server response note is held back while the toggle is still queued (#1262)', async () => {
     const db = await seedGroup('q1');
-    // The reply to a title PATCH sent before the queued toggle replayed.
-    await saveServerResponseNote(db, makeListNote({
+    // The reply to a title PATCH sent before the queued toggle replayed: it
+    // predates the toggle, so none of its content is taken.
+    const saved = await saveServerResponseNote(db, makeListNote({
       id: 'q1',
       items: [
         makeNoteItem({ id: 'q1-p', note_id: 'q1', completed: false }),
@@ -107,7 +108,8 @@ describe('completed values a queued op has yet to replay', () => {
         makeNoteItem({ id: 'q1-x', note_id: 'q1', completed: true, position: 2 }),
       ],
     }));
-    expect(await completedById('q1')).toEqual({ 'q1-p': true, 'q1-c': true, 'q1-x': true });
+    expect(saved).toBe(false);
+    expect(await completedById('q1')).toEqual({ 'q1-p': true, 'q1-c': true, 'q1-x': false });
   });
 
   it('a drain response applies its own op but keeps the items a later queued op still has to replay', async () => {

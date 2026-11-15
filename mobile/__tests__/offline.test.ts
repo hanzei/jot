@@ -59,6 +59,12 @@ beforeEach(() => {
     /^Failed to reconcile note/,
   );
   silenceConsole('info', /^Queue drain stopped at entry/, /^Dropping queued operation/);
+  // A drain pulls the notes its landed writes touched (#1262). Suites that do
+  // not care about the pull get a 404 for it (logged and ignored); the probe
+  // and other reads keep the mock's default.
+  mockApi.get.mockImplementation(((url: string) =>
+    url.startsWith('/notes/') ? Promise.reject(makeAxiosError(404)) : undefined) as never);
+  silenceConsole('warn', /^Failed to pull note id=\S+ after the queue drain: Request failed with status code 404$/);
 });
 
 // ── generateClientNoteId / isUnsyncedNoteId ────────────────────────────────
@@ -476,10 +482,14 @@ describe('drainQueue', () => {
         mockApi.patch.mockRejectedValueOnce(makeTimeoutError(code)); // this op always outlasts the write timeout
         mockApi.get.mockResolvedValueOnce({ data: {} } as never);
         mockApi.patch.mockResolvedValueOnce({ data: {} } as never); // the unaffected note
+        // The unaffected note's write landed, so the drain pulls it afterwards.
+        mockApi.get.mockResolvedValueOnce({ data: makeTextNote({ id: 'xyz' }) } as never);
 
         const { discardedOperations } = await drainQueue(db);
 
-        expect(mockApi.get).toHaveBeenCalledTimes(1);
+        // The probe, then the post-drain pull.
+        expect(mockApi.get).toHaveBeenCalledTimes(2);
+        expect(mockApi.get).toHaveBeenLastCalledWith('/notes/xyz');
         expect(await deadLetterRows()).toMatchObject([
           { endpoint: '/notes/abc', status: PROCESSING_ERROR_STATUS, attempts: MAX_ENTRY_DRAIN_ATTEMPTS },
         ]);
@@ -1003,11 +1013,15 @@ describe('drainQueue', () => {
       mockApi.post
         .mockResolvedValueOnce({ data: makeListNote({ id: 'n1', items: [first] }) } as never)
         .mockResolvedValueOnce({ data: added } as never);
+      // The create's response was held back behind the createItem, which
+      // returns only the item, so the drain pulls the note afterwards (#1262).
+      mockApi.get.mockResolvedValueOnce({ data: makeListNote({ id: 'n1', items: [first, added] }) } as never);
 
       await drainQueue(db);
 
       expect(await localItemIds()).toEqual([{ id: 'i1', parent_id: null }, { id: 'i2', parent_id: null }]);
       expect(await remainingQueueIds(db)).toEqual([]);
+      expect(mockApi.get.mock.calls.map(([url]) => url)).toEqual(['/notes/n1']);
     });
 
     it('is re-homed when the prune removes its parent', async () => {
@@ -1174,6 +1188,201 @@ describe('drainQueue', () => {
     // best-effort reconcile fetch failed (the next background sync reconciles).
     expect(await remainingQueueIds(db)).toEqual([]);
     expect(await db.getFirstAsync('SELECT is_shared FROM notes WHERE id = ?', ['n1'])).toEqual({ is_shared: 0 });
+  });
+
+  describe('applying a replayed note response (#1262)', () => {
+    const localNote = () => db.getFirstAsync('SELECT content, version FROM notes WHERE id = ?', ['n1']);
+    const queueUpdate = (body: Record<string, unknown>) =>
+      seedQueueEntry(db, { operation: 'update', endpoint: '/notes/n1', method: 'PATCH', body });
+
+    it('keeps an offline edit queued behind its note\'s create', async () => {
+      // Offline: create "A", keep typing to "AB".
+      await saveNote(db, makeTextNote({ id: 'n1', content: 'AB', version: 1 }));
+      await seedQueueEntry(db, {
+        operation: 'create', endpoint: '/notes', method: 'POST', body: { id: 'n1', note_type: 'text', content: 'A' },
+      });
+      await queueUpdate({ content: 'AB' });
+      mockApi.post.mockResolvedValueOnce({ data: makeTextNote({ id: 'n1', content: 'A', version: 1 }) } as never);
+      mockApi.patch.mockResolvedValueOnce({ data: makeTextNote({ id: 'n1', content: 'AB', version: 2 }) } as never);
+
+      const { idMappings } = await drainQueue(db);
+
+      expect(mockApi.patch).toHaveBeenCalledWith('/notes/n1', { content: 'AB', base_version: 1 }, REPLAY_CONFIG);
+      expect(await localNote()).toEqual({ content: 'AB', version: 2 });
+      // The held-back create response is not handed to the UI cache either.
+      expect(idMappings).toEqual([]);
+      // The last response settled the note, so nothing is pulled.
+      expect(mockApi.get).not.toHaveBeenCalled();
+    });
+
+    it('adopts the version a create produced so the queued edit behind it does not self-conflict', async () => {
+      await saveNote(db, makeTextNote({ id: 'n1', content: 'AB', version: 0 }));
+      await seedQueueEntry(db, {
+        operation: 'create', endpoint: '/notes', method: 'POST', body: { id: 'n1', note_type: 'text', content: 'A' },
+      });
+      await queueUpdate({ content: 'AB' });
+      mockApi.post.mockResolvedValueOnce({ data: makeTextNote({ id: 'n1', content: 'A', version: 1 }) } as never);
+      mockApi.patch.mockResolvedValueOnce({ data: makeTextNote({ id: 'n1', content: 'AB', version: 2 }) } as never);
+
+      await drainQueue(db);
+
+      expect(mockApi.patch).toHaveBeenCalledWith('/notes/n1', { content: 'AB', base_version: 1 }, REPLAY_CONFIG);
+    });
+
+    it('saves the whole response when no further op for the note is queued', async () => {
+      // Offline pin while a collaborator edits the content: the protected note
+      // skipped that edit, so the pin's response is the first sight of it.
+      await saveNote(db, makeTextNote({ id: 'n1', content: 'old', version: 5 }));
+      await queueUpdate({ pinned: true });
+      mockApi.patch.mockResolvedValueOnce({
+        data: makeTextNote({ id: 'n1', content: 'collaborator edit', version: 6, pinned: true }),
+      } as never);
+
+      await drainQueue(db);
+
+      expect(await localNote()).toEqual({ content: 'collaborator edit', version: 6 });
+    });
+
+    it('does not adopt an unguarded response version, so a later content edit still conflicts', async () => {
+      await saveNote(db, makeTextNote({ id: 'n1', content: 'mine', version: 5 }));
+      await queueUpdate({ pinned: true });
+      await queueUpdate({ content: 'mine' });
+      mockApi.patch
+        .mockResolvedValueOnce({ data: makeTextNote({ id: 'n1', content: 'collaborator edit', version: 6 }) } as never)
+        .mockRejectedValueOnce(makeAxiosError(409));
+
+      await drainQueue(db);
+
+      // Replayed against the version this device last saw, not the
+      // collaborator's, so the server rejects it instead of overwriting.
+      expect(mockApi.patch).toHaveBeenNthCalledWith(2, '/notes/n1', { content: 'mine', base_version: 5 }, REPLAY_CONFIG);
+      expect(await getDeadLetteredOperations(db)).toMatchObject([{ operation: 'update', status: 409, note_id: 'n1' }]);
+      expect(await localNote()).toEqual({ content: 'mine', version: 5 });
+    });
+
+    it('does not adopt a guarded response whose version skipped past the base', async () => {
+      // A no-op content write is not version-checked, so the server can answer
+      // with a version that includes a collaborator's edit.
+      await saveNote(db, makeTextNote({ id: 'n1', content: 'mine', version: 5 }));
+      await queueUpdate({ content: 'same' });
+      await queueUpdate({ content: 'mine' });
+      mockApi.patch
+        .mockResolvedValueOnce({ data: makeTextNote({ id: 'n1', content: 'same', version: 7 }) } as never)
+        .mockRejectedValueOnce(makeAxiosError(409));
+
+      await drainQueue(db);
+
+      expect(mockApi.patch).toHaveBeenNthCalledWith(2, '/notes/n1', { content: 'mine', base_version: 5 }, REPLAY_CONFIG);
+    });
+
+    it('holds back a response when an op for the note is enqueued while it is in flight', async () => {
+      await saveNote(db, makeTextNote({ id: 'n1', content: 'A', version: 1 }));
+      await seedQueueEntry(db, {
+        operation: 'create', endpoint: '/notes', method: 'POST', body: { id: 'n1', note_type: 'text', content: 'A' },
+      });
+      mockApi.post.mockImplementationOnce(async () => {
+        // The user keeps typing while the replay is in flight.
+        await db.runAsync('UPDATE notes SET content = ? WHERE id = ?', ['AB', 'n1']);
+        await queueUpdate({ content: 'AB' });
+        return { data: makeTextNote({ id: 'n1', content: 'A', version: 1 }) } as never;
+      });
+      // The drain read its entries up front, so the new one waits for the next drain.
+      await drainQueue(db);
+
+      expect(await localNote()).toEqual({ content: 'AB', version: 1 });
+      expect(await remainingQueueIds(db)).toHaveLength(1);
+      // Still queued, so still protected: nothing to pull.
+      expect(mockApi.get).not.toHaveBeenCalled();
+    });
+
+    it('pulls a note whose held-back response no later response settled', async () => {
+      await saveNote(db, makeTextNote({ id: 'n1', content: 'old', version: 5 }));
+      await queueUpdate({ pinned: true });
+      await seedQueueEntry(db, { operation: 'markViewed', endpoint: '/notes/n1/view', method: 'POST' });
+      mockApi.patch.mockResolvedValueOnce({ data: makeTextNote({ id: 'n1', content: 'collaborator edit', version: 6 }) } as never);
+      mockApi.post.mockResolvedValueOnce({ status: 204 } as never);
+      mockApi.get.mockResolvedValueOnce({ data: makeTextNote({ id: 'n1', content: 'collaborator edit', version: 6 }) } as never);
+
+      await drainQueue(db);
+
+      expect(mockApi.get.mock.calls.map(([url]) => url)).toEqual(['/notes/n1']);
+      expect(await localNote()).toEqual({ content: 'collaborator edit', version: 6 });
+    });
+
+    it('keeps a failed change\'s local content when a later op for the note lands', async () => {
+      // The content edit conflicts and is dead-lettered; the pin behind it then
+      // lands with nothing else queued. Its response must not replace the row
+      // "Keep my version" forks from.
+      await saveNote(db, makeTextNote({ id: 'n1', content: 'mine', version: 5 }));
+      await queueUpdate({ content: 'mine' });
+      await queueUpdate({ pinned: true });
+      mockApi.patch
+        .mockRejectedValueOnce(makeAxiosError(409))
+        .mockResolvedValueOnce({ data: makeTextNote({ id: 'n1', content: 'collaborator edit', version: 6 }) } as never);
+
+      await drainQueue(db);
+
+      expect(await localNote()).toEqual({ content: 'mine', version: 5 });
+      expect(await getDeadLetteredOperations(db)).toMatchObject([{ operation: 'update', status: 409, note_id: 'n1' }]);
+      // Still named by a dead letter, so not pulled either.
+      expect(mockApi.get).not.toHaveBeenCalled();
+    });
+
+    it('pulls a note whose landed write returned no note', async () => {
+      await saveNote(db, makeListNote({ id: 'n1', items: [] }));
+      await seedQueueEntry(db, {
+        operation: 'createItem', endpoint: '/notes/n1/items', method: 'POST', body: { id: 'i1', text: 'Milk', position: 0 },
+      });
+      mockApi.post.mockResolvedValueOnce({ data: makeNoteItem({ id: 'i1', note_id: 'n1', text: 'Milk' }) } as never);
+      mockApi.get.mockResolvedValueOnce({
+        data: makeListNote({ id: 'n1', title: 'Renamed elsewhere', version: 2, items: [makeNoteItem({ id: 'i1', note_id: 'n1', text: 'Milk' })] }),
+      } as never);
+
+      await drainQueue(db);
+
+      expect(mockApi.get.mock.calls.map(([url]) => url)).toEqual(['/notes/n1']);
+      expect(await db.getFirstAsync('SELECT title, version FROM notes WHERE id = ?', ['n1'])).toEqual({ title: 'Renamed elsewhere', version: 2 });
+    });
+
+    it('pulls a note the drain deleted and then restored', async () => {
+      await saveNote(db, makeTextNote({ id: 'n1', content: 'old', version: 5 }));
+      await seedQueueEntry(db, { operation: 'delete', endpoint: '/notes/n1', method: 'DELETE' });
+      await seedQueueEntry(db, { operation: 'restore', endpoint: '/notes/n1/restore', method: 'POST' });
+      mockApi.delete.mockResolvedValueOnce({ status: 204 } as never);
+      mockApi.post.mockResolvedValueOnce({ status: 204 } as never);
+      mockApi.get.mockResolvedValueOnce({ data: makeTextNote({ id: 'n1', content: 'old', version: 5 }) } as never);
+
+      await drainQueue(db);
+
+      expect(mockApi.get.mock.calls.map(([url]) => url)).toEqual(['/notes/n1']);
+    });
+
+    it('does not pull a note the drain then deleted', async () => {
+      await saveNote(db, makeTextNote({ id: 'n1', content: 'old', version: 5 }));
+      await queueUpdate({ pinned: true });
+      await seedQueueEntry(db, { operation: 'delete', endpoint: '/notes/n1', method: 'DELETE' });
+      mockApi.patch.mockResolvedValueOnce({ data: makeTextNote({ id: 'n1', content: 'old', version: 5 }) } as never);
+      mockApi.delete.mockResolvedValueOnce({ status: 204 } as never);
+
+      await drainQueue(db);
+
+      expect(mockApi.get).not.toHaveBeenCalled();
+    });
+
+    it('keeps the drain going when the post-drain pull fails', async () => {
+      silenceConsole('warn', /^Failed to pull note/);
+      await saveNote(db, makeTextNote({ id: 'n1', content: 'old', version: 5 }));
+      await queueUpdate({ pinned: true });
+      await seedQueueEntry(db, { operation: 'markViewed', endpoint: '/notes/n1/view', method: 'POST' });
+      mockApi.patch.mockResolvedValueOnce({ data: makeTextNote({ id: 'n1', content: 'new', version: 6 }) } as never);
+      mockApi.post.mockResolvedValueOnce({ status: 204 } as never);
+      mockApi.get.mockRejectedValueOnce(makeAxiosError(500));
+
+      await drainQueue(db);
+
+      expect(await remainingQueueIds(db)).toEqual([]);
+      expect(await localNote()).toEqual({ content: 'old', version: 5 });
+    });
   });
 });
 
