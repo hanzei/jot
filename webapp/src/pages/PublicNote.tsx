@@ -4,8 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { formatDate } from '@/utils/formatDate';
 import { ChevronDown, Square, SquareCheck, FileQuestion, ArrowRight } from 'lucide-react';
 import { VALIDATION, groupNoteItems, type PublicListNote, type PublicNote as PublicNoteData, type PublicNoteItem } from '@jot/shared';
-import { canOpenNote, publicNoteImages, publicNotes } from '@/utils/api';
-import { isAuthenticated } from '@/utils/auth';
+import { getNoteIfAccessible, publicNoteImages, publicNotes } from '@/utils/api';
+import { getUser } from '@/utils/auth';
 import { httpStatus } from '@/utils/apiError';
 import { inlineMarkdownToText, renderMarkdown } from '@/utils/markdown';
 import InlineMarkdown from '@/components/InlineMarkdown';
@@ -68,45 +68,52 @@ export default function PublicNote() {
         {state.status === 'error' && (
           <Message title={t('publicNote.errorTitle')} body={t('publicNote.errorBody')} />
         )}
-        {note && <OpenInAppBar noteId={note.id} />}
+        {note && <NoteAccessBar noteId={note.id} />}
         {note && token && <PublicNoteView note={note} token={token} />}
       </main>
     </div>
   );
 }
 
+type NoteAccess = 'owner' | 'collaborator';
+
 /**
- * Offers a visitor who can open the note in the app a link to it. Only asked
- * when this browser has a signed-in user stored, so an anonymous visitor makes
- * no call beyond the public one; any failure (no or stale session, no access)
- * shows nothing.
+ * Offers a visitor who can open the note in the app a link to it: the owner is
+ * told this is how others see their note, a collaborator that it is shared
+ * with them. Only asked when this browser has a signed-in user stored, so an
+ * anonymous visitor makes no call beyond the public one; any failure (no or
+ * stale session, no access) shows nothing.
  */
-function OpenInAppBar({ noteId }: { noteId: string }) {
+function NoteAccessBar({ noteId }: { noteId: string }) {
   const { t } = useTranslation();
-  const [checked, setChecked] = useState<{ noteId: string; canOpen: boolean } | null>(null);
+  const [checked, setChecked] = useState<{ noteId: string; access: NoteAccess | null } | null>(null);
 
   useEffect(() => {
-    if (!isAuthenticated()) return;
+    const user = getUser();
+    if (!user) return;
     let cancelled = false;
-    void canOpenNote(noteId).then(canOpen => {
-      if (!cancelled) setChecked({ noteId, canOpen });
+    void getNoteIfAccessible(noteId).then(found => {
+      if (cancelled) return;
+      const access = found ? (found.user_id === user.id ? 'owner' : 'collaborator') : null;
+      setChecked({ noteId, access });
     });
     return () => { cancelled = true; };
   }, [noteId]);
 
-  if (checked?.noteId !== noteId || !checked.canOpen) return null;
+  const access = checked?.noteId === noteId ? checked.access : null;
+  if (!access) return null;
   return (
     <div
       className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-slate-800 px-4 py-3 text-sm text-gray-800 dark:text-gray-100"
-      data-testid="public-note-open-in-app"
+      data-testid="public-note-access-bar"
     >
-      <span>{t('publicNote.openInAppBody')}</span>
+      <span>{access === 'owner' ? t('publicNote.ownerBody') : t('publicNote.collaboratorBody')}</span>
       {/* A full page load: the app is decided from the entry URL (App.tsx). */}
       <a
         href={`/notes/${noteId}`}
         className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 font-medium text-white hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900"
       >
-        {t('publicNote.openInApp')}
+        {access === 'owner' ? t('publicNote.ownerAction') : t('publicNote.collaboratorAction')}
         <ArrowRight aria-hidden="true" className="h-4 w-4" />
       </a>
     </div>

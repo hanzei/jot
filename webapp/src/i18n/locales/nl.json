@@ -578,8 +578,10 @@
     "errorBody": "Er is iets misgegaan. Probeer het zo meteen opnieuw.",
     "imageAlt": "Afbeelding {{number}}",
     "footer": "Alleen-lezen kopie · Laatst bijgewerkt {{date}}",
-    "openInAppBody": "Je kunt deze notitie openen in Jot.",
-    "openInApp": "Notitie openen"
+    "ownerBody": "Zo zien anderen je notitie.",
+    "ownerAction": "Notitie bewerken",
+    "collaboratorBody": "Deze notitie is met je gedeeld.",
+    "collaboratorAction": "Notitie openen"
   },
   "publicLink": {
     "heading": "Openbare link",

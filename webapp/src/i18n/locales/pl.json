@@ -592,8 +592,10 @@
     "errorBody": "Coś poszło nie tak. Spróbuj ponownie za chwilę.",
     "imageAlt": "Obraz {{number}}",
     "footer": "Kopia tylko do odczytu · Ostatnia aktualizacja: {{date}}",
-    "openInAppBody": "Możesz otworzyć tę notatkę w Jot.",
-    "openInApp": "Otwórz notatkę"
+    "ownerBody": "Tak inni widzą Twoją notatkę.",
+    "ownerAction": "Edytuj notatkę",
+    "collaboratorBody": "Ta notatka jest Ci udostępniona.",
+    "collaboratorAction": "Otwórz notatkę"
   },
   "publicLink": {
     "heading": "Link publiczny",

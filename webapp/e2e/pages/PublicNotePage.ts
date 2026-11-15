@@ -32,13 +32,14 @@ export class PublicNotePage {
     return this.page.getByTestId('public-note-completed-items');
   }
 
-  /** The bar offering a signed-in visitor who can open the note a link to it. */
-  openInAppBar() {
-    return this.page.getByTestId('public-note-open-in-app');
+  /** The bar offering a signed-in owner or collaborator a link to the note. */
+  accessBar() {
+    return this.page.getByTestId('public-note-access-bar');
   }
 
-  openInAppLink() {
-    return this.openInAppBar().getByRole('link', { name: 'Open note' });
+  /** The bar's link: "Edit note" for the owner, "Open note" for a collaborator. */
+  accessLink(name: 'Edit note' | 'Open note') {
+    return this.accessBar().getByRole('link', { name });
   }
 
   notFound() {

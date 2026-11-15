@@ -585,8 +585,10 @@
     "errorBody": "Une erreur s'est produite. Réessayez dans un instant.",
     "imageAlt": "Image {{number}}",
     "footer": "Copie en lecture seule · Dernière mise à jour : {{date}}",
-    "openInAppBody": "Vous pouvez ouvrir cette note dans Jot.",
-    "openInApp": "Ouvrir la note"
+    "ownerBody": "Voici comment les autres voient votre note.",
+    "ownerAction": "Modifier la note",
+    "collaboratorBody": "Cette note est partagée avec vous.",
+    "collaboratorAction": "Ouvrir la note"
   },
   "publicLink": {
     "heading": "Lien public",

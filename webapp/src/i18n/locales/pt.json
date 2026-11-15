@@ -585,8 +585,10 @@
     "errorBody": "Algo deu errado. Tente novamente em instantes.",
     "imageAlt": "Imagem {{number}}",
     "footer": "Cópia somente leitura · Última atualização: {{date}}",
-    "openInAppBody": "Você pode abrir esta nota no Jot.",
-    "openInApp": "Abrir nota"
+    "ownerBody": "É assim que os outros veem sua nota.",
+    "ownerAction": "Editar nota",
+    "collaboratorBody": "Esta nota foi compartilhada com você.",
+    "collaboratorAction": "Abrir nota"
   },
   "publicLink": {
     "heading": "Link público",

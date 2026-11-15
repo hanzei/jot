@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { API_BASE_PATH, apiPaths, apiUrl, createJotApi, type FileImportType, type ExportFormat, type ImportResponse, type NoteImage, type User } from '@jot/shared';
+import { API_BASE_PATH, apiPaths, apiUrl, createJotApi, type FileImportType, type ExportFormat, type ImportResponse, type Note, type NoteImage, type User } from '@jot/shared';
 import { removeUser } from '@/utils/auth';
 import { authPathWithRedirect, currentRedirectTarget } from '@/utils/authRedirect';
 import { recordFailedRequest } from '@/utils/diagnostics';
@@ -132,13 +132,13 @@ const publicJot = createJotApi(publicApi);
 export const { publicNotes } = publicJot;
 
 /**
- * Whether the visitor's session, if any, can open note `id` in the app. Used
- * by the public viewer to offer a signed-in owner or collaborator a link to
- * the note; it goes through `publicApi` so a 401 (no session, or a stale one)
- * stays on the page, and every failure just means "no".
+ * The note `id` as the visitor's session, if any, sees it, or null when it
+ * cannot open it. Used by the public viewer to offer a signed-in owner or
+ * collaborator a link to the note; it goes through `publicApi` so a 401 (no
+ * session, or a stale one) stays on the page, and every failure means null.
  */
-export const canOpenNote = (id: string): Promise<boolean> =>
-  publicJot.notes.getById(id).then(() => true, () => false);
+export const getNoteIfAccessible = (id: string): Promise<Note | null> =>
+  publicJot.notes.getById(id).catch(() => null);
 
 // A public note's images, loaded by <img> straight from these URLs. The token
 // scopes them: the server serves only images that belong to that note.

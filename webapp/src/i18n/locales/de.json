@@ -578,8 +578,10 @@
     "errorBody": "Etwas ist schiefgelaufen. Bitte versuche es gleich noch einmal.",
     "imageAlt": "Bild {{number}}",
     "footer": "Schreibgeschützte Ansicht · Zuletzt aktualisiert {{date}}",
-    "openInAppBody": "Du kannst diese Notiz in Jot öffnen.",
-    "openInApp": "Notiz öffnen"
+    "ownerBody": "So sehen andere deine Notiz.",
+    "ownerAction": "Notiz bearbeiten",
+    "collaboratorBody": "Diese Notiz ist mit dir geteilt.",
+    "collaboratorAction": "Notiz öffnen"
   },
   "publicLink": {
     "heading": "Öffentlicher Link",

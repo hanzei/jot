@@ -578,8 +578,10 @@
     "errorBody": "Something went wrong. Please try again in a moment.",
     "imageAlt": "Image {{number}}",
     "footer": "Read-only copy · Last updated {{date}}",
-    "openInAppBody": "You can open this note in Jot.",
-    "openInApp": "Open note"
+    "ownerBody": "This is how others see your note.",
+    "ownerAction": "Edit note",
+    "collaboratorBody": "This note is shared with you.",
+    "collaboratorAction": "Open note"
   },
   "publicLink": {
     "heading": "Public link",

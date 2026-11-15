@@ -51,10 +51,10 @@ test.describe('Public note viewer', () => {
     await expect(page).toHaveURL(TOKEN_SHAPE);
     // Nothing signed in is stored, so the app link is not even asked about.
     expect(paths(requests)).toEqual([`/api/v1/public/notes/${token}`]);
-    await expect(publicNotePage.openInAppBar()).toHaveCount(0);
+    await expect(publicNotePage.accessBar()).toHaveCount(0);
   });
 
-  test('offers a signed-in owner a link into the app, above the same public view', async ({ page, authenticatedUser, publicNotePage }) => {
+  test('tells the signed-in owner this is how others see their note, and links to it', async ({ page, authenticatedUser, publicNotePage }) => {
     void authenticatedUser;
     const noteId = await createListNote(page.request, 'Open me in the app', [{ text: 'First' }]);
     const token = await setPublicLink(page.request, noteId);
@@ -73,17 +73,18 @@ test.describe('Public note viewer', () => {
 
     // The owner still sees what outsiders see, plus the bar.
     await expect(publicNotePage.activeItems()).toHaveText(['First']);
-    await expect(publicNotePage.openInAppLink()).toHaveAttribute('href', `/notes/${noteId}`);
+    await expect(publicNotePage.accessBar()).toContainText('This is how others see your note.');
+    await expect(publicNotePage.accessLink('Edit note')).toHaveAttribute('href', `/notes/${noteId}`);
     // No session check, SSE stream, profile icons or config: only the note
     // and the one access check.
     expect(paths(requests)).toEqual([`/api/v1/public/notes/${token}`, `/api/v1/notes/${noteId}`]);
 
-    await publicNotePage.openInAppLink().click();
+    await publicNotePage.accessLink('Edit note').click();
     await expect(page).toHaveURL(`/notes/${noteId}`);
     await expect(page.locator('input[placeholder="Note title..."]')).toHaveValue('Open me in the app');
   });
 
-  test('offers a collaborator the link too', async ({ page, request, authenticatedUser, publicNotePage }) => {
+  test('tells a signed-in collaborator the note is shared with them, and links to it', async ({ page, request, authenticatedUser, publicNotePage }) => {
     void authenticatedUser;
     const me = (await (await page.request.get('/api/v1/users/me')).json()) as { user: { id: string } };
     await signUp(request, 'plopenown');
@@ -94,7 +95,8 @@ test.describe('Public note viewer', () => {
     await publicNotePage.goto(token);
 
     await expect(publicNotePage.content()).toHaveText('Shared with a collaborator');
-    await expect(publicNotePage.openInAppLink()).toHaveAttribute('href', `/notes/${noteId}`);
+    await expect(publicNotePage.accessBar()).toContainText('This note is shared with you.');
+    await expect(publicNotePage.accessLink('Open note')).toHaveAttribute('href', `/notes/${noteId}`);
   });
 
   test('shows a signed-in user without access only the public view, and stays on the link', async ({ page, request, authenticatedUser, publicNotePage }) => {
@@ -108,7 +110,7 @@ test.describe('Public note viewer', () => {
 
     await expect(publicNotePage.content()).toHaveText('Not shared with you');
     expect((await accessCheck).status()).toBe(404);
-    await expect(publicNotePage.openInAppBar()).toHaveCount(0);
+    await expect(publicNotePage.accessBar()).toHaveCount(0);
     await expect(page).toHaveURL(TOKEN_SHAPE);
   });
 

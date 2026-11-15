@@ -36,9 +36,9 @@ compiled web app, while SQLite keeps the default deployment small and portable.
   into a chat app, the link previews with the note's title and the thumbnail of
   its first image — never its text. Chat apps keep that card, so revoking a
   link does not remove its title and image from messages already sent.
-  Opening a link while signed in as someone who can open the note (its owner
-  or a collaborator) shows the same read-only copy, with a button to open the
-  note in the app. Operators can switch the feature off with `JOT_PUBLIC_LINKS_ENABLED`.
+  Opening a link while signed in shows the same read-only copy; the owner is
+  told this is how others see their note and a collaborator that it is shared
+  with them, each with a button to the note itself. Operators can switch the feature off with `JOT_PUBLIC_LINKS_ENABLED`.
 - **Unread badges**: Note cards mark a note shared with you as "New" until you
   open it, and as "Updated" when a collaborator changed it since you last
   looked.
