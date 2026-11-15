@@ -280,9 +280,29 @@ export function useCreateNote() {
   return useMutation({
     mutationFn: async (data: CreateNoteRequest): Promise<Note> => {
       assertSwitchWriteAllowed();
+      // Pick the note's ID (and its item IDs) before the online attempt and send
+      // them on it too. A write that times out client-side may still have
+      // committed; the queued replay below reuses these IDs, so it gets a 409
+      // (already applied) instead of creating a second note (#1278).
+      const clientId = generateClientNoteId();
+      // Pre-assign a permanent, server-format ID to every list item so the *same*
+      // ID backs the local row and is sent in the create body. The server honors
+      // client-supplied item IDs (see createBulkListItem), so the item's identity
+      // is stable from creation — no `local_* → server ID` reconciliation on drain
+      // (issues #513/#475), and a later per-item edit queued before the create
+      // drains still references a valid ID. In local mode there is no server to
+      // reconcile against, so this permanent ID is simply terminal.
+      const itemsWithIds =
+        data.note_type === 'list'
+          ? (data.items ?? []).map((item) => ({ ...item, id: item.id ?? generateId() }))
+          : undefined;
       if (isOnlineWriteAllowed(isConnected)) {
         try {
-          const note = await jot.notes.create(data);
+          const note = await jot.notes.create({
+            ...data,
+            ...(itemsWithIds ? { items: itemsWithIds } : {}),
+            id: clientId,
+          });
           await saveServerResponseNote(db, note);
           // Labels sent by name may have been minted by the create; store them so
           // the drawer shows them right away (#691).
@@ -299,7 +319,6 @@ export function useCreateNote() {
       // server operation. The note gets a server-valid ID up front so it is sent
       // as the note's primary key on replay, making the queued create idempotent
       // (issue #475) — no server-side ID reconciliation needed.
-      const clientId = generateClientNoteId();
       const now = new Date().toISOString();
       // Attach the labels the create names (a new note labelled before it
       // existed, or a sync-failure fork) to the local row too. A label not known
@@ -312,17 +331,6 @@ export function useCreateNote() {
       }
       const shared_with: NoteShare[] = [];
 
-      // Pre-assign a permanent, server-format ID to every list item so the *same*
-      // ID backs the local row and is sent in the create body. The server honors
-      // client-supplied item IDs (see createBulkListItem), so the item's identity
-      // is stable from creation — no `local_* → server ID` reconciliation on drain
-      // (issues #513/#475), and a later per-item edit queued before the create
-      // drains still references a valid ID. In local mode there is no server to
-      // reconcile against, so this permanent ID is simply terminal.
-      const itemsWithIds =
-        data.note_type === 'list'
-          ? (data.items ?? []).map((item) => ({ ...item, id: item.id ?? generateId() }))
-          : undefined;
       const baseLocalNote = {
         id: clientId,
         user_id: user?.id ?? '',
@@ -915,9 +923,23 @@ export function useDuplicateNote() {
       // calling online against a note the server doesn't know yet (a 404 would
       // surface as an error instead of syncing).
       const pendingCreate = await isNotePendingCreate(db, id);
+      // Pick the copy's ID and item IDs before the online attempt and send them
+      // on it too, so a request that times out after the server committed is
+      // replayed under the same IDs (a 409, already applied) instead of making a
+      // second copy (#1278). Without a local source the offline path throws below,
+      // so the online call goes without IDs as before.
+      const source = await getLocalNote(db, id);
+      const clientId = generateClientNoteId();
+      const idRemap = new Map<string, string>();
+      for (const item of source?.note_type === 'list' ? (source.items ?? []) : []) {
+        idRemap.set(item.id, generateId());
+      }
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
-          const duplicatedNote = await jot.notes.duplicate(id);
+          const duplicatedNote = await jot.notes.duplicate(
+            id,
+            source ? { id: clientId, ...(idRemap.size > 0 ? { itemIds: Object.fromEntries(idRemap) } : {}) } : {},
+          );
           await saveServerResponseNote(db, duplicatedNote);
           return duplicatedNote;
         } catch (err) {
@@ -931,12 +953,10 @@ export function useDuplicateNote() {
       // server-valid client ID and queue the server operation. The client ID is
       // sent in the request body so the server keeps it — making the replay
       // idempotent (same ID → 409, treated as already-applied, no second copy).
-      const source = await getLocalNote(db, id);
       if (!source) {
         throw new Error(`Note ${id} not found in local DB`);
       }
 
-      const clientId = generateClientNoteId();
       const now = new Date().toISOString();
       const resetFields = {
         id: clientId,
@@ -951,18 +971,15 @@ export function useDuplicateNote() {
         created_at: now,
         updated_at: now,
       };
-      // Build a source→new item ID map for list notes. This is captured here
-      // (outside the items spread) so we can send it to the server, letting it
-      // honor the same IDs. That way any per-item edits queued after this
-      // duplicate—but before it drains—still target valid server item IDs.
-      const idRemap = new Map<string, string>();
+      // idRemap (source→new item IDs, built above) is also sent to the server so
+      // it honors the same IDs; per-item edits queued after this duplicate but
+      // before it drains still target valid server item IDs.
       const localDuplicate: Note = source.note_type === 'list'
         ? {
             ...source,
             ...resetFields,
             items: (source.items ?? []).map((item) => {
-              const newId = generateId();
-              idRemap.set(item.id, newId);
+              const newId = idRemap.get(item.id) ?? generateId();
               return {
                 ...item,
                 id: newId,
