@@ -524,7 +524,9 @@ export function useUpdateNote() {
       });
 
       // Build the optimistic return from the data we already have.
-      return { ...existing, ...data, updated_at: now };
+      // Keep the caller's baseline: the editor adopts the returned version, and the
+      // row's may already be a collaborator's snapshot it has not applied (#1277).
+      return { ...existing, ...data, version: baseVersion ?? existing.version, updated_at: now };
     },
     // Roll back the optimistic edit so a failed write doesn't leave a phantom on screen.
     onError: (_err, { id }, context) => rollbackOptimisticNote(queryClient, id, context),

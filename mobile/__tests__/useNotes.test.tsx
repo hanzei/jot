@@ -893,6 +893,16 @@ describe('useNotes hooks', () => {
       expect(mockJot.notes.update).toHaveBeenCalledWith('123', { content: 'Mine', base_version: 5 });
     });
 
+    it('returns the caller baseVersion when the edit is queued, not the row version (#1277)', async () => {
+      mockJot.notes.update.mockRejectedValueOnce(makeAxiosError(503));
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingNote as never);
+
+      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+      const returned = await result.current.mutateAsync({ id: '123', data: { content: 'Mine' }, baseVersion: 5 });
+
+      expect(returned.version).toBe(5);
+    });
+
     it('falls back to the local queue when a transient failure (5xx) occurs', async () => {
       mockJot.notes.update.mockRejectedValueOnce(makeAxiosError(503));
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingNote as never);
@@ -1807,6 +1817,16 @@ describe('useNotes hooks', () => {
       is_shared: false, deleted_at: null,
       user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
     };
+
+    it('sends the editor-supplied baseVersion on convert (#1277)', async () => {
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce({ ...sourceTextNote, version: 9 } as never);
+      mockJot.notes.convert.mockResolvedValueOnce({ ...sourceTextNote, note_type: 'list', items: [], version: 10 } as never);
+
+      const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ id: '123', baseVersion: 3 });
+
+      expect(mockJot.notes.convert).toHaveBeenCalledWith('123', expect.objectContaining({ base_version: 3 }));
+    });
 
     it('converts a text note to a list via the API (precomputed items) and caches it locally', async () => {
       const converted = {
