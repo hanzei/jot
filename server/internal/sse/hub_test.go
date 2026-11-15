@@ -198,15 +198,10 @@ func TestHubEviction(t *testing.T) {
 				t.Fatal("Publish blocked on full channel")
 			}
 
-			// The slow subscriber still gets what was buffered, then sees
-			// its channel closed.
-			for range subscriberBufferSize {
-				got, ok := <-slow
-				require.True(t, ok)
-				assert.Equal(t, event, got)
-			}
+			// The slow subscriber's backlog is discarded (its client resyncs
+			// in full on reconnect), so its channel reads as closed at once.
 			_, ok := <-slow
-			assert.False(t, ok, "slow subscriber's channel should be closed")
+			assert.False(t, ok, "slow subscriber's channel should be closed with nothing left buffered")
 
 			// The healthy subscriber is unaffected and stays registered.
 			got, ok := <-fast

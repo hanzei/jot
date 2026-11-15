@@ -65,9 +65,10 @@ type Event struct {
 // subscriberBufferSize is how many events a subscriber may fall behind before
 // Publish evicts it. Eviction closes the stream, and the client's reconnect
 // re-pulls notes, labels and users in full, so the buffer is sized to absorb
-// ordinary bursts (a collaborator's replayed offline session, a bulk item
-// change) and evict only a client that has genuinely stopped reading. It is
-// kept bounded so such a client is resynced promptly rather than left stale.
+// ordinary bursts (a collaborator's replayed offline session publishes one
+// event per queued mutation) and evict only a client that has genuinely stopped
+// reading. It is kept bounded so such a client is resynced promptly rather than
+// left stale.
 const subscriberBufferSize = 128
 
 // Hub manages per-user SSE subscriber channels.
@@ -178,6 +179,17 @@ func (h *Hub) removeLocked(userID string, ch chan Event) bool {
 	return false
 }
 
+// drain discards every event currently buffered in ch without blocking.
+func drain(ch chan Event) {
+	for {
+		select {
+		case <-ch:
+		default:
+			return
+		}
+	}
+}
+
 // SubscriberCount returns the number of currently open SSE subscriptions
 // across all users. It is zero after Close.
 func (h *Hub) SubscriberCount() int {
@@ -263,6 +275,11 @@ func (h *Hub) Publish(ctx context.Context, userIDs []string, event Event) {
 		if !h.closed {
 			for _, o := range overflowed {
 				if h.removeLocked(o.userID, o.ch) {
+					// The client resyncs in full on reconnect, so whatever is
+					// still buffered is redundant. Discard it so the stream
+					// ends now instead of after flushing stale events over the
+					// link that just fell behind.
+					drain(o.ch)
 					close(o.ch)
 					logutil.FromContext(ctx).WithField("type", string(event.Type)).WithField("user_id", o.userID).Warn("SSE: subscriber channel full, closing stream so the client resyncs")
 					h.subscribersEvicted.Add(ctx, 1, metric.WithAttributes(eventAttr))
