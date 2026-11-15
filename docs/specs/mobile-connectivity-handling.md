@@ -471,10 +471,10 @@ its own edit times. Merging (§8.5) therefore loses nothing history would keep.
 | Rule | Issue |
 |---|---|
 | §8.2 a write to a note with a queued op or a write in flight is queued behind it; local edit and queue row commit together | #1261 |
-| §8.3 own-write responses (checked in the write's transaction), and the pull after a drain | #1262 |
 | §8.3 protected check in the write's transaction; refusing older snapshots | #1265 |
 | §8.4 protection lasts until the dead letter is resolved | #1263 |
 | §8.5 merging queued ops | #1268 |
+| §8.3 "take neither content nor version" while other ops are queued. Until queued ops are merged, a chain of queued edits to one note would conflict with itself, so the drain still adopts a response's version without its content when the version can only be its own write's: a create, or a version-guarded edit the server accepted at `base_version` or one above (`saveServerResponseNote`'s `ownVersion`). Remove the exception with #1268. | #1268 |
 | §8.6 account ownership, logout wipe and warning | #1264 |
 
 ---

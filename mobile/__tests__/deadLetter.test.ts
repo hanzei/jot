@@ -22,7 +22,7 @@ import { silenceConsole } from './helpers/consoleGuard';
 
 jest.mock('../src/api/client', () => ({
   __esModule: true,
-  default: { post: jest.fn(), patch: jest.fn(), delete: jest.fn() },
+  default: { get: jest.fn(), post: jest.fn(), patch: jest.fn(), delete: jest.fn() },
 }));
 
 const mockApi = api as jest.Mocked<typeof api>;
@@ -47,6 +47,10 @@ beforeEach(() => {
   // drive exactly those paths.
   silenceConsole('warn', /^Discarding queued operation/, /^Dead-lettering queued operation/);
   silenceConsole('info', /^Dropping queued operation/);
+  // A drain pulls the notes its landed writes touched (#1262); here that pull
+  // gets a 404, which is logged and ignored.
+  mockApi.get.mockRejectedValue(makeAxiosError(404));
+  silenceConsole('warn', /^Failed to pull note id=\S+ after the queue drain: Request failed with status code 404$/);
 });
 
 /** Seed a local note at a known optimistic-concurrency version. */
