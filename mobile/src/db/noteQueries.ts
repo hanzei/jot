@@ -1030,6 +1030,12 @@ async function removeLocalNotesNotInTx(
   // so we must not remove notes that may still belong in other views.
   if (params?.my_tasks) return;
 
+  // A search result says which notes match, not which notes exist. The server
+  // matches on full-text tokens while the local scope would be a substring
+  // test, so a note matching only the local test would be deleted wrongly.
+  // Deletions converge through the unfiltered list syncs instead.
+  if (params?.search) return;
+
   // Notes with a pending sync-queue op are protected from pruning too: a queued
   // edit can optimistically move a note into this scope (e.g. un-archive/restore)
   // before the server reflects it, so it would be absent from serverIds and get
@@ -1043,12 +1049,6 @@ async function removeLocalNotesNotInTx(
     scopedWhereSql += ' AND deleted_at IS NOT NULL';
   } else {
     scopedWhereSql += ' AND archived = 0 AND deleted_at IS NULL';
-  }
-
-  if (params?.search) {
-    const pattern = `%${escapeLikePattern(params.search)}%`;
-    scopedWhereSql += ` AND ${SEARCH_LIKE_SQL}`;
-    scopeArgs.push(pattern, pattern, pattern);
   }
 
   if (params?.label) {
