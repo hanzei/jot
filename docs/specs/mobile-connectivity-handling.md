@@ -173,6 +173,10 @@ mode" for the write paths.
   reconnect (not the first connect — that's covered by the mount-time sync). This
   closes the gap a bare foreground leaves: foregrounding on a stable network does
   not flip `isConnected`, so the `isConnected`-keyed refresh alone would miss it.
+  The server relies on this too: a subscriber that falls too far behind is
+  disconnected rather than sent an incomplete stream, so the reconnect resync is
+  what recovers the events it missed. On mobile that close is noticed only by the
+  stall watchdog (`src/api/events.ts`), so recovery takes up to its timeout.
 - A refresh must never roll back this device's own writes; §8.3 has the rules
   for applying a snapshot.
 - A failed background read is **not** an error dialog — it's a *staleness*
