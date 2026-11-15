@@ -24,7 +24,14 @@ export type UploadNoteImageResult = { status: 'uploaded'; image: NoteImage } | {
  * bytes) regardless of which path handled the delete.
  */
 async function hideImageLocally(db: SQLiteDatabase, noteId: string, imageId: string): Promise<void> {
-  await patchLocalNoteImages(db, noteId, (images) => images.filter((img) => img.id !== imageId));
+  // The server bumps the note's updated_at for the removal; the response is a
+  // bare 204, so touch the local row with this device's clock, as item edits do.
+  await patchLocalNoteImages(
+    db,
+    noteId,
+    (images) => images.filter((img) => img.id !== imageId),
+    new Date().toISOString(),
+  );
   await deleteCachedNoteImage(imageId);
 }
 
@@ -64,9 +71,13 @@ export function useUploadNoteImage() {
           // The SSE echo of this upload is dropped for the client that triggered
           // it (self-echo suppression in useSSE, keyed on the same X-Client-Id
           // header this upload just sent), so the local cache needs patching here
-          // directly instead of waiting for note_image_added to arrive.
-          await patchLocalNoteImages(db, noteId, (images) =>
-            images.some((img) => img.id === image.id) ? images : [...images, image],
+          // directly instead of waiting for note_image_added to arrive. The
+          // server bumped the note's updated_at to the image's created_at.
+          await patchLocalNoteImages(
+            db,
+            noteId,
+            (images) => images.some((img) => img.id === image.id) ? images : [...images, image],
+            image.created_at,
           );
           return { status: 'uploaded', image };
         } catch (err) {

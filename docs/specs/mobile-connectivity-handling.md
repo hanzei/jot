@@ -389,15 +389,13 @@ SSE event) and the response to this device's own write.
   protected set first and writing afterwards lets a write slip in between.
 - A snapshot **older than the local row** is not applied. Compare `updated_at`:
   item changes do not bump `version`. An equal `updated_at` is applied, since
-  some changes (images) leave it alone. This covers a list response built
-  before a queued write landed and saved after its queue row was removed.
-- **Known limit:** because image changes leave `updated_at` alone, a snapshot
-  built before an image upload and saved after it ties with the local row and
-  replaces the newer image list. The image disappears from the local cache
-  until the next sync; the server copy is unaffected. Keeping the local images
-  on a tie is not the fix: a remote image removal whose SSE event was missed
-  would then never apply. Closing this needs a server change marker that
-  covers images.
+  some changes (labels, shares, the public link) leave it alone. This covers a
+  list response built before a queued write landed and saved after its queue
+  row was removed.
+- Image uploads and removals bump `updated_at` like item changes. The device
+  that made one gets no SSE echo, so it sets the local row's `updated_at`
+  itself: to the image's `created_at` after an upload (the server uses the same
+  value), and to the local clock after a removal, whose response is a bare 204.
 
 **Responses to our own writes**
 

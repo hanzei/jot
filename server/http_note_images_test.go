@@ -276,6 +276,39 @@ func TestDeleteNoteImageUnknownReturns404(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
 }
 
+// TestNoteImageChangesBumpNoteUpdatedAt checks that an image is note content
+// for "last modified": adding or removing one bumps the note's updated_at, and
+// deleting an image that is already gone leaves it alone.
+func TestNoteImageChangesBumpNoteUpdatedAt(t *testing.T) {
+	t.Parallel()
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "imgtouch", "password123", false)
+
+	note, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "note"})
+	require.NoError(t, err)
+
+	img, err := user.Client.UploadNoteImage(t.Context(), note.ID, "cat.png", bytes.NewReader(testPNG(t, 4, 4)))
+	require.NoError(t, err)
+
+	afterUpload, err := user.Client.GetNote(t.Context(), note.ID)
+	require.NoError(t, err)
+	assert.True(t, afterUpload.UpdatedAt.After(note.UpdatedAt), "an upload bumps updated_at")
+	assert.True(t, afterUpload.UpdatedAt.Equal(img.CreatedAt), "the bump shares the image's timestamp")
+
+	require.NoError(t, user.Client.DeleteNoteImage(t.Context(), img.ID))
+
+	afterDelete, err := user.Client.GetNote(t.Context(), note.ID)
+	require.NoError(t, err)
+	assert.True(t, afterDelete.UpdatedAt.After(afterUpload.UpdatedAt), "a delete bumps updated_at")
+
+	err = user.Client.DeleteNoteImage(t.Context(), img.ID)
+	assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
+
+	afterRepeat, err := user.Client.GetNote(t.Context(), note.ID)
+	require.NoError(t, err)
+	assert.True(t, afterRepeat.UpdatedAt.Equal(afterDelete.UpdatedAt), "a repeated delete changes nothing")
+}
+
 // TestNoteImageDedupBlobSurvivesUntilUnreferenced exercises the dedup +
 // refcount reclamation path end-to-end over HTTP: the same image bytes
 // attached to two different notes hash to one blob, and deleting one

@@ -483,11 +483,18 @@ export async function getLocalNote(db: SQLiteDatabase, id: string): Promise<Note
  * `note_image_added`/`note_image_removed` event (issue #616). No-op if the
  * note isn't cached locally yet — the next full note fetch will pick up its
  * images.
+ *
+ * `touchedAt` is for this device's own uploads and deletes, whose SSE echo is
+ * dropped: the server bumps the note's updated_at for an image change (#1275),
+ * so the local row takes `touchedAt` as its updated_at too, but only when the
+ * image list actually changed, matching the server's no-op rule. SSE patches
+ * omit it, since the note_updated that follows them carries the server's value.
  */
 export async function patchLocalNoteImages(
   db: SQLiteDatabase,
   noteId: string,
   updater: (images: NoteImage[]) => NoteImage[],
+  touchedAt?: string,
 ): Promise<void> {
   // Serialized like saveNote: the read-modify-write below would otherwise let
   // two back-to-back SSE events (e.g. two rapid note_image_added) interleave
@@ -501,6 +508,15 @@ export async function patchLocalNoteImages(
     let images: NoteImage[] = [];
     try { images = JSON.parse(row.images_json) as NoteImage[]; } catch { /* ignore */ }
     const nextImages = updater(images);
+    const changed = nextImages.length !== images.length
+      || nextImages.some((img, i) => img.id !== images[i]?.id);
+    if (touchedAt !== undefined && changed) {
+      await db.runAsync(
+        'UPDATE notes SET images_json = ?, updated_at = ? WHERE id = ?',
+        [JSON.stringify(nextImages), touchedAt, noteId],
+      );
+      return;
+    }
     await db.runAsync(
       'UPDATE notes SET images_json = ? WHERE id = ?',
       [JSON.stringify(nextImages), noteId],

@@ -175,9 +175,6 @@ func TestNoteUnreadState(t *testing.T) {
 				_, convErr := store.convertNoteRowTx(ctx, tx, note.ID, ownerID, note.NoteType, "stale title", "stale content", nil, nil, stale)
 				return convErr
 			},
-			"recordContentChangeTx": func(tx *sql.Tx) error {
-				return recordContentChangeTx(ctx, tx, store.d, note.ID, ownerID, stale)
-			},
 		}
 		for name, write := range staleWriters {
 			require.NoError(t, inTx(ctx, store, write), name)
