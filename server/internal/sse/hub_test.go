@@ -162,6 +162,14 @@ func TestHubPublish(t *testing.T) {
 			t.Fatal("expected event in channel but got none")
 		}
 	})
+}
+
+func TestHubEviction(t *testing.T) {
+	event := Event{
+		Type:         EventNoteCreated,
+		SourceUserID: "user1",
+		Data:         NoteEventData{NoteID: "note1"},
+	}
 
 	t.Run("evicts a subscriber whose buffer is full without blocking", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {

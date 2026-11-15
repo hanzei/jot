@@ -49,8 +49,8 @@ func TestSSESlowSubscriberStreamEnds(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	subscribers := func() int64 {
-		stats, err := admin.Client.AdminGetStats(t.Context())
-		require.NoError(t, err)
+		stats, statsErr := admin.Client.AdminGetStats(t.Context())
+		require.NoError(t, statsErr)
 		return stats.Runtime.SSESubscribers
 	}
 	require.Equal(t, int64(1), subscribers())
@@ -63,8 +63,8 @@ func TestSSESlowSubscriberStreamEnds(t *testing.T) {
 	evicted := false
 	for i := 0; i < 5000 && !evicted; i++ {
 		c := content + string(rune('a'+i%26))
-		_, err := user.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{Content: &c})
-		require.NoError(t, err)
+		_, updateErr := user.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{Content: &c})
+		require.NoError(t, updateErr)
 		evicted = subscribers() == 0
 	}
 	require.True(t, evicted, "slow subscriber should have been evicted")
