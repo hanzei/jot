@@ -120,9 +120,7 @@ function itemRowToNoteItem(row: NoteItemRow): NoteItem {
 /**
  * Escape SQL LIKE wildcards in user-entered search text so `%`/`_` match
  * literally (paired with `ESCAPE '\'` on the LIKE). Without this a search like
- * "50%" over-matches locally — and, worse, widens the prune scope in
- * {@link removeLocalNotesNotIn} beyond what the server's literal match
- * returned, deleting local rows that still exist on the server.
+ * "50%" over-matches in the offline local search.
  */
 function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
