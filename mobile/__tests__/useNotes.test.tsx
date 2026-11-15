@@ -156,6 +156,21 @@ describe('useNotes hooks', () => {
       expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newNote, expect.objectContaining({ serverSnapshot: true }));
     });
 
+    it('sends the IDs it queues when the request times out after the server committed (#1278)', async () => {
+      mockJot.notes.create.mockRejectedValueOnce(makeNetworkError());
+
+      const { result } = await renderHook(() => useCreateNote(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({
+        note_type: 'list', title: 'L', items: [{ text: 'a', position: 0 }, { text: 'b', position: 1 }],
+      });
+
+      const sent = mockJot.notes.create.mock.calls[0]![0] as { id?: string; items: { id?: string }[] };
+      expect(sent.id).toBe('ClientNoteId000000000A');
+      expect(sent.items.every((i) => !!i.id)).toBe(true);
+      const queued = mockSyncQueue.enqueueOperation.mock.calls[0]![1];
+      expect(queued.body).toEqual(sent);
+    });
+
     it('stores the labels a create returns, since it may have minted them', async () => {
       const errands = { id: 'label-errands', user_id: 'u1', name: 'Errands', created_at: '', updated_at: '' };
       mockJot.notes.create.mockResolvedValueOnce({
@@ -1644,7 +1659,7 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toEqual(duplicated);
-      expect(mockJot.notes.duplicate).toHaveBeenCalledWith('123');
+      expect(mockJot.notes.duplicate).toHaveBeenCalledWith('123', {});
       expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), duplicated, expect.objectContaining({ serverSnapshot: true }));
     });
   });
@@ -1784,6 +1799,22 @@ describe('useNotes hooks', () => {
       );
     });
 
+    it('queues the same IDs the timed-out online request carried (#1278)', async () => {
+      mockJot.notes.duplicate.mockRejectedValueOnce(makeNetworkError());
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce({
+        ...sourceTextNote, note_type: 'list',
+        items: [{ id: 'src-item', note_id: '123', text: 'a', completed: false, position: 0, parent_id: null, assigned_to: '', created_at: '', updated_at: '' }],
+      } as never);
+
+      const { result } = await renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
+      await result.current.mutateAsync('123');
+
+      const [, opts] = mockJot.notes.duplicate.mock.calls[0]!;
+      expect(opts).toEqual({ id: 'ClientNoteId000000000A', itemIds: { 'src-item': expect.any(String) } });
+      const queued = mockSyncQueue.enqueueOperation.mock.calls[0]![1];
+      expect(queued.body).toEqual({ id: opts!.id, item_ids: opts!.itemIds });
+    });
+
     it('falls back to the local queue on a network error (no response)', async () => {
       mockJot.notes.duplicate.mockRejectedValueOnce(makeNetworkError());
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceTextNote as never);
@@ -1806,7 +1837,6 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isError).toBe(true));
 
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
-      expect(mockNoteQueries.getLocalNote).not.toHaveBeenCalled();
     });
   });
 

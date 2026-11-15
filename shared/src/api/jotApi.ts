@@ -222,7 +222,10 @@ export function createJotApi(http: JotHttpClient) {
       /** Every label, each with its `note_count`. */
       getAll: (): Promise<LabelWithCount[]> => http.get<LabelListResponse>(apiPaths.labels).then(res => res.data.labels),
 
-      create: (name: string): Promise<Label> => data(http.post<Label>(apiPaths.labels, { name } satisfies AddLabelRequest)),
+      // With an `id` the create is strict (a replayed ID or a taken name is a 409);
+      // without one it is get-or-create by name.
+      create: (name: string, id?: string): Promise<Label> =>
+        data(http.post<Label>(apiPaths.labels, (id ? { id, name } : { name }) satisfies AddLabelRequest)),
 
       rename: (id: string, name: string): Promise<Label> => data(http.patch<Label>(apiPaths.label(id), { name } satisfies RenameLabelRequest)),
 
