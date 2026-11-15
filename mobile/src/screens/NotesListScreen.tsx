@@ -29,6 +29,7 @@ import type { RootStackParamList, LayoutRect } from '../navigation/RootNavigator
 import { isSortWarningDismissed, dismissSortWarning } from '../utils/sortWarningDismissed';
 import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
 import { enqueueOperation, isQueueableError } from '../db/syncQueue';
+import { recordWriteLanded } from '../db/snapshotGate';
 import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { styles } from './notesList/styles';
@@ -334,6 +335,9 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
       await jot.notes.emptyTrash();
       serverTrashEmptied = true;
       const trashedNotes = await getLocalNotes(db, { trashed: true });
+      // DELETE /notes/trash names none of the notes it purged; record them so a
+      // trash fetch already in flight cannot write them back (#1265).
+      recordWriteLanded(trashedNotes.map((note) => note.id));
       await Promise.all(trashedNotes.map((note) => permanentDeleteLocalNote(db, note.id)));
       Alert.alert(t('dashboard.emptyTrash'), t('dashboard.trashEmptied'));
     } catch {

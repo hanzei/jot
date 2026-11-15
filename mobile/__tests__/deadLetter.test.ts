@@ -14,7 +14,7 @@ import {
   saveServerNote,
   QUEUED_WRITE_TIMEOUT_MS,
 } from '../src/db/syncQueue';
-import { snapshotMark } from '../src/db/snapshotGate';
+import { notesWrittenSince, snapshotMark } from '../src/db/snapshotGate';
 import { getFailedNoteIds, saveNote } from '../src/db/noteQueries';
 import api from '../src/api/client';
 import { makeTextNote as buildTextNote, remainingQueueIds, seedQueueEntry } from './helpers/fixtures';
@@ -257,6 +257,41 @@ describe('drainQueue dead-letter persistence', () => {
     expect(await failedNoteIds()).toEqual([]);
     expect(await remainingQueueIds(db)).toEqual([]);
     expect(discardedOperations).toEqual([{ operation: 'removeImage', endpoint: '/images/img1', status: 403 }]);
+  });
+
+  it('records the landing of a replayed removeImage, whose request names no note (#1265)', async () => {
+    // The DELETE goes out without a body, so only the drain knows its note: a
+    // snapshot fetched before the delete must not bring the image back.
+    await seedQueueEntry(db, {
+      operation: 'removeImage',
+      endpoint: '/images/img1',
+      method: 'DELETE',
+      body: { note_id: 'n1' },
+    });
+    mockApi.delete.mockResolvedValueOnce({ data: null } as never);
+    const since = snapshotMark();
+
+    await drainQueue(db);
+
+    expect(notesWrittenSince(since)).toEqual(new Set(['n1']));
+  });
+
+  it('records the landing of a create resolved as an already-applied 409 (#1265)', async () => {
+    // The original POST landed unseen, so the API client never recorded it; the
+    // queue row was the only gate, and it is about to go.
+    await saveNote(db, makeTextNote('created'));
+    await seedQueueEntry(db, {
+      operation: 'create',
+      endpoint: '/notes',
+      method: 'POST',
+      body: { id: 'created', note_type: 'text' },
+    });
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(409));
+    const since = snapshotMark();
+
+    await drainQueue(db);
+
+    expect(notesWrittenSince(since)).toEqual(new Set(['created']));
   });
 
   it('drops a permanently-rejected markViewed without flagging the note', async () => {

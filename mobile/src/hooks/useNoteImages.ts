@@ -6,6 +6,7 @@ import { uploadNoteImage, type ImageUploadFile } from '../api/images';
 import { patchLocalNoteImages, isNotePendingCreate } from '../db/noteQueries';
 import { enqueueOperation, rethrowIfNotQueueable } from '../db/syncQueue';
 import { enqueueImageUpload } from '../db/imageUploadQueue';
+import { recordWriteLanded } from '../db/snapshotGate';
 import { deleteCachedNoteImage } from '../utils/noteImageCache';
 import { assertSwitchWriteAllowed } from '../api/client';
 import { isOnlineWriteAllowed } from '../api/serverReachability';
@@ -127,6 +128,10 @@ export function useDeleteNoteImage() {
       if (isLocalModeActive() || isOnlineWriteAllowed(isConnected)) {
         try {
           await jot.images.delete(imageId);
+          // DELETE /images/{id} names no note, so the API client cannot record
+          // which note this write landed on; a snapshot fetched before it would
+          // otherwise bring the image back (#1265).
+          recordWriteLanded([noteId]);
           // Same self-echo gap as the upload above, on the removal side.
           await hideImageLocally(db, noteId, imageId);
           return;

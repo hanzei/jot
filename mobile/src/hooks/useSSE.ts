@@ -16,7 +16,7 @@ import {
   patchLocalNoteImages,
   upsertLabel,
 } from '../db/noteQueries';
-import { getProtectedNoteIds, saveServerNote } from '../db/syncQueue';
+import { getSnapshotSkipNoteIds, saveServerNote } from '../db/syncQueue';
 import { snapshotMark } from '../db/snapshotGate';
 import { isSseQuiesced, subscribeToServerSwitchLifecycle } from '../store/serverSwitchLifecycle';
 import { publishProfileIconUpdate } from '../store/profileIconEvents';
@@ -144,7 +144,7 @@ export function useSSE(
             // the optimistic edit (#487/#492). The drain replaying against a server-deleted
             // note gets a 404 and dead-letters the op, so this can't wedge the queue.
             try {
-              const protectedNoteIds = await getProtectedNoteIds(db);
+              const protectedNoteIds = await getSnapshotSkipNoteIds(db, since);
               if (!protectedNoteIds.has(note_id)) {
                 queryClient.removeQueries({ queryKey: noteLocalQueryKey(note_id) });
                 await markLocalNoteDeleted(db, note_id);
@@ -198,7 +198,7 @@ export function useSSE(
               // tombstone — it must not linger in their trash view). Defer to a
               // pending/failed local op (#487/#492).
               try {
-                const protectedNoteIds = await getProtectedNoteIds(db);
+                const protectedNoteIds = await getSnapshotSkipNoteIds(db, since);
                 if (!protectedNoteIds.has(note_id)) {
                   queryClient.removeQueries({ queryKey: noteLocalQueryKey(note_id) });
                   await permanentDeleteLocalNote(db, note_id);

@@ -21,7 +21,7 @@ import {
 } from './noteQueries';
 import { isLocalModeActive } from '../store/localMode';
 import { collectNoteIds } from './affectedNoteIds';
-import { notesWrittenSince, type SnapshotMark } from './snapshotGate';
+import { notesWrittenSince, recordWriteLanded, type SnapshotMark } from './snapshotGate';
 import type { Label } from '@jot/shared';
 
 export type QueueOperation =
@@ -908,6 +908,9 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         }
       }
 
+      // The API client records the landing too, but only from what was sent:
+      // a removeImage replay sends no body, so its note id is only here (#1265).
+      recordWriteLanded(affectedNoteIds(endpoint, body));
       await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
 
       // The write landed: if this note was carrying a prior failure, clear it so
@@ -925,6 +928,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // reconciled by the next server fetch / SSE event. Attempt counting is
         // reserved for failures *before* the request lands (issue #714).
         console.warn(`Queue entry id=${entry.id} landed server-side; post-response reconciliation failed:`, err);
+        recordWriteLanded(affectedNoteIds(endpoint, body));
         await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
         continue;
       }
@@ -1039,6 +1043,10 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           console.info(
             `Dropping queued operation id=${entry.id} ${entry.operation} ${endpoint} (HTTP ${status}): no replay needed`,
           );
+          // The end state is already on the server (an earlier attempt landed
+          // unseen, or the target is gone), and the row that gated snapshots is
+          // about to go: a snapshot in flight may predate it (#1265).
+          recordWriteLanded(affectedNoteIds(endpoint, body));
         }
 
         await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
