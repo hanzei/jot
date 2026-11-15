@@ -20,8 +20,8 @@ func scanNoteImage(rows *sql.Rows) (NoteImage, error) {
 
 // CreateNoteImage inserts a new note_images row and returns the created
 // image. An empty imageID is generated; a caller-supplied one that is already
-// taken returns ErrNoteImageExists. When maxImages > 0 the note's image count is checked inside the
-// same transaction as the insert and ErrNoteImageCapExceeded is returned if
+// taken returns ErrNoteImageExists. When maxImages > 0 the note's image count
+// is checked inside the same transaction as the insert and ErrNoteImageCapExceeded is returned if
 // adding the image would exceed the cap — atomic, so concurrent uploads to
 // the same note cannot race past it (mirrors CreateItemWithID's maxItems
 // check). Callers may additionally pre-check the count outside the

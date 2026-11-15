@@ -215,6 +215,23 @@ func TestNoteImageStore(t *testing.T) {
 			assert.Empty(t, notes[2].Images)
 		})
 
+		t.Run("CreateNoteImage keeps a client-supplied ID and rejects a taken one", func(t *testing.T) {
+			store, userID, noteID := newTestNoteImageStore(t, driver)
+			ctx := t.Context()
+
+			const imageID = "clientimage0000000001"
+			img, err := store.CreateNoteImage(ctx, noteID, userID, imageID, "a.png", "image/png", 1, "sha-a", 1, 1, 0)
+			require.NoError(t, err)
+			assert.Equal(t, imageID, img.ID)
+
+			_, err = store.CreateNoteImage(ctx, noteID, userID, imageID, "b.png", "image/png", 1, "sha-b", 1, 1, 0)
+			require.ErrorIs(t, err, ErrNoteImageExists)
+
+			images, err := store.GetNoteImagesByNoteID(ctx, noteID)
+			require.NoError(t, err)
+			assert.Len(t, images, 1)
+		})
+
 		t.Run("CreateNoteImage enforces maxImages atomically", func(t *testing.T) {
 			store, userID, noteID := newTestNoteImageStore(t, driver)
 			ctx := t.Context()

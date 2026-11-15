@@ -289,20 +289,27 @@ func (h *NotesHandler) resolveClientImageID(ctx context.Context, noteID, imageID
 	if !models.IsValidID(imageID) {
 		return http.StatusBadRequest, nil, errors.New("invalid image ID format")
 	}
-	_, err := h.noteStore.GetNoteImageByID(ctx, imageID)
+	existing, err := h.noteStore.GetNoteImageByID(ctx, imageID)
 	if errors.Is(err, models.ErrNoteImageNotFound) {
 		return 0, nil, nil
 	}
-	return h.existingImageResponse(ctx, noteID, imageID)
+	return replayResponse(noteID, existing, err)
 }
 
-// existingImageResponse answers an upload whose client-supplied ID is taken:
-// the image itself (200) when it is on this note, 409 when it is elsewhere.
+// existingImageResponse answers an upload that lost a race for its
+// client-supplied ID, like resolveClientImageID does for a taken one.
 func (h *NotesHandler) existingImageResponse(ctx context.Context, noteID, imageID string) (int, *models.NoteImage, error) {
 	existing, err := h.noteStore.GetNoteImageByID(ctx, imageID)
-	if err != nil {
-		status, _, storeErr := storeError(err, "get note image")
-		return status, nil, storeErr
+	return replayResponse(noteID, existing, err)
+}
+
+// replayResponse is the answer to an upload whose client-supplied ID is
+// taken: the image itself (200) when it is on this note, 409 when it is
+// elsewhere. A failed lookup is reported as such.
+func replayResponse(noteID string, existing *models.NoteImage, lookupErr error) (int, *models.NoteImage, error) {
+	if lookupErr != nil {
+		status, _, err := storeError(lookupErr, "get note image")
+		return status, nil, err
 	}
 	if existing.NoteID != noteID {
 		return http.StatusConflict, nil, errors.New("image ID already exists")
