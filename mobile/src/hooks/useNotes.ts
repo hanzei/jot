@@ -425,13 +425,20 @@ function buildLocalNoteRevert(existing: Note, data: UpdateNoteRequest): LocalNot
   return revert;
 }
 
+interface UpdateNoteVariables {
+  id: string;
+  data: UpdateNoteRequest;
+  /** Version of the text the user edited from; see the editor's `savedVersionRef`. */
+  baseVersion?: number | undefined;
+}
+
 export function useUpdateNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
 
   return useMutation({
-    onMutate: async ({ id, data }: { id: string; data: UpdateNoteRequest }) => {
+    onMutate: async ({ id, data }: UpdateNoteVariables) => {
       // Cancel in-flight note reads before patching the cache, so a refetch
       // already on the wire can't resolve over the optimistic edit (the same
       // revert a re-read *during* the request causes, from the other direction).
@@ -439,7 +446,7 @@ export function useUpdateNote() {
       const now = new Date().toISOString();
       return applyOptimisticNote(queryClient, id, (note) => ({ ...note, ...data, updated_at: now }));
     },
-    mutationFn: async ({ id, data }: { id: string; data: UpdateNoteRequest }): Promise<Note> => {
+    mutationFn: async ({ id, data, baseVersion }: UpdateNoteVariables): Promise<Note> => {
       assertSwitchWriteAllowed();
 
       const existing = await getLocalNote(db, id);
@@ -471,8 +478,13 @@ export function useUpdateNote() {
           // Online: gate on the version we currently hold locally so the server
           // can reject a write that raced a concurrent edit on another device
           // (#489). A 409 is permanent, so rethrowIfNotQueueable surfaces it.
+          // An editor passes the version its text was based on (`baseVersion`):
+          // the row may already hold a collaborator's newer snapshot the user
+          // never saw, and sending that would turn their conflict into a silent
+          // overwrite (#1277). Callers without an editor baseline fall back to the row.
+          const guardVersion = baseVersion ?? existing?.version;
           const body: UpdateNoteRequest =
-            touchesContent && existing ? { ...data, base_version: existing.version } : data;
+            touchesContent && guardVersion !== undefined ? { ...data, base_version: guardVersion } : data;
           const updatedNote = await jot.notes.update(id, body);
           await saveServerResponseNote(db, updatedNote);
           return updatedNote;
@@ -636,7 +648,7 @@ export function useConvertNoteType() {
   const { isConnected } = useNetworkStatus();
 
   return useMutation({
-    mutationFn: async (id: string): Promise<Note> => {
+    mutationFn: async ({ id, baseVersion }: { id: string; baseVersion?: number | undefined }): Promise<Note> => {
       assertSwitchWriteAllowed();
 
       const existing = await getLocalNote(db, id);
@@ -650,7 +662,7 @@ export function useConvertNoteType() {
       const pendingCreate = await isNotePendingCreate(db, id);
       if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
-          const convertedNote = await jot.notes.convert(id, { ...data, base_version: existing.version });
+          const convertedNote = await jot.notes.convert(id, { ...data, base_version: baseVersion ?? existing.version });
           await saveServerResponseNote(db, convertedNote);
           return convertedNote;
         } catch (err) {

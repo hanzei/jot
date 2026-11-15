@@ -77,6 +77,8 @@ export interface NoteEditorSync {
    */
   flushSave: (unmounting?: boolean, options?: FlushOptions) => Promise<boolean>;
   /** Cancels the debounced save, then flushes. */
+  /** Version the editor's text is based on; the `base_version` for a convert. */
+  savedVersionRef: React.RefObject<number | undefined>;
   flushPendingChanges: (options?: FlushOptions) => Promise<boolean>;
   /** Drops any debounced save without flushing it. */
   cancelScheduledSave: () => void;
@@ -225,6 +227,11 @@ export function useNoteEditorSync({
   const savedItemsRef = useRef<Map<string, ItemSnapshot>>(new Map());
   const savedOrderRef = useRef<string[]>([]);
   const savedScalarsRef = useRef<NoteScalars>({ title: '', content: '', pinned: false, archived: false, color: DEFAULT_NOTE_COLOR, checked_items_collapsed: false });
+  // Version of the note the editor's text is based on (spec §8.1 `base_version`).
+  // Advanced only when the editor applies a note or one of its own saves returns;
+  // a snapshot that lands in SQLite while the editor is dirty must not move it,
+  // or the save would pass the collaborator's version as its own (#1277).
+  const savedVersionRef = useRef<number | undefined>(undefined);
   const isHydratingRef = useRef(initialNoteId !== null && !existingNote);
   // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isHydratingRef.current = initialNoteId !== null && !existingNote;
@@ -278,6 +285,7 @@ export function useNoteEditorSync({
     };
     savedItemsRef.current = new Map(nextItems.map((it) => [it.id, itemSnapshot(it)]));
     savedOrderRef.current = nextItems.map((it) => it.id);
+    savedVersionRef.current = note.version;
   }, [doc]);
 
   // Load existing note data (once, on first hydration).
@@ -454,6 +462,7 @@ export function useNoteEditorSync({
         // The server honors the client-supplied item IDs, so the items we just
         // sent become the baseline for subsequent granular edits.
         captureBaseline();
+        savedVersionRef.current = newNote.version;
         if (!isMountedRef.current || unmounting) return true;
         noteIdRef.current = newNote.id;
         doc.setNoteId(newNote.id);
@@ -472,7 +481,8 @@ export function useNoteEditorSync({
           checked_items_collapsed: currentCollapsed,
         }, savedScalarsRef.current);
         if (scalarData) {
-          await updateMutateRef.current({ id: currentNoteId, data: scalarData });
+          const saved = await updateMutateRef.current({ id: currentNoteId, data: scalarData, baseVersion: savedVersionRef.current });
+          savedVersionRef.current = saved.version;
         }
 
         // Items are persisted as granular per-item operations.
@@ -731,6 +741,7 @@ export function useNoteEditorSync({
     markDirtyAndScheduleUpdate,
     runMetadataUpdate,
     commitMetadataBaseline,
+    savedVersionRef,
     savedItemsRef,
     savedOrderRef,
     isHydratingRef,
