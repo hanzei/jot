@@ -1513,7 +1513,7 @@ describe('removeLocalNotesNotIn with search', () => {
     return rows.map((r) => r.id);
   };
 
-  it('prunes only notes inside the search scope, including item-text matches', async () => {
+  it('does not prune on a search scope, even for notes absent from the response', async () => {
     await saveNote(db, makeTextNote({ id: 'match-content', content: 'hello world' }));
     await saveNote(
       db,
@@ -1523,22 +1523,13 @@ describe('removeLocalNotesNotIn with search', () => {
         items: [makeNoteItem({ id: 'i1', note_id: 'match-item', text: 'hello again' })],
       }),
     );
+    // Substring-only match: the server's token search would not return it.
+    await saveNote(db, makeTextNote({ id: 'substring-only', content: 'othello' }));
     await saveNote(db, makeTextNote({ id: 'outside-scope', content: 'unrelated' }));
 
     await removeLocalNotesNotIn(db, new Set<string>(), { search: 'hello' });
 
-    // Only the two notes the search scope covers are pruned.
-    expect(await remainingNoteIds()).toEqual(['outside-scope']);
-  });
-
-  it('escapes LIKE wildcards so the prune scope matches the server literal search', async () => {
-    await saveNote(db, makeTextNote({ id: 'literal-percent', content: 'save 50% now' }));
-    await saveNote(db, makeTextNote({ id: 'not-literal', content: '5000 items' }));
-
-    await removeLocalNotesNotIn(db, new Set<string>(), { search: '50%' });
-
-    // A naive `%50%%` pattern would have swept up '5000 items' too.
-    expect(await remainingNoteIds()).toEqual(['not-literal']);
+    expect(await remainingNoteIds()).toEqual(['match-content', 'match-item', 'outside-scope', 'substring-only']);
   });
 });
 
