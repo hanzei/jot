@@ -173,16 +173,8 @@ mode" for the write paths.
   reconnect (not the first connect — that's covered by the mount-time sync). This
   closes the gap a bare foreground leaves: foregrounding on a stable network does
   not flip `isConnected`, so the `isConnected`-keyed refresh alone would miss it.
-- A refresh must never roll back this device's own writes. Server snapshots go
-  through the `saveServerNote*` writers in `src/db/syncQueue.ts`, which skip a
-  note while it has a queued or failed op (`getProtectedNoteIds`), and also any
-  note one of this device's writes landed on after the snapshot's request
-  started: the snapshot may predate that write even though its queue row is
-  gone (#1265). The API client records each landed write
-  (`src/db/snapshotGate.ts`); every snapshot writer takes a `snapshotMark()`
-  before it fetches and passes it to the save. The skip set is read inside the
-  save's own transaction. The gate compares a local counter, never server
-  timestamps against the device clock.
+- A refresh must never roll back this device's own writes; §8.3 has the rules
+  for applying a snapshot.
 - A failed background read is **not** an error dialog — it's a *staleness*
   signal. The user keeps seeing cached data; ideally the UI can show when data
   was last synced (a diagnostic surface exists; a user-facing one is future
@@ -397,17 +389,23 @@ SSE event) and the response to this device's own write.
   field only the server owns and no local edit can touch (the public link).
 - The protected check and the write happen in **one transaction**. Reading the
   protected set first and writing afterwards lets a write slip in between.
-- A snapshot **older than the local row** is not applied. Compare `updated_at`:
-  item changes do not bump `version`. An equal `updated_at` is applied, since
-  some changes (images) leave it alone. This covers a list response built
-  before a queued write landed and saved after its queue row was removed.
-- **Known limit:** because image changes leave `updated_at` alone, a snapshot
-  built before an image upload and saved after it ties with the local row and
-  replaces the newer image list. The image disappears from the local cache
-  until the next sync; the server copy is unaffected. Keeping the local images
-  on a tie is not the fix: a remote image removal whose SSE event was missed
-  would then never apply. Closing this needs a server change marker that
-  covers images.
+- A snapshot **older than one of this device's writes** is not applied to the
+  note that write touched. This covers a list response built before a queued
+  write landed and saved after its queue row was removed. Each snapshot writer
+  takes a `snapshotMark()` before it fetches; the API client and the drain
+  record every note a write landed on (`src/db/snapshotGate.ts`); the save
+  skips, and does not prune, a note written after the mark. The mark is a
+  local counter kept in memory: a restart drops every snapshot in flight along
+  with it.
+- The age check does **not** compare `updated_at`. Local edits stamp it from
+  the device clock, so against a server timestamp a device whose clock runs
+  ahead would refuse newer snapshots; item changes do not bump `version`
+  either. A rule that never accepts a lower `version` is also out: after an
+  operator restores a server backup it would freeze notes on every device.
+- **Known limit:** an SSE payload is built on the server before it reaches the
+  device, so its mark is taken on receipt. A payload from another device's
+  write, built just before this device's write to the same note landed but
+  received after it, still replaces the newer row until the next pull.
 
 **Responses to our own writes**
 
@@ -482,7 +480,6 @@ its own edit times. Merging (§8.5) therefore loses nothing history would keep.
 |---|---|
 | §8.2 a write to a note with a queued op or a write in flight is queued behind it; local edit and queue row commit together | #1261 |
 | §8.3 own-write responses (checked in the write's transaction), and the pull after a drain | #1262 |
-| §8.3 protected check in the write's transaction; refusing older snapshots | #1265 |
 | §8.4 protection lasts until the dead letter is resolved | #1263 |
 | §8.5 merging queued ops | #1268 |
 | §8.6 account ownership, logout wipe and warning | #1264 |
@@ -496,7 +493,7 @@ its own edit times. Merging (§8.5) therefore loses nothing history would keep.
 | Device connectivity + queue drain | `src/store/OfflineContext.tsx` |
 | Server-reachability belief + write gate | `src/api/serverReachability.ts` (`isServerReachable`, `isOnlineWriteAllowed`) |
 | Timeouts + interceptors + reachability wiring | `src/api/client.ts` |
-| Local note rows, snapshot and response writes (§8.1, §8.3) | `src/db/noteQueries.ts`, `src/db/syncQueue.ts` (`saveServerNote`, `saveServerResponseNote`, `getProtectedNoteIds`) |
+| Local note rows, snapshot and response writes (§8.1, §8.3) | `src/db/noteQueries.ts`, `src/db/syncQueue.ts` (`saveServerNote`, `saveServerResponseNote`, `getProtectedNoteIds`, `getSnapshotSkipNoteIds`) |
 | Failed-change review and resolution (§8.4) | `src/hooks/useSyncFailures.ts` |
 | Sync queue + transient/permanent split + head-of-line dead-lettering | `src/db/syncQueue.ts` (`rethrowIfNotQueueable`, `isQueueableError`, `isGlobalDrainFailure`, `MAX_ENTRY_DRAIN_ATTEMPTS`, `getSyncQueueStats`) |
 | Snapshot gate (own writes landed after a fetch started) | `src/db/snapshotGate.ts`, wired in `src/api/client.ts` |
