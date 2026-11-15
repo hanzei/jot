@@ -2,9 +2,10 @@ import { Fragment, useEffect, useId, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { formatDate } from '@/utils/formatDate';
-import { ChevronDown, Square, SquareCheck, FileQuestion } from 'lucide-react';
+import { ChevronDown, Square, SquareCheck, FileQuestion, ArrowRight } from 'lucide-react';
 import { VALIDATION, groupNoteItems, type PublicListNote, type PublicNote as PublicNoteData, type PublicNoteItem } from '@jot/shared';
-import { publicNoteImages, publicNotes } from '@/utils/api';
+import { canOpenNote, publicNoteImages, publicNotes } from '@/utils/api';
+import { isAuthenticated } from '@/utils/auth';
 import { httpStatus } from '@/utils/apiError';
 import { inlineMarkdownToText, renderMarkdown } from '@/utils/markdown';
 import InlineMarkdown from '@/components/InlineMarkdown';
@@ -19,7 +20,10 @@ type LoadState =
 /**
  * The page behind a public note link (`/share/{token}`): a read-only snapshot
  * of the note as it was when the page loaded. It renders the same for every
- * visitor, signed in or not, and calls only the unauthenticated public API.
+ * visitor, signed in or not. The one addition for a signed-in visitor who can
+ * open the note (its owner or a collaborator) is a bar linking to it in the
+ * app; the view itself stays the public one, so the owner can still check what
+ * outsiders see.
  */
 export default function PublicNote() {
   const { token } = useParams<{ token: string }>();
@@ -64,8 +68,47 @@ export default function PublicNote() {
         {state.status === 'error' && (
           <Message title={t('publicNote.errorTitle')} body={t('publicNote.errorBody')} />
         )}
+        {note && <OpenInAppBar noteId={note.id} />}
         {note && token && <PublicNoteView note={note} token={token} />}
       </main>
+    </div>
+  );
+}
+
+/**
+ * Offers a visitor who can open the note in the app a link to it. Only asked
+ * when this browser has a signed-in user stored, so an anonymous visitor makes
+ * no call beyond the public one; any failure (no or stale session, no access)
+ * shows nothing.
+ */
+function OpenInAppBar({ noteId }: { noteId: string }) {
+  const { t } = useTranslation();
+  const [checked, setChecked] = useState<{ noteId: string; canOpen: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!isAuthenticated()) return;
+    let cancelled = false;
+    void canOpenNote(noteId).then(canOpen => {
+      if (!cancelled) setChecked({ noteId, canOpen });
+    });
+    return () => { cancelled = true; };
+  }, [noteId]);
+
+  if (checked?.noteId !== noteId || !checked.canOpen) return null;
+  return (
+    <div
+      className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-slate-800 px-4 py-3 text-sm text-gray-800 dark:text-gray-100"
+      data-testid="public-note-open-in-app"
+    >
+      <span>{t('publicNote.openInAppBody')}</span>
+      {/* A full page load: the app is decided from the entry URL (App.tsx). */}
+      <a
+        href={`/notes/${noteId}`}
+        className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 font-medium text-white hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900"
+      >
+        {t('publicNote.openInApp')}
+        <ArrowRight aria-hidden="true" className="h-4 w-4" />
+      </a>
     </div>
   );
 }

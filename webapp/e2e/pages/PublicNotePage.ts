@@ -32,6 +32,15 @@ export class PublicNotePage {
     return this.page.getByTestId('public-note-completed-items');
   }
 
+  /** The bar offering a signed-in visitor who can open the note a link to it. */
+  openInAppBar() {
+    return this.page.getByTestId('public-note-open-in-app');
+  }
+
+  openInAppLink() {
+    return this.openInAppBar().getByRole('link', { name: 'Open note' });
+  }
+
   notFound() {
     return this.page.getByRole('heading', { name: 'Note not found' });
   }

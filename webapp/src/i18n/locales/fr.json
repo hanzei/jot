@@ -584,7 +584,9 @@
     "errorTitle": "Impossible de charger cette note",
     "errorBody": "Une erreur s'est produite. Réessayez dans un instant.",
     "imageAlt": "Image {{number}}",
-    "footer": "Copie en lecture seule · Dernière mise à jour : {{date}}"
+    "footer": "Copie en lecture seule · Dernière mise à jour : {{date}}",
+    "openInAppBody": "Vous pouvez ouvrir cette note dans Jot.",
+    "openInApp": "Ouvrir la note"
   },
   "publicLink": {
     "heading": "Lien public",

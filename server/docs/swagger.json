@@ -4955,6 +4955,10 @@
                     "description": "Content is present for text notes only.",
                     "type": "string"
                 },
+                "id": {
+                    "description": "ID is the note's ID. It is not a secret — every note endpoint checks\naccess itself — and lets a signed-in visitor who can open the note be\noffered a link to it in the app.",
+                    "type": "string"
+                },
                 "images": {
                     "description": "Images lists the note's images in upload order; fetch each through\n/public/notes/{token}/images/{id} (or .../thumbnail).",
                     "type": "array",

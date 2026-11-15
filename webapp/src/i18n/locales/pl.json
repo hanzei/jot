@@ -591,7 +591,9 @@
     "errorTitle": "Nie udało się wczytać notatki",
     "errorBody": "Coś poszło nie tak. Spróbuj ponownie za chwilę.",
     "imageAlt": "Obraz {{number}}",
-    "footer": "Kopia tylko do odczytu · Ostatnia aktualizacja: {{date}}"
+    "footer": "Kopia tylko do odczytu · Ostatnia aktualizacja: {{date}}",
+    "openInAppBody": "Możesz otworzyć tę notatkę w Jot.",
+    "openInApp": "Otwórz notatkę"
   },
   "publicLink": {
     "heading": "Link publiczny",

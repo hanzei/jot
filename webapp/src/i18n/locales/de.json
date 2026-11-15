@@ -577,7 +577,9 @@
     "errorTitle": "Notiz konnte nicht geladen werden",
     "errorBody": "Etwas ist schiefgelaufen. Bitte versuche es gleich noch einmal.",
     "imageAlt": "Bild {{number}}",
-    "footer": "Schreibgeschützte Ansicht · Zuletzt aktualisiert {{date}}"
+    "footer": "Schreibgeschützte Ansicht · Zuletzt aktualisiert {{date}}",
+    "openInAppBody": "Du kannst diese Notiz in Jot öffnen.",
+    "openInApp": "Notiz öffnen"
   },
   "publicLink": {
     "heading": "Öffentlicher Link",

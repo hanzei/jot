@@ -584,7 +584,9 @@
     "errorTitle": "Não foi possível carregar esta nota",
     "errorBody": "Algo deu errado. Tente novamente em instantes.",
     "imageAlt": "Imagem {{number}}",
-    "footer": "Cópia somente leitura · Última atualização: {{date}}"
+    "footer": "Cópia somente leitura · Última atualização: {{date}}",
+    "openInAppBody": "Você pode abrir esta nota no Jot.",
+    "openInApp": "Abrir nota"
   },
   "publicLink": {
     "heading": "Link público",

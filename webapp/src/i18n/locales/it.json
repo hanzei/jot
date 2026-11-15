@@ -584,7 +584,9 @@
     "errorTitle": "Impossibile caricare questa nota",
     "errorBody": "Qualcosa è andato storto. Riprova tra un momento.",
     "imageAlt": "Immagine {{number}}",
-    "footer": "Copia di sola lettura · Ultimo aggiornamento: {{date}}"
+    "footer": "Copia di sola lettura · Ultimo aggiornamento: {{date}}",
+    "openInAppBody": "Puoi aprire questa nota in Jot.",
+    "openInApp": "Apri nota"
   },
   "publicLink": {
     "heading": "Link pubblico",

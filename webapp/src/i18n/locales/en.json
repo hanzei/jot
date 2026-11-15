@@ -577,7 +577,9 @@
     "errorTitle": "Couldn't load this note",
     "errorBody": "Something went wrong. Please try again in a moment.",
     "imageAlt": "Image {{number}}",
-    "footer": "Read-only copy · Last updated {{date}}"
+    "footer": "Read-only copy · Last updated {{date}}",
+    "openInAppBody": "You can open this note in Jot.",
+    "openInApp": "Open note"
   },
   "publicLink": {
     "heading": "Public link",

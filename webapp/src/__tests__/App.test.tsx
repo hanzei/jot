@@ -1,7 +1,8 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import App from '../App';
-import { serverConfig, auth, publicNotes } from '@/utils/api';
+import { serverConfig, auth, publicNotes, canOpenNote } from '@/utils/api';
+import { isAuthenticated } from '@/utils/auth';
 import type { SSOConfig } from '@jot/shared';
 
 vi.mock('@/utils/api', () => ({
@@ -9,6 +10,7 @@ vi.mock('@/utils/api', () => ({
   auth: { me: vi.fn(), login: vi.fn(), register: vi.fn() },
   SSO_LOGIN_URL: '/api/v1/auth/oidc/login',
   publicNotes: { get: vi.fn() },
+  canOpenNote: vi.fn(),
   publicNoteImages: () => ({ url: (id: string) => id, thumbnailUrl: (id: string) => id }),
 }));
 
@@ -17,6 +19,7 @@ vi.mock('@/utils/auth', () => ({
   setSettings: vi.fn(),
   removeUser: vi.fn(),
   isAdmin: vi.fn().mockReturnValue(false),
+  isAuthenticated: vi.fn().mockReturnValue(false),
   getUser: vi.fn().mockReturnValue(null),
   getSettings: vi.fn().mockReturnValue(null),
 }));
@@ -63,20 +66,24 @@ describe('App routing — /register vs SSO', () => {
   });
 });
 
+const publicTextNote = {
+  id: 'Ab3dEf6hIj9kLm2nOp5qRs',
+  note_type: 'text' as const,
+  title: '',
+  content: 'Hello from a public link',
+  updated_at: '2026-11-09T12:00:00Z',
+  images: [],
+};
+
 describe('App routing — public note links', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(isAuthenticated).mockReturnValue(false);
     window.history.pushState({}, '', '/share/q3XvT0b9Lr2Kp8WmZcE1yN4hUa7sDfGj6oBtYiR5lMw');
   });
 
   it('renders the viewer without checking the session or fetching config', async () => {
-    vi.mocked(publicNotes.get).mockResolvedValue({
-      note_type: 'text',
-      title: '',
-      content: 'Hello from a public link',
-      updated_at: '2026-11-09T12:00:00Z',
-      images: [],
-    });
+    vi.mocked(publicNotes.get).mockResolvedValue(publicTextNote);
 
     render(<App />);
 
@@ -86,6 +93,37 @@ describe('App routing — public note links', () => {
     expect(auth.me).not.toHaveBeenCalled();
     expect(serverConfig.get).not.toHaveBeenCalled();
     expect(window.location.pathname).toMatch(/^\/share\//);
+    // Nothing signed in is stored, so access to the note is not even asked.
+    expect(canOpenNote).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('public-note-open-in-app')).not.toBeInTheDocument();
+  });
+
+  it('offers a signed-in visitor who can open the note a link to it', async () => {
+    vi.mocked(isAuthenticated).mockReturnValue(true);
+    vi.mocked(canOpenNote).mockResolvedValue(true);
+    vi.mocked(publicNotes.get).mockResolvedValue(publicTextNote);
+
+    render(<App />);
+
+    const link = await screen.findByRole('link', { name: 'Open note' });
+    expect(link).toHaveAttribute('href', '/notes/Ab3dEf6hIj9kLm2nOp5qRs');
+    expect(canOpenNote).toHaveBeenCalledWith('Ab3dEf6hIj9kLm2nOp5qRs');
+    expect(screen.getByText('Hello from a public link')).toBeInTheDocument();
+    expect(auth.me).not.toHaveBeenCalled();
+  });
+
+  it('shows no link to a signed-in visitor who cannot open the note', async () => {
+    vi.mocked(isAuthenticated).mockReturnValue(true);
+    vi.mocked(canOpenNote).mockResolvedValue(false);
+    vi.mocked(publicNotes.get).mockResolvedValue(publicTextNote);
+
+    render(<App />);
+
+    expect(await screen.findByText('Hello from a public link')).toBeInTheDocument();
+    await vi.waitFor(() => expect(canOpenNote).toHaveBeenCalled());
+    // Let the check's answer land before asserting nothing was rendered for it.
+    await act(() => vi.mocked(canOpenNote).mock.results[0]!.value);
+    expect(screen.queryByTestId('public-note-open-in-app')).not.toBeInTheDocument();
   });
 
   it('shows the not-found state for a dead link', async () => {

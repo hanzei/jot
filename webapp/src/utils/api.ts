@@ -127,7 +127,18 @@ export const images = {
 // request worth recording in a signed-in user's diagnostics.
 const publicApi = axios.create({ baseURL: API_BASE_PATH, timeout: 10_000 });
 
-export const { publicNotes } = createJotApi(publicApi);
+const publicJot = createJotApi(publicApi);
+
+export const { publicNotes } = publicJot;
+
+/**
+ * Whether the visitor's session, if any, can open note `id` in the app. Used
+ * by the public viewer to offer a signed-in owner or collaborator a link to
+ * the note; it goes through `publicApi` so a 401 (no session, or a stale one)
+ * stays on the page, and every failure just means "no".
+ */
+export const canOpenNote = (id: string): Promise<boolean> =>
+  publicJot.notes.getById(id).then(() => true, () => false);
 
 // A public note's images, loaded by <img> straight from these URLs. The token
 // scopes them: the server serves only images that belong to that note.

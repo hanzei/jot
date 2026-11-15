@@ -252,6 +252,8 @@ export interface PublicNoteItem {
 }
 
 interface BasePublicNote {
+  /** Not a secret: `GET /notes/{id}` still checks access. */
+  id: string;
   note_type: NoteType;
   updated_at: string;
   /** Fetch each through `apiPaths.publicNoteImage` / `publicNoteImageThumbnail`. */

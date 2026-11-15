@@ -49,22 +49,67 @@ test.describe('Public note viewer', () => {
     await expect(publicNotePage.content().getByRole('link', { name: 'map' })).toHaveAttribute('href', 'https://example.com/map');
     // Stays on the link, rather than the 401 handler sending the visitor to /login.
     await expect(page).toHaveURL(TOKEN_SHAPE);
+    // Nothing signed in is stored, so the app link is not even asked about.
     expect(paths(requests)).toEqual([`/api/v1/public/notes/${token}`]);
+    await expect(publicNotePage.openInAppBar()).toHaveCount(0);
   });
 
-  test('shows a signed-in user the same viewer, with no signed-in calls', async ({ page, authenticatedUser, publicNotePage }) => {
+  test('offers a signed-in owner a link into the app, above the same public view', async ({ page, authenticatedUser, publicNotePage }) => {
     void authenticatedUser;
-    const noteId = await createTextNote(page.request, 'Signed-in visitors see the same page');
+    const noteId = await createListNote(page.request, 'Open me in the app', [{ text: 'First' }]);
     const token = await setPublicLink(page.request, noteId);
+    // On a touch device the note URL the link leads to raises the "open in
+    // the Jot app" handoff, as any /notes/:id does; this test is about the
+    // link, so opt out the way a visitor who picked the browser has.
+    // mobile-app-handoff.spec.ts covers the handoff.
+    await page.addInitScript(() => {
+      window.localStorage.setItem('jot_mobile_app_handoff_dismissed', '1');
+    });
     // Leave the dashboard first, so its in-flight requests are not counted.
     await page.goto('about:blank');
 
     const requests = recordApiRequests(page);
     await publicNotePage.goto(token);
 
-    await expect(publicNotePage.content()).toHaveText('Signed-in visitors see the same page');
-    // No session check, SSE stream, profile icons or config: only the note.
-    expect(paths(requests)).toEqual([`/api/v1/public/notes/${token}`]);
+    // The owner still sees what outsiders see, plus the bar.
+    await expect(publicNotePage.activeItems()).toHaveText(['First']);
+    await expect(publicNotePage.openInAppLink()).toHaveAttribute('href', `/notes/${noteId}`);
+    // No session check, SSE stream, profile icons or config: only the note
+    // and the one access check.
+    expect(paths(requests)).toEqual([`/api/v1/public/notes/${token}`, `/api/v1/notes/${noteId}`]);
+
+    await publicNotePage.openInAppLink().click();
+    await expect(page).toHaveURL(`/notes/${noteId}`);
+    await expect(page.locator('input[placeholder="Note title..."]')).toHaveValue('Open me in the app');
+  });
+
+  test('offers a collaborator the link too', async ({ page, request, authenticatedUser, publicNotePage }) => {
+    void authenticatedUser;
+    const me = (await (await page.request.get('/api/v1/users/me')).json()) as { user: { id: string } };
+    await signUp(request, 'plopenown');
+    const noteId = await createTextNote(request, 'Shared with a collaborator');
+    await shareNote(request, noteId, me.user.id);
+    const token = await setPublicLink(request, noteId);
+
+    await publicNotePage.goto(token);
+
+    await expect(publicNotePage.content()).toHaveText('Shared with a collaborator');
+    await expect(publicNotePage.openInAppLink()).toHaveAttribute('href', `/notes/${noteId}`);
+  });
+
+  test('shows a signed-in user without access only the public view, and stays on the link', async ({ page, request, authenticatedUser, publicNotePage }) => {
+    void authenticatedUser;
+    await signUp(request, 'plstranger');
+    const noteId = await createTextNote(request, 'Not shared with you');
+    const token = await setPublicLink(request, noteId);
+
+    const accessCheck = page.waitForResponse((res) => new URL(res.url()).pathname === `/api/v1/notes/${noteId}`);
+    await publicNotePage.goto(token);
+
+    await expect(publicNotePage.content()).toHaveText('Not shared with you');
+    expect((await accessCheck).status()).toBe(404);
+    await expect(publicNotePage.openInAppBar()).toHaveCount(0);
+    await expect(page).toHaveURL(TOKEN_SHAPE);
   });
 
   test('renders a list note with nested items, struck-through completed items and images', async ({ page, request, publicNotePage }) => {

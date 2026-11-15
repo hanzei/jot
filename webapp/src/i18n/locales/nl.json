@@ -577,7 +577,9 @@
     "errorTitle": "Kan deze notitie niet laden",
     "errorBody": "Er is iets misgegaan. Probeer het zo meteen opnieuw.",
     "imageAlt": "Afbeelding {{number}}",
-    "footer": "Alleen-lezen kopie · Laatst bijgewerkt {{date}}"
+    "footer": "Alleen-lezen kopie · Laatst bijgewerkt {{date}}",
+    "openInAppBody": "Je kunt deze notitie openen in Jot.",
+    "openInApp": "Notitie openen"
   },
   "publicLink": {
     "heading": "Openbare link",
