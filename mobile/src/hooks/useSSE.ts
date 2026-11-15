@@ -103,8 +103,8 @@ export function useSSE(
             // Whether the event changes the note's content, judged against the
             // cached copy before it is overwritten. Public link changes arrive
             // as note_updated too but leave updated_at alone, while every
-            // content change (item check-offs included) bumps it. `version` is
-            // no substitute: item changes don't bump it. Without a payload or
+            // content change (item check-offs and images included) bumps it.
+            // `version` is no substitute: item changes don't bump it. Without a payload or
             // a cached copy there is nothing to compare, so it counts as one.
             let contentChanged = true;
             if (note) {

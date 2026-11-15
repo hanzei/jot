@@ -218,7 +218,7 @@ describe('retryImageUpload / dismissImageUpload', () => {
 describe('drainImageUploadQueue', () => {
   const image = {
     id: 'img-1', filename: 'photo.png', content_type: 'image/png',
-    width: 10, height: 10, created_at: 'now',
+    width: 10, height: 10, created_at: '2026-06-01T12:00:00.123456Z',
   };
 
   it('uploads queued entries, patches the local cache, and deletes the row + file', async () => {
@@ -234,8 +234,10 @@ describe('drainImageUploadQueue', () => {
       sizeBytes: entry.size_bytes,
     });
     // The uploaded image lands on the note's cached metadata.
-    expect(await db.getFirstAsync('SELECT images_json FROM notes WHERE id = ?', ['note-1'])).toEqual({
+    // ...and the note takes the server's bumped updated_at, the image's created_at (#1275).
+    expect(await db.getFirstAsync('SELECT images_json, updated_at FROM notes WHERE id = ?', ['note-1'])).toEqual({
       images_json: JSON.stringify([image]),
+      updated_at: image.created_at,
     });
     expect(await uploadRow(entry.id)).toBeNull();
     expect(fs.files.has(entry.local_path)).toBe(false);

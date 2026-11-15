@@ -408,6 +408,13 @@ SSE event) and the response to this device's own write.
   device, so its mark is taken on receipt. A payload from another device's
   write, built just before this device's write to the same note landed but
   received after it, still replaces the newer row until the next pull.
+- Image uploads and removals bump `updated_at` like item changes (it orders
+  notes by "last modified" and tells `note_updated` content changes apart). The
+  device that made one gets no SSE echo, so it sets the local row's
+  `updated_at` itself: to the image's `created_at` after an upload (the server
+  uses the same value), and to the local clock after a removal, whose response
+  is a bare 204. Neither moves it backward. This is for ordering only; the age
+  check above never reads it.
 
 **Responses to our own writes**
 

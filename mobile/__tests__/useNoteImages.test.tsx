@@ -134,6 +134,14 @@ describe('useNoteImages hooks', () => {
     return row ? (JSON.parse(row.images_json) as NoteImage[]) : [];
   };
 
+  const updatedAtOf = async (noteId: string): Promise<string | undefined> => {
+    const row = await db.getFirstAsync<{ updated_at: string }>(
+      'SELECT updated_at FROM notes WHERE id = ?',
+      [noteId],
+    );
+    return row?.updated_at;
+  };
+
   const queuedOps = () =>
     db.getAllAsync<{ operation: string; endpoint: string; body: string | null }>(
       'SELECT operation, endpoint, body FROM sync_queue ORDER BY id',
@@ -208,6 +216,7 @@ describe('useNoteImages hooks', () => {
         expect.anything(),
         'note-1',
         expect.any(Function),
+        image.created_at,
       );
       // The image really landed on the note's cached metadata.
       expect(await imagesOf('note-1')).toEqual([image]);
@@ -228,6 +237,34 @@ describe('useNoteImages hooks', () => {
       await result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file });
 
       expect(await imagesOf('note-1')).toEqual([image]);
+      // Nothing changed, so the note keeps its updated_at (#1275).
+      expect(await updatedAtOf('note-1')).toBe('2026-01-01T00:00:00Z');
+    });
+
+    it('bumps the note\'s updated_at to the server\'s, the image\'s created_at (#1275)', async () => {
+      const image = makeImage({ created_at: '2026-06-01T12:00:00.123456Z' });
+      mockImagesApi.uploadNoteImage.mockResolvedValueOnce(image);
+
+      const { result } = await renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
+      const file = { uri: 'file:///photo.png', name: 'photo.png', mimeType: 'image/png' };
+      await result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file });
+
+      expect(await updatedAtOf('note-1')).toBe('2026-06-01T12:00:00.123456Z');
+    });
+
+    it('never moves the note\'s updated_at backward past a newer snapshot (#1275)', async () => {
+      // A collaborator's later edit reached the cache (over SSE) before this
+      // upload's response was applied.
+      await saveNote(db, makeTextNote({ id: 'note-1', updated_at: '2026-06-01T12:00:00.5Z' }));
+      const image = makeImage({ created_at: '2026-06-01T12:00:00.123456Z' });
+      mockImagesApi.uploadNoteImage.mockResolvedValueOnce(image);
+
+      const { result } = await renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
+      const file = { uri: 'file:///photo.png', name: 'photo.png', mimeType: 'image/png' };
+      await result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file });
+
+      expect(await imagesOf('note-1')).toEqual([image]);
+      expect(await updatedAtOf('note-1')).toBe('2026-06-01T12:00:00.5Z');
     });
 
     it('rejects and leaves the local cache untouched when the server switch is in progress', async () => {
@@ -381,6 +418,7 @@ describe('useNoteImages hooks', () => {
         expect.anything(),
         'note-1',
         expect.any(Function),
+        expect.any(String),
       );
       expect(mockEnqueueOperation).not.toHaveBeenCalled();
 
@@ -426,6 +464,7 @@ describe('useNoteImages hooks', () => {
         expect.anything(),
         'note-1',
         expect.any(Function),
+        expect.any(String),
       );
       expect(mockEnqueueOperation).toHaveBeenCalledWith(expect.anything(), {
         operation: 'removeImage',
@@ -452,6 +491,19 @@ describe('useNoteImages hooks', () => {
       expect(await imagesOf('note-1')).toEqual([makeImage({ id: 'img-2' })]);
     });
 
+    it('bumps the note\'s updated_at only when the image was there to remove (#1275)', async () => {
+      mockJot.images.delete.mockResolvedValue(undefined);
+      await saveNote(db, makeTextNote({ id: 'note-1', images: [makeImage({ id: 'img-1' })] }));
+      const { result } = await renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ noteId: 'note-1', imageId: 'img-1' });
+      expect((await updatedAtOf('note-1'))! > '2026-01-01T00:00:00Z').toBe(true);
+
+      await saveNote(db, makeTextNote({ id: 'note-2' }));
+      await result.current.mutateAsync({ noteId: 'note-2', imageId: 'img-1' });
+      expect(await updatedAtOf('note-2')).toBe('2026-01-01T00:00:00Z');
+    });
+
     it('falls back to the offline queue after a transient delete failure while connected', async () => {
       const error = Object.assign(new Error('Server Error'), { isAxiosError: true, response: { status: 503 } });
       mockJot.images.delete.mockRejectedValueOnce(error);
@@ -467,6 +519,7 @@ describe('useNoteImages hooks', () => {
         expect.anything(),
         'note-1',
         expect.any(Function),
+        expect.any(String),
       );
       const updater = mockNoteQueries.patchLocalNoteImages.mock.calls[0]![2];
       const images = [makeImage({ id: 'img-1' }), makeImage({ id: 'img-2' })];

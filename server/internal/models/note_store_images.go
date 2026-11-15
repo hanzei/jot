@@ -73,7 +73,10 @@ func (s *noteStore) CreateNoteImage(ctx context.Context, noteID, uploaderID, fil
 		return nil, fmt.Errorf("failed to create note image: %w", err)
 	}
 
-	if err = recordContentChangeTx(ctx, tx, s.d, noteID, uploaderID, now); err != nil {
+	// An image is note content like an item: bump updated_at ("last modified"
+	// order, client freshness checks) and record the change for unread
+	// tracking. The note's new updated_at equals the image's created_at.
+	if err = touchNoteTx(ctx, tx, s.d, noteID, uploaderID, now); err != nil {
 		return nil, fmt.Errorf("create note image: %w", err)
 	}
 
@@ -194,8 +197,9 @@ func (s *noteStore) getNoteImagesByNoteIDs(ctx context.Context, noteIDs []string
 // DeleteNoteImage hard-deletes an image row and returns it. Undo lives
 // entirely on the client (a ~10s toast before it ever calls this), so there
 // is no soft-delete/restore step here — by the time this is called the
-// removal is final. The removal is recorded as userID's change to the note for
-// unread tracking. The caller needs the returned SHA256 to call
+// removal is final. The removal touches the note (updated_at, and userID's
+// change for unread tracking); deleting an image that is already gone returns
+// ErrNoteImageNotFound and leaves the note alone. The caller needs the returned SHA256 to call
 // GetNoteImageRefCount and decide whether the blob is now orphaned. Returns
 // ErrNoteImageNotFound if the image doesn't exist.
 func (s *noteStore) DeleteNoteImage(ctx context.Context, imageID, userID string) (*NoteImage, error) {
@@ -221,7 +225,7 @@ func (s *noteStore) DeleteNoteImage(ctx context.Context, imageID, userID string)
 		return nil, fmt.Errorf("failed to delete note image: %w", err)
 	}
 
-	if err = recordContentChangeTx(ctx, tx, s.d, deleted.NoteID, userID, Timestamp(Now())); err != nil {
+	if err = touchNoteTx(ctx, tx, s.d, deleted.NoteID, userID, Timestamp(Now())); err != nil {
 		return nil, fmt.Errorf("delete note image: %w", err)
 	}
 

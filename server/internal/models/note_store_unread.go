@@ -49,19 +49,6 @@ func appendContentChangedArgs(args []any, now, actorID string) []any {
 	return append(args, now, now, now, actorID)
 }
 
-// recordContentChangeTx records a change to the note's shared content by actorID
-// for unread tracking, without touching updated_at, and marks the note viewed by
-// actorID. Used by writes that live outside the notes row, such as images.
-func recordContentChangeTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, actorID, now string) error {
-	if _, err := tx.ExecContext(ctx,
-		d.RewritePlaceholders(`UPDATE notes SET `+contentChangedSet+` WHERE id = ?`),
-		append(appendContentChangedArgs(nil, now, actorID), noteID)...,
-	); err != nil {
-		return fmt.Errorf("failed to record note content change: %w", err)
-	}
-	return markViewedTx(ctx, tx, d, noteID, actorID, now)
-}
-
 // MarkViewed records that userID viewed the note at viewedAt, clearing what was
 // unread up to then. viewedAt is the time the user opened the note, which an
 // offline client's replay sends from the past: a change a collaborator made

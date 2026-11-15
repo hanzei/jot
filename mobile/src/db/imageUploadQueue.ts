@@ -268,8 +268,12 @@ export async function drainImageUploadQueue(db: SQLiteDatabase): Promise<ImageUp
     await discardEntry(db, entry);
     uploadedNoteIds.push(entry.note_id);
     try {
-      await patchLocalNoteImages(db, entry.note_id, (images) =>
-        images.some((img) => img.id === image.id) ? images : [...images, image],
+      // The server bumped the note's updated_at to the image's created_at.
+      await patchLocalNoteImages(
+        db,
+        entry.note_id,
+        (images) => images.some((img) => img.id === image.id) ? images : [...images, image],
+        image.created_at,
       );
     } catch (err) {
       // The note's local images_json will be reconciled by the next server
