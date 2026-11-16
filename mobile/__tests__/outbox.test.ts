@@ -4,7 +4,7 @@
  * Runs against the real SQLite adapter (see `helpers/testDb.ts`).
  */
 
-import { getLocalNote, getLocalNoteVersion, saveNote, updateLocalNote } from '../src/db/noteQueries';
+import { getLocalNote, getLocalNoteVersion, markNotePendingCreate, saveNote, updateLocalNote } from '../src/db/noteQueries';
 import { drainQueue, enqueueWrite, subscribeToEnqueue, type EnqueueParams } from '../src/db/syncQueue';
 import { clearOwnVersionSteps, recordOwnVersionStep, resolveOwnBaseVersion } from '../src/db/ownVersions';
 import { setLocalModeActive } from '../src/store/localMode';
@@ -209,6 +209,39 @@ describe('drain of an outbox content edit', () => {
     expect(resolveOwnBaseVersion(NOTE_ID, 5)).toBe(5);
   });
 
+  it('rebases edits queued against a duplicate onto the version the server gave the copy', async () => {
+    // The local copy keeps its source's version (5); the server's copy starts at 1.
+    const copyId = 'OutboxCopy000000000000';
+    await saveNote(db, makeTextNote({ id: copyId, content: 'Old', version: 5 }));
+    await markNotePendingCreate(db, copyId);
+    await seedQueueEntry(db, {
+      operation: 'duplicate',
+      endpoint: `/notes/${NOTE_ID}/duplicate`,
+      method: 'POST',
+      keys: [`note:${copyId}`],
+      readKeys: [`note:${NOTE_ID}`],
+      body: { id: copyId },
+    });
+    await seedQueueEntry(db, {
+      operation: 'update',
+      endpoint: `/notes/${copyId}`,
+      method: 'PATCH',
+      keys: [`note:${copyId}`],
+      body: { content: 'Edited copy', base_version: 5 },
+    });
+    mockApi.post.mockResolvedValueOnce({ data: makeTextNote({ id: copyId, content: 'Old', version: 1 }) } as never);
+    mockApi.patch.mockResolvedValueOnce({ data: makeTextNote({ id: copyId, content: 'Edited copy', version: 2 }) } as never);
+
+    await drainQueue(db);
+
+    expect(mockApi.patch).toHaveBeenCalledWith(
+      `/notes/${copyId}`,
+      { content: 'Edited copy', base_version: 1 },
+      expect.anything(),
+    );
+    expect(resolveOwnBaseVersion(copyId, 5)).toBe(2);
+  });
+
   it('records the step for an edit enqueued after the landing (ownVersions)', async () => {
     await seedQueueEntry(db, { ...updateOp({ content: 'First', base_version: 5 }) });
     mockApi.patch.mockResolvedValueOnce({ data: makeTextNote({ id: NOTE_ID, content: 'First', version: 6 }) } as never);
@@ -227,6 +260,14 @@ describe('ownVersions', () => {
     expect(resolveOwnBaseVersion('n', 1)).toBe(3);
     expect(resolveOwnBaseVersion('n', 7)).toBe(7);
     expect(resolveOwnBaseVersion('other', 1)).toBe(1);
+  });
+
+  it('drops a step from the old numbering once the versions reach it again', () => {
+    // A duplicate's local copy kept its source's v5; the server's copy started at 1.
+    recordOwnVersionStep('n', 5, 1);
+    for (let v = 1; v < 5; v++) recordOwnVersionStep('n', v, v + 1);
+    // An editor that stayed at v3 while its edits landed must reach v5, not loop back.
+    expect(resolveOwnBaseVersion('n', 3)).toBe(5);
   });
 
   it('ignores a no-op step', () => {

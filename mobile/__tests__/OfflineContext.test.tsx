@@ -639,6 +639,34 @@ describe('OfflineProvider queue draining', () => {
     expect(mockDrainQueue).toHaveBeenCalledTimes(drainsAfterMount + 2);
   });
 
+  it('leaves a scheduled backoff retry alone when a write is enqueued during it', async () => {
+    // The mount drain stalls, so a backoff retry is scheduled.
+    mockGetPendingCount.mockResolvedValue(1);
+    await renderProvider();
+    await flush();
+    expect(lastConsecutiveFailureCount).toBe(1);
+    const drainsAfterMount = mockDrainQueue.mock.calls.length;
+
+    // Autosaves keep enqueueing; none of them may cut the backoff short.
+    for (let i = 0; i < 3; i++) {
+      await act(() => {
+        enqueueListener?.();
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(300);
+      });
+      await flush();
+    }
+    expect(mockDrainQueue).toHaveBeenCalledTimes(drainsAfterMount);
+    expect(lastConsecutiveFailureCount).toBe(1);
+
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    await flush();
+    expect(mockDrainQueue).toHaveBeenCalledTimes(drainsAfterMount + 1);
+  });
+
   it('resets the retry budget and resumes draining when a new write is enqueued after the cap', async () => {
     mockGetPendingCount.mockResolvedValue(1);
     await renderProvider();

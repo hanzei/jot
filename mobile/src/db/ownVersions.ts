@@ -22,6 +22,10 @@ export function recordOwnVersionStep(noteId: string, from: number, to: number): 
     steps = new Map();
     stepsByNote.set(noteId, steps);
   }
+  // A step out of `to` can only predate this one when the note's versions
+  // restarted (a duplicate's server copy starts afresh below its source's): it
+  // belongs to the old numbering, and following it would loop back past `to`.
+  steps.delete(to);
   steps.set(from, to);
 }
 

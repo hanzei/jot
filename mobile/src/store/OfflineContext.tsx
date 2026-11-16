@@ -481,6 +481,10 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       // disconnected and must immediately reflect its pending-create marker (#475).
       refreshPendingNoteIds();
       if (!isConnectedRef.current) return;
+      // A backoff retry is already scheduled: the write goes with it. Every
+      // editor save enqueues (#1284), so resetting here would re-send a failing
+      // entry on each autosave and never reach the cap.
+      if (failureCountRef.current > 0 && drainTimerRef.current !== null) return;
       // A fresh write is a new signal that the server may be reachable again, so
       // give the queue a clean retry budget even if a prior streak had paused
       // auto-retrying. scheduleDrain debounces bursts; performDrain's own guard

@@ -442,13 +442,17 @@ Writes to the same note reach the server in the order the user made them.
   an edit nothing will replay.
 - The drain is the only sender, in FIFO order per key (§7): an op is sent only
   after every earlier queued op that touches the same note. With one drain
-  pass at a time, at most one request per note is in flight.
+  pass at a time, the drain has at most one request per note in flight.
 - A queue row stays until the drain has applied its response and deleted it in
   one transaction (§8.3), so the note is protected from the moment the edit
   commits until its outcome is in SQLite, across a restart too.
 - While some hooks still go online (§4.1, Migration), they do so only when the
   note has no queued write; otherwise they queue behind it. A queue row covers
-  the drain's own request, so this also keeps them from racing it.
+  the drain's own request, so they cannot race a send already under way. The
+  reverse is still open: nothing tracks their own request while it is in
+  flight, so an outbox write queued meanwhile can be sent alongside it and the
+  two can land in either order. That gap closes when the last hook is
+  converted.
 
 **The base of a queued content edit.** The row stores the `base_version` the
 editor was showing (#1277), not a value resolved when it is sent. An editor
@@ -458,8 +462,10 @@ the own-version rule: when the drain lands a version-guarded edit sent at `b`
 and the server answers with `b` or `b + 1` (§8.3, `isOwnVersion`), the new
 version holds nothing but this device's edit, and in the same transaction the
 drain rebases every edit still queued for the note at base `b` onto it
-(`rebaseQueuedEdits`). An edit queued afterwards from the same editor is
-rebased at enqueue, from an in-memory record of those steps
+(`rebaseQueuedEdits`). A landed create or duplicate does the same from the
+local copy's version to the server's (a duplicate's local copy keeps its
+source's version; the server's copy starts afresh). An edit queued afterwards
+from the same editor is rebased at enqueue, from an in-memory record of those steps
 (`src/db/ownVersions.ts`; an editor's baseline does not outlive the process
 either). An edit based on any other version is sent as it is, so a real
 conflict still gets its 409. Merging queued edits at enqueue (#1268) would

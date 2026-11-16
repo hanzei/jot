@@ -972,6 +972,16 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
   let stoppedOnConnectivity = false;
   let syncedSettings = false;
 
+  const rebaseOwnStep = (step: { noteId: string; from: number; to: number }) =>
+    rebaseQueuedEdits(db, step.noteId, step.from, step.to);
+  // This pass loaded the rows before a rebase rewrote them.
+  const applyRebased = (rebased: ReadonlyMap<number, string>) => {
+    for (const later of entries) {
+      const next = rebased.get(later.id);
+      if (next !== undefined) later.body = next;
+    }
+  };
+
   for (const entry of entries) {
     settledThisEntry = new Set<string>();
     // Declared outside the try so the catch can dead-letter using the endpoint
@@ -983,6 +993,9 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
     // not retry or dead-letter the entry (issue #714 — mirrors imageUploadQueue's
     // "the upload already landed, so remove the queue entry first").
     let requestLanded = false;
+    // The note this replay version-guarded (or created), and the version its
+    // response reports, when that version is its own (see rebaseQueuedEdits).
+    let ownVersionStep: { noteId: string; from: number; to: number } | null = null;
     // The notes this entry writes, and every key it touches.
     const targets = (): readonly string[] => noteIdsByEntry.get(entry.id) ?? [];
     const keys = keysByEntry.get(entry.id) ?? [];
@@ -1014,9 +1027,6 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
 
       // The base_version this replay was sent with, if it was version-guarded.
       let baseVersion: number | null = null;
-      // The note this replay version-guarded, and the version its response
-      // reports, when that version is its own (see rebaseQueuedEdits).
-      let ownVersionStep: { noteId: string; from: number; to: number } | null = null;
       let response: { data?: unknown } | undefined;
       if (entry.method === 'POST') {
         if (entry.operation === 'convertNoteType' && body) {
@@ -1096,6 +1106,14 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
             // edited a note the server only just created, so its version is ours.
             const clientId = body?.id as string | undefined;
             if (clientId && hasStringId(data)) {
+              // The local copy's version need not be the server's (a duplicate
+              // keeps its source's; the server's copy starts afresh): edits
+              // queued against the local one are rebased like an own edit's.
+              const localVersion = await getLocalNoteVersion(db, clientId);
+              const serverVersion = (data as Note).version;
+              if (localVersion !== null && typeof serverVersion === 'number') {
+                ownVersionStep = { noteId: clientId, from: localVersion, to: serverVersion };
+              }
               syncedNote = await applyResponse(true);
               await clearNotePendingCreate(db, clientId);
             }
@@ -1146,9 +1164,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         }
 
         await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
-        if (ownVersionStep) {
-          rebased = await rebaseQueuedEdits(db, ownVersionStep.noteId, ownVersionStep.from, ownVersionStep.to);
-        }
+        if (ownVersionStep) rebased = await rebaseOwnStep(ownVersionStep);
 
         // The write landed: if this note was carrying a prior failure that no
         // dead letter still records, clear it so it resumes syncing from the
@@ -1158,11 +1174,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         }
       });
       if (syncedNote) syncedNotes.push(syncedNote);
-      // This pass loaded the rows before the rebase rewrote them.
-      for (const later of entries) {
-        const next = rebased.get(later.id);
-        if (next !== undefined) later.body = next;
-      }
+      applyRebased(rebased);
 
       // The API client already recorded this landing from the request, except
       // for a removeImage replay: it sends no body, so its note id is only
@@ -1187,7 +1199,16 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // reserved for failures *before* the request lands (issue #714).
         console.warn(`Queue entry id=${entry.id} landed server-side; post-response reconciliation failed:`, err);
         if (entry.operation === 'removeImage') recordWriteLanded(targets());
-        await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
+        // The landing transaction rolled back, rebase included: the edits queued
+        // at this write's base would otherwise replay against a version its own
+        // landing has left, and conflict with it.
+        const step = ownVersionStep;
+        let rebased = new Map<number, string>();
+        await withSerializedTransaction(db, async () => {
+          await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
+          if (step) rebased = await rebaseOwnStep(step);
+        });
+        applyRebased(rebased);
         continue;
       }
 

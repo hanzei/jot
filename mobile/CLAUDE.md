@@ -130,7 +130,8 @@ What the device may believe after a sync (spec §8). These are the target; spec
   the content it belongs to, or the reverse.
 - **Writes to one note stay in order.** The drain sends them FIFO per key; an
   unconverted hook goes online only when the note has no queued write, and
-  queues behind it otherwise. One request per note at a time.
+  queues behind it otherwise. Its own in-flight request is not tracked, so an
+  outbox write can overtake it until that hook is converted.
 - **A write commits its local edit and its queue row in one transaction**
   (`enqueueWrite`), and the drain applies the response and deletes the row in
   one transaction.
