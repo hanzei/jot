@@ -14,6 +14,7 @@ import {
   saveServerNote,
   QUEUED_WRITE_TIMEOUT_MS,
 } from '../src/db/syncQueue';
+import { reconcileDiscard } from '../src/hooks/useSyncFailures';
 import { notesWrittenSince, snapshotMark } from '../src/db/snapshotGate';
 import { getFailedNoteIds, saveNote } from '../src/db/noteQueries';
 import api from '../src/api/client';
@@ -456,6 +457,28 @@ describe('drainQueue dead-letter persistence', () => {
     expect(await deadLetters()).toEqual([]);
   });
 
+  it('keeps the failed flag while a dead letter for the note is unresolved, so a later landed op does not unprotect it (#1263)', async () => {
+    await saveNote(db, buildTextNote({ id: 'n1', version: 5, content: 'my edit' }));
+    await seedQueueEntry(db, {
+      operation: 'update', endpoint: '/notes/n1', method: 'PATCH', body: { content: 'my edit' },
+    });
+    await seedQueueEntry(db, {
+      operation: 'update', endpoint: '/notes/n1', method: 'PATCH', body: { pinned: true },
+    });
+    mockApi.patch
+      .mockRejectedValueOnce(makeAxiosError(409))
+      .mockResolvedValueOnce({ data: buildTextNote({ id: 'n1', version: 6, content: 'server text', pinned: true }) } as never);
+
+    await drainQueue(db);
+
+    expect(await deadLetters()).toMatchObject([{ operation: 'update', note_id: 'n1' }]);
+    expect(await syncStateOf('n1')).toBe('failed');
+    expect(await getProtectedNoteIds(db)).toContain('n1');
+    // The landed op's response did not replace the edit "Keep my version" forks.
+    await saveServerNote(db, buildTextNote({ id: 'n1', version: 6, content: 'server text' }), snapshotMark());
+    expect(await db.getFirstAsync('SELECT content FROM notes WHERE id = ?', ['n1'])).toEqual({ content: 'my edit' });
+  });
+
   it('dead-letters an update queued after an offline create when the update fails', async () => {
     const clientId = 'ClientNoteId000000001A';
     await saveNote(db, buildTextNote({ id: clientId }));
@@ -537,6 +560,54 @@ describe('getFailedNoteIds / getProtectedNoteIds', () => {
     await seedQueueEntry(db, { operation: 'update', endpoint: '/notes/pending', method: 'PATCH' });
 
     expect(await getProtectedNoteIds(db)).toEqual(new Set(['pending', 'failed']));
+  });
+});
+
+describe('dead-letter protection without the failed flag (#1263)', () => {
+  async function seedDeadLetter(noteId: string | null, endpoint: string, body: unknown = null): Promise<number> {
+    const result = await db.runAsync(
+      `INSERT INTO dead_letter (operation, endpoint, method, body, status, note_id, created_at, failed_at)
+       VALUES (?, ?, 'PATCH', ?, 409, ?, '', '')`,
+      [noteId ? 'update' : 'reorder', endpoint, body === null ? null : JSON.stringify(body), noteId],
+    );
+    return result.lastInsertRowId;
+  }
+
+  it('protects a note a dead letter names even when its flag was cleared (older data)', async () => {
+    await saveNote(db, buildTextNote({ id: 'n1', content: 'my edit' }));
+    await seedDeadLetter('n1', '/notes/n1', { content: 'my edit' });
+
+    await saveServerNote(db, buildTextNote({ id: 'n1', content: 'server copy' }), snapshotMark());
+
+    expect(await db.getFirstAsync('SELECT content FROM notes WHERE id = ?', ['n1'])).toEqual({ content: 'my edit' });
+  });
+
+  it('protects every note a multi-note dead letter touched', async () => {
+    await seedDeadLetter(null, '/notes/reorder', { note_ids: ['a', 'b'] });
+
+    expect(await getProtectedNoteIds(db)).toEqual(new Set(['a', 'b']));
+  });
+
+  it('keeps the failed flag when one of two dead letters for a note is discarded', async () => {
+    await saveNote(db, buildTextNote({ id: 'n1', content: 'my edit' }));
+    await db.runAsync(`UPDATE notes SET sync_state = 'failed' WHERE id = ?`, ['n1']);
+    const first = await seedDeadLetter('n1', '/notes/n1', { content: 'my edit' });
+    await seedDeadLetter('n1', '/notes/n1', { color: '#ffffff' });
+    mockApi.get.mockResolvedValueOnce({ data: buildTextNote({ id: 'n1', content: 'server copy' }) } as never);
+
+    const [firstDl] = (await deadLetters()).filter((d) => d.id === first);
+    await reconcileDiscard(db, firstDl!);
+
+    expect(await deadLetters()).toHaveLength(1);
+    expect(await syncStateOf('n1')).toBe('failed');
+    expect(await db.getFirstAsync('SELECT content FROM notes WHERE id = ?', ['n1'])).toEqual({ content: 'my edit' });
+
+    // Resolving the last one lifts the protection and takes the server copy.
+    mockApi.get.mockResolvedValueOnce({ data: buildTextNote({ id: 'n1', content: 'server copy' }) } as never);
+    await reconcileDiscard(db, (await deadLetters())[0]!);
+
+    expect(await syncStateOf('n1')).toBe('synced');
+    expect(await db.getFirstAsync('SELECT content FROM notes WHERE id = ?', ['n1'])).toEqual({ content: 'server copy' });
   });
 });
 
