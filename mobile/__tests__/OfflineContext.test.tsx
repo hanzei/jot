@@ -15,6 +15,7 @@ import { getQueuedImageUploadCount } from '../src/db/imageUploadQueue';
 import { setLocalModeActive } from '../src/store/localMode';
 import * as serverReachability from '../src/api/serverReachability';
 import { silenceConsole } from './helpers/consoleGuard';
+import { subscribeToReconnectResync } from '../src/store/resyncEvents';
 
 // Capture the enqueue listener registered by the provider so tests can fire it.
 let enqueueListener: (() => void) | null = null;
@@ -778,11 +779,14 @@ describe('OfflineProvider queue draining', () => {
       ['a captive portal letting the device through', wifi({ isInternetReachable: false }), wifi()],
       ['moving to another Wi-Fi network', wifi(), wifi({ details: { ipAddress: '10.0.0.7', strength: 80 } })],
       ['moving from Wi-Fi to cellular', wifi(), wifi({ type: 'cellular', details: null })],
-    ])('reconnects on %s while staying online', async (_name, before, after) => {
+    ])('reconnects and re-syncs the read caches on %s while staying online', async (_name, before, after) => {
+      const resync = jest.fn();
+      const unsubscribe = subscribeToReconnectResync(resync);
       mockFetch.mockResolvedValue(before);
       await renderProvider();
       await flush();
       expect(mockRevalidate).toHaveBeenCalledTimes(1);
+      expect(resync).not.toHaveBeenCalled();
 
       await act(async () => {
         getNetInfoListener()(after);
@@ -790,6 +794,28 @@ describe('OfflineProvider queue draining', () => {
       await flush();
 
       expect(mockRevalidate).toHaveBeenCalledTimes(2);
+      expect(resync).toHaveBeenCalledTimes(1);
+      unsubscribe();
+    });
+
+    it('leaves the read re-sync of an offline → online transition to the isConnected flip', async () => {
+      const resync = jest.fn();
+      const unsubscribe = subscribeToReconnectResync(resync);
+      mockFetch.mockResolvedValue(wifi());
+      await renderProvider();
+      await flush();
+
+      await act(async () => {
+        getNetInfoListener()({ isConnected: false, isInternetReachable: false, type: 'none', details: null });
+      });
+      await act(async () => {
+        getNetInfoListener()(wifi());
+      });
+      await flush();
+
+      expect(mockRevalidate).toHaveBeenCalledTimes(2);
+      expect(resync).not.toHaveBeenCalled();
+      unsubscribe();
     });
 
     it.each([

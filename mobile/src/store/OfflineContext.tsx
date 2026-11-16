@@ -13,6 +13,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useQueryClient } from '@tanstack/react-query';
 import { drainQueue, getPendingCount, getDeadLetterCount, subscribeToEnqueue } from '../db/syncQueue';
 import { isServerReachable, markServerReachable, subscribeToServerReachability } from '../api/serverReachability';
+import { publishReconnectResync } from './resyncEvents';
 import { isNetworkChange, mergeNetworkIdentity, networkIdentity, type NetworkIdentity } from './networkChange';
 import { drainImageUploadQueue, getQueuedImageUploadCount } from '../db/imageUploadQueue';
 import { getPendingCreateNoteIds, getFailedNoteIds } from '../db/noteQueries';
@@ -434,11 +435,18 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       const networkChanged = isNetworkChange(networkRef.current, network);
       networkRef.current = mergeNetworkIdentity(networkRef.current, network);
 
-      if (connected && (!prevConnectedRef.current || networkChanged)) {
-        // Transitioned from offline → online, or moved to another network (or
-        // a captive portal let the device through) while staying online: a
-        // server that was unreachable may answer now.
+      if (connected && !prevConnectedRef.current) {
+        // Transitioned from offline → online. The read caches re-sync on the
+        // isConnected flip itself.
         handleReconnect().catch(() => {});
+      } else if (connected && networkChanged) {
+        // Moved to another network, or a captive portal let the device
+        // through, while staying online: a server that was unreachable may
+        // answer now. isConnected does not flip, and a stream that never
+        // opened treats its first open as the initial connect, so neither
+        // re-syncs the read caches; ask for that catch-up here, once the
+        // reconnect has re-armed reachability and revalidated the session.
+        handleReconnect().then(publishReconnectResync).catch(() => {});
       } else if (!connected) {
         // Going offline: cancel any pending backoff/debounce drain so we don't
         // fire doomed network calls until connectivity returns.

@@ -64,6 +64,9 @@ answers. It is therefore not part of "device offline" (#1266). `OfflineContext`
 uses it only to notice a change of network while the device stays connected —
 another network, or a captive portal letting the device through — which starts
 a reconnect like an offline→online transition (`src/store/networkChange.ts`).
+Since `isConnected` does not flip there, the reconnect also publishes the
+catch-up resync (`src/store/resyncEvents.ts`) once it has revalidated the
+session; otherwise the read caches would stay stale after a portal login.
 
 ### 3.1 The server-reachability belief
 
