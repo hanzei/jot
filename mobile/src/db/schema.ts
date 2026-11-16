@@ -2,7 +2,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { DEFAULT_NOTE_COLOR } from '@jot/shared';
 import { generateClientId } from './clientId';
 import { rewriteLabelId } from './labelIdRewrite';
-import { insertKeys, legacyQueueKeys, loadLabelIdsByName } from './queueKeys';
+import { insertKeys, legacyQueueKeys, loadLabelIdsByName, parseJsonObject } from './queueKeys';
 
 // Migration 1: creates initial schema; idempotent via IF NOT EXISTS and column probing.
 const migration1 = async (db: SQLiteDatabase): Promise<void> => {
@@ -355,15 +355,13 @@ const migration11 = async (db: SQLiteDatabase): Promise<void> => {
             'SELECT user_id, created_at FROM labels WHERE id = ?',
             [placeholder],
           );
-          // The key tables come in migration 13, which derives the keys from
-          // the rewritten rows.
           await rewriteLabelId(db, placeholder, newId, {
             id: newId,
             user_id: stored?.user_id ?? '',
             name: body.name,
             created_at: stored?.created_at ?? now,
             updated_at: now,
-          }, { queueKeys: false });
+          });
         }
         // rewriteLabelId swapped the placeholder only where it was a whole value;
         // the row's own `local_id` key is what turns it into an `id` create.
@@ -428,14 +426,8 @@ const migration13 = async (db: SQLiteDatabase): Promise<void> => {
         `SELECT id, operation, endpoint, body FROM ${table}`,
       );
       for (const row of rows) {
-        let body: Record<string, unknown> | null = null;
-        try {
-          const parsed: unknown = JSON.parse(row.body ?? 'null');
-          if (parsed !== null && typeof parsed === 'object') body = parsed as Record<string, unknown>;
-        } catch {
-          // An unparseable body names nothing; the endpoint may still.
-        }
-        const keys = legacyQueueKeys(row.operation, row.endpoint, body, labelIdsByName);
+        // An unparseable body names nothing; the endpoint may still.
+        const keys = legacyQueueKeys(row.operation, row.endpoint, parseJsonObject(row.body), labelIdsByName);
         await insertKeys(db, table === 'sync_queue' ? 'sync_queue_keys' : 'dead_letter_keys', row.id, keys);
       }
     }

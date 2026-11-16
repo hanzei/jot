@@ -4,19 +4,15 @@
 // (queueKeys.ts, #1282).
 
 /**
- * Add the note IDs a request writes (identified by its URL and already-parsed
- * body) to `ids`. Requests that write no note (labels, settings, image deletes)
- * contribute nothing.
+ * The note IDs a request writes, identified by its URL and already-parsed body.
+ * Requests that write no note (labels, settings, image deletes) yield none.
  */
-export function collectNoteIds(
-  endpoint: string,
-  body: Record<string, unknown> | null,
-  ids: Set<string>,
-): void {
+export function collectNoteIds(endpoint: string, body: Record<string, unknown> | null): Set<string> {
+  const ids = new Set<string>();
   // Drop any query string (e.g. "/notes/{id}?permanent=true") before splitting,
   // and filter out the empty segment from the leading slash.
   const segments = endpoint.split('?')[0]!.split('/').filter(Boolean);
-  if (segments[0] !== 'notes') return;
+  if (segments[0] !== 'notes') return ids;
 
   if (segments.length === 1) {
     // POST /notes (create): the affected note is the offline-created note, identified
@@ -40,4 +36,5 @@ export function collectNoteIds(
       ids.add(segments[1]!);
     }
   }
+  return ids;
 }

@@ -24,26 +24,13 @@ function replaceValue(value: unknown, from: string, to: string): unknown {
  * database rather than in memory means an op queued behind a *later* drain also
  * targets the surviving label. Callers run it inside a transaction.
  *
- * The ops' recorded `label:` keys move too, unless `queueKeys` is false: a
- * migration older than the key tables has none to move.
+ * The ops' recorded `label:` keys are not touched: {@link rewriteLabelKeys}
+ * moves them, so a migration older than the key tables can call this one.
  *
  * `to` is the label that survives, so it replaces `from` everywhere: when a note
  * already carries `to`, the duplicate `from` entry is dropped.
  */
-export async function rewriteLabelId(
-  db: SQLiteDatabase,
-  from: string,
-  to: string,
-  target: Label,
-  options: { queueKeys?: boolean } = {},
-): Promise<void> {
-  if (options.queueKeys ?? true) {
-    for (const table of ['sync_queue_keys', 'dead_letter_keys']) {
-      // A row already keyed by `to` keeps that key; its `from` key just goes.
-      await db.runAsync(`UPDATE OR IGNORE ${table} SET key = ? WHERE key = ?`, [labelKey(to), labelKey(from)]);
-      await db.runAsync(`DELETE FROM ${table} WHERE key = ?`, [labelKey(from)]);
-    }
-  }
+export async function rewriteLabelId(db: SQLiteDatabase, from: string, to: string, target: Label): Promise<void> {
   for (const table of ['sync_queue', 'dead_letter']) {
     const rows = await db.getAllAsync<{ id: number; endpoint: string; body: string | null }>(
       `SELECT id, endpoint, body FROM ${table}`,
@@ -92,5 +79,17 @@ export async function rewriteLabelId(
       if (!next.some((l) => l.id === mapped.id)) next.push(mapped);
     }
     await db.runAsync('UPDATE notes SET labels_json = ? WHERE id = ?', [JSON.stringify(next), note.id]);
+  }
+}
+
+/**
+ * Re-point the queued and dead-lettered ops' recorded `label:` keys from `from`
+ * to `to`, alongside {@link rewriteLabelId}. Callers run it inside a transaction.
+ */
+export async function rewriteLabelKeys(db: SQLiteDatabase, from: string, to: string): Promise<void> {
+  for (const table of ['sync_queue_keys', 'dead_letter_keys']) {
+    // A row already keyed by `to` keeps that key; its `from` key just goes.
+    await db.runAsync(`UPDATE OR IGNORE ${table} SET key = ? WHERE key = ?`, [labelKey(to), labelKey(from)]);
+    await db.runAsync(`DELETE FROM ${table} WHERE key = ?`, [labelKey(from)]);
   }
 }

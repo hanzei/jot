@@ -26,12 +26,12 @@ import {
   insertKeys,
   keyIdExpression,
   keyKindCondition,
-  noteIdsOf,
   noteKey,
+  parseJsonObject,
   type QueueKey,
 } from './queueKeys';
 import { withSerializedTransaction } from './transaction';
-import { rewriteLabelId } from './labelIdRewrite';
+import { rewriteLabelId, rewriteLabelKeys } from './labelIdRewrite';
 import { notesWrittenSince, recordWriteLanded, snapshotMark, type SnapshotMark } from './snapshotGate';
 import type { Label } from '@jot/shared';
 
@@ -419,42 +419,36 @@ export async function getSyncQueueStats(db: SQLiteDatabase): Promise<SyncQueueSt
   };
 }
 
-function parseQueueBody(body: string | null): Record<string, unknown> | null {
-  if (!body) return null;
-  try {
-    return JSON.parse(body) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
-
 /**
- * The notes a queued op writes, from its keys. A duplicate also keys its source
- * note, which it only reads (so the source's queued writes land first); it
- * writes the clone alone, its client-supplied `id`. This is what a landing is
- * recorded for, what a dead letter links and flags failed, and what the drain
- * pulls afterwards.
+ * The notes a queued op writes, from the notes it keys. A duplicate also keys
+ * its source note, which it only reads (so the source's queued writes land
+ * first); it writes the clone alone, its client-supplied `id`. This is what a
+ * landing is recorded for, what a dead letter links and flags failed, and what
+ * the drain pulls afterwards.
  */
 function writtenNoteIds(
   operation: QueueOperation,
-  keys: readonly string[],
+  keyedNoteIds: readonly string[],
   body: Record<string, unknown> | undefined,
 ): string[] {
   if (operation === 'duplicate') {
     const cloneId = body?.id;
     return typeof cloneId === 'string' ? [cloneId] : [];
   }
-  return noteIdsOf(keys);
+  return [...keyedNoteIds];
 }
 
-/** Every queued entry's keys, by entry id. */
-async function getQueueKeysByEntry(db: SQLiteDatabase): Promise<Map<number, string[]>> {
-  const rows = await db.getAllAsync<{ entry_id: number; key: string }>('SELECT entry_id, key FROM sync_queue_keys');
+/** The notes each queued entry keys, by entry id. */
+async function getKeyedNoteIdsByEntry(db: SQLiteDatabase): Promise<Map<number, string[]>> {
+  const rows = await db.getAllAsync<{ entry_id: number; id: string }>(
+    `SELECT entry_id, ${keyIdExpression('key', 'note')} AS id FROM sync_queue_keys
+     WHERE ${keyKindCondition('key', 'note')}`,
+  );
   const byEntry = new Map<number, string[]>();
   for (const row of rows) {
-    const keys = byEntry.get(row.entry_id);
-    if (keys) keys.push(row.key);
-    else byEntry.set(row.entry_id, [row.key]);
+    const ids = byEntry.get(row.entry_id);
+    if (ids) ids.push(row.id);
+    else byEntry.set(row.entry_id, [row.id]);
   }
   return byEntry;
 }
@@ -645,7 +639,7 @@ export async function getQueuedCompletedItemIds(
   const ids = new Set<string>();
   let localItems: NoteItem[] | null = null;
   for (const entry of entries) {
-    const body = parseQueueBody(entry.body);
+    const body = parseJsonObject(entry.body);
     const itemIds = body?.item_ids;
     if (!Array.isArray(itemIds)) continue;
     // The op names only the tapped items; each one's cascade is recovered from
@@ -865,7 +859,8 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
   const entries = await db.getAllAsync<QueueEntry>(
     'SELECT * FROM sync_queue ORDER BY id ASC',
   );
-  let keysByEntry = await getQueueKeysByEntry(db);
+  // A label-id rewrite mid-drain moves only `label:` keys, so this holds throughout.
+  const noteIdsByEntry = await getKeyedNoteIdsByEntry(db);
 
   const syncedNotes: Note[] = [];
   const discardedOperations: DiscardedOperation[] = [];
@@ -914,7 +909,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
     // "the upload already landed, so remove the queue entry first").
     let requestLanded = false;
     // The notes this entry writes; reads `body` once it is parsed.
-    const targets = (): string[] => writtenNoteIds(entry.operation, keysByEntry.get(entry.id) ?? [], body);
+    const targets = (): string[] => writtenNoteIds(entry.operation, noteIdsByEntry.get(entry.id) ?? [], body);
     try {
       if (entry.body) {
         body = JSON.parse(entry.body) as Record<string, unknown>;
@@ -1132,9 +1127,10 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
                 // resolution so every later op (and local copy) uses that label.
                 // A failure here is a local processing error and propagates as
                 // one rather than dead-lettering a create the server did resolve.
-                await withSerializedTransaction(db, () =>
-                  rewriteLabelId(db, clientLabelId, serverLabel.id, serverLabel),
-                );
+                await withSerializedTransaction(db, async () => {
+                  await rewriteLabelId(db, clientLabelId, serverLabel.id, serverLabel);
+                  await rewriteLabelKeys(db, clientLabelId, serverLabel.id);
+                });
                 // The drain snapshot predates the rewrite: refresh the rows behind this one.
                 const rewritten = new Map(
                   (await db.getAllAsync<QueueEntry>('SELECT * FROM sync_queue WHERE id > ?', [entry.id]))
@@ -1147,7 +1143,6 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
                     later.body = fresh.body;
                   }
                 }
-                keysByEntry = await getQueueKeysByEntry(db);
               }
               idempotentConflict = true;
             }

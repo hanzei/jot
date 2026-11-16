@@ -43,13 +43,15 @@ export function keyIdExpression(column: string, kind: 'note' | 'label'): string 
   return `substr(${column}, ${kind.length + 2})`;
 }
 
-/** The note ids among `keys`. */
-export function noteIdsOf(keys: Iterable<string>): string[] {
-  const ids: string[] = [];
-  for (const key of keys) {
-    if (key.startsWith(NOTE_PREFIX)) ids.push(key.slice(NOTE_PREFIX.length));
+/** A stored JSON body as an object, or null when it is absent, unparseable or not an object. */
+export function parseJsonObject(text: string | null): Record<string, unknown> | null {
+  if (!text) return null;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return parsed !== null && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
   }
-  return ids;
 }
 
 /** Record `keys` for row `rowId` of the queue (or dead letter) the key table belongs to. */
@@ -86,12 +88,7 @@ export async function loadLabelIdsByName(db: SQLiteDatabase): Promise<Map<string
       `SELECT body FROM ${table} WHERE operation = 'createLabel'`,
     );
     for (const row of creates) {
-      let body: { id?: unknown; name?: unknown } | null = null;
-      try {
-        body = JSON.parse(row.body ?? 'null') as { id?: unknown; name?: unknown } | null;
-      } catch {
-        continue;
-      }
+      const body = parseJsonObject(row.body);
       if (typeof body?.id !== 'string' || typeof body.name !== 'string') continue;
       const name = body.name.toLowerCase();
       // The store holds the current names; a create's only fills a gap.
