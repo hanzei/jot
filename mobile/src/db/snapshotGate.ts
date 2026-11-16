@@ -42,8 +42,8 @@ export function notesWrittenSince(mark: SnapshotMark): Set<string> {
 
 /**
  * Called by the API client for every successful non-GET request: records the
- * notes it wrote. Covers the queue drain's replays and the online write paths
- * alike, since both go through the same axios instance.
+ * notes it wrote. Covers the queue drain's replays and the one-shot writes
+ * with no queue alike, since both go through the same axios instance.
  */
 export function recordWriteResponse(method: string | undefined, url: string | undefined, data: unknown): void {
   if (!url || !method || method.toLowerCase() === 'get') return;

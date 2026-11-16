@@ -8,6 +8,7 @@ import i18n from '../src/i18n';
 import { useAuth } from '../src/store/AuthContext';
 import type { User } from '@jot/shared';
 import { jot } from '../src/api/jot';
+import { enqueueSettingsUpdate } from '../src/db/syncQueue';
 
 jest.mock('../src/api/jot', () => ({
   jot: {
@@ -80,6 +81,11 @@ jest.mock('../src/api/client', () => ({
   cacheAuthProfile: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('../src/db/syncQueue', () => ({
+  ...jest.requireActual('../src/db/syncQueue'),
+  enqueueSettingsUpdate: jest.fn().mockResolvedValue(undefined),
+}));
+
 jest.mock('../src/store/serverAccounts', () => ({
   getActiveServer: jest.fn(async () => ({ serverUrl: 'https://active.example.com' })),
 }));
@@ -89,7 +95,7 @@ jest.mock('../src/hooks/useServerConfig', () => ({
 }));
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
-const mockUpdateMe = jest.mocked(jot.users.updateMe);
+const mockEnqueueSettingsUpdate = jest.mocked(enqueueSettingsUpdate);
 const mockListSessions = jest.mocked(jot.sessions.list);
 const mockGetAboutInfo = jest.mocked(jot.about.get);
 const mockRevokeSession = jest.mocked(jot.sessions.revoke);
@@ -194,10 +200,6 @@ describe('SettingsScreen language selection', () => {
       ...currentSettings,
       language: 'de',
     };
-    mockUpdateMe.mockResolvedValue({
-      user,
-      settings: updatedSettings,
-    });
 
     const { getByTestId } = await render(<SettingsScreen />);
 
@@ -209,7 +211,7 @@ describe('SettingsScreen language selection', () => {
     await fireEvent.press(getByTestId('settings-language-de'));
 
     await waitFor(() => {
-      expect(mockUpdateMe).toHaveBeenCalledWith({ language: 'de' });
+      expect(mockEnqueueSettingsUpdate).toHaveBeenCalledWith(expect.anything(), { language: 'de' });
     });
 
     await waitFor(() => {
@@ -241,14 +243,6 @@ describe('SettingsScreen language selection', () => {
   });
 
   it('persists selected theme through the theme dropdown', async () => {
-    const updatedSettings = {
-      ...currentSettings,
-      theme: 'dark' as const,
-    };
-    mockUpdateMe.mockResolvedValue({
-      user,
-      settings: updatedSettings,
-    });
 
     const { getByTestId } = await render(<SettingsScreen />);
 
@@ -260,7 +254,7 @@ describe('SettingsScreen language selection', () => {
     await fireEvent.press(getByTestId('settings-theme-dark'));
 
     await waitFor(() => {
-      expect(mockUpdateMe).toHaveBeenCalledWith({ theme: 'dark' });
+      expect(mockEnqueueSettingsUpdate).toHaveBeenCalledWith(expect.anything(), { theme: 'dark' });
     });
 
     expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ theme: 'dark' }));

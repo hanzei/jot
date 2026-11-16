@@ -17,7 +17,7 @@ import {
 } from '../src/db/syncQueue';
 import { reconcileDiscard } from '../src/hooks/useSyncFailures';
 import { notesWrittenSince, snapshotMark } from '../src/db/snapshotGate';
-import { getFailedNoteIds, saveNote } from '../src/db/noteQueries';
+import { getFailedNoteIds, getLocalNote, saveNote } from '../src/db/noteQueries';
 import { insertKeys, legacyQueueKeys } from '../src/db/queueKeys';
 import api from '../src/api/client';
 import { makeTextNote as buildTextNote, remainingQueueIds, seedQueueEntry } from './helpers/fixtures';
@@ -126,46 +126,27 @@ describe('drainQueue dead-letter persistence', () => {
     expect(await deadLetters()).toMatchObject([{ note_id: orphanId }]);
   });
 
-  it('stores a NULL note_id for a multi-note reorder but flags every listed note', async () => {
-    for (const id of ['a', 'b', 'c']) {
-      await saveNote(db, buildTextNote({ id }));
-    }
-    await seedQueueEntry(db, {
-      operation: 'reorder',
-      endpoint: '/notes/reorder',
-      method: 'POST',
-      body: { note_ids: ['a', 'b', 'c'] },
-    });
-    mockApi.post.mockRejectedValueOnce(makeAxiosError(400));
-
-    await drainQueue(db);
-
-    // No single clear note, so the row's note_id is NULL...
-    expect(await deadLetters()).toMatchObject([{ note_id: null }]);
-    // ...but every note the reorder touched is still flagged.
-    expect(await failedNoteIds()).toEqual(['a', 'b', 'c']);
-  });
-
   it('carries the entry\'s keys over to the dead letter (#1282)', async () => {
+    await saveNote(db, buildTextNote({ id: 'a' }));
     await seedQueueEntry(db, {
-      operation: 'reorder',
-      endpoint: '/notes/reorder',
+      operation: 'create',
+      endpoint: '/notes',
       method: 'POST',
-      body: { note_ids: ['a', 'b'] },
-      keys: ['note:a', 'note:b'],
+      body: { id: 'a', note_type: 'text', content: 'x', labels: ['Work'] },
+      keys: ['note:a', 'label:l1'],
     });
     mockApi.post.mockRejectedValueOnce(makeAxiosError(400));
 
     await drainQueue(db);
 
     expect(await db.getAllAsync('SELECT key FROM dead_letter_keys ORDER BY key')).toEqual([
+      { key: 'label:l1' },
       { key: 'note:a' },
-      { key: 'note:b' },
     ]);
     expect(await db.getAllAsync('SELECT * FROM sync_queue_keys')).toEqual([]);
-    // Once the failed flags are cleared, the dead letter's keys alone protect them.
+    // Once the failed flag is cleared, the dead letter's keys alone protect it.
     await db.runAsync(`UPDATE notes SET sync_state = 'synced'`);
-    expect(await getProtectedNoteIds(db)).toEqual(new Set(['a', 'b']));
+    expect(await getProtectedNoteIds(db)).toEqual(new Set(['a']));
   });
 
   it('links and flags only the clone of a dead-lettered duplicate, not its source (#1282)', async () => {
@@ -278,37 +259,6 @@ describe('drainQueue dead-letter persistence', () => {
     expect(await failedNoteIds()).toEqual([]);
     expect(await remainingQueueIds(db)).toEqual([]);
     expect(discardedOperations).toEqual([{ operation: 'delete', endpoint: '/notes/n1', status: 410 }]);
-  });
-
-  it('still dead-letters a non-gone permanent failure (400) for a delete op', async () => {
-    // Only 404/410 ("target is gone") is idempotent for a delete; a genuine
-    // validation-class rejection is still preserved + flagged.
-    await saveNote(db, buildTextNote({ id: 'n1' }));
-    await seedQueueEntry(db, { operation: 'delete', endpoint: '/notes/n1', method: 'DELETE' });
-    mockApi.delete.mockRejectedValueOnce(makeAxiosError(400));
-
-    await drainQueue(db);
-
-    expect(await deadLetters()).toHaveLength(1);
-    expect(await failedNoteIds()).toEqual(['n1']);
-  });
-
-  it('does not treat a 404 as idempotent for a non-destructive op (addLabelToNote)', async () => {
-    // A 404 on adding a label is a real failure (note gone) worth preserving; the
-    // gone-idempotent shortcut is scoped to destructive/restore ops only.
-    await saveNote(db, buildTextNote({ id: 'n1' }));
-    await seedQueueEntry(db, {
-      operation: 'addLabelToNote',
-      endpoint: '/notes/n1/labels',
-      method: 'POST',
-      body: { label_id: 'l1' },
-    });
-    mockApi.post.mockRejectedValueOnce(makeAxiosError(404));
-
-    await drainQueue(db);
-
-    expect(await deadLetters()).toHaveLength(1);
-    expect(await failedNoteIds()).toEqual(['n1']);
   });
 
   it('resolves a permanently-rejected removeImage silently regardless of status (issue #618)', async () => {
@@ -577,6 +527,89 @@ describe('drainQueue dead-letter persistence', () => {
 });
 
 // ── getDeadLetteredOperations ───────────────────────────────────────────────
+
+// ── drainQueue: which rejections are failed changes (#1285, spec §8.4) ──────
+
+describe('drainQueue rejection policy', () => {
+  type Seed = Parameters<typeof seedQueueEntry>[1];
+  const n1 = (op: Omit<Seed, 'keys'>): Seed => ({ ...op, keys: ['note:n1'] });
+
+  // Ops whose local value is not worth a "Keep my version" fork: a rejection
+  // drops the row and pulls the note, which undoes the local change.
+  it.each<[string, Seed]>([
+    ['delete', n1({ operation: 'delete', endpoint: '/notes/n1', method: 'DELETE' })],
+    ['restore', n1({ operation: 'restore', endpoint: '/notes/n1/restore', method: 'POST' })],
+    ['permanentDelete', n1({ operation: 'permanentDelete', endpoint: '/notes/n1/permanent', method: 'DELETE' })],
+    ['reorder', { operation: 'reorder', endpoint: '/notes/reorder', method: 'POST', body: { note_ids: ['n1'] }, keys: ['note:n1'] }],
+    ['deleteItem', n1({ operation: 'deleteItem', endpoint: '/notes/n1/items/i1', method: 'DELETE' })],
+    ['reorderItems', n1({ operation: 'reorderItems', endpoint: '/notes/n1/items/reorder', method: 'POST', body: { item_ids: ['i1'] } })],
+    ['setItemsCompleted', n1({ operation: 'setItemsCompleted', endpoint: '/notes/n1/items/set-completed', method: 'POST', body: { item_ids: ['i1'], completed: true } })],
+    ['deleteCompletedItems', n1({ operation: 'deleteCompletedItems', endpoint: '/notes/n1/items/delete', method: 'POST', body: { item_ids: ['i1'] } })],
+    ['addLabelToNote', { operation: 'addLabelToNote', endpoint: '/notes/n1/labels', method: 'POST', body: { name: 'Work' }, keys: ['note:n1', 'label:l1'] }],
+    ['removeLabelFromNote', { operation: 'removeLabelFromNote', endpoint: '/notes/n1/labels/l1', method: 'DELETE', keys: ['note:n1', 'label:l1'] }],
+    ['share', n1({ operation: 'share', endpoint: '/notes/n1/shares', method: 'POST', body: { user_id: 'u2' } })],
+    ['unshare', n1({ operation: 'unshare', endpoint: '/notes/n1/shares/u2', method: 'DELETE' })],
+    ['a per-user update', n1({ operation: 'update', endpoint: '/notes/n1', method: 'PATCH', body: { pinned: true } })],
+    ['an updateItem without text', n1({ operation: 'updateItem', endpoint: '/notes/n1/items/i1', method: 'PATCH', body: { parent_id: 'i0' } })],
+  ])('takes the server\'s state for a rejected op: %s', async (_name, entry) => {
+    await saveNote(db, buildTextNote({ id: 'n1', content: 'local' }));
+    await seedQueueEntry(db, entry);
+    const rejection = makeAxiosError(400);
+    mockApi.post.mockRejectedValueOnce(rejection);
+    mockApi.patch.mockRejectedValueOnce(rejection);
+    mockApi.delete.mockRejectedValueOnce(rejection);
+    mockApi.get.mockResolvedValue({ data: buildTextNote({ id: 'n1', content: 'server' }) });
+
+    const { discardedOperations } = await drainQueue(db);
+
+    expect(discardedOperations).toEqual([expect.objectContaining({ operation: entry.operation, status: 400 })]);
+    expect(await deadLetters()).toEqual([]);
+    expect(await failedNoteIds()).toEqual([]);
+    expect(await remainingQueueIds(db)).toEqual([]);
+    // The pull replaced the local state with the server's.
+    expect(mockApi.get).toHaveBeenCalledWith('/notes/n1');
+    expect(await getLocalNote(db, 'n1')).toMatchObject({ content: 'server' });
+  });
+
+  it('brings back a note a rejected permanent delete already removed locally', async () => {
+    await seedQueueEntry(db, n1({ operation: 'permanentDelete', endpoint: '/notes/n1/permanent', method: 'DELETE' }));
+    mockApi.delete.mockRejectedValueOnce(makeAxiosError(403));
+    mockApi.get.mockResolvedValue({ data: buildTextNote({ id: 'n1', content: 'server' }) });
+
+    await drainQueue(db);
+
+    expect(await deadLetters()).toEqual([]);
+    expect(await getLocalNote(db, 'n1')).toMatchObject({ content: 'server' });
+  });
+
+  // Content the user typed, and label and settings changes: a failed change.
+  it.each<[string, Seed]>([
+    ['a content update', n1({ operation: 'update', endpoint: '/notes/n1', method: 'PATCH', body: { content: 'x', base_version: 1 } })],
+    ['an updateItem with text', n1({ operation: 'updateItem', endpoint: '/notes/n1/items/i1', method: 'PATCH', body: { text: 'x' } })],
+    ['a createItem', n1({ operation: 'createItem', endpoint: '/notes/n1/items', method: 'POST', body: { id: 'i1', text: 'x', position: 0 } })],
+    ['a convert', n1({ operation: 'convertNoteType', endpoint: '/notes/n1/convert', method: 'POST', body: { note_type: 'list', base_version: 1 } })],
+    ['a renameLabel', { operation: 'renameLabel', endpoint: '/labels/l1', method: 'PATCH', body: { name: 'x' }, keys: ['label:l1'] }],
+    ['an updateSettings', { operation: 'updateSettings', endpoint: '/users/me', method: 'PATCH', body: { username: 'x' }, keys: ['settings'] }],
+  ])('dead-letters a rejected op: %s', async (_name, entry) => {
+    await saveNote(db, buildTextNote({ id: 'n1' }));
+    await seedQueueEntry(db, entry);
+    const rejection = makeAxiosError(400);
+    mockApi.post.mockRejectedValueOnce(rejection);
+    mockApi.patch.mockRejectedValueOnce(rejection);
+
+    await drainQueue(db);
+
+    expect(await deadLetters()).toEqual([expect.objectContaining({ operation: entry.operation, status: 400 })]);
+    expect(await remainingQueueIds(db)).toEqual([]);
+  });
+
+  it('has the settings re-read after a rejected settings change', async () => {
+    await seedQueueEntry(db, { operation: 'updateSettings', endpoint: '/users/me', method: 'PATCH', body: { username: 'x' }, keys: ['settings'] });
+    mockApi.patch.mockRejectedValueOnce(makeAxiosError(409));
+
+    expect((await drainQueue(db)).syncedSettings).toBe(true);
+  });
+});
 
 describe('getDeadLetteredOperations', () => {
   const insertDeadLetter = (endpoint: string) =>

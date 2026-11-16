@@ -4,7 +4,6 @@ import { compareServerTimestamps, type Note, type NoteItem, type NoteUnread, typ
 import { generateClientId } from './clientId';
 import { withSerializedTransaction } from './transaction';
 import { noteKey, parseJsonObject } from './queueKeys';
-import { localCompletedWrites } from './localCompletedWrites';
 import { isLocalModeActive } from '../store/localMode';
 
 interface NoteRow {
@@ -281,13 +280,8 @@ export async function saveNoteInTx(
     // identity) rather than being torn down and recreated on every sync, the
     // same reasoning that motivated the upsert itself over `INSERT OR
     // REPLACE` above.
-    //
-    // A server snapshot's completed flags go through localCompletedWrites: an
-    // item a toggle still in flight is writing keeps its local value, and a
-    // stale one takes the newest value seen.
-    const completedById = serverSnapshot ? localCompletedWrites.accept(null, items) : null;
     for (const item of items) {
-      const completed = completedBinding(completedById, item, keepLocalCompletedIds);
+      const completed = completedBinding(item, keepLocalCompletedIds);
       await db.runAsync(
         `INSERT INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -321,10 +315,10 @@ export async function saveNoteInTx(
 interface SaveNoteOptions {
   skipNoteIds?: ReadonlySet<string>;
   /**
-   * The notes are server snapshots, so their items' completed flags go through
-   * localCompletedWrites rather than overwriting a toggle still in flight. Set
-   * only by the server-snapshot writers in syncQueue.ts (saveServerNote and
-   * friends); a raw saveNote is a local write.
+   * The notes are server snapshots, so their item prune keeps the items a
+   * queued createItem has yet to send (see pruneLocalItems). Set only by the
+   * server-snapshot writers in syncQueue.ts (saveServerNote and friends); a raw
+   * saveNote is a local write.
    */
   serverSnapshot?: boolean;
   /** Items that keep their local completed value whatever the snapshot says. */
@@ -346,21 +340,17 @@ export interface SnapshotSkips {
 }
 
 /**
- * The completed binding for a server item under the completed-write gate:
- * `keepLocal` is 1 when the gate withholds the item (an existing row keeps its
- * local value), and `value` is what to write otherwise — the gate's value, or
- * the item's own when no gate applies.
+ * The completed binding for a server item: `keepLocal` is 1 when the item is
+ * in `keepLocalIds` (an existing row keeps its local value, which a queued op
+ * has yet to send), and `value` is the item's own otherwise.
  */
 function completedBinding(
-  completedById: ReadonlyMap<string, boolean> | null,
   item: { id: string; completed: boolean },
   keepLocalIds?: ReadonlySet<string>,
 ): { keepLocal: 0 | 1; value: 0 | 1 } {
-  const gated = completedById?.get(item.id);
-  const keepLocal = (completedById !== null && gated === undefined) || keepLocalIds?.has(item.id) === true;
   return {
-    keepLocal: keepLocal ? 1 : 0,
-    value: (gated ?? item.completed) ? 1 : 0,
+    keepLocal: keepLocalIds?.has(item.id) === true ? 1 : 0,
+    value: item.completed ? 1 : 0,
   };
 }
 
@@ -509,28 +499,36 @@ export async function patchLocalNoteImages(
   // Serialized like saveNote: the read-modify-write below would otherwise let
   // two back-to-back SSE events (e.g. two rapid note_image_added) interleave
   // and have the second write clobber the first's change.
-  await withSerializedTransaction(db, async () => {
-    const row = await db.getFirstAsync<Pick<NoteRow, 'images_json' | 'updated_at'>>(
-      'SELECT images_json, updated_at FROM notes WHERE id = ?',
-      [noteId],
-    );
-    if (!row) return;
-    let images: NoteImage[] = [];
-    try { images = JSON.parse(row.images_json) as NoteImage[]; } catch { /* ignore */ }
-    const nextImages = updater(images);
-    const changed = nextImages.length !== images.length
-      || nextImages.some((img, i) => img.id !== images[i]?.id);
-    // Never move updated_at backward: a newer snapshot (a collaborator's edit
-    // over SSE) can land before this device's own upload response is applied.
-    const updatedAt = touchedAt !== undefined && changed
-      && (compareServerTimestamps(touchedAt, row.updated_at) ?? 1) > 0
-      ? touchedAt
-      : row.updated_at;
-    await db.runAsync(
-      'UPDATE notes SET images_json = ?, updated_at = ? WHERE id = ?',
-      [JSON.stringify(nextImages), updatedAt, noteId],
-    );
-  });
+  await withSerializedTransaction(db, () => patchLocalNoteImagesInTx(db, noteId, updater, touchedAt));
+}
+
+/** {@link patchLocalNoteImages} without its own transaction: the caller runs it inside one. */
+export async function patchLocalNoteImagesInTx(
+  db: SQLiteDatabase,
+  noteId: string,
+  updater: (images: NoteImage[]) => NoteImage[],
+  touchedAt?: string,
+): Promise<void> {
+  const row = await db.getFirstAsync<Pick<NoteRow, 'images_json' | 'updated_at'>>(
+    'SELECT images_json, updated_at FROM notes WHERE id = ?',
+    [noteId],
+  );
+  if (!row) return;
+  let images: NoteImage[] = [];
+  try { images = JSON.parse(row.images_json) as NoteImage[]; } catch { /* ignore */ }
+  const nextImages = updater(images);
+  const changed = nextImages.length !== images.length
+    || nextImages.some((img, i) => img.id !== images[i]?.id);
+  // Never move updated_at backward: a newer snapshot (a collaborator's edit
+  // over SSE) can land before this device's own upload response is applied.
+  const updatedAt = touchedAt !== undefined && changed
+    && (compareServerTimestamps(touchedAt, row.updated_at) ?? 1) > 0
+    ? touchedAt
+    : row.updated_at;
+  await db.runAsync(
+    'UPDATE notes SET images_json = ?, updated_at = ? WHERE id = ?',
+    [JSON.stringify(nextImages), updatedAt, noteId],
+  );
 }
 
 export async function markLocalNoteDeleted(db: SQLiteDatabase, id: string): Promise<void> {
@@ -680,24 +678,6 @@ export async function updateLocalNote(
 }
 
 /**
- * Read the current `position` of each of `ids` that exists locally, as a map.
- * Used by the optimistic reorder (#947) to snapshot the pre-drag positions so a
- * permanently-rejected reorder can put them back — the new positions are the
- * array indices, but the old ones are whatever they were, so they have to be
- * captured before the pre-flight write. Ids absent from the local DB are simply
- * omitted (nothing to restore).
- */
-export async function getLocalNotePositions(db: SQLiteDatabase, ids: string[]): Promise<Map<string, number>> {
-  if (ids.length === 0) return new Map();
-  const placeholders = ids.map(() => '?').join(', ');
-  const rows = await db.getAllAsync<{ id: string; position: number }>(
-    `SELECT id, position FROM notes WHERE id IN (${placeholders})`,
-    ids,
-  );
-  return new Map(rows.map((row) => [row.id, row.position]));
-}
-
-/**
  * The position just past the last active pinned note, mirroring where the
  * server places a note created pinned (`POST /notes` with `pinned`), so a
  * pinned note created offline sorts the same way locally before it syncs.
@@ -770,42 +750,41 @@ export async function getLocalNoteUpdatedAt(db: SQLiteDatabase, id: string): Pro
   return row?.updated_at ?? null;
 }
 
+/** Renames a label in every local note's labels. Runs inside the caller's transaction (an outbox write). */
 export async function renameLabelInLocalNotes(
   db: SQLiteDatabase,
   labelId: string,
   name: string,
 ): Promise<void> {
-  await withSerializedTransaction(db, async () => {
-    const rows = await db.getAllAsync<Pick<NoteRow, 'id' | 'labels_json'>>(
-      'SELECT id, labels_json FROM notes',
-    );
-    for (const row of rows) {
-      let labels: Label[] = [];
-      try {
-        labels = JSON.parse(row.labels_json) as Label[];
-      } catch {
-        continue;
-      }
-
-      let changed = false;
-      const nextLabels = labels.map((label) => {
-        if (label.id !== labelId || label.name === name) {
-          return label;
-        }
-        changed = true;
-        return { ...label, name };
-      });
-
-      if (!changed) {
-        continue;
-      }
-
-      await db.runAsync(
-        'UPDATE notes SET labels_json = ?, updated_at = ? WHERE id = ?',
-        [JSON.stringify(nextLabels), new Date().toISOString(), row.id],
-      );
+  const rows = await db.getAllAsync<Pick<NoteRow, 'id' | 'labels_json'>>(
+    'SELECT id, labels_json FROM notes',
+  );
+  for (const row of rows) {
+    let labels: Label[] = [];
+    try {
+      labels = JSON.parse(row.labels_json) as Label[];
+    } catch {
+      continue;
     }
-  });
+
+    let changed = false;
+    const nextLabels = labels.map((label) => {
+      if (label.id !== labelId || label.name === name) {
+        return label;
+      }
+      changed = true;
+      return { ...label, name };
+    });
+
+    if (!changed) {
+      continue;
+    }
+
+    await db.runAsync(
+      'UPDATE notes SET labels_json = ?, updated_at = ? WHERE id = ?',
+      [JSON.stringify(nextLabels), new Date().toISOString(), row.id],
+    );
+  }
 }
 
 /**
@@ -865,33 +844,32 @@ export async function removeLabelFromLocalNote(
   });
 }
 
+/** Drops a label from every local note's labels. Runs inside the caller's transaction (an outbox write). */
 export async function deleteLabelFromLocalNotes(
   db: SQLiteDatabase,
   labelId: string,
 ): Promise<void> {
-  await withSerializedTransaction(db, async () => {
-    const rows = await db.getAllAsync<Pick<NoteRow, 'id' | 'labels_json'>>(
-      'SELECT id, labels_json FROM notes',
-    );
-    for (const row of rows) {
-      let labels: Label[] = [];
-      try {
-        labels = JSON.parse(row.labels_json) as Label[];
-      } catch {
-        continue;
-      }
-
-      const nextLabels = labels.filter((label) => label.id !== labelId);
-      if (nextLabels.length === labels.length) {
-        continue;
-      }
-
-      await db.runAsync(
-        'UPDATE notes SET labels_json = ?, updated_at = ? WHERE id = ?',
-        [JSON.stringify(nextLabels), new Date().toISOString(), row.id],
-      );
+  const rows = await db.getAllAsync<Pick<NoteRow, 'id' | 'labels_json'>>(
+    'SELECT id, labels_json FROM notes',
+  );
+  for (const row of rows) {
+    let labels: Label[] = [];
+    try {
+      labels = JSON.parse(row.labels_json) as Label[];
+    } catch {
+      continue;
     }
-  });
+
+    const nextLabels = labels.filter((label) => label.id !== labelId);
+    if (nextLabels.length === labels.length) {
+      continue;
+    }
+
+    await db.runAsync(
+      'UPDATE notes SET labels_json = ?, updated_at = ? WHERE id = ?',
+      [JSON.stringify(nextLabels), new Date().toISOString(), row.id],
+    );
+  }
 }
 
 // ── Label store (issue #691) ─────────────────────────────────────────────────
@@ -1148,7 +1126,9 @@ export async function saveServerSnapshotNotes(
 
 // --- Granular local list-item mutations -----------------------------------
 // These mirror the server's per-item endpoints so the local SQLite cache stays
-// consistent when items are edited one at a time (online or offline).
+// consistent when items are edited one at a time. Each is the local half of an
+// outbox write and runs inside its transaction (enqueueWrite in syncQueue.ts),
+// so none opens one of its own.
 
 async function touchLocalNote(db: SQLiteDatabase, noteId: string): Promise<void> {
   await db.runAsync('UPDATE notes SET updated_at = ? WHERE id = ?', [new Date().toISOString(), noteId]);
@@ -1177,29 +1157,27 @@ export interface LocalItemInput {
 
 export async function createLocalItem(db: SQLiteDatabase, noteId: string, item: LocalItemInput): Promise<void> {
   const now = new Date().toISOString();
-  await withSerializedTransaction(db, async () => {
-    // A real upsert, not `INSERT OR REPLACE` — see saveNoteInTx above for why:
-    // REPLACE is DELETE+INSERT under the hood and would cascade-delete any
-    // future table that references note_items(id) on a replayed/offline-queued
-    // create for an item that already exists locally.
-    await db.runAsync(
-      `INSERT INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         note_id = excluded.note_id,
-         text = excluded.text,
-         completed = excluded.completed,
-         position = excluded.position,
-         parent_id = excluded.parent_id,
-         assigned_to = excluded.assigned_to,
-         created_at = excluded.created_at,
-         updated_at = excluded.updated_at`,
-      // '' is the wire format's top-level (see CreateNoteItemRequest); the
-      // column stores NULL, as patchLocalItem does.
-      [item.id, noteId, item.text, item.completed ? 1 : 0, item.position, item.parent_id || null, item.assigned_to ?? '', now, now],
-    );
-    await touchLocalNote(db, noteId);
-  });
+  // A real upsert, not `INSERT OR REPLACE` — see saveNoteInTx above for why:
+  // REPLACE is DELETE+INSERT under the hood and would cascade-delete any
+  // future table that references note_items(id) on a replayed/offline-queued
+  // create for an item that already exists locally.
+  await db.runAsync(
+    `INSERT INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       note_id = excluded.note_id,
+       text = excluded.text,
+       completed = excluded.completed,
+       position = excluded.position,
+       parent_id = excluded.parent_id,
+       assigned_to = excluded.assigned_to,
+       created_at = excluded.created_at,
+       updated_at = excluded.updated_at`,
+    // '' is the wire format's top-level (see CreateNoteItemRequest); the
+    // column stores NULL, as patchLocalItem does.
+    [item.id, noteId, item.text, item.completed ? 1 : 0, item.position, item.parent_id || null, item.assigned_to ?? '', now, now],
+  );
+  await touchLocalNote(db, noteId);
 }
 
 export interface LocalItemPatch {
@@ -1222,27 +1200,21 @@ export async function patchLocalItem(db: SQLiteDatabase, noteId: string, itemId:
   fields.push('updated_at = ?');
   values.push(new Date().toISOString());
   values.push(itemId, noteId);
-  await withSerializedTransaction(db, async () => {
-    await db.runAsync(`UPDATE note_items SET ${fields.join(', ')} WHERE id = ? AND note_id = ?`, values);
-    await touchLocalNote(db, noteId);
-  });
+  await db.runAsync(`UPDATE note_items SET ${fields.join(', ')} WHERE id = ? AND note_id = ?`, values);
+  await touchLocalNote(db, noteId);
 }
 
 export async function deleteLocalItem(db: SQLiteDatabase, noteId: string, itemId: string): Promise<void> {
-  await withSerializedTransaction(db, async () => {
-    const result = await db.runAsync('DELETE FROM note_items WHERE id = ? AND note_id = ?', [itemId, noteId]);
-    await touchLocalNoteIfChanged(db, noteId, result.changes);
-  });
+  const result = await db.runAsync('DELETE FROM note_items WHERE id = ? AND note_id = ?', [itemId, noteId]);
+  await touchLocalNoteIfChanged(db, noteId, result.changes);
 }
 
 export async function reorderLocalItems(db: SQLiteDatabase, noteId: string, itemIds: string[]): Promise<void> {
   const now = new Date().toISOString();
-  await withSerializedTransaction(db, async () => {
-    for (const [i, itemId] of itemIds.entries()) {
-      await db.runAsync('UPDATE note_items SET position = ?, updated_at = ? WHERE id = ? AND note_id = ?', [i, now, itemId, noteId]);
-    }
-    await touchLocalNote(db, noteId);
-  });
+  for (const [i, itemId] of itemIds.entries()) {
+    await db.runAsync('UPDATE note_items SET position = ?, updated_at = ? WHERE id = ? AND note_id = ?', [i, now, itemId, noteId]);
+  }
+  await touchLocalNote(db, noteId);
 }
 
 export async function setLocalItemsCompleted(db: SQLiteDatabase, noteId: string, itemIds: string[], completed: boolean): Promise<void> {
@@ -1250,27 +1222,23 @@ export async function setLocalItemsCompleted(db: SQLiteDatabase, noteId: string,
   const now = new Date().toISOString();
   const value = completed ? 1 : 0;
   const placeholders = itemIds.map(() => '?').join(', ');
-  await withSerializedTransaction(db, async () => {
-    // One statement, and only rows not already at the value: callers often pass
-    // a whole note's worth of ids of which few, if any, actually change.
-    const result = await db.runAsync(
-      `UPDATE note_items SET completed = ?, updated_at = ? WHERE note_id = ? AND completed != ? AND id IN (${placeholders})`,
-      [value, now, noteId, value, ...itemIds],
-    );
-    await touchLocalNoteIfChanged(db, noteId, result.changes);
-  });
+  // One statement, and only rows not already at the value: callers often pass
+  // a whole note's worth of ids of which few, if any, actually change.
+  const result = await db.runAsync(
+    `UPDATE note_items SET completed = ?, updated_at = ? WHERE note_id = ? AND completed != ? AND id IN (${placeholders})`,
+    [value, now, noteId, value, ...itemIds],
+  );
+  await touchLocalNoteIfChanged(db, noteId, result.changes);
 }
 
 export async function deleteLocalItems(db: SQLiteDatabase, noteId: string, itemIds: string[]): Promise<void> {
   if (itemIds.length === 0) return;
-  await withSerializedTransaction(db, async () => {
-    let deleted = 0;
-    for (const id of itemIds) {
-      const result = await db.runAsync('DELETE FROM note_items WHERE id = ? AND note_id = ?', [id, noteId]);
-      deleted += result.changes;
-    }
-    await touchLocalNoteIfChanged(db, noteId, deleted);
-  });
+  let deleted = 0;
+  for (const id of itemIds) {
+    const result = await db.runAsync('DELETE FROM note_items WHERE id = ? AND note_id = ?', [id, noteId]);
+    deleted += result.changes;
+  }
+  await touchLocalNoteIfChanged(db, noteId, deleted);
 }
 
 export interface ServerItemInput {
@@ -1285,39 +1253,24 @@ export interface ServerItemInput {
 
 /**
  * Reconciles local item rows for a note against a server-authoritative full
- * item list (returned by set-completed/delete): upserts
- * every returned item and removes any local row not present in the set, all
- * in one transaction. Used where the response is the complete current truth,
- * so a stale local row (e.g. one deleted by another session while this
- * device was offline) can't linger indefinitely — patching only the rows
- * present in the response would leave such a row behind forever.
+ * item list (returned by set-completed/delete): upserts every returned item
+ * and removes any local row not present in the set. Used where the response is
+ * the complete current truth, so a stale local row (e.g. one deleted by another
+ * session while this device was offline) can't linger indefinitely — patching
+ * only the rows present in the response would leave such a row behind forever.
+ * Opens no transaction of its own: the drain runs it in its landing one.
  */
-export async function reconcileLocalItems(
-  db: SQLiteDatabase,
-  noteId: string,
-  items: ServerItemInput[],
-  write: number | null = null,
-  keepLocalCompletedIds?: ReadonlySet<string>,
-): Promise<void> {
-  await withSerializedTransaction(db, () => reconcileLocalItemsInTx(db, noteId, items, write, keepLocalCompletedIds));
-}
-
-/** {@link reconcileLocalItems} without its own transaction: the caller runs it inside one. */
 export async function reconcileLocalItemsInTx(
   db: SQLiteDatabase,
   noteId: string,
   items: ServerItemInput[],
-  write: number | null = null,
   keepLocalCompletedIds?: ReadonlySet<string>,
 ): Promise<void> {
   const now = new Date().toISOString();
-  // The completed flags go through localCompletedWrites: `write` is the token of
-  // the local write this list answers, or null for one it does not (a queue
-  // drain's replay, a bulk delete). `keepLocalCompletedIds` keeps the local value
-  // of items a queued op has yet to replay. Every other field is taken as reported.
-  const completedById = localCompletedWrites.accept(write, items);
+  // `keepLocalCompletedIds` keeps the local completed value of items a queued
+  // op has yet to replay. Every other field is taken as reported.
   for (const item of items) {
-    const completed = completedBinding(completedById, item, keepLocalCompletedIds);
+    const completed = completedBinding(item, keepLocalCompletedIds);
     await db.runAsync(
       `UPDATE note_items SET text = ?, completed = CASE WHEN ? THEN completed ELSE ? END, position = ?, parent_id = ?, assigned_to = ?, updated_at = ?
        WHERE id = ? AND note_id = ?`,

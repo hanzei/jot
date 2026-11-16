@@ -5,21 +5,24 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useAuth } from '../../store/AuthContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { cacheAuthProfile } from '../../api/client';
-import { enqueueOperation, isQueueableError } from '../../db/syncQueue';
-import { SETTINGS_KEY } from '../../db/queueKeys';
-import { isOnlineWriteAllowed } from '../../api/serverReachability';
-import { useNetworkStatus } from '../../hooks/useNetworkStatus';
+import { enqueueSettingsUpdate } from '../../db/syncQueue';
 import { displayMessage, extractApiError } from '../../i18n/utils';
 import { styles } from './styles';
-import { jot } from '../../api/jot';
-import { apiPaths, type UpdateMeRequest } from '@jot/shared';
+import { getUsernameValidationError, type UpdateMeRequest, type UsernameValidationErrorCode } from '@jot/shared';
+
+/** The message key for each client-side username check, shared with registration. */
+const USERNAME_ERROR_KEYS: Record<UsernameValidationErrorCode, string> = {
+  min: 'auth.usernameMin',
+  max: 'auth.usernameMax',
+  chars: 'auth.usernameChars',
+  edge: 'auth.usernameEdge',
+};
 
 export default function AccountSection() {
-  const { user, settings, setUser, setSettings, isLocalMode } = useAuth();
+  const { user, settings, setUser, isLocalMode } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
   const db = useSQLiteContext();
-  const { isConnected } = useNetworkStatus();
 
   const [firstName, setFirstName] = useState(user?.first_name ?? '');
   const [lastName, setLastName] = useState(user?.last_name ?? '');
@@ -41,6 +44,13 @@ export default function AccountSection() {
   const handleSaveProfile = useCallback(async () => {
     setProfileError('');
     setProfileSuccess('');
+    // The save is queued and sent later (#1285), so a username the server
+    // would reject is caught here, where the user can still fix it.
+    const usernameError = getUsernameValidationError(username);
+    if (usernameError) {
+      setProfileError(USERNAME_ERROR_KEYS[usernameError]);
+      return;
+    }
     setProfileSaving(true);
     const profileUpdate = { username, first_name: firstName, last_name: lastName } satisfies UpdateMeRequest;
 
@@ -63,60 +73,24 @@ export default function AccountSection() {
       return;
     }
 
-    if (!isOnlineWriteAllowed(isConnected)) {
-      // Server known-unreachable: skip the doomed round-trip and enqueue the
-      // change for replay, matching the hook-layer gate (#716). The enqueue
-      // itself is a local SQLite write and can still fail, so it gets the same
-      // try/catch/finally as the network path below rather than escaping as an
-      // unhandled rejection out of the void-invoked handler.
-      try {
-        await enqueueOperation(db, {
-          operation: 'updateSettings',
-          endpoint: apiPaths.usersMe,
-          method: 'PATCH',
-          keys: [SETTINGS_KEY],
-          body: profileUpdate,
-        });
-        setProfileSuccess('settings.profileUpdated');
-      } catch (err: unknown) {
-        if (previousUser) {
-          setUser(previousUser);
-          if (settings) void cacheAuthProfile({ user: previousUser, settings });
-        }
-        setProfileError(extractApiError(err) ?? 'settings.failedUpdateProfile');
-      } finally {
-        setProfileSaving(false);
-      }
-      return;
-    }
-
+    // Through the outbox (#1285): the drain sends it, and a rejection (say a
+    // username already taken) surfaces as a failed change, after which the
+    // session is re-read. The enqueue itself is a local SQLite write and can
+    // still fail, so it rolls back rather than escaping as an unhandled
+    // rejection out of the void-invoked handler.
     try {
-      const { user: updatedUser, settings: updatedSettings } = await jot.users.updateMe(profileUpdate);
-      setUser(updatedUser);
-      setSettings(updatedSettings);
-      void cacheAuthProfile({ user: updatedUser, settings: updatedSettings });
+      await enqueueSettingsUpdate(db, profileUpdate);
       setProfileSuccess('settings.profileUpdated');
     } catch (err: unknown) {
-      if (isQueueableError(err)) {
-        await enqueueOperation(db, {
-          operation: 'updateSettings',
-          endpoint: apiPaths.usersMe,
-          method: 'PATCH',
-          keys: [SETTINGS_KEY],
-          body: profileUpdate,
-        });
-        setProfileSuccess('settings.profileUpdated');
-      } else {
-        if (previousUser) {
-          setUser(previousUser);
-          if (settings) void cacheAuthProfile({ user: previousUser, settings });
-        }
-        setProfileError(extractApiError(err) ?? 'settings.failedUpdateProfile');
+      if (previousUser) {
+        setUser(previousUser);
+        if (settings) void cacheAuthProfile({ user: previousUser, settings });
       }
+      setProfileError(extractApiError(err) ?? 'settings.failedUpdateProfile');
     } finally {
       setProfileSaving(false);
     }
-  }, [firstName, lastName, setSettings, setUser, username, user, settings, db, isLocalMode, isConnected]);
+  }, [firstName, lastName, setUser, username, user, settings, db, isLocalMode]);
 
   return (
     <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>

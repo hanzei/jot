@@ -55,8 +55,6 @@ function useHarness() {
     setSaveError,
     savedItemsRef,
     savedOrderRef,
-    // The pending bar is its own hook; here it just runs the action.
-    withPendingIndicator: (fn) => fn(),
     // The refresh guard lives in useNoteEditorSync; the screen tests cover it.
     withItemWriteInFlight: (op) => op(),
     completedWrites,

@@ -195,19 +195,6 @@ export const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
-  pendingBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-  },
-  pendingBarText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
   // Reachable by screen readers only: a 1px target in the corner of the preview.
   screenReaderOnly: {
     position: 'absolute',

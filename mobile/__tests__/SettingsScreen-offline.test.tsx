@@ -1,34 +1,20 @@
 /**
- * Tests for offline / queued settings changes (issue #485).
- * Verifies that language, theme, and profile changes:
- *  - persist optimistically to local cache when the API call fails transiently,
- *  - enqueue the operation for later replay, and
- *  - revert + show an error when the failure is permanent.
+ * Tests for queued settings changes (issues #485, #1285). Language, theme and
+ * profile changes go through the outbox whatever the connectivity: they apply
+ * optimistically to the session and its cache and queue an `updateSettings`
+ * row, and never call the server themselves. Only a failure of the local
+ * enqueue reverts them; a server rejection arrives later, from the drain.
  */
 
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import SettingsScreen from '../src/screens/SettingsScreen';
 import { useAuth } from '../src/store/AuthContext';
 import { cacheAuthProfile } from '../src/api/client';
-import { enqueueOperation } from '../src/db/syncQueue';
+import { enqueueSettingsUpdate } from '../src/db/syncQueue';
 import { markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
 import i18n from '../src/i18n';
 import type { User } from '@jot/shared';
-import { apiErrorBody } from './helpers/apiError';
 import { jot } from '../src/api/jot';
-
-// ── helpers ────────────────────────────────────────────────────────────────
-
-function makeAxiosError(status: number) {
-  return Object.assign(new Error(`HTTP ${status}`), {
-    isAxiosError: true,
-    response: { status },
-  });
-}
-
-function makeNetworkError() {
-  return Object.assign(new Error('Network Error'), { isAxiosError: true });
-}
 
 // ── mocks ──────────────────────────────────────────────────────────────────
 
@@ -73,7 +59,7 @@ jest.mock('../src/api/client', () => ({
 
 jest.mock('../src/db/syncQueue', () => ({
   ...jest.requireActual('../src/db/syncQueue'),
-  enqueueOperation: jest.fn().mockResolvedValue(undefined),
+  enqueueSettingsUpdate: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../src/store/serverAccounts', () => ({
@@ -122,7 +108,7 @@ const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const mockUpdateMe = jest.mocked(jot.users.updateMe);
 const mockListSessions = jest.mocked(jot.sessions.list);
 const mockCacheAuthProfile = cacheAuthProfile as jest.MockedFunction<typeof cacheAuthProfile>;
-const mockEnqueueOperation = enqueueOperation as jest.MockedFunction<typeof enqueueOperation>;
+const mockEnqueueSettingsUpdate = jest.mocked(enqueueSettingsUpdate);
 
 const baseUser: User = {
   id: 'user-1',
@@ -166,7 +152,7 @@ function setupAuth(overrides?: { settings?: typeof baseSettings; user?: User }) 
 
 // ── test suite ─────────────────────────────────────────────────────────────
 
-describe('SettingsScreen offline / queued settings changes', () => {
+describe('SettingsScreen queued settings changes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     markServerReachable();
@@ -181,431 +167,120 @@ describe('SettingsScreen offline / queued settings changes', () => {
     });
   });
 
-  // ── language ────────────────────────────────────────────────────────────
+  async function renderSettings() {
+    const view = await render(<SettingsScreen />);
+    await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
+    return view;
+  }
 
-  describe('language change', () => {
-    it('persists to cache and enqueues when updateMe fails transiently (network error)', async () => {
+  // Online or not, the change is queued and the server is not called.
+  describe.each([
+    ['reachable', () => markServerReachable()],
+    ['known-unreachable', () => markServerUnreachable()],
+  ])('while the server is %s', (_state, setReachability) => {
+    it('applies a language change, caches it and queues it', async () => {
       const { setSettings } = setupAuth();
-      mockUpdateMe.mockRejectedValue(makeNetworkError());
-
-      const { getByTestId } = await render(<SettingsScreen />);
-      await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
+      setReachability();
+      const { getByTestId } = await renderSettings();
 
       await fireEvent.press(getByTestId('settings-language-dropdown'));
       await fireEvent.press(getByTestId('settings-language-de'));
 
-      await waitFor(() => expect(mockEnqueueOperation).toHaveBeenCalled());
-
-      // Settings should be updated optimistically (not reverted)
-      expect(setSettings).toHaveBeenCalledWith(
-        expect.objectContaining({ language: 'de' }),
-      );
-      // Cache should be updated with the new language
-      expect(mockCacheAuthProfile).toHaveBeenCalledWith(
-        expect.objectContaining({
-          settings: expect.objectContaining({ language: 'de' }),
-        }),
-      );
-      // Operation should be enqueued for replay
-      expect(mockEnqueueOperation).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          operation: 'updateSettings',
-          endpoint: '/users/me',
-          method: 'PATCH',
-          body: { language: 'de' },
-          keys: ['settings'],
-        }),
-      );
-    });
-
-    it('persists to cache and enqueues when updateMe fails transiently (5xx)', async () => {
-      const { setSettings } = setupAuth();
-      mockUpdateMe.mockRejectedValue(makeAxiosError(503));
-
-      const { getByTestId } = await render(<SettingsScreen />);
-      await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
-
-      await fireEvent.press(getByTestId('settings-language-dropdown'));
-      await fireEvent.press(getByTestId('settings-language-fr'));
-
-      await waitFor(() => expect(mockEnqueueOperation).toHaveBeenCalled());
-
-      expect(setSettings).toHaveBeenCalledWith(
-        expect.objectContaining({ language: 'fr' }),
-      );
-      expect(mockEnqueueOperation).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({ body: { language: 'fr' } }),
-      );
-    });
-
-    it('reverts language and shows error when updateMe fails permanently (4xx)', async () => {
-      const { setSettings } = setupAuth();
-      mockUpdateMe.mockRejectedValue(
-        Object.assign(makeAxiosError(422), { response: { status: 422, data: apiErrorBody('limit_exceeded', 'invalid language') } }),
-      );
-
-      const { getByTestId, getByText } = await render(<SettingsScreen />);
-      await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
-
-      await fireEvent.press(getByTestId('settings-language-dropdown'));
-      await fireEvent.press(getByTestId('settings-language-de'));
-
-      await waitFor(() => {
-        expect(getByText('invalid language')).toBeTruthy();
-      });
-
-      // The last setSettings call should revert to the original settings
-      const allCalls = setSettings.mock.calls;
-      const lastCall = allCalls[allCalls.length - 1][0];
-      expect(lastCall).toEqual(expect.objectContaining({ language: 'en' }));
-
-      // Should NOT enqueue
-      expect(mockEnqueueOperation).not.toHaveBeenCalled();
-    });
-
-    it('reverts language and shows error when updateMe fails with 400', async () => {
-      setupAuth();
-      mockUpdateMe.mockRejectedValue(
-        Object.assign(makeAxiosError(400), { response: { status: 400, data: apiErrorBody('validation_failed', 'bad request') } }),
-      );
-
-      const { getByTestId, getByText } = await render(<SettingsScreen />);
-      await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
-
-      await fireEvent.press(getByTestId('settings-language-dropdown'));
-      await fireEvent.press(getByTestId('settings-language-de'));
-
-      await waitFor(() => {
-        expect(getByText('bad request')).toBeTruthy();
-      });
-
-      expect(mockEnqueueOperation).not.toHaveBeenCalled();
-    });
-
-    it('skips the network round-trip and enqueues directly when the server is known-unreachable', async () => {
-      const { setSettings } = setupAuth();
-      markServerUnreachable();
-
-      const { getByTestId } = await render(<SettingsScreen />);
-      await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
-
-      await fireEvent.press(getByTestId('settings-language-dropdown'));
-      await fireEvent.press(getByTestId('settings-language-de'));
-
-      await waitFor(() => expect(mockEnqueueOperation).toHaveBeenCalled());
-
-      // The doomed round-trip is skipped entirely.
+      await waitFor(() => expect(mockEnqueueSettingsUpdate).toHaveBeenCalledWith(expect.anything(), { language: 'de' }));
       expect(mockUpdateMe).not.toHaveBeenCalled();
-      expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ language: 'de' }));
-      expect(mockEnqueueOperation).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          operation: 'updateSettings',
-          endpoint: '/users/me',
-          method: 'PATCH',
-          body: { language: 'de' },
-          keys: ['settings'],
-        }),
-      );
-    });
-
-    it('reverts the language when the local enqueue itself fails while known-unreachable', async () => {
-      const { setSettings } = setupAuth();
-      markServerUnreachable();
-      mockEnqueueOperation.mockRejectedValueOnce(new Error('sqlite write failed'));
-
-      const { getByTestId, getByText } = await render(<SettingsScreen />);
-      await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
-
-      await fireEvent.press(getByTestId('settings-language-dropdown'));
-      await fireEvent.press(getByTestId('settings-language-de'));
-
-      // Nothing was queued for replay, so the optimistic language change is
-      // rolled back rather than left dangling forever.
-      await waitFor(() => {
-        expect(getByText(i18n.t('settings.failedUpdateLanguage'))).toBeTruthy();
-      });
-      const allCalls = setSettings.mock.calls;
-      const lastCall = allCalls[allCalls.length - 1][0];
-      expect(lastCall).toEqual(expect.objectContaining({ language: 'en' }));
-    });
-  });
-
-  // ── theme ────────────────────────────────────────────────────────────────
-
-  describe('theme change', () => {
-    it('persists to cache and enqueues when updateMe fails transiently (network error)', async () => {
-      const { setSettings } = setupAuth();
-      mockUpdateMe.mockRejectedValue(makeNetworkError());
-
-      const { getByTestId } = await render(<SettingsScreen />);
-      await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
-
-      await fireEvent.press(getByTestId('settings-theme-dropdown'));
-      await fireEvent.press(getByTestId('settings-theme-dark'));
-
-      await waitFor(() => expect(mockEnqueueOperation).toHaveBeenCalled());
-
-      expect(setSettings).toHaveBeenCalledWith(
-        expect.objectContaining({ theme: 'dark' }),
-      );
+      expect(setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ language: 'de' }));
       expect(mockCacheAuthProfile).toHaveBeenCalledWith(
-        expect.objectContaining({
-          settings: expect.objectContaining({ theme: 'dark' }),
-        }),
-      );
-      expect(mockEnqueueOperation).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          operation: 'updateSettings',
-          endpoint: '/users/me',
-          method: 'PATCH',
-          body: { theme: 'dark' },
-          keys: ['settings'],
-        }),
+        expect.objectContaining({ settings: expect.objectContaining({ language: 'de' }) }),
       );
     });
 
-    it('persists to cache and enqueues when updateMe fails transiently (5xx)', async () => {
+    it('applies a theme change, caches it and queues it', async () => {
       const { setSettings } = setupAuth();
-      mockUpdateMe.mockRejectedValue(makeAxiosError(500));
-
-      const { getByTestId } = await render(<SettingsScreen />);
-      await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
-
-      await fireEvent.press(getByTestId('settings-theme-dropdown'));
-      await fireEvent.press(getByTestId('settings-theme-light'));
-
-      await waitFor(() => expect(mockEnqueueOperation).toHaveBeenCalled());
-
-      expect(setSettings).toHaveBeenCalledWith(
-        expect.objectContaining({ theme: 'light' }),
-      );
-      expect(mockEnqueueOperation).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({ body: { theme: 'light' } }),
-      );
-    });
-
-    it('reverts theme and shows error when updateMe fails permanently (4xx)', async () => {
-      const { setSettings } = setupAuth();
-      mockUpdateMe.mockRejectedValue(
-        Object.assign(makeAxiosError(422), { response: { status: 422, data: apiErrorBody('limit_exceeded', 'invalid theme') } }),
-      );
-
-      const { getByTestId, getByText } = await render(<SettingsScreen />);
-      await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
+      setReachability();
+      const { getByTestId } = await renderSettings();
 
       await fireEvent.press(getByTestId('settings-theme-dropdown'));
       await fireEvent.press(getByTestId('settings-theme-dark'));
 
-      await waitFor(() => {
-        expect(getByText('invalid theme')).toBeTruthy();
-      });
-
-      const allCalls = setSettings.mock.calls;
-      const lastCall = allCalls[allCalls.length - 1][0];
-      expect(lastCall).toEqual(expect.objectContaining({ theme: 'system' }));
-
-      expect(mockEnqueueOperation).not.toHaveBeenCalled();
-    });
-
-    it('reverts theme and shows error when updateMe fails with 403', async () => {
-      setupAuth();
-      mockUpdateMe.mockRejectedValue(
-        Object.assign(makeAxiosError(403), { response: { status: 403, data: apiErrorBody('forbidden', 'forbidden') } }),
-      );
-
-      const { getByTestId, getByText } = await render(<SettingsScreen />);
-      await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
-
-      await fireEvent.press(getByTestId('settings-theme-dropdown'));
-      await fireEvent.press(getByTestId('settings-theme-dark'));
-
-      await waitFor(() => {
-        expect(getByText('forbidden')).toBeTruthy();
-      });
-
-      expect(mockEnqueueOperation).not.toHaveBeenCalled();
-    });
-
-    it('skips the network round-trip and enqueues directly when the server is known-unreachable', async () => {
-      const { setSettings } = setupAuth();
-      markServerUnreachable();
-
-      const { getByTestId } = await render(<SettingsScreen />);
-      await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
-
-      await fireEvent.press(getByTestId('settings-theme-dropdown'));
-      await fireEvent.press(getByTestId('settings-theme-dark'));
-
-      await waitFor(() => expect(mockEnqueueOperation).toHaveBeenCalled());
-
+      await waitFor(() => expect(mockEnqueueSettingsUpdate).toHaveBeenCalledWith(expect.anything(), { theme: 'dark' }));
       expect(mockUpdateMe).not.toHaveBeenCalled();
-      expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ theme: 'dark' }));
-      expect(mockEnqueueOperation).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          operation: 'updateSettings',
-          endpoint: '/users/me',
-          method: 'PATCH',
-          body: { theme: 'dark' },
-          keys: ['settings'],
-        }),
-      );
+      expect(setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ theme: 'dark' }));
     });
 
-    it('reverts the theme when the local enqueue itself fails while known-unreachable', async () => {
-      const { setSettings } = setupAuth();
-      markServerUnreachable();
-      mockEnqueueOperation.mockRejectedValueOnce(new Error('sqlite write failed'));
-
-      const { getByTestId, getByText } = await render(<SettingsScreen />);
-      await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
-
-      await fireEvent.press(getByTestId('settings-theme-dropdown'));
-      await fireEvent.press(getByTestId('settings-theme-dark'));
-
-      await waitFor(() => {
-        expect(getByText(i18n.t('settings.failedUpdateTheme'))).toBeTruthy();
-      });
-      const allCalls = setSettings.mock.calls;
-      const lastCall = allCalls[allCalls.length - 1][0];
-      expect(lastCall).toEqual(expect.objectContaining({ theme: 'system' }));
-    });
-  });
-
-  // ── profile save ─────────────────────────────────────────────────────────
-
-  describe('profile save', () => {
-    it('applies optimistic user update, caches, and enqueues when updateMe fails transiently', async () => {
+    it('applies a profile save to the session, caches it and queues it', async () => {
       const { setUser, setSettings } = setupAuth();
-      mockUpdateMe.mockRejectedValue(makeNetworkError());
+      setReachability();
+      const { getByTestId, getByText } = await renderSettings();
 
-      const { getByTestId } = await render(<SettingsScreen />);
-      await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
-
+      await fireEvent.changeText(getByTestId('settings-first-name'), 'Alicia');
       await fireEvent.press(getByTestId('settings-save-profile'));
 
-      await waitFor(() => expect(mockEnqueueOperation).toHaveBeenCalled());
-
-      // User should be updated optimistically
-      expect(setUser).toHaveBeenCalledWith(
-        expect.objectContaining({
-          username: 'alice',
-          first_name: 'Alice',
-          last_name: 'Smith',
-        }),
-      );
-      // Settings should not change for profile update (only user changes)
-      expect(setSettings).not.toHaveBeenCalled();
-      // Cache should be updated
-      expect(mockCacheAuthProfile).toHaveBeenCalledWith(
-        expect.objectContaining({
-          user: expect.objectContaining({ username: 'alice' }),
-        }),
-      );
-      // Operation should be enqueued
-      expect(mockEnqueueOperation).toHaveBeenCalledWith(
+      await waitFor(() => expect(mockEnqueueSettingsUpdate).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({
-          operation: 'updateSettings',
-          endpoint: '/users/me',
-          method: 'PATCH',
-          body: expect.objectContaining({ username: 'alice' }),
-          keys: ['settings'],
-        }),
-      );
-    });
-
-    it('applies optimistic user update and enqueues when updateMe fails with 5xx', async () => {
-      const { setUser } = setupAuth();
-      mockUpdateMe.mockRejectedValue(makeAxiosError(503));
-
-      const { getByTestId } = await render(<SettingsScreen />);
-      await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
-
-      await fireEvent.press(getByTestId('settings-save-profile'));
-
-      await waitFor(() => expect(mockEnqueueOperation).toHaveBeenCalled());
-
-      expect(setUser).toHaveBeenCalled();
-      expect(mockEnqueueOperation).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          operation: 'updateSettings',
-          body: expect.objectContaining({ username: 'alice' }),
-        }),
-      );
-    });
-
-    it('applies optimistic update then reverts and shows error when updateMe fails permanently (4xx)', async () => {
-      const { setUser } = setupAuth();
-      mockUpdateMe.mockRejectedValue(
-        Object.assign(makeAxiosError(422), { response: { status: 422, data: apiErrorBody('limit_exceeded', 'username taken') } }),
-      );
-
-      const { getByTestId, getByText } = await render(<SettingsScreen />);
-      await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
-
-      await fireEvent.press(getByTestId('settings-save-profile'));
-
-      await waitFor(() => {
-        expect(getByText('username taken')).toBeTruthy();
-      });
-
-      // First call: optimistic update; second call: revert to original
-      expect(setUser).toHaveBeenCalledTimes(2);
-      expect(setUser).toHaveBeenNthCalledWith(1, expect.objectContaining({ username: 'alice' }));
-      expect(setUser).toHaveBeenNthCalledWith(2, baseUser);
-      expect(mockEnqueueOperation).not.toHaveBeenCalled();
-    });
-
-    it('applies optimistic update then reverts and shows error when updateMe fails with 400', async () => {
-      const { setUser } = setupAuth();
-      mockUpdateMe.mockRejectedValue(
-        Object.assign(makeAxiosError(400), { response: { status: 400, data: apiErrorBody('validation_failed', 'invalid input') } }),
-      );
-
-      const { getByTestId, getByText } = await render(<SettingsScreen />);
-      await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
-
-      await fireEvent.press(getByTestId('settings-save-profile'));
-
-      await waitFor(() => {
-        expect(getByText('invalid input')).toBeTruthy();
-      });
-
-      expect(setUser).toHaveBeenCalledTimes(2);
-      expect(setUser).toHaveBeenNthCalledWith(2, baseUser);
-      expect(mockEnqueueOperation).not.toHaveBeenCalled();
-    });
-
-    it('skips the network round-trip and enqueues directly when the server is known-unreachable', async () => {
-      const { setUser } = setupAuth();
-      markServerUnreachable();
-
-      const { getByTestId } = await render(<SettingsScreen />);
-      await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
-
-      await fireEvent.press(getByTestId('settings-save-profile'));
-
-      await waitFor(() => expect(mockEnqueueOperation).toHaveBeenCalled());
-
+        { username: 'alice', first_name: 'Alicia', last_name: 'Smith' },
+      ));
       expect(mockUpdateMe).not.toHaveBeenCalled();
-      expect(setUser).toHaveBeenCalledWith(expect.objectContaining({ username: 'alice' }));
-      expect(mockEnqueueOperation).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          operation: 'updateSettings',
-          endpoint: '/users/me',
-          method: 'PATCH',
-          body: expect.objectContaining({ username: 'alice' }),
-          keys: ['settings'],
-        }),
+      expect(setUser).toHaveBeenCalledWith(expect.objectContaining({ first_name: 'Alicia' }));
+      expect(setSettings).not.toHaveBeenCalled();
+      expect(mockCacheAuthProfile).toHaveBeenCalledWith(
+        expect.objectContaining({ user: expect.objectContaining({ first_name: 'Alicia' }) }),
       );
+      expect(getByText(i18n.t('settings.profileUpdated'))).toBeTruthy();
     });
+  });
+
+  it('reverts the language and shows an error when the local enqueue fails', async () => {
+    const { setSettings } = setupAuth();
+    mockEnqueueSettingsUpdate.mockRejectedValueOnce(new Error('sqlite write failed'));
+    const { getByTestId, getByText } = await renderSettings();
+
+    await fireEvent.press(getByTestId('settings-language-dropdown'));
+    await fireEvent.press(getByTestId('settings-language-de'));
+
+    // Nothing was queued, so the optimistic change is rolled back rather than
+    // left dangling forever.
+    await waitFor(() => {
+      expect(getByText(i18n.t('settings.failedUpdateLanguage'))).toBeTruthy();
+    });
+    expect(setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ language: 'en' }));
+  });
+
+  it('reverts the theme and shows an error when the local enqueue fails', async () => {
+    const { setSettings } = setupAuth();
+    mockEnqueueSettingsUpdate.mockRejectedValueOnce(new Error('sqlite write failed'));
+    const { getByTestId, getByText } = await renderSettings();
+
+    await fireEvent.press(getByTestId('settings-theme-dropdown'));
+    await fireEvent.press(getByTestId('settings-theme-dark'));
+
+    await waitFor(() => {
+      expect(getByText(i18n.t('settings.failedUpdateTheme'))).toBeTruthy();
+    });
+    expect(setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ theme: 'system' }));
+  });
+
+  it('reverts the profile and shows an error when the local enqueue fails', async () => {
+    const { setUser } = setupAuth();
+    mockEnqueueSettingsUpdate.mockRejectedValueOnce(new Error('sqlite write failed'));
+    const { getByTestId, getByText } = await renderSettings();
+
+    await fireEvent.press(getByTestId('settings-save-profile'));
+
+    await waitFor(() => {
+      expect(getByText(i18n.t('settings.failedUpdateProfile'))).toBeTruthy();
+    });
+    expect(setUser).toHaveBeenLastCalledWith(baseUser);
+  });
+
+  it('rejects an invalid username before queueing it, since the server would only reject it later', async () => {
+    const { setUser } = setupAuth();
+    const { getByTestId, getByText } = await renderSettings();
+
+    await fireEvent.changeText(getByTestId('settings-username'), 'Alice');
+    await fireEvent.press(getByTestId('settings-save-profile'));
+
+    expect(getByText(i18n.t('auth.usernameChars'))).toBeTruthy();
+    expect(mockEnqueueSettingsUpdate).not.toHaveBeenCalled();
+    expect(setUser).not.toHaveBeenCalled();
   });
 });

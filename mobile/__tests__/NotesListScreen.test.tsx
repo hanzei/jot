@@ -1,6 +1,6 @@
 import { Alert } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import NotesListScreen from '../src/screens/NotesListScreen';
 import { lightColors } from '../src/theme/colors';
 import { ConfirmContext } from '../src/hooks/useConfirm';
@@ -92,7 +92,7 @@ jest.mock('../src/db/noteQueries', () => ({
 
 jest.mock('../src/db/syncQueue', () => ({
   ...jest.requireActual('../src/db/syncQueue'),
-  enqueueOperation: jest.fn().mockResolvedValue(undefined),
+  enqueueSettingsUpdate: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../src/components/NoteCard', () => {
@@ -151,7 +151,7 @@ const mockUpdateMe = jest.requireMock('../src/api/jot').jot.users.updateMe as je
 const mockEmptyTrash = jest.requireMock('../src/api/jot').jot.notes.emptyTrash as jest.Mock;
 const mockGetLocalNotes = jest.requireMock('../src/db/noteQueries').getLocalNotes as jest.Mock;
 const mockPermanentDeleteLocalNote = jest.requireMock('../src/db/noteQueries').permanentDeleteLocalNote as jest.Mock;
-const mockEnqueueOperation = jest.requireMock('../src/db/syncQueue').enqueueOperation as jest.Mock;
+const mockEnqueueSettingsUpdate = jest.requireMock('../src/db/syncQueue').enqueueSettingsUpdate as jest.Mock;
 
 const mockMutateAsync = jest.fn();
 const mockUser = {
@@ -201,16 +201,11 @@ const buildNote = (overrides: Partial<{
 });
 
 const createDeferred = <T,>() => {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((res) => {
-    resolve = res;
+  let reject!: (err: unknown) => void;
+  const promise = new Promise<T>((_res, rej) => {
+    reject = rej;
   });
-  return { promise, resolve };
-};
-
-type SortPreferenceResponse = {
-  user: typeof mockUser;
-  settings: typeof baseSettings & { note_sort: NoteSort };
+  return { promise, reject };
 };
 
 describe('NotesListScreen sorting', () => {
@@ -310,11 +305,6 @@ describe('NotesListScreen sorting', () => {
       refetch: jest.fn(),
       isRefetching: false,
     });
-    mockUpdateMe.mockResolvedValue({
-      user: mockUser,
-      settings: { ...baseSettings, note_sort: 'created_at' },
-    });
-
     await render(<NotesListScreen variant="notes" />);
 
     expect(screen.queryByTestId('sort-disabled-notice')).toBeNull();
@@ -324,16 +314,18 @@ describe('NotesListScreen sorting', () => {
     await fireEvent.press(screen.getByTestId('sort-chip-created_at'));
 
     await waitFor(() => {
-      expect(mockUpdateMe).toHaveBeenCalledWith({ note_sort: 'created_at' });
+      // Queued through the outbox, never sent from here (#1285).
+      expect(mockEnqueueSettingsUpdate).toHaveBeenCalledWith(expect.anything(), { note_sort: 'created_at' });
       expect(screen.getByTestId('sort-disabled-notice')).toBeTruthy();
     });
+    expect(mockUpdateMe).not.toHaveBeenCalled();
 
     expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ note_sort: 'created_at' }));
     expect(screen.queryByTestId('notes-masonry-draggable')).toBeNull();
     expect(screen.getByTestId('notes-masonry-grid')).toBeTruthy();
   });
 
-  it('rolls back the selected sort when persistence fails', async () => {
+  it('rolls back the selected sort when the local enqueue fails', async () => {
     const setSettings = jest.fn();
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
     mockUseAuth.mockReturnValue({
@@ -351,149 +343,27 @@ describe('NotesListScreen sorting', () => {
       refetch: jest.fn(),
       isRefetching: false,
     });
-    mockUpdateMe.mockRejectedValue(new Error('network error'));
+    mockEnqueueSettingsUpdate.mockRejectedValueOnce(new Error('sqlite write failed'));
 
     await render(<NotesListScreen variant="notes" />);
 
     await openSortControls();
     await fireEvent.press(screen.getByTestId('sort-chip-created_at'));
 
+    // Nothing was queued, so the change can never sync: roll back rather than
+    // silently pretend it saved.
     await waitFor(() => {
-      expect(mockUpdateMe).toHaveBeenCalledWith({ note_sort: 'created_at' });
       expect(alertSpy).toHaveBeenCalledWith('Error', 'Failed to update sort preference');
     });
-
     expect(screen.queryByTestId('sort-disabled-notice')).toBeNull();
     expect(setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ note_sort: 'manual' }));
     alertSpy.mockRestore();
   });
 
-  it('enqueues the sort change without a network call when the server is known-unreachable', async () => {
-    markServerUnreachable();
-    const setSettings = jest.fn();
-    mockUseAuth.mockReturnValue({
-      user: mockUser,
-      settings: baseSettings,
-      setSettings,
-    });
-    mockUseOfflineNotes.mockReturnValue({
-      data: [
-        buildNote({ id: 'unpinned-bravo', title: 'sort-demo-bravo', pinned: false }),
-        buildNote({ id: 'unpinned-alpha', title: 'sort-demo-alpha', pinned: false }),
-      ],
-      isLoading: false,
-      isError: false,
-      refetch: jest.fn(),
-      isRefetching: false,
-    });
-
-    await render(<NotesListScreen variant="notes" />);
-
-    await openSortControls();
-    await fireEvent.press(screen.getByTestId('sort-chip-created_at'));
-
-    await waitFor(() => {
-      expect(mockEnqueueOperation).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          operation: 'updateSettings',
-          endpoint: '/users/me',
-          method: 'PATCH',
-          body: { note_sort: 'created_at' },
-          keys: ['settings'],
-        }),
-      );
-    });
-
-    // The doomed round-trip is skipped entirely, and the optimistic sort stands.
-    expect(mockUpdateMe).not.toHaveBeenCalled();
-    expect(setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ note_sort: 'created_at' }));
-  });
-
-  it('rolls back the sort change when the local enqueue itself fails while known-unreachable', async () => {
-    markServerUnreachable();
-    mockEnqueueOperation.mockRejectedValueOnce(new Error('sqlite write failed'));
+  it('does not roll back a newer selection when an older one fails to enqueue', async () => {
     const setSettings = jest.fn();
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
-    mockUseAuth.mockReturnValue({
-      user: mockUser,
-      settings: baseSettings,
-      setSettings,
-    });
-    mockUseOfflineNotes.mockReturnValue({
-      data: [
-        buildNote({ id: 'unpinned-bravo', title: 'sort-demo-bravo', pinned: false }),
-        buildNote({ id: 'unpinned-alpha', title: 'sort-demo-alpha', pinned: false }),
-      ],
-      isLoading: false,
-      isError: false,
-      refetch: jest.fn(),
-      isRefetching: false,
-    });
-
-    await render(<NotesListScreen variant="notes" />);
-
-    await openSortControls();
-    await fireEvent.press(screen.getByTestId('sort-chip-created_at'));
-
-    // Since the local SQLite enqueue itself failed (not just the network), the
-    // change can never replay — roll back rather than silently pretending it saved.
-    await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalledWith('Error', 'Failed to update sort preference');
-    });
-    expect(setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ note_sort: 'manual' }));
-    alertSpy.mockRestore();
-  });
-
-  it('enqueues the sort change (without rolling back) when persistence fails transiently', async () => {
-    const setSettings = jest.fn();
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
-    mockUseAuth.mockReturnValue({
-      user: mockUser,
-      settings: baseSettings,
-      setSettings,
-    });
-    mockUseOfflineNotes.mockReturnValue({
-      data: [
-        buildNote({ id: 'unpinned-bravo', title: 'sort-demo-bravo', pinned: false }),
-        buildNote({ id: 'unpinned-alpha', title: 'sort-demo-alpha', pinned: false }),
-      ],
-      isLoading: false,
-      isError: false,
-      refetch: jest.fn(),
-      isRefetching: false,
-    });
-    // A transient (queueable) failure: a network error surfaced as an axios error.
-    mockUpdateMe.mockRejectedValue(Object.assign(new Error('Network Error'), { isAxiosError: true }));
-
-    await render(<NotesListScreen variant="notes" />);
-
-    await openSortControls();
-    await fireEvent.press(screen.getByTestId('sort-chip-created_at'));
-
-    await waitFor(() => {
-      expect(mockEnqueueOperation).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          operation: 'updateSettings',
-          endpoint: '/users/me',
-          method: 'PATCH',
-          body: { note_sort: 'created_at' },
-          keys: ['settings'],
-        }),
-      );
-    });
-
-    // No rollback and no blocking dialog for a transient failure.
-    expect(alertSpy).not.toHaveBeenCalled();
-    expect(setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ note_sort: 'created_at' }));
-    alertSpy.mockRestore();
-  });
-
-  it('ignores stale sort responses when selections change quickly', async () => {
-    const setSettings = jest.fn();
-    const first = createDeferred<SortPreferenceResponse>();
-    const second = createDeferred<SortPreferenceResponse>();
+    const first = createDeferred<void>();
 
     mockUseAuth.mockReturnValue({
       user: mockUser,
@@ -511,9 +381,7 @@ describe('NotesListScreen sorting', () => {
       refetch: jest.fn(),
       isRefetching: false,
     });
-    mockUpdateMe
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise);
+    mockEnqueueSettingsUpdate.mockReturnValueOnce(first.promise);
 
     await render(<NotesListScreen variant="notes" />);
 
@@ -522,24 +390,18 @@ describe('NotesListScreen sorting', () => {
     await openSortControls();
     await fireEvent.press(screen.getByTestId('sort-chip-created_at'));
 
-    second.resolve({
-      user: mockUser,
-      settings: { ...baseSettings, note_sort: 'created_at' },
-    });
-
     await waitFor(() => {
       expect(within(screen.getByTestId('sort-disabled-notice')).getByText(/Date created/)).toBeTruthy();
     });
 
-    first.resolve({
-      user: mockUser,
-      settings: { ...baseSettings, note_sort: 'updated_at' },
+    await act(async () => {
+      first.reject(new Error('sqlite write failed'));
     });
 
-    await waitFor(() => {
-      expect(setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ note_sort: 'created_at' }));
-    });
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ note_sort: 'created_at' }));
     expect(within(screen.getByTestId('sort-disabled-notice')).getByText(/Date created/)).toBeTruthy();
+    alertSpy.mockRestore();
   });
 
   it('toggles sort controls visibility from the compact header', async () => {

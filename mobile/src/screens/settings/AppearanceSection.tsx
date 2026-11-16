@@ -13,23 +13,18 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useAuth } from '../../store/AuthContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { cacheAuthProfile } from '../../api/client';
-import { enqueueOperation, isQueueableError } from '../../db/syncQueue';
-import { SETTINGS_KEY } from '../../db/queueKeys';
-import { isOnlineWriteAllowed } from '../../api/serverReachability';
-import { useNetworkStatus } from '../../hooks/useNetworkStatus';
+import { enqueueSettingsUpdate } from '../../db/syncQueue';
 import { SUPPORTED_LANGUAGES, getLanguagePreference, resolveLanguage, type LanguagePreference } from '../../i18n/language';
 import { displayMessage, extractApiError } from '../../i18n/utils';
 import i18n from '../../i18n';
-import { apiPaths, type ThemePreference, type UpdateMeRequest } from '@jot/shared';
+import type { ThemePreference } from '@jot/shared';
 import { styles } from './styles';
-import { jot } from '../../api/jot';
 
 export default function AppearanceSection() {
   const { user, settings, setSettings, isLocalMode } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
   const db = useSQLiteContext();
-  const { isConnected } = useNetworkStatus();
 
   const [languagePref, setLanguagePref] = useState<LanguagePreference>(
     getLanguagePreference(settings?.language),
@@ -63,56 +58,21 @@ export default function AppearanceSection() {
       return;
     }
 
-    if (!isOnlineWriteAllowed(isConnected)) {
-      // Server known-unreachable: skip the doomed round-trip and enqueue the
-      // change for replay instead of eating the write timeout (#716). The
-      // enqueue is a local SQLite write and can still fail, so it gets the
-      // same rollback/error handling as the jot.users.updateMe path below rather than
-      // escaping as an unhandled rejection out of the void-invoked handler.
-      try {
-        await enqueueOperation(db, {
-          operation: 'updateSettings',
-          endpoint: apiPaths.usersMe,
-          method: 'PATCH',
-          keys: [SETTINGS_KEY],
-          body: { language } satisfies UpdateMeRequest,
-        });
-      } catch (err: unknown) {
-        setLanguagePref(previousLanguage);
-        void i18n.changeLanguage(resolveLanguage(previousLanguage));
-        if (previousSettings) {
-          setSettings(previousSettings);
-          if (user) void cacheAuthProfile({ user, settings: previousSettings });
-        }
-        setLanguageError(extractApiError(err) ?? 'settings.failedUpdateLanguage');
-      }
-      return;
-    }
-
+    // Through the outbox (#1285): the drain sends it. The enqueue is a local
+    // SQLite write and can still fail, so it rolls back rather than escaping
+    // as an unhandled rejection out of the void-invoked handler.
     try {
-      const { settings: updatedSettings } = await jot.users.updateMe({ language });
-      setSettings(updatedSettings);
-      if (user) void cacheAuthProfile({ user, settings: updatedSettings });
+      await enqueueSettingsUpdate(db, { language });
     } catch (err: unknown) {
-      if (isQueueableError(err)) {
-        await enqueueOperation(db, {
-          operation: 'updateSettings',
-          endpoint: apiPaths.usersMe,
-          method: 'PATCH',
-          keys: [SETTINGS_KEY],
-          body: { language } satisfies UpdateMeRequest,
-        });
-      } else {
-        setLanguagePref(previousLanguage);
-        void i18n.changeLanguage(resolveLanguage(previousLanguage));
-        if (previousSettings) {
-          setSettings(previousSettings);
-          if (user) void cacheAuthProfile({ user, settings: previousSettings });
-        }
-        setLanguageError(extractApiError(err) ?? 'settings.failedUpdateLanguage');
+      setLanguagePref(previousLanguage);
+      void i18n.changeLanguage(resolveLanguage(previousLanguage));
+      if (previousSettings) {
+        setSettings(previousSettings);
+        if (user) void cacheAuthProfile({ user, settings: previousSettings });
       }
+      setLanguageError(extractApiError(err) ?? 'settings.failedUpdateLanguage');
     }
-  }, [languagePref, settings, user, setSettings, isLocalMode, isConnected, db]);
+  }, [languagePref, settings, user, setSettings, isLocalMode, db]);
 
   const handleThemeChange = useCallback(async (theme: ThemePreference) => {
     const prev = themePref;
@@ -130,54 +90,18 @@ export default function AppearanceSection() {
       return;
     }
 
-    if (!isOnlineWriteAllowed(isConnected)) {
-      // Server known-unreachable: skip the doomed round-trip and enqueue the
-      // change for replay instead of eating the write timeout (#716). The
-      // enqueue is a local SQLite write and can still fail, so it gets the
-      // same rollback/error handling as the jot.users.updateMe path below rather than
-      // escaping as an unhandled rejection out of the void-invoked handler.
-      try {
-        await enqueueOperation(db, {
-          operation: 'updateSettings',
-          endpoint: apiPaths.usersMe,
-          method: 'PATCH',
-          keys: [SETTINGS_KEY],
-          body: { theme } satisfies UpdateMeRequest,
-        });
-      } catch (err: unknown) {
-        setThemePref(prev);
-        if (previousSettings) {
-          setSettings(previousSettings);
-          if (user) void cacheAuthProfile({ user, settings: previousSettings });
-        }
-        setThemeError(extractApiError(err) ?? 'settings.failedUpdateTheme');
-      }
-      return;
-    }
-
+    // Through the outbox (#1285), like the language above.
     try {
-      const { settings: updatedSettings } = await jot.users.updateMe({ theme });
-      setSettings(updatedSettings);
-      if (user) void cacheAuthProfile({ user, settings: updatedSettings });
+      await enqueueSettingsUpdate(db, { theme });
     } catch (err: unknown) {
-      if (isQueueableError(err)) {
-        await enqueueOperation(db, {
-          operation: 'updateSettings',
-          endpoint: apiPaths.usersMe,
-          method: 'PATCH',
-          keys: [SETTINGS_KEY],
-          body: { theme } satisfies UpdateMeRequest,
-        });
-      } else {
-        setThemePref(prev);
-        if (previousSettings) {
-          setSettings(previousSettings);
-          if (user) void cacheAuthProfile({ user, settings: previousSettings });
-        }
-        setThemeError(extractApiError(err) ?? 'settings.failedUpdateTheme');
+      setThemePref(prev);
+      if (previousSettings) {
+        setSettings(previousSettings);
+        if (user) void cacheAuthProfile({ user, settings: previousSettings });
       }
+      setThemeError(extractApiError(err) ?? 'settings.failedUpdateTheme');
     }
-  }, [settings, user, setSettings, isLocalMode, isConnected, themePref, db]);
+  }, [settings, user, setSettings, isLocalMode, themePref, db]);
 
   const languageOptions: { value: LanguagePreference; label: string }[] = [
     { value: 'system', label: t('settings.languageSystem') },

@@ -23,7 +23,6 @@ import {
   splitPasteIntoItems,
   truncateToCodePoints,
   type CompletedWriteTracker,
-  type ServerCompletedItem,
 } from '@jot/shared';
 import {
   useDeleteCompletedItems,
@@ -65,13 +64,11 @@ export interface UseListItemEditingParams {
   markDirtyAndScheduleUpdate: () => void;
   /** Drops a debounced save that would otherwise race a direct item write. */
   cancelScheduledSave: () => void;
-  /** Surfaces the in-editor save-failure banner when an item write is rejected. */
+  /** Surfaces the in-editor save-failure banner when an item write fails locally. */
   setSaveError: React.Dispatch<React.SetStateAction<string | null>>;
   /** Save baseline, advanced in step with the item writes made here. */
   savedItemsRef: React.RefObject<Map<string, ItemSnapshot>>;
   savedOrderRef: React.RefObject<string[]>;
-  /** Surfaces the pending bar while a bulk item write is in flight. */
-  withPendingIndicator: <T>(fn: () => Promise<T>) => Promise<T>;
   /**
    * Runs an item write with the editor's refresh effect held off, so a note
    * re-read that resolves mid-write can't apply the pre-write item state over
@@ -187,7 +184,6 @@ export function useListItemEditing({
   setSaveError,
   savedItemsRef,
   savedOrderRef,
-  withPendingIndicator,
   withItemWriteInFlight,
   completedWrites,
   scrollViewRef,
@@ -213,14 +209,14 @@ export function useListItemEditing({
   deleteCompletedItemsRef.current = deleteCompletedItemsMutation.mutateAsync;
 
   // Persists a completed-flag change already applied to the editor. `priorById`
-  // holds the value each changed item had before it; `request` sends the write
-  // and resolves to the note's full item list, or to [] when it was queued
-  // offline. Runs inside the item-write in-flight window, so until the
-  // reconciled state is set no note re-read is applied over it. Resolves false
-  // only when the request failed and the flags were reverted.
+  // holds the value each changed item had before it; `request` commits the
+  // change to SQLite with its queue row (the drain sends it, #1285). Runs
+  // inside the item-write in-flight window, so until the baseline is advanced
+  // no note re-read is applied over it. Resolves false only when the local
+  // write failed and the flags were reverted.
   const persistCompletedWrite = useCallback(async (
     priorById: ReadonlyMap<string, boolean>,
-    request: () => Promise<ServerCompletedItem[]>,
+    request: () => Promise<void>,
   ): Promise<boolean> => {
     const applyItems = (completedById: ReadonlyMap<string, boolean>) => {
       const next = applyCompletedValues(itemsRef.current, completedById);
@@ -237,24 +233,14 @@ export function useListItemEditing({
     };
     const write = completedWrites.begin(priorById);
     try {
-      const serverItems = await request();
-      if (serverItems.length > 0) {
-        // Online: the response is the note's full item list as of this write, so
-        // it still reports any row tapped after this one unchecked — apply only
-        // what the gate says it may still decide, composing on the latest state
-        // so a concurrent write's optimistic change is preserved.
-        const completedById = completedWrites.accept(write, serverItems);
-        applyItems(completedById);
-        syncBaseline(completedById);
-      } else {
-        // Offline: the local DB already holds the change; advance the baseline
-        // for the items no later write has taken over.
-        const decided = new Map<string, boolean>();
-        for (const entry of priorById) {
-          if (completedWrites.decides(write, entry[0])) decided.set(entry[0], !entry[1]);
-        }
-        syncBaseline(decided);
+      await request();
+      // The local DB now holds the change; advance the baseline for the items
+      // no later write has taken over.
+      const decided = new Map<string, boolean>();
+      for (const entry of priorById) {
+        if (completedWrites.decides(write, entry[0])) decided.set(entry[0], !entry[1]);
       }
+      syncBaseline(decided);
       return true;
     } catch {
       // Revert only the items no later write has taken over, so a concurrent
@@ -434,10 +420,10 @@ export function useListItemEditing({
       return;
     }
 
-    await withItemWriteInFlight(() => withPendingIndicator(() =>
+    await withItemWriteInFlight(() =>
       persistCompletedWrite(new Map(ids.map((id) => [id, true])), () =>
-        uncheckAllItemsRef.current({ noteId, itemIds: ids }))));
-  }, [itemsRef, markDirtyAndScheduleUpdate, noteIdRef, persistCompletedWrite, setItems, withItemWriteInFlight, withPendingIndicator]);
+        uncheckAllItemsRef.current({ noteId, itemIds: ids })));
+  }, [itemsRef, markDirtyAndScheduleUpdate, noteIdRef, persistCompletedWrite, setItems, withItemWriteInFlight]);
 
   // Deletes every currently-completed item after a confirm dialog (overflow
   // menu); mobile has no in-editor undo-bar equivalent to the web's
@@ -478,7 +464,7 @@ export function useListItemEditing({
       return;
     }
 
-    await withItemWriteInFlight(() => withPendingIndicator(async () => {
+    await withItemWriteInFlight(async () => {
       try {
         await deleteCompletedItemsRef.current({ noteId, itemIds: ids });
       } catch {
@@ -501,8 +487,8 @@ export function useListItemEditing({
 
         setSaveError('note.failedSaveChanges');
       }
-    }));
-  }, [confirm, itemsRef, markDirtyAndScheduleUpdate, noteIdRef, savedItemsRef, savedOrderRef, setItems, setSaveError, t, withItemWriteInFlight, withPendingIndicator]);
+    });
+  }, [confirm, itemsRef, markDirtyAndScheduleUpdate, noteIdRef, savedItemsRef, savedOrderRef, setItems, setSaveError, t, withItemWriteInFlight]);
 
   const handleItemTextChange = useCallback(
     (index: number, text: string) => {

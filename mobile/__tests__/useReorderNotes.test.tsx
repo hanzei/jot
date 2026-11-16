@@ -1,11 +1,13 @@
 import React from 'react';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useReorderNotes } from '../src/hooks/useNotes';
-import { saveNotes, getLocalNotePositions, markNotePendingCreate } from '../src/db/noteQueries';
-import { getDefaultTestDb } from './helpers/testDb';
+import { saveNotes, markNotePendingCreate } from '../src/db/noteQueries';
+import { notesLocalQueryKey } from '../src/hooks/queryKeys';
+import { getDefaultTestDb, type TestDatabase } from './helpers/testDb';
 import { makeTextNote } from './helpers/fixtures';
 import { jot } from '../src/api/jot';
+import type { Note } from '@jot/shared';
 
 jest.mock('../src/api/jot');
 
@@ -15,7 +17,6 @@ jest.mock('react-native', () => ({
 
 const mockJot = jest.mocked(jot);
 
-
 function createWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -23,153 +24,89 @@ function createWrapper() {
       mutations: { retry: false },
     },
   });
-  return function Wrapper({ children }: { children: React.ReactNode }) {
+  function Wrapper({ children }: { children: React.ReactNode }) {
     return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  };
+  }
+  return { wrapper: Wrapper, queryClient };
 }
 
-// A promise whose resolution the test controls, to hold a reorder request in
-// flight while we inspect the local rows.
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (err: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
+async function positions(db: TestDatabase): Promise<Record<string, number>> {
+  const rows = await db.getAllAsync<{ id: string; position: number }>('SELECT id, position FROM notes ORDER BY id');
+  return Object.fromEntries(rows.map((row) => [row.id, row.position]));
 }
 
-function makeAxiosError(status: number) {
-  return Object.assign(new Error(`Request failed with status code ${status}`), {
-    isAxiosError: true,
-    response: { status },
-  });
-}
-
+/**
+ * useReorderNotes writes through the outbox (#1285): the new positions and the
+ * queued reorder commit together, and the hook never calls the server.
+ */
 describe('useReorderNotes', () => {
-  beforeEach(() => {
+  let db: TestDatabase;
+
+  beforeEach(async () => {
     jest.clearAllMocks();
-  });
-
-  it('calls reorderNotes API with note IDs', async () => {
-    mockJot.notes.reorder.mockResolvedValueOnce(undefined);
-
-    const { result } = await renderHook(() => useReorderNotes(), { wrapper: createWrapper() });
-
-    result.current.mutate(['id-1', 'id-2', 'id-3']);
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-    expect(mockJot.notes.reorder).toHaveBeenCalledWith(['id-1', 'id-2', 'id-3']);
-  });
-
-  it('handles reorder failure', async () => {
-    mockJot.notes.reorder.mockRejectedValueOnce(new Error('Failed'));
-
-    const { result } = await renderHook(() => useReorderNotes(), { wrapper: createWrapper() });
-
-    result.current.mutate(['id-1']);
-
-    await waitFor(() => expect(result.current.isError).toBe(true));
-  });
-
-  // The local rows have to move with the optimistic order, not trail it: the
-  // list query is SQLite-backed, so rows that still hold the pre-drag positions
-  // while the request is in flight are what any re-read in that window resolves
-  // to — snapping the cards back to the old order until the response lands (#947).
-  it('writes the new positions to SQLite before the request goes out', async () => {
-    const db = getDefaultTestDb();
+    db = getDefaultTestDb();
     await saveNotes(db, [makeTextNote({ id: 'a', position: 0 }), makeTextNote({ id: 'b', position: 1 })]);
-
-    const pending = deferred<undefined>();
-    mockJot.notes.reorder.mockReturnValueOnce(pending.promise as never);
-
-    const { result } = await renderHook(() => useReorderNotes(), { wrapper: createWrapper() });
-    result.current.mutate(['b', 'a']);
-
-    // Request is still in flight (pending unresolved), and SQLite already holds
-    // the new order.
-    await waitFor(() => expect(mockJot.notes.reorder).toHaveBeenCalledWith(['b', 'a']));
-    const positions = await getLocalNotePositions(db, ['a', 'b']);
-    expect(positions.get('b')).toBe(0);
-    expect(positions.get('a')).toBe(1);
-
-    pending.resolve(undefined);
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
   });
 
-  // A note created offline (#475) has no note_user_state row on the server until
-  // its queued create drains, so including it in a reorder would 403 the whole
-  // batch and roll back every note's position (#956). While online but with a
-  // pending-create note in the batch, the reorder must queue (draining FIFO after
-  // the create) instead of calling the API.
-  it('queues (does not call the API) when the batch includes a pending-create note while online', async () => {
-    const db = getDefaultTestDb();
-    await saveNotes(db, [makeTextNote({ id: 'a', position: 0 }), makeTextNote({ id: 'b', position: 1 })]);
-    await markNotePendingCreate(db, 'b');
+  it('commits the new positions and queues the reorder, keyed by every note it names', async () => {
+    const { wrapper } = createWrapper();
+    const { result } = await renderHook(() => useReorderNotes(), { wrapper });
 
-    const { result } = await renderHook(() => useReorderNotes(), { wrapper: createWrapper() });
-    await result.current.mutateAsync(['b', 'a']);
+    await act(async () => {
+      await result.current.mutateAsync(['b', 'a']);
+    });
 
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-    // The API is skipped and the reorder is queued for replay after the create.
     expect(mockJot.notes.reorder).not.toHaveBeenCalled();
+    // SQLite holds the new order, so any re-read shows it (#945, #947).
+    expect(await positions(db)).toEqual({ a: 1, b: 0 });
     const queued = await db.getAllAsync<{ operation: string; endpoint: string; body: string }>(
       'SELECT operation, endpoint, body FROM sync_queue',
     );
-    expect(queued).toEqual([
-      expect.objectContaining({ operation: 'reorder', endpoint: '/notes/reorder' }),
-    ]);
+    expect(queued).toEqual([expect.objectContaining({ operation: 'reorder', endpoint: '/notes/reorder' })]);
     expect(JSON.parse(queued[0]!.body)).toEqual({ note_ids: ['b', 'a'] });
-    // Keyed by every note it names (#1282).
     expect(await db.getAllAsync('SELECT key FROM sync_queue_keys ORDER BY key')).toEqual([{ key: 'note:a' }, { key: 'note:b' }]);
-
-    // The new positions are still written locally so the optimistic order holds.
-    const positions = await getLocalNotePositions(db, ['a', 'b']);
-    expect(positions.get('b')).toBe(0);
-    expect(positions.get('a')).toBe(1);
   });
 
-  // If enqueueing the replay op fails, the reorder can never sync, so the
-  // pre-flight local write must be undone rather than left as a phantom order
-  // that onSettled's refetch would pull straight back out of SQLite (#957).
-  it('restores the pre-drag positions when enqueueing the offline op fails', async () => {
-    const db = getDefaultTestDb();
-    await saveNotes(db, [makeTextNote({ id: 'a', position: 0 }), makeTextNote({ id: 'b', position: 1 })]);
+  // The server rejects a reorder naming a note it does not know yet (#956);
+  // the reorder's keys hold it behind the note's queued create.
+  it('queues behind a pending create in the batch like any other write', async () => {
+    await markNotePendingCreate(db, 'b');
+    const { wrapper } = createWrapper();
+    const { result } = await renderHook(() => useReorderNotes(), { wrapper });
 
-    // Force the offline path (transient network failure) and make the enqueue
-    // throw by removing the table it writes to.
-    mockJot.notes.reorder.mockRejectedValueOnce(makeAxiosError(503));
-    await db.execAsync('DROP TABLE sync_queue');
+    await act(async () => {
+      await result.current.mutateAsync(['b', 'a']);
+    });
 
-    const { result } = await renderHook(() => useReorderNotes(), { wrapper: createWrapper() });
-    await result.current.mutateAsync(['b', 'a']).catch(() => {});
-
-    await waitFor(() => expect(result.current.isError).toBe(true));
-
-    const positions = await getLocalNotePositions(db, ['a', 'b']);
-    expect(positions.get('a')).toBe(0);
-    expect(positions.get('b')).toBe(1);
+    expect(mockJot.notes.reorder).not.toHaveBeenCalled();
+    expect(await db.getAllAsync('SELECT operation FROM sync_queue')).toEqual([{ operation: 'reorder' }]);
   });
 
-  it('restores the pre-drag positions on a permanent failure', async () => {
-    const db = getDefaultTestDb();
-    await saveNotes(db, [makeTextNote({ id: 'a', position: 0 }), makeTextNote({ id: 'b', position: 1 })]);
+  it('re-sorts the cached list before the write commits', async () => {
+    const { wrapper, queryClient } = createWrapper();
+    const cached: Note[] = [makeTextNote({ id: 'a', position: 0 }), makeTextNote({ id: 'b', position: 1 })];
+    queryClient.setQueryData(notesLocalQueryKey(), cached);
+    const { result } = await renderHook(() => useReorderNotes(), { wrapper });
 
-    // A 409 is permanent, so it surfaces rather than queues.
-    mockJot.notes.reorder.mockRejectedValueOnce(makeAxiosError(409));
+    await act(async () => {
+      await result.current.mutateAsync(['b', 'a']);
+    });
 
-    const { result } = await renderHook(() => useReorderNotes(), { wrapper: createWrapper() });
-    await result.current.mutateAsync(['b', 'a']).catch(() => {});
+    expect(queryClient.getQueryData<Note[]>(notesLocalQueryKey())?.map((n) => n.id)).toEqual(['b', 'a']);
+  });
 
-    await waitFor(() => expect(result.current.isError).toBe(true));
+  // A failed enqueue rolls the whole transaction back: no phantom order is
+  // left in SQLite for onSettled's re-read to pull back out (#957).
+  it('leaves the positions untouched when the local write fails', async () => {
+    await db.execAsync('DROP TABLE sync_queue_keys');
+    const { wrapper } = createWrapper();
+    const { result } = await renderHook(() => useReorderNotes(), { wrapper });
 
-    // The pre-flight write is undone, so the rows end up back where they started
-    // rather than holding an order the server rejected.
-    const positions = await getLocalNotePositions(db, ['a', 'b']);
-    expect(positions.get('a')).toBe(0);
-    expect(positions.get('b')).toBe(1);
+    await act(async () => {
+      await result.current.mutateAsync(['b', 'a']).catch(() => {});
+    });
+
+    expect(result.current.isError).toBe(true);
+    expect(await positions(db)).toEqual({ a: 0, b: 1 });
   });
 });

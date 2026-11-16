@@ -39,11 +39,6 @@ export default function LabelPicker({
 }: LabelPickerProps) {
   // One field both filters the list and names a new label, as on the webapp.
   const [query, setQuery] = useState('');
-  // id of the label row currently being toggled and whether a brand-new label
-  // is being created, so the affected row/button can show a spinner instead of
-  // silently sitting for up to the ~5s write timeout (#698).
-  const [togglingLabelId, setTogglingLabelId] = useState<string | null>(null);
-  const [isCreatingLabel, setIsCreatingLabel] = useState(false);
   const { colors } = useTheme();
   const { t } = useTranslation();
   const { data: allLabels, isLoading } = useLabels();
@@ -51,6 +46,8 @@ export default function LabelPicker({
   const removeLabel = useRemoveLabelFromNote();
 
   const noteLabelIds = new Set(noteLabels.map((l) => l.id));
+  // A label write commits locally and returns at once (the drain sends it,
+  // #1285); until then a second tap would read the labels from before it.
   const isMutating = addLabel.isPending || removeLabel.isPending;
   const trimmedQuery = query.trim();
   // On a not-yet-created note, a label named in the picker exists only as the
@@ -75,7 +72,6 @@ export default function LabelPicker({
         : [...noteLabels, label]);
       return;
     }
-    setTogglingLabelId(label.id);
     try {
       if (noteLabelIds.has(label.id)) {
         await removeLabel.mutateAsync({ noteId, labelId: label.id });
@@ -85,8 +81,6 @@ export default function LabelPicker({
       onLabelsChanged?.();
     } catch {
       Alert.alert(t('common.error'), t('labels.failedUpdate'));
-    } finally {
-      setTogglingLabelId(null);
     }
   };
 
@@ -99,15 +93,12 @@ export default function LabelPicker({
       setQuery('');
       return;
     }
-    setIsCreatingLabel(true);
     try {
       await addLabel.mutateAsync({ noteId, name: trimmedQuery });
       setQuery('');
       onLabelsChanged?.();
     } catch {
       Alert.alert(t('common.error'), t('labels.failedCreate'));
-    } finally {
-      setIsCreatingLabel(false);
     }
   };
 
@@ -153,16 +144,13 @@ export default function LabelPicker({
           {filteredLabels.map((label) => (
             <TouchableOpacity
               key={label.id}
-              style={[styles.labelRow, isMutating && styles.labelRowDisabled]}
+              style={styles.labelRow}
               onPress={() => handleToggleLabel(label)}
-              disabled={isMutating}
               testID={`label-item-${label.id}`}
               accessibilityRole="checkbox"
-              accessibilityState={{ checked: noteLabelIds.has(label.id), busy: togglingLabelId === label.id }}
+              accessibilityState={{ checked: noteLabelIds.has(label.id) }}
             >
-              {togglingLabelId === label.id ? (
-                <ActivityIndicator size="small" color={colors.primary} testID={`label-item-${label.id}-spinner`} />
-              ) : noteLabelIds.has(label.id) ? (
+              {noteLabelIds.has(label.id) ? (
                 <SquareCheck size={22} color={colors.primary} />
               ) : (
                 <Square size={22} color={colors.iconMuted} />
@@ -172,18 +160,12 @@ export default function LabelPicker({
           ))}
           {showCreate && (
             <TouchableOpacity
-              style={[styles.labelRow, isMutating && !isCreatingLabel && styles.labelRowDisabled]}
+              style={styles.labelRow}
               onPress={handleCreateLabel}
-              disabled={isMutating}
               testID="label-create-option"
               accessibilityRole="button"
-              accessibilityState={{ disabled: isMutating, busy: isCreatingLabel }}
             >
-              {isCreatingLabel ? (
-                <ActivityIndicator size="small" color={colors.primary} testID="label-create-option-spinner" />
-              ) : (
-                <Plus size={22} color={colors.primary} />
-              )}
+              <Plus size={22} color={colors.primary} />
               <Text style={[styles.labelName, styles.createLabelText, { color: colors.primary }]} numberOfLines={1}>
                 {t('labels.createLabel', { name: trimmedQuery })}
               </Text>
@@ -227,8 +209,5 @@ const styles = StyleSheet.create({
   },
   createLabelText: {
     flexShrink: 1,
-  },
-  labelRowDisabled: {
-    opacity: 0.5,
   },
 });

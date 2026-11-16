@@ -2,7 +2,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import axios from 'axios';
 import api from '../api/client';
 import { jot } from '../api/jot';
-import { completedCascadeScope, type GetNotesParams, type Note, type NoteItem } from '@jot/shared';
+import { apiPaths, completedCascadeScope, type GetNotesParams, type Note, type NoteItem, type UpdateMeRequest } from '@jot/shared';
 import {
   getLocalNote,
   markLocalNoteDeleted,
@@ -12,7 +12,6 @@ import {
   saveLabels,
   reconcileLocalItemsInTx,
   reconcileServerNotesScope,
-  type ServerItemInput,
   markNoteSyncFailed,
   clearNoteSyncFailed,
   clearNotePendingCreate,
@@ -29,6 +28,7 @@ import {
   noteIdOfKey,
   noteKey,
   parseJsonObject,
+  SETTINGS_KEY,
   type QueueKey,
 } from './queueKeys';
 import { withSerializedTransaction } from './transaction';
@@ -122,12 +122,10 @@ export interface EnqueueParams {
  * (5xx). Everything else — notably 4xx client errors such as validation
  * (400/422), forbidden (403), and missing/conflict (404/409) — is permanent.
  *
- * Shared by two call sites so they stay in agreement:
- *   - online writes (useNotes): transient → fall back to the local queue instead
- *     of losing the edit; permanent → surface the error to the UI.
- *   - queue drain: transient → keep the entry queued and retry it on a later
- *     pass; permanent → discard (dead-letter) the entry so it cannot wedge the
- *     queue.
+ * The queue drain keeps a transient failure queued and retries it on a later
+ * pass; a permanent one is discarded so it cannot wedge the queue, and either
+ * dead-lettered or resolved by accepting server state (see
+ * {@link acceptsServerStateOnRejection}).
  */
 export function isTransientHttpStatus(status: number | undefined): boolean {
   if (status === undefined) return true;
@@ -191,13 +189,12 @@ function isClientTimeout(err: unknown): boolean {
 }
 
 /**
- * Timeout for a write replayed from the queue. An online write uses the short
- * WRITE_REQUEST_TIMEOUT_MS (api/client.ts) so it falls back to the queue
- * quickly; a replay has no such fallback — it simply stays queued — and a
- * replay that times out while the server answers the probe holds back its
- * note's later ops until it gets through (#1211, #1283). So a replay gets a
- * longer budget, letting a large write on a slow but working link complete.
- * Passed explicitly, so the client's write-timeout interceptor leaves it alone.
+ * Timeout for a write the drain sends: the only timeout a write has, since
+ * every write goes through the queue (#1284, #1285). A write has no fallback
+ * to hurry toward — it simply stays queued — and one that times out while the
+ * server answers the probe holds back its note's later ops until it gets
+ * through (#1211, #1283). So the budget is generous, letting a large write on
+ * a slow but working link complete.
  */
 export const QUEUED_WRITE_TIMEOUT_MS = 30000;
 
@@ -252,12 +249,56 @@ export function errorSummary(err: unknown): string {
  * Ops a permanent rejection resolves silently, whatever the status, because
  * nothing is lost: the next server sync reconciles what they would have done.
  * `removeImage`: the image just reappears (the image spec's fail-safe design,
- * §6). `markViewed`: the unread badge just stays.
+ * §6). `markViewed`: the unread badge just stays. Unlike the ops in
+ * {@link SERVER_STATE_ON_REJECTION_OPERATIONS}, one that keeps failing
+ * transiently is dropped too, so it never holds back its note's edits.
  */
 const BEST_EFFORT_OPERATIONS: ReadonlySet<QueueOperation> = new Set([
   'removeImage',
   'markViewed',
 ]);
+
+/**
+ * Ops whose permanent rejection the drain resolves by accepting server state
+ * rather than as a failed change (spec §8.4, #1285): their local value is not
+ * worth a "Keep my version" fork, which copies a note's content. The row is
+ * dropped and the note pulled, which undoes the local change.
+ *
+ * - Per-user state: trash, restore, permanent delete (pulled back if it still
+ *   exists), and reorder (positions).
+ * - Item structure and completed flags: a delete, reorder, check-off or bulk
+ *   delete names items but carries no text the user typed.
+ * - Label membership and sharing, including a collaborator leaving a note,
+ *   whose local copy is already gone: the pull brings it back if the server
+ *   kept the share.
+ *
+ * A per-user `update` (pin, colour, archive, collapse) and an `updateItem`
+ * without text resolve the same way; see {@link acceptsServerStateOnRejection}.
+ * Content — create, duplicate, convert, a title/content `update`, item text —
+ * and label and settings changes are failed changes.
+ */
+const SERVER_STATE_ON_REJECTION_OPERATIONS: ReadonlySet<QueueOperation> = new Set([
+  'delete',
+  'restore',
+  'permanentDelete',
+  'reorder',
+  'deleteItem',
+  'reorderItems',
+  'setItemsCompleted',
+  'deleteCompletedItems',
+  'addLabelToNote',
+  'removeLabelFromNote',
+  'share',
+  'unshare',
+]);
+
+/** Whether a permanent rejection of this op resolves by accepting server state (see {@link SERVER_STATE_ON_REJECTION_OPERATIONS}). */
+function acceptsServerStateOnRejection(operation: QueueOperation, body: Record<string, unknown> | undefined): boolean {
+  if (SERVER_STATE_ON_REJECTION_OPERATIONS.has(operation)) return true;
+  if (operation === 'update') return body !== undefined && !('content' in body) && !('title' in body);
+  if (operation === 'updateItem') return body !== undefined && !('text' in body);
+  return false;
+}
 
 /**
  * Operations for which a "target is gone" replay status (404/410) is an
@@ -269,11 +310,10 @@ const BEST_EFFORT_OPERATIONS: ReadonlySet<QueueOperation> = new Set([
  * would only surface a spurious "couldn't be saved" banner (and, for a delete,
  * offer to resurrect the note the user just deleted).
  *
- * This is the common flaky-connection case: an online write times out
- * client-side (WRITE_REQUEST_TIMEOUT_MS, see api/client.ts) *after* the server
- * committed it, falls back to the offline queue, and the replay then finds the
- * note already trashed/restored/gone (server returns 404). Mirrors the
- * long-standing `removeImage` handling below, generalized to its siblings.
+ * This is the common flaky-connection case: a replay times out client-side
+ * *after* the server committed it, stays queued, and the next replay then
+ * finds the note already trashed/restored/gone (server returns 404). Mirrors
+ * the long-standing `removeImage` handling below, generalized to its siblings.
  */
 const GONE_IDEMPOTENT_OPERATIONS: ReadonlySet<QueueOperation> = new Set([
   'delete',
@@ -285,34 +325,6 @@ const GONE_IDEMPOTENT_OPERATIONS: ReadonlySet<QueueOperation> = new Set([
   'removeLabelFromNote',
   'deleteLabel',
 ]);
-
-/**
- * Returns true if the error is a transient HTTP failure that can be safely
- * swallowed and queued for later replay. Returns false for permanent errors
- * (non-Axios errors, 401, or permanent 4xx) that should be surfaced.
- *
- * 401 is treated as non-queueable: the API response interceptor clears the
- * session on 401, so the write must surface the error rather than queue it.
- */
-export function isQueueableError(err: unknown): boolean {
-  if (!axios.isAxiosError(err)) return false;
-  const status = err.response?.status;
-  return status !== 401 && isTransientHttpStatus(status);
-}
-
-/**
- * Called from the `catch` of an online write attempt. If the failure is
- * transient (a flaky connection, timeout, or 5xx), it is swallowed so the
- * caller can fall back to the offline path — writing locally and queueing the
- * operation for replay — instead of losing the edit. Permanent failures (4xx
- * validation/auth/conflict) and unexpected local errors are rethrown so the UI
- * can surface them to the user.
- */
-export function rethrowIfNotQueueable(err: unknown): void {
-  if (!isQueueableError(err)) {
-    throw err;
-  }
-}
 
 /** Called after a row is queued, with its operation (none for an image upload). */
 type EnqueueListener = (operation?: QueueOperation) => void;
@@ -352,8 +364,8 @@ export function notifyEnqueueListeners(operation?: QueueOperation): void {
  * Insert a single entry and its keys into the sync queue, bypassing the
  * local-mode guard and enqueue listeners. The local→server upgrade seed path
  * (seedReplayQueue) calls it directly, because local mode is still active while
- * the queue is being pre-populated for replay and `enqueueOperation`'s guard
- * would make that a no-op; everything else goes through `enqueueOperation`. The
+ * the queue is being pre-populated for replay and `enqueueWrite`'s guard
+ * would make that a no-op; everything else goes through `enqueueWrite`. The
  * row and its keys are separate statements: run it inside a transaction.
  */
 export async function insertQueueEntry(db: SQLiteDatabase, params: EnqueueParams): Promise<void> {
@@ -371,23 +383,47 @@ export async function insertQueueEntry(db: SQLiteDatabase, params: EnqueueParams
   await insertKeys(db, 'sync_queue_keys', result.lastInsertRowId, params);
 }
 
-/** Queue an op whose local edit the caller has already written: {@link enqueueWrite} with no local apply. */
+/** Queue an op that has no local edit to apply: {@link enqueueWrite} with no local apply. */
 export async function enqueueOperation(db: SQLiteDatabase, params: EnqueueParams): Promise<void> {
   await enqueueWrite(db, { localApply: async () => undefined, op: () => params });
 }
 
+/**
+ * Queue a change to the user's profile or settings (`PATCH /users/me`). The
+ * caller has already applied it to the in-memory session, which is where
+ * settings live; a rejection is a failed change, and the drain then has the
+ * session re-read so the app shows the server's values again.
+ */
+export async function enqueueSettingsUpdate(db: SQLiteDatabase, body: UpdateMeRequest): Promise<void> {
+  await enqueueOperation(db, {
+    operation: 'updateSettings',
+    endpoint: apiPaths.usersMe,
+    method: 'PATCH',
+    keys: [SETTINGS_KEY],
+    body: body as Record<string, unknown>,
+  });
+}
+
 /** One write through the outbox: see {@link enqueueWrite}. */
 export interface OutboxWrite<T> {
-  /** Applies the edit to SQLite. Runs inside the write's transaction; its result goes to `op`. */
+  /**
+   * Applies the edit to SQLite. Runs inside the write's transaction, so it must
+   * not open one of its own (withSerializedTransaction does not nest); its
+   * result goes to `op`.
+   */
   localApply: () => Promise<T>;
-  /** The queue row that sends the edit, built in the same transaction from what `localApply` returned. */
-  op: (applied: T) => EnqueueParams;
+  /**
+   * The queue rows that send the edit, in send order, built in the same
+   * transaction from what `localApply` returned. Usually one; a write that
+   * needs a label created first queues that label's create ahead of it.
+   */
+  op: (applied: T) => EnqueueParams | readonly EnqueueParams[];
 }
 
 /**
- * The only way a converted write reaches the server (spec §4.1, §8.2, #1284):
- * apply the edit to SQLite and insert its queue row in one transaction, then
- * kick the drain. Nothing here touches the network; the drain sends the row.
+ * The only way a write reaches the server (spec §4.1, §8.2, #1284, #1285):
+ * apply the edit to SQLite and insert its queue rows in one transaction, then
+ * kick the drain. Nothing here touches the network; the drain sends the rows.
  *
  * Committed together, a snapshot that lands between the two cannot find the
  * edit without its row, and a process kill cannot leave an edit that nothing
@@ -400,34 +436,18 @@ export async function enqueueWrite<T>(db: SQLiteDatabase, write: OutboxWrite<T>)
   // nothing can dead-letter purely because a server is absent.
   const queue = !isLocalModeActive();
   let applied!: T;
-  let operation: QueueOperation | undefined;
+  const operations: QueueOperation[] = [];
   await withSerializedTransaction(db, async () => {
     applied = await write.localApply();
     if (!queue) return;
-    const op = write.op(applied);
-    operation = op.operation;
-    await insertQueueEntry(db, op);
+    const ops = write.op(applied);
+    for (const op of Array.isArray(ops) ? ops as readonly EnqueueParams[] : [ops as EnqueueParams]) {
+      await insertQueueEntry(db, op);
+      operations.push(op.operation);
+    }
   });
-  if (operation) notifyEnqueueListeners(operation);
+  for (const operation of operations) notifyEnqueueListeners(operation);
   return applied;
-}
-
-/**
- * Whether a write to `noteId` must queue behind an earlier one rather than go
- * online: the queue holds an op that writes the note, or its create has not
- * landed. A converted write always queues, so this is only for the write hooks
- * that still try the network first (#1284): sending past a queued op would
- * reorder the note's writes (spec §8.2). A queue row stays until its response
- * is applied, so this also covers a row the drain is sending.
- */
-export async function hasQueuedWriteForNote(db: SQLiteDatabase, noteId: string): Promise<boolean> {
-  const row = await db.getFirstAsync<{ found: number }>(
-    `SELECT 1 AS found FROM sync_queue_keys WHERE key = ? AND read_only = 0
-     UNION ALL SELECT 1 FROM notes WHERE id = ? AND sync_state = 'pending'
-     LIMIT 1`,
-    [noteKey(noteId), noteId],
-  );
-  return row !== null;
 }
 
 export async function getPendingCount(db: SQLiteDatabase): Promise<number> {
@@ -707,7 +727,7 @@ export async function saveServerNote(db: SQLiteDatabase, note: Note, since: Snap
  * the local one. Read from the queue itself, so it holds across restarts.
  * `exceptEntryId` leaves out the entry whose own response is being applied.
  */
-export async function getQueuedCompletedItemIds(
+async function getQueuedCompletedItemIds(
   db: SQLiteDatabase,
   noteId: string,
   exceptEntryId?: number,
@@ -814,7 +834,11 @@ export interface DrainResult {
   syncedNotes: Note[];
   /** Operations that were discarded because the server returned a permanent (non-transient 4xx) error. */
   discardedOperations: DiscardedOperation[];
-  /** True if at least one `updateSettings` operation was successfully drained. */
+  /**
+   * True if at least one `updateSettings` operation landed or was rejected:
+   * either way the server's settings may differ from the optimistic ones the
+   * app shows, so the caller re-reads them.
+   */
   syncedSettings: boolean;
   /**
    * Entries this pass loaded that are still queued: held back, failed
@@ -1035,40 +1059,32 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         body = JSON.parse(entry.body) as Record<string, unknown>;
       }
 
-      // The base_version this replay was sent with, if it was version-guarded.
+      // The base_version this replay was sent with, if it was version-guarded:
+      // a convert, or an update that touches content.
       let baseVersion: number | null = null;
-      let response: { data?: unknown } | undefined;
-      if (entry.method === 'POST') {
-        if (entry.operation === 'convertNoteType' && body) {
-          // Resolve base_version from the note's current local version at replay
-          // time, matching a legacy `update` row (#489): a chain of offline edits
-          // to one note (e.g. a scalar update followed by a convert) then replays
-          // each op against the version the previous one left behind instead of
-          // the stale value captured when this op was first queued.
-          const noteId = targets()[0];
-          baseVersion = noteId ? await getLocalNoteVersion(db, noteId) : null;
+      const guardedNoteId = targets()[0];
+      if (guardedNoteId !== undefined && body !== undefined && (
+        entry.operation === 'convertNoteType'
+        || (entry.operation === 'update' && ('content' in body || 'title' in body)))) {
+        if (typeof body.base_version === 'number') {
+          // The version the editor was showing, stored at enqueue (#1277,
+          // #1284), advanced past this device's own edits that landed since
+          // (rebaseQueuedEdits rewrites the row too, for after a restart).
+          baseVersion = resolveOwnBaseVersion(db, guardedNoteId, body.base_version);
+          body.base_version = baseVersion;
+        } else {
+          // A row queued before edits stored their base: resolve it from the
+          // note's local version at replay time, as the drain used to (#489).
+          // applyResponse below advances that version after each drained
+          // edit, so a chain of such edits replays against the right base.
+          baseVersion = await getLocalNoteVersion(db, guardedNoteId);
           if (baseVersion !== null) body.base_version = baseVersion;
         }
+      }
+      let response: { data?: unknown } | undefined;
+      if (entry.method === 'POST') {
         response = await api.post(endpoint, body, REPLAY_REQUEST_CONFIG);
       } else if (entry.method === 'PATCH') {
-        const updateNoteID =
-          entry.operation === 'update' ? targets()[0] : undefined;
-        if (updateNoteID !== undefined && body && ('content' in body || 'title' in body)) {
-          if (typeof body.base_version === 'number') {
-            // The version the editor was showing, stored at enqueue (#1277,
-            // #1284), advanced past this device's own edits that landed since
-            // (rebaseQueuedEdits rewrites the row too, for after a restart).
-            baseVersion = resolveOwnBaseVersion(db, updateNoteID, body.base_version);
-            body.base_version = baseVersion;
-          } else {
-            // A row queued before edits stored their base: resolve it from the
-            // note's local version at replay time, as the drain used to (#489).
-            // applyResponse below advances that version after each drained
-            // edit, so a chain of such edits replays against the right base.
-            baseVersion = await getLocalNoteVersion(db, updateNoteID);
-            if (baseVersion !== null) body.base_version = baseVersion;
-          }
-        }
         response = await api.patch(endpoint, body, REPLAY_REQUEST_CONFIG);
       } else if (entry.method === 'DELETE') {
         response = await api.delete(endpoint, REPLAY_REQUEST_CONFIG);
@@ -1219,6 +1235,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // never succeed, so discard the entry and continue rather than letting one
         // bad operation wedge the whole queue indefinitely.
         discardedOperations.push({ operation: entry.operation, endpoint, status });
+        if (entry.operation === 'updateSettings') syncedSettings = true;
 
         // A 409 from a create/duplicate replay is an idempotent already-applied
         // conflict (the original request already committed): the local state is
@@ -1300,7 +1317,15 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
             }
           }
         }
-        if (!idempotentConflict) {
+        if (!idempotentConflict && acceptsServerStateOnRejection(entry.operation, body)) {
+          // Rejected, but not worth a failed change: drop it and pull the note,
+          // so its local state becomes the server's again (#1285).
+          console.info(
+            `Dropping queued operation id=${entry.id} ${entry.operation} ${endpoint} (HTTP ${status}): taking the server's state`,
+          );
+          // Nothing landed, so the snapshot gate has nothing to record.
+          for (const noteId of targets()) pullNoteIds.add(noteId);
+        } else if (!idempotentConflict) {
           // The edit is lost server-side (the failed-changes banner surfaces it),
           // so this one is worth a warning.
           console.warn(`Discarding queued operation id=${entry.id} ${entry.operation} ${endpoint} (HTTP ${status})`);
@@ -1514,7 +1539,8 @@ export interface ServerResponseOptions {
 
 /**
  * Persist a note the server returned in answer to this client's own write on it
- * — an online hook's request, or the queue drain's replay (spec §8.3, #1262).
+ * — the queue drain's replay, or a failed change's resolution re-reading the
+ * note (spec §8.3, #1262).
  * Returns true when the note was saved in full.
  *
  * - **Unresolved failed change:** take neither content nor version; the local
@@ -1526,8 +1552,7 @@ export interface ServerResponseOptions {
  *   exception to §8.3 until queued ops are merged (§8.5, #1268). A version that
  *   may carry a collaborator's edit is never adopted without its content.
  * - **Otherwise:** save it whole, which also brings in any collaborator edit
- *   made while the note was protected from snapshots. Its completed flags still
- *   go through localCompletedWrites like any server snapshot.
+ *   made while the note was protected from snapshots.
  *
  * The checks and the write share one transaction, so a write serialized
  * behind it cannot slip in between.
@@ -1565,41 +1590,18 @@ async function saveServerResponseNoteInTx(
 }
 
 /**
- * Reconciles a note's local rows against a server-authoritative full item list
- * (see reconcileLocalItems), keeping the completed value of every item a queued
- * completed op still has to replay (see {@link getQueuedCompletedItemIds}).
- * `write` is the localCompletedWrites token the list answers, if any;
- * `exceptEntryId` is the queue entry it answers during a drain.
- */
-export async function reconcileServerItems(
-  db: SQLiteDatabase,
-  noteId: string,
-  items: ServerItemInput[],
-  options: { write?: number; exceptEntryId?: number } = {},
-): Promise<void> {
-  await withSerializedTransaction(db, () => reconcileServerItemsInTx(db, noteId, items, options));
-}
-
-/** {@link reconcileServerItems} without its own transaction: the caller runs it inside one. */
-async function reconcileServerItemsInTx(
-  db: SQLiteDatabase,
-  noteId: string,
-  items: ServerItemInput[],
-  options: { write?: number; exceptEntryId?: number },
-): Promise<void> {
-  const queued = await getQueuedCompletedItemIds(db, noteId, options.exceptEntryId);
-  await reconcileLocalItemsInTx(db, noteId, items, options.write ?? null, queued);
-}
-
-/**
- * {@link reconcileServerItems} for a drain's response, inside the transaction
- * that deletes its queue entry. `items` is `unknown` since it's a raw response
- * body; anything other than an array (e.g. a malformed/legacy response) is
- * skipped rather than wiping the note's items.
+ * Reconciles a note's local rows against a drain response's full item list
+ * (see reconcileLocalItemsInTx), inside the transaction that deletes its queue
+ * entry, keeping the completed value of every item a queued completed op other
+ * than `entryId` still has to replay (see {@link getQueuedCompletedItemIds}).
+ * `items` is `unknown` since it's a raw response body; anything other than an
+ * array (e.g. a malformed/legacy response) is skipped rather than wiping the
+ * note's items.
  */
 async function reconcileItemsFromResponseInTx(db: SQLiteDatabase, noteId: string, items: unknown, entryId: number): Promise<void> {
   if (!Array.isArray(items)) return;
-  await reconcileServerItemsInTx(db, noteId, items as NoteItem[], { exceptEntryId: entryId });
+  const queued = await getQueuedCompletedItemIds(db, noteId, entryId);
+  await reconcileLocalItemsInTx(db, noteId, items as NoteItem[], queued);
 }
 
 /**
@@ -1648,7 +1650,7 @@ async function rebaseQueuedEdits(db: SQLiteDatabase, { noteId, from, to }: OwnVe
   if (from === to) return;
   await db.runAsync(
     `UPDATE sync_queue SET body = json_set(body, '$.base_version', ?)
-     WHERE operation = 'update'
+     WHERE operation IN ('update', 'convertNoteType')
        AND json_extract(body, '$.base_version') = ?
        AND id IN (SELECT entry_id FROM sync_queue_keys WHERE key = ? AND read_only = 0)`,
     [to, from, noteKey(noteId)],
