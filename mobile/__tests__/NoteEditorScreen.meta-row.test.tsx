@@ -78,9 +78,6 @@ describe('NoteEditorScreen collaborators + labels row', () => {
     });
 
     await waitFor(() => expect(getByTestId('label-picker-open')).toBeTruthy());
-    // On a saved note the open is instant — well under the pending bar's show
-    // delay — so the loading bar never flashes in and shoves the note down.
-    expect(queryByTestId('menu-action-pending')).toBeNull();
   });
 
   it('does not render an "Add labels" affordance in the meta row', async () => {

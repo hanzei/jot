@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, renderHook } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useReorderNotes } from '../src/hooks/useNotes';
 import { saveNotes, markNotePendingCreate } from '../src/db/noteQueries';
@@ -106,7 +106,7 @@ describe('useReorderNotes', () => {
       await result.current.mutateAsync(['b', 'a']).catch(() => {});
     });
 
-    expect(result.current.isError).toBe(true);
+    await waitFor(() => expect(result.current.isError).toBe(true));
     expect(await positions(db)).toEqual({ a: 0, b: 1 });
   });
 });

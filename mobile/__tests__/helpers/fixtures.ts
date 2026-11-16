@@ -131,3 +131,36 @@ export async function remainingQueueIds(db: TestDatabase): Promise<number[]> {
   const rows = await db.getAllAsync<{ id: number }>('SELECT id FROM sync_queue ORDER BY id ASC');
   return rows.map((r) => r.id);
 }
+
+/** A queued op as a test asserts it: its row, parsed body, and the keys it writes and reads. */
+export interface QueuedOp {
+  operation: string;
+  endpoint: string;
+  method: string;
+  body: Record<string, unknown> | null;
+  keys: string[];
+  readKeys: string[];
+}
+
+/** Every queued op, oldest first, with its `sync_queue_keys`. */
+export async function queuedOps(db: TestDatabase): Promise<QueuedOp[]> {
+  const rows = await db.getAllAsync<{ id: number; operation: string; endpoint: string; method: string; body: string | null }>(
+    'SELECT id, operation, endpoint, method, body FROM sync_queue ORDER BY id ASC',
+  );
+  const ops: QueuedOp[] = [];
+  for (const row of rows) {
+    const keys = await db.getAllAsync<{ key: string; read_only: number }>(
+      'SELECT key, read_only FROM sync_queue_keys WHERE entry_id = ? ORDER BY rowid',
+      [row.id],
+    );
+    ops.push({
+      operation: row.operation,
+      endpoint: row.endpoint,
+      method: row.method,
+      body: row.body ? JSON.parse(row.body) as Record<string, unknown> : null,
+      keys: keys.filter((k) => !k.read_only).map((k) => k.key),
+      readKeys: keys.filter((k) => k.read_only).map((k) => k.key),
+    });
+  }
+  return ops;
+}

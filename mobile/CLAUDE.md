@@ -97,12 +97,13 @@ truth, and the network is a background reconciler. Rationale and code map:
 - **Writes go through the outbox** (spec §4.1). A write hook calls
   `enqueueWrite`: the local edit and its queue row commit in one transaction,
   and the hook returns without touching the network. The drain is the only
-  sender, and a permanent rejection surfaces later as a failed change, never as
-  an error from the action. Hooks not converted yet (all but `useUpdateNote`)
-  still try the network first: gated on `isOnlineWriteAllowed()` and on
-  `hasQueuedWriteForNote()` being false, rolling back only on a *permanent*
-  rejection. Convert, don't extend, that pattern. Note-image uploads use their
-  own offline upload queue.
+  sender. A permanent rejection arrives later, never as an error from the
+  action: content, label and settings changes become failed changes, the rest
+  are undone silently from server state (spec §8.4,
+  `SERVER_STATE_ON_REJECTION_OPERATIONS`). Validate locally what you can before
+  queueing. Settings go through `enqueueSettingsUpdate`. No write hook reads
+  `isOnlineWriteAllowed()`; it gates one-shot actions and note-image uploads,
+  which still go online first and fall back to their own upload queue (#1288).
 - **Reads serve the local cache immediately** and refresh in the background with
   bounded, backed-off retries (`retrySync`) that respect `isServerReachable()`.
 - **Auth and one-shot ops** (login, logout, PAT) may hit the network on the
@@ -110,11 +111,11 @@ truth, and the network is a background reconciler. Rationale and code map:
   Be optimistic where the local outcome is authoritative (logout clears locally,
   POSTs in the background).
 - **Timeouts are finite and tiered; never `timeout: 0`.** Queue replays use
-  `QUEUED_WRITE_TIMEOUT_MS`, the only timeout an outbox write has; the online
-  attempts of unconverted hooks `WRITE_REQUEST_TIMEOUT_MS`; reads/auth
-  `DEFAULT_REQUEST_TIMEOUT_MS`.
+  `QUEUED_WRITE_TIMEOUT_MS`, the only timeout a write has; uploads
+  `NOTE_IMAGE_UPLOAD_TIMEOUT_MS`; reads/auth/one-shot `DEFAULT_REQUEST_TIMEOUT_MS`.
 - **Feedback is ambient** (banners, failed-note badge), not spinners or dialogs
-  per action. Distinguish transient (queued) from permanent failures.
+  per action; a write never shows a pending state. Distinguish transient
+  (queued) from permanent failures.
 - **Recovery:** nothing that stops while the reachability flag is `false` may
   be what re-arms it, and a flip back resumes a parked drain (spec §3.1). On SSE
   reopen also publish the catch-up resync
@@ -128,20 +129,18 @@ What the device may believe after a sync (spec §8). These are the target; spec
 
 - **`version` and content move together.** Never store a server version without
   the content it belongs to, or the reverse.
-- **Writes to one note stay in order.** The drain sends them FIFO per key; an
-  unconverted hook goes online only when the note has no queued write, and
-  queues behind it otherwise. Its own in-flight request is not tracked, so an
-  outbox write can overtake it until that hook is converted.
+- **Writes to one note stay in order.** The drain is the only sender and sends
+  them FIFO per key.
 - **A write commits its local edit and its queue row in one transaction**
   (`enqueueWrite`), and the drain applies the response and deletes the row in
   one transaction.
-- **A queued content edit stores the `base_version` its editor showed.** When
-  the drain lands one as this device's own version, it rebases the edits
-  queued at the same base in that transaction (`rebaseQueuedEdits`); an edit
-  enqueued later resolves its base through `src/db/ownVersions.ts`.
-- **A protected note** (queued op, write in flight, or an unresolved failed
-  change) takes no server content, from a snapshot or from the response to
-  another write. Check and write in one transaction.
+- **A queued content edit or conversion stores the `base_version` its editor
+  showed.** When the drain lands one as this device's own version, it rebases
+  the edits queued at the same base in that transaction (`rebaseQueuedEdits`);
+  an edit enqueued later resolves its base through `src/db/ownVersions.ts`.
+- **A protected note** (queued op or an unresolved failed change) takes no
+  server content, from a snapshot or from the response to another write. Check
+  and write in one transaction.
 - **Never apply a snapshot older than this device's own write to the note.**
   Take a `snapshotMark()` before fetching and pass it to the `saveServerNote*`
   writer (`src/db/snapshotGate.ts`); never compare `updated_at`, which mixes
