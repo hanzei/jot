@@ -3,7 +3,7 @@ import axios from 'axios';
 import type { NoteImage } from '@jot/shared';
 import { uploadNoteImage, type ImageUploadFile } from '../api/images';
 import { patchLocalNoteImages, getPendingCreateNoteIds, getFailedNoteIds } from './noteQueries';
-import { errorSummary, isTransientHttpStatus, isGlobalDrainFailureProbed, MAX_ENTRY_DRAIN_ATTEMPTS, notifyEnqueueListeners } from './syncQueue';
+import { chargeEntryFailure, errorSummary, isTransientHttpStatus, isGlobalDrainFailureProbed, notifyEnqueueListeners } from './syncQueue';
 import { copyFile, deleteFileIfExists, documentPath, ensureDirExists } from '../utils/fs';
 
 const PENDING_UPLOADS_DIR = documentPath('pending-image-uploads');
@@ -26,7 +26,7 @@ export interface PendingImageUploadEntry {
    * failure leaves the upload queued (#1283).
    */
   attempts?: number;
-  /** How many of `attempts` were non-HTTP errors: at MAX_ENTRY_DRAIN_ATTEMPTS the upload is flagged `error` (#1283). */
+  /** How many of `attempts` were non-HTTP errors; see `chargeEntryFailure` (#1283). */
   processing_errors?: number;
 }
 
@@ -209,13 +209,13 @@ export async function drainImageUploadQueue(db: SQLiteDatabase): Promise<ImageUp
 
   const uploadedNoteIds: string[] = [];
   let discardedCount = 0;
-  // Notes with an upload that failed transiently this pass: their later
-  // uploads wait, so a note's images still land in the order they were added.
-  const heldBackNoteIds = new Set<string>();
+  // Notes whose uploads wait this pass: not yet confirmed on the server (see
+  // above), or with an upload that failed transiently this pass, so a note's
+  // images still land in the order they were added (#1283).
+  const skippedNoteIds = new Set([...pendingCreateNoteIds, ...failedNoteIds]);
 
   for (const entry of entries) {
-    if (pendingCreateNoteIds.has(entry.note_id) || failedNoteIds.has(entry.note_id)) continue;
-    if (heldBackNoteIds.has(entry.note_id)) continue;
+    if (skippedNoteIds.has(entry.note_id)) continue;
 
     let image: NoteImage;
     try {
@@ -244,28 +244,20 @@ export async function drainImageUploadQueue(db: SQLiteDatabase): Promise<ImageUp
       if (await isGlobalDrainFailureProbed(err)) {
         // Connectivity failure (network error/401/408/429, or a timeout or
         // 502/503/504 while the server does not answer) — every entry would fail the same
-        // way, so stop draining without charging this entry and retry on the
-        // next reconnect (issue #714).
+        // way, so stop the pass without charging this entry and retry on the
+        // next one (issue #714).
         console.info(`Image upload queue drain stopped at entry id=${entry.id} (connectivity): ${errorSummary(err)}`);
         break;
       }
       // Entry-specific transient failure (a 5xx tied to this upload, a timeout
-      // while the server answers the probe, or a non-HTTP throw): charge the
-      // attempt counter (#714). An HTTP failure, or a non-HTTP one below the
-      // cap, leaves the upload queued for a later pass and holds back only
-      // its note's later uploads (#1283).
-      const attempts = (entry.attempts ?? 0) + 1;
-      const processingError = !axios.isAxiosError(err);
-      const processingErrors = (entry.processing_errors ?? 0) + (processingError ? 1 : 0);
-      await db.runAsync(
-        'UPDATE pending_image_uploads SET attempts = ?, processing_errors = ? WHERE id = ?',
-        [attempts, processingErrors, entry.id],
-      );
-      if (!processingError || processingErrors < MAX_ENTRY_DRAIN_ATTEMPTS) {
+      // while the server answers the probe, or a non-HTTP throw). Below the
+      // cap it stays queued and holds back only its note's later uploads (#1283).
+      const { attempts, processingErrors, capped } = await chargeEntryFailure(db, 'pending_image_uploads', entry, err);
+      if (!capped) {
         console.warn(
           `Image upload id=${entry.id} failed (attempt ${attempts}); holding back its note's later uploads: ${errorSummary(err)}`,
         );
-        heldBackNoteIds.add(entry.note_id);
+        skippedNoteIds.add(entry.note_id);
         continue;
       }
       // A non-HTTP error at the cap (the stable file copy is unreadable, say):

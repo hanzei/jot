@@ -358,8 +358,9 @@ Rules of thumb:
     on the device, so a
     retry is unlikely to help, and the queue needs a way past it. A dead-lettered
     `create` drops its note's dependent queued ops rather than 404-ing each one.
-    A `markViewed` that keeps failing is dropped at the same count, so a view
-    ping never holds back its note's edits.
+    A best-effort op (`markViewed`, `removeImage`) that keeps failing is
+    dropped at the same count, as a permanent rejection of one is: the next
+    sync reconciles it, and it never holds back its note's edits.
   - The image-upload queue (`pending_image_uploads.attempts`) follows the same
     rules per note: a transiently failing upload stays queued and holds back its
     note's later uploads for the pass; only a non-HTTP error at the cap flags it

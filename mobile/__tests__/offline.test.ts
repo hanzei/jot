@@ -21,6 +21,11 @@ function makeAxiosError(status: number) {
   });
 }
 
+/** An axios error with no response: a network failure at the transport. */
+function makeNetworkError() {
+  return Object.assign(new Error('Network Error'), { isAxiosError: true, response: undefined });
+}
+
 jest.mock('../src/api/client', () => ({
   __esModule: true,
   default: {
@@ -51,7 +56,6 @@ beforeEach(() => {
   // drive exactly those paths.
   silenceConsole(
     'warn',
-    /^Queue drain stopped at entry/,
     /^Queue entry id=\S+ landed server-side/,
     /^Discarding queued operation/,
     /^Dead-lettering queued operation/,
@@ -151,6 +155,13 @@ describe('drainQueue', () => {
     return row?.attempts ?? null;
   };
 
+  // An op for note abc, then one for an unrelated note xyz.
+  const seedTwoNotes = async () => {
+    const first = await seedQueueEntry(db, { operation: 'update', endpoint: '/notes/abc', method: 'PATCH', body: {} });
+    const second = await seedQueueEntry(db, { operation: 'update', endpoint: '/notes/xyz', method: 'PATCH', body: {} });
+    return { first, second };
+  };
+
   it('processes POST operations and removes them from queue', async () => {
     const id = await seedQueueEntry(db, {
       operation: 'create',
@@ -238,9 +249,7 @@ describe('drainQueue', () => {
   it('stops draining on network errors (non-4xx)', async () => {
     const first = await seedQueueEntry(db, { operation: 'update', endpoint: '/notes/abc', method: 'PATCH', body: {} });
     const second = await seedQueueEntry(db, { operation: 'update', endpoint: '/notes/xyz', method: 'PATCH', body: {} });
-    mockApi.patch.mockRejectedValueOnce(
-      Object.assign(new Error('Network Error'), { isAxiosError: true, response: undefined }),
-    );
+    mockApi.patch.mockRejectedValueOnce(makeNetworkError());
 
     await drainQueue(db);
 
@@ -350,17 +359,15 @@ describe('drainQueue', () => {
     expect(mockApi.patch).toHaveBeenCalledWith('/notes/ok', {}, REPLAY_CONFIG);
   });
 
-  it('drops a persistently-failing markViewed at the cap without dead-lettering or flagging the note', async () => {
-    // Marking a note viewed is best-effort: it must never surface as a failed
-    // sync, whether the server rejects it outright or keeps failing.
+  it.each([
+    ['markViewed', 'POST', '/notes/viewed/viewed', {}],
+    ['removeImage', 'DELETE', '/images/img1', { note_id: 'viewed' }],
+  ] as const)('drops a persistently-failing best-effort %s at the cap without dead-lettering or flagging the note', async (operation, method, endpoint, body) => {
+    // A best-effort op must never surface as a failed sync, whether the server
+    // rejects it outright or keeps failing, nor hold back its note's edits.
     await saveNote(db, makeTextNote({ id: 'viewed' }));
-    await seedQueueEntry(db, {
-      operation: 'markViewed',
-      endpoint: '/notes/viewed/viewed',
-      method: 'POST',
-      attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1,
-    });
-    mockApi.post.mockRejectedValueOnce(makeAxiosError(500));
+    await seedQueueEntry(db, { operation, endpoint, method, body, attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 });
+    (method === 'POST' ? mockApi.post : mockApi.delete).mockRejectedValueOnce(makeAxiosError(500));
 
     const { discardedOperations } = await drainQueue(db);
 
@@ -479,9 +486,7 @@ describe('drainQueue', () => {
       attempts: 2,
     });
     // An axios error with no response models a network failure/timeout at the transport.
-    mockApi.patch.mockRejectedValueOnce(
-      Object.assign(new Error('Network Error'), { isAxiosError: true, response: undefined }),
-    );
+    mockApi.patch.mockRejectedValueOnce(makeNetworkError());
 
     await drainQueue(db);
 
@@ -493,22 +498,10 @@ describe('drainQueue', () => {
     const makeTimeoutError = (code: 'ECONNABORTED' | 'ETIMEDOUT') =>
       Object.assign(new Error('timeout of 5000ms exceeded'), { isAxiosError: true, code, response: undefined });
 
-    const seedAtCap = async () => {
-      const first = await seedQueueEntry(db, {
-        operation: 'update',
-        endpoint: '/notes/abc',
-        method: 'PATCH',
-        body: {},
-        attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1,
-      });
-      const second = await seedQueueEntry(db, { operation: 'update', endpoint: '/notes/xyz', method: 'PATCH', body: {} });
-      return { first, second };
-    };
-
     it.each(['ECONNABORTED', 'ETIMEDOUT'] as const)(
       'is charged to the entry when the server answers the probe (%s): it stays queued and the other notes drain',
       async (code) => {
-        const { first } = await seedAtCap();
+        const { first } = await seedTwoNotes();
         mockApi.patch.mockRejectedValueOnce(makeTimeoutError(code)); // this op always outlasts the write timeout
         mockApi.get.mockResolvedValueOnce({ data: {} } as never);
         mockApi.patch.mockResolvedValueOnce({ data: {} } as never); // the unaffected note
@@ -520,7 +513,7 @@ describe('drainQueue', () => {
         // The probe, then the post-drain pull.
         expect(mockApi.get).toHaveBeenCalledTimes(2);
         expect(mockApi.get).toHaveBeenLastCalledWith('/notes/xyz');
-        expect(await attemptsFor(first)).toBe(MAX_ENTRY_DRAIN_ATTEMPTS);
+        expect(await attemptsFor(first)).toBe(1);
         expect(await deadLetterRows()).toEqual([]);
         expect(discardedOperations).toEqual([]);
         expect(mockApi.patch).toHaveBeenCalledWith('/notes/xyz', {}, REPLAY_CONFIG);
@@ -529,14 +522,14 @@ describe('drainQueue', () => {
     );
 
     it('is global when the server does not answer the probe: no charge, no dead-letter', async () => {
-      const { first, second } = await seedAtCap();
+      const { first, second } = await seedTwoNotes();
       mockApi.patch.mockRejectedValueOnce(makeTimeoutError('ECONNABORTED'));
       mockApi.get.mockRejectedValueOnce(makeTimeoutError('ECONNABORTED'));
 
       const { discardedOperations } = await drainQueue(db);
 
       expect(mockApi.get).toHaveBeenCalledTimes(1);
-      expect(await attemptsFor(first)).toBe(MAX_ENTRY_DRAIN_ATTEMPTS - 1);
+      expect(await attemptsFor(first)).toBe(0);
       expect(await remainingQueueIds(db)).toEqual([first, second]);
       expect(mockApi.patch).toHaveBeenCalledTimes(1);
       expect(discardedOperations).toEqual([]);
@@ -544,7 +537,7 @@ describe('drainQueue', () => {
     });
 
     it('does not probe on a plain network error', async () => {
-      const { first } = await seedAtCap();
+      const { first } = await seedTwoNotes();
       mockApi.patch.mockRejectedValueOnce(
         Object.assign(new Error('Network Error'), { isAxiosError: true, code: 'ERR_NETWORK', response: undefined }),
       );
@@ -552,11 +545,11 @@ describe('drainQueue', () => {
       await drainQueue(db);
 
       expect(mockApi.get).not.toHaveBeenCalled();
-      expect(await attemptsFor(first)).toBe(MAX_ENTRY_DRAIN_ATTEMPTS - 1);
+      expect(await attemptsFor(first)).toBe(0);
     });
 
     it('does not probe on an aborted request (ECONNABORTED without a timeout)', async () => {
-      const { first } = await seedAtCap();
+      const { first } = await seedTwoNotes();
       mockApi.patch.mockRejectedValueOnce(
         Object.assign(new Error('Request aborted'), { isAxiosError: true, code: 'ECONNABORTED', response: undefined }),
       );
@@ -564,39 +557,25 @@ describe('drainQueue', () => {
       await drainQueue(db);
 
       expect(mockApi.get).not.toHaveBeenCalled();
-      expect(await attemptsFor(first)).toBe(MAX_ENTRY_DRAIN_ATTEMPTS - 1);
+      expect(await attemptsFor(first)).toBe(0);
     });
   });
 
   describe('a gateway status (502/503/504) from a reverse proxy', () => {
-    const seedAtCap = async () => {
-      const first = await seedQueueEntry(db, {
-        operation: 'update',
-        endpoint: '/notes/abc',
-        method: 'PATCH',
-        body: {},
-        attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1,
-      });
-      const second = await seedQueueEntry(db, { operation: 'update', endpoint: '/notes/xyz', method: 'PATCH', body: {} });
-      return { first, second };
-    };
-
     it.each([
       ['also gets a gateway status', () => mockApi.get.mockRejectedValueOnce(makeAxiosError(502))],
-      ['gets no response', () => mockApi.get.mockRejectedValueOnce(
-        Object.assign(new Error('Network Error'), { isAxiosError: true, response: undefined }),
-      )],
+      ['gets no response', () => mockApi.get.mockRejectedValueOnce(makeNetworkError())],
     ])('is global when the server probe %s: no charge, no dead-letter', async (_label, mockProbe) => {
-      const { first, second } = await seedAtCap();
+      const { first, second } = await seedTwoNotes();
       mockApi.patch.mockRejectedValueOnce(makeAxiosError(503));
       mockProbe();
 
       const { discardedOperations } = await drainQueue(db);
 
-      // Even at the cap, the entry stays queued and uncharged, and the drain
-      // stops rather than trying later entries.
+      // The entry stays queued and uncharged, and the drain stops rather
+      // than trying later entries.
       expect(mockApi.get).toHaveBeenCalledTimes(1);
-      expect(await attemptsFor(first)).toBe(MAX_ENTRY_DRAIN_ATTEMPTS - 1);
+      expect(await attemptsFor(first)).toBe(0);
       expect(await remainingQueueIds(db)).toEqual([first, second]);
       expect(mockApi.patch).toHaveBeenCalledTimes(1);
       expect(discardedOperations).toEqual([]);
@@ -607,14 +586,14 @@ describe('drainQueue', () => {
       ['succeeds', () => mockApi.get.mockResolvedValueOnce({ data: {} } as never)],
       ['gets an error status from the server itself', () => mockApi.get.mockRejectedValueOnce(makeAxiosError(401))],
     ])('is charged to the entry when the server probe %s: it stays queued and the other notes drain', async (_label, mockProbe) => {
-      const { first } = await seedAtCap();
+      const { first } = await seedTwoNotes();
       mockApi.patch.mockRejectedValueOnce(makeAxiosError(504)); // this op times out at the proxy
       mockProbe();
       mockApi.patch.mockResolvedValueOnce({ data: {} } as never); // the unaffected note
 
       const { discardedOperations } = await drainQueue(db);
 
-      expect(await attemptsFor(first)).toBe(MAX_ENTRY_DRAIN_ATTEMPTS);
+      expect(await attemptsFor(first)).toBe(1);
       expect(await deadLetterRows()).toEqual([]);
       expect(discardedOperations).toEqual([]);
       expect(mockApi.patch).toHaveBeenCalledWith('/notes/xyz', {}, REPLAY_CONFIG);

@@ -71,7 +71,6 @@ beforeEach(() => {
   // below drive exactly those paths.
   silenceConsole(
     'warn',
-    /^Image upload queue drain stopped at entry/,
     /^Flagging image upload/,
     /^Failed to patch local images/,
     /^Image upload id=\S+ failed \(attempt \d+\); holding back/,
@@ -308,7 +307,7 @@ describe('drainImageUploadQueue', () => {
 
   it('stops without charging on a gateway status while the server does not answer', async () => {
     await saveNote(db, makeTextNote({ id: 'n1' }));
-    await seedUpload({ id: 'up-gw', note_id: 'n1', created_at: '2024-01-01T00:00:00Z', attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 });
+    await seedUpload({ id: 'up-gw', note_id: 'n1', created_at: '2024-01-01T00:00:00Z' });
     await seedUpload({ id: 'up-next', note_id: 'n1', local_path: 'file:///docs/pending-image-uploads/up-next', created_at: '2024-01-02T00:00:00Z' });
     mockUploadNoteImage.mockRejectedValueOnce(
       Object.assign(new Error('Bad Gateway'), { isAxiosError: true, response: { status: 502 } }),
@@ -319,13 +318,13 @@ describe('drainImageUploadQueue', () => {
 
     expect(mockProbe).toHaveBeenCalledTimes(1);
     expect(mockUploadNoteImage).toHaveBeenCalledTimes(1);
-    expect(await uploadRow('up-gw')).toEqual({ status: 'queued', error_message: null, attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 });
+    expect(await uploadRow('up-gw')).toEqual({ status: 'queued', error_message: null, attempts: 0 });
     expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
   });
 
   it('keeps an upload that keeps timing out at the proxy queued while the server answers (#1283)', async () => {
     await saveNote(db, makeTextNote({ id: 'n1' }));
-    await seedUpload({ id: 'up-slow', note_id: 'n1', attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 });
+    await seedUpload({ id: 'up-slow', note_id: 'n1' });
     mockUploadNoteImage.mockRejectedValueOnce(
       Object.assign(new Error('Gateway Timeout'), { isAxiosError: true, response: { status: 504 } }),
     );
@@ -333,13 +332,13 @@ describe('drainImageUploadQueue', () => {
 
     const result = await drainImageUploadQueue(db);
 
-    expect(await uploadRow('up-slow')).toEqual({ status: 'queued', error_message: null, attempts: MAX_ENTRY_DRAIN_ATTEMPTS });
+    expect(await uploadRow('up-slow')).toEqual({ status: 'queued', error_message: null, attempts: 1 });
     expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
   });
 
   it('keeps an upload that keeps timing out client-side queued while the server answers (#1211, #1283)', async () => {
     await saveNote(db, makeTextNote({ id: 'n1' }));
-    await seedUpload({ id: 'up-timeout', note_id: 'n1', attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 });
+    await seedUpload({ id: 'up-timeout', note_id: 'n1' });
     mockUploadNoteImage.mockRejectedValueOnce(
       Object.assign(new Error('timeout of 90000ms exceeded'), { isAxiosError: true, code: 'ECONNABORTED', response: undefined }),
     );
@@ -348,13 +347,13 @@ describe('drainImageUploadQueue', () => {
     const result = await drainImageUploadQueue(db);
 
     expect(mockProbe).toHaveBeenCalledTimes(1);
-    expect(await uploadRow('up-timeout')).toEqual({ status: 'queued', error_message: null, attempts: MAX_ENTRY_DRAIN_ATTEMPTS });
+    expect(await uploadRow('up-timeout')).toEqual({ status: 'queued', error_message: null, attempts: 1 });
     expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
   });
 
   it('stops without charging on a client-side timeout while the server does not answer (#1211)', async () => {
     await saveNote(db, makeTextNote({ id: 'n1' }));
-    await seedUpload({ id: 'up-timeout', note_id: 'n1', attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 });
+    await seedUpload({ id: 'up-timeout', note_id: 'n1' });
     const timeout = () => Object.assign(new Error('timeout exceeded'), { isAxiosError: true, code: 'ECONNABORTED', response: undefined });
     mockUploadNoteImage.mockRejectedValueOnce(timeout());
     mockProbe.mockRejectedValueOnce(timeout());
@@ -362,7 +361,7 @@ describe('drainImageUploadQueue', () => {
     const result = await drainImageUploadQueue(db);
 
     expect(mockProbe).toHaveBeenCalledTimes(1);
-    expect(await uploadRow('up-timeout')).toEqual({ status: 'queued', error_message: null, attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 });
+    expect(await uploadRow('up-timeout')).toEqual({ status: 'queued', error_message: null, attempts: 0 });
     expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
   });
 

@@ -26,6 +26,7 @@ import {
   insertKeys,
   keyIdExpression,
   keyKindCondition,
+  noteIdOfKey,
   noteKey,
   parseJsonObject,
   type QueueKey,
@@ -84,8 +85,8 @@ interface QueueEntry {
  * Such an error happens on the device, so retrying it later is unlikely to
  * help. An HTTP failure is not capped (#1283): the server never rejected the
  * op, so it stays queued and only the ops that share a key with it wait (see
- * {@link drainQueue}). A markViewed is dropped at the cap whatever failed,
- * so a view ping that keeps failing does not hold back its note's edits.
+ * {@link drainQueue}). A best-effort op (markViewed, removeImage) is dropped
+ * at the cap whatever failed, so it never holds back its note's edits.
  */
 export const MAX_ENTRY_DRAIN_ATTEMPTS = 5;
 
@@ -425,37 +426,58 @@ export async function getSyncQueueStats(db: SQLiteDatabase): Promise<SyncQueueSt
   };
 }
 
-/**
- * Every key of each queued entry, by entry id, read-only ones included: what
- * the drain holds back behind an entry that fails (#1283).
- */
-async function getKeysByEntry(db: SQLiteDatabase): Promise<Map<number, string[]>> {
-  return groupByEntry(await db.getAllAsync<{ entry_id: number; value: string }>(
-    'SELECT entry_id, key AS value FROM sync_queue_keys',
-  ));
+/** What each queued entry touches, by entry id, from one read of `sync_queue_keys`. */
+interface EntryKeys {
+  /** Every key, read-only ones included: what the drain holds back behind an entry that fails (#1283). */
+  keys: Map<number, string[]>;
+  /**
+   * The notes the entry writes (its written `note:` keys): what a landing is
+   * recorded for, what a dead letter links and flags failed, and what the
+   * drain pulls afterwards.
+   */
+  writtenNoteIds: Map<number, string[]>;
 }
 
-/** `sync_queue_keys`-derived rows grouped into a list of values per entry id. */
-function groupByEntry(rows: readonly { entry_id: number; value: string }[]): Map<number, string[]> {
-  const byEntry = new Map<number, string[]>();
+async function loadEntryKeys(db: SQLiteDatabase): Promise<EntryKeys> {
+  const rows = await db.getAllAsync<{ entry_id: number; key: string; read_only: number }>(
+    'SELECT entry_id, key, read_only FROM sync_queue_keys',
+  );
+  const keys = new Map<number, string[]>();
+  const writtenNoteIds = new Map<number, string[]>();
+  const add = (map: Map<number, string[]>, entryId: number, value: string): void => {
+    const values = map.get(entryId);
+    if (values) values.push(value);
+    else map.set(entryId, [value]);
+  };
   for (const row of rows) {
-    const values = byEntry.get(row.entry_id);
-    if (values) values.push(row.value);
-    else byEntry.set(row.entry_id, [row.value]);
+    add(keys, row.entry_id, row.key);
+    const noteId = row.read_only === 0 ? noteIdOfKey(row.key) : null;
+    if (noteId !== null) add(writtenNoteIds, row.entry_id, noteId);
   }
-  return byEntry;
+  return { keys, writtenNoteIds };
 }
 
 /**
- * The notes each queued entry writes, by entry id: its written (not read-only)
- * note keys. This is what a landing is recorded for, what a dead letter links
- * and flags failed, and what the drain pulls afterwards.
+ * Charge an entry's failed drain attempt to its counters (issue #714) and say
+ * whether it has reached the cap. `attempts` counts every entry-specific
+ * failure, for diagnostics and backoff; only a non-HTTP processing error is
+ * capped, on its own count, since `attempts` keeps growing through a server
+ * outage (#1283). Shared by both drains so they apply one rule.
  */
-async function getWrittenNoteIdsByEntry(db: SQLiteDatabase): Promise<Map<number, string[]>> {
-  return groupByEntry(await db.getAllAsync<{ entry_id: number; value: string }>(
-    `SELECT entry_id, ${keyIdExpression('key', 'note')} AS value FROM sync_queue_keys
-     WHERE read_only = 0 AND ${keyKindCondition('key', 'note')}`,
-  ));
+export async function chargeEntryFailure(
+  db: SQLiteDatabase,
+  table: 'sync_queue' | 'pending_image_uploads',
+  entry: { id: number | string; attempts?: number; processing_errors?: number },
+  err: unknown,
+): Promise<{ attempts: number; processingErrors: number; capped: boolean }> {
+  const attempts = (entry.attempts ?? 0) + 1;
+  const processingError = !axios.isAxiosError(err);
+  const processingErrors = (entry.processing_errors ?? 0) + (processingError ? 1 : 0);
+  await db.runAsync(
+    `UPDATE ${table} SET attempts = ?, processing_errors = ? WHERE id = ?`,
+    [attempts, processingErrors, entry.id],
+  );
+  return { attempts, processingErrors, capped: processingError && processingErrors >= MAX_ENTRY_DRAIN_ATTEMPTS };
 }
 
 /**
@@ -871,16 +893,14 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
   const entries = await db.getAllAsync<QueueEntry>(
     'SELECT * FROM sync_queue ORDER BY id ASC',
   );
+  const entryKeys = await loadEntryKeys(db);
   // A label-id rewrite mid-drain moves only `label:` keys, so this holds throughout.
-  const noteIdsByEntry = await getWrittenNoteIdsByEntry(db);
+  const noteIdsByEntry = entryKeys.writtenNoteIds;
   // Reloaded after a label-id rewrite, which moves `label:` keys.
-  let keysByEntry = await getKeysByEntry(db);
+  let keysByEntry = entryKeys.keys;
   // Keys of the entries this pass held back: one that failed transiently, and
   // every later one that shares a key with it (#1283).
   const blockedKeys = new Set<string>();
-  const holdBack = (entryId: number): void => {
-    for (const key of keysByEntry.get(entryId) ?? []) blockedKeys.add(key);
-  };
 
   const syncedNotes: Note[] = [];
   const discardedOperations: DiscardedOperation[] = [];
@@ -928,8 +948,9 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
     // not retry or dead-letter the entry (issue #714 — mirrors imageUploadQueue's
     // "the upload already landed, so remove the queue entry first").
     let requestLanded = false;
-    // The notes this entry writes.
+    // The notes this entry writes, and every key it touches.
     const targets = (): readonly string[] => noteIdsByEntry.get(entry.id) ?? [];
+    const keys = keysByEntry.get(entry.id) ?? [];
     try {
       // If this op targets a note whose create was just dead-lettered, replaying
       // it against a note the server never got is pointless — drop it (the note
@@ -947,8 +968,8 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
 
       // An earlier op this op depends on failed this pass: it waits behind it,
       // and so does every later op that depends on this one.
-      if ((keysByEntry.get(entry.id) ?? []).some((key) => blockedKeys.has(key))) {
-        holdBack(entry.id);
+      if (keys.some((key) => blockedKeys.has(key))) {
+        for (const key of keys) blockedKeys.add(key);
         continue;
       }
 
@@ -1159,7 +1180,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
                   await rewriteLabelKeys(db, clientLabelId, serverLabel.id);
                 });
                 // The drain snapshot predates the rewrite: refresh the rows behind this one.
-                keysByEntry = await getKeysByEntry(db);
+                keysByEntry = (await loadEntryKeys(db)).keys;
                 const rewritten = new Map(
                   (await db.getAllAsync<QueueEntry>('SELECT * FROM sync_queue WHERE id > ?', [entry.id]))
                     .map((row) => [row.id, row]),
@@ -1235,44 +1256,32 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
       } else {
         // Entry-specific transient failure: a 5xx tied to this op's payload (a
         // gateway status or a client timeout only when the server answered the
-        // probe), or a non-HTTP error thrown while processing this entry
-        // (corrupted body, a local DB error). Charge the entry's attempt
-        // counter (issue #714).
-        // Non-HTTP errors are counted on their own: `attempts` also counts
-        // HTTP failures, which are never capped, so it would hit the cap on the
-        // first processing error after a long outage.
-        const attempts = (entry.attempts ?? 0) + 1;
-        const processingError = !axios.isAxiosError(err);
-        const processingErrors = (entry.processing_errors ?? 0) + (processingError ? 1 : 0);
-        await db.runAsync(
-          'UPDATE sync_queue SET attempts = ?, processing_errors = ? WHERE id = ?',
-          [attempts, processingErrors, entry.id],
-        );
+        // probe), or a non-HTTP error thrown while processing this entry.
+        const { attempts, processingErrors, capped } = await chargeEntryFailure(db, 'sync_queue', entry, err);
 
-        if (attempts >= MAX_ENTRY_DRAIN_ATTEMPTS && entry.operation === 'markViewed') {
-          // Best-effort (see the permanent-failure branch above): a view that
-          // keeps failing only leaves a badge the next server fetch reconciles,
-          // so drop it rather than hold back its note's edits behind it.
-          console.info(`Dropping queued operation id=${entry.id} markViewed ${endpoint} after ${attempts} failed attempts`);
+        if (attempts >= MAX_ENTRY_DRAIN_ATTEMPTS && BEST_EFFORT_OPERATIONS.has(entry.operation)) {
+          // Best-effort (see the permanent-failure branch above): the next
+          // server sync reconciles what it would have done, so drop it rather
+          // than hold back its note's edits behind it.
+          console.info(
+            `Dropping queued operation id=${entry.id} ${entry.operation} ${endpoint} after ${attempts} failed attempts`,
+          );
           await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
           continue;
         }
 
-        if (!processingError || processingErrors < MAX_ENTRY_DRAIN_ATTEMPTS) {
-          // The server never rejected this op, so it stays queued and is
-          // retried on a later pass. Hold back only the ops that depend on it
-          // and go on with the rest (#1283).
+        if (!capped) {
+          // Not rejected by the server: stays queued, holds back its dependents (#1283).
           console.warn(
             `Queue entry id=${entry.id} ${entry.operation} failed (attempt ${attempts}); `
               + `holding back the ops that depend on it: ${errorSummary(err)}`,
           );
-          holdBack(entry.id);
+          for (const key of keys) blockedKeys.add(key);
           continue;
         }
 
-        // A non-HTTP processing error at the cap: retrying is unlikely to help,
-        // so dead-letter the entry with PROCESSING_ERROR_STATUS (0) and
-        // continue. Record the endpoint/body that was actually sent.
+        // A non-HTTP processing error at the cap: dead-letter it with
+        // PROCESSING_ERROR_STATUS (0) and the endpoint/body actually sent.
         const errorMessage = errorSummary(err);
         console.warn(
           `Dead-lettering queued operation id=${entry.id} after ${processingErrors} processing errors: ${errorMessage}`,
