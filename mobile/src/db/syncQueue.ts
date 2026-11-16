@@ -452,19 +452,58 @@ export async function getPendingNoteIds(db: SQLiteDatabase): Promise<Set<string>
 }
 
 /**
+ * Notes a dead letter still covers: the note it is linked to, or every note a
+ * multi-note op (`note_id = NULL`, e.g. reorder) touched. `exceptDeadLetterId`
+ * leaves out the row being resolved. The dead letters are what the user has
+ * yet to review, so they — not the `failed` flag alone — decide whether a
+ * note's preserved local content is still needed (#1263).
+ */
+async function getDeadLetteredNoteIds(db: SQLiteDatabase, exceptDeadLetterId?: number): Promise<Set<string>> {
+  const rows = await db.getAllAsync<Pick<DeadLetteredOperation, 'endpoint' | 'body' | 'note_id'>>(
+    'SELECT endpoint, body, note_id FROM dead_letter WHERE id IS NOT ?',
+    [exceptDeadLetterId ?? null],
+  );
+  const ids = new Set<string>();
+  for (const row of rows) {
+    if (row.note_id) ids.add(row.note_id);
+    else for (const id of deadLetterAffectedNoteIds(row)) ids.add(id);
+  }
+  return ids;
+}
+
+/**
+ * Clear the note's `sync_state = 'failed'` flag unless a dead letter other than
+ * `exceptDeadLetterId` still covers it. A later write that lands for the note
+ * does not resolve an earlier failure: "Keep my version" forks the local row,
+ * so the row must stay protected until the user has reviewed every failure on
+ * it (#1263).
+ */
+export async function clearNoteSyncFailedIfResolved(
+  db: SQLiteDatabase,
+  noteId: string,
+  exceptDeadLetterId?: number,
+): Promise<void> {
+  if ((await getDeadLetteredNoteIds(db, exceptDeadLetterId)).has(noteId)) return;
+  await clearNoteSyncFailed(db, noteId);
+}
+
+/**
  * Notes that server-sourced writes must leave untouched: those with a pending
  * queue op (#487), those with a queued or errored image upload (#1279), plus
- * those marked `sync_state = 'failed'` after a dead-lettered op (#492). A dead-lettered note no longer has a queue row, so the failed flag
- * is what keeps its preserved local content from being overwritten or pruned by
- * a later background fetch / SSE event.
+ * those with an unresolved failure (#492): flagged `sync_state = 'failed'`, or
+ * still covered by a dead letter (#1263). A dead-lettered note no longer has a
+ * queue row, so this is what keeps its preserved local content from being
+ * overwritten or pruned by a later background fetch / SSE event.
  */
 export async function getProtectedNoteIds(db: SQLiteDatabase): Promise<Set<string>> {
-  const [pending, failed, uploads] = await Promise.all([
+  const [pending, failed, deadLettered, uploads] = await Promise.all([
     getPendingNoteIds(db),
     getFailedNoteIds(db),
+    getDeadLetteredNoteIds(db),
     getNoteIdsWithPendingUploads(db),
   ]);
   for (const id of failed) pending.add(id);
+  for (const id of deadLettered) pending.add(id);
   for (const id of uploads) pending.add(id);
   return pending;
 }
@@ -960,11 +999,11 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
       if (entry.operation === 'removeImage') recordWriteLanded(affectedNoteIds(endpoint, body));
       await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
 
-      // The write landed: if this note was carrying a prior failure, clear it so
-      // it resumes syncing from the server normally (#492). Guarded UPDATE, so a
-      // no-op for the common (already-synced) case.
+      // The write landed: if this note was carrying a prior failure that no
+      // dead letter still records, clear it so it resumes syncing from the
+      // server normally (#492). An unresolved dead letter keeps it (#1263).
       for (const noteId of affectedNoteIds(endpoint, body)) {
-        await clearNoteSyncFailed(db, noteId);
+        await clearNoteSyncFailedIfResolved(db, noteId);
         // A trashed or deleted note has nothing left to pull; one this
         // response settled is already current.
         const gone = entry.operation === 'delete' || entry.operation === 'permanentDelete';
@@ -1237,45 +1276,33 @@ async function hasOtherQueuedOpForNote(
 
 /**
  * Whether the note has a failed change the user has not resolved (spec §8.4):
- * it is flagged `failed`, or a dead letter still names it. The dead letter
- * counts on its own because a later landed write clears the flag.
+ * it is flagged `failed`, or a dead letter other than `exceptDeadLetterId`
+ * still covers it (see {@link getDeadLetteredNoteIds}).
  */
 async function hasUnresolvedFailure(
   db: SQLiteDatabase,
   noteId: string,
   exceptDeadLetterId: number | undefined,
 ): Promise<boolean> {
-  const row = await db.getFirstAsync<{ failed: number }>(
-    `SELECT 1 AS failed FROM notes WHERE id = ? AND sync_state = 'failed'
-     UNION ALL
-     SELECT 1 FROM dead_letter WHERE note_id = ? AND id IS NOT ?
-     LIMIT 1`,
-    [noteId, noteId, exceptDeadLetterId ?? null],
+  const flagged = await db.getFirstAsync<{ failed: number }>(
+    `SELECT 1 AS failed FROM notes WHERE id = ? AND sync_state = 'failed'`,
+    [noteId],
   );
-  return row !== null;
-}
-
-/** IDs of notes a dead letter still names (see {@link hasUnresolvedFailure}). */
-async function getDeadLetteredNoteIds(db: SQLiteDatabase): Promise<Set<string>> {
-  const rows = await db.getAllAsync<{ note_id: string }>(
-    'SELECT DISTINCT note_id FROM dead_letter WHERE note_id IS NOT NULL',
-  );
-  return new Set(rows.map((r) => r.note_id));
+  return flagged !== null || (await getDeadLetteredNoteIds(db, exceptDeadLetterId)).has(noteId);
 }
 
 /**
  * Fetch the notes a drain touched whose local row no response settled
  * (#1262, spec §8.3). The device gets no SSE echo of its own writes, so
  * without this a row that fell behind stays behind until an unrelated sync
- * runs. Notes that are protected (queued op or failed flag) or still named by
- * a dead letter are skipped. Fetched one at a time: a batch would hold early
+ * runs. Protected notes (queued op, unresolved failure) are skipped. Fetched one at a time: a batch would hold early
  * results while a newer snapshot lands, and its slowest timeout would finish
  * last and mark the server unreachable. Best effort: a failed fetch leaves the
  * note for the next background sync.
  */
 async function pullTouchedNotes(db: SQLiteDatabase, noteIds: Set<string>): Promise<void> {
-  const [protectedIds, deadLettered] = await Promise.all([getProtectedNoteIds(db), getDeadLetteredNoteIds(db)]);
-  const toPull = [...noteIds].filter((id) => !protectedIds.has(id) && !deadLettered.has(id));
+  const protectedIds = await getProtectedNoteIds(db);
+  const toPull = [...noteIds].filter((id) => !protectedIds.has(id));
   if (toPull.length > MAX_POST_DRAIN_NOTE_PULLS) {
     console.info(
       `Pulling ${MAX_POST_DRAIN_NOTE_PULLS} of ${toPull.length} notes after the queue drain; the next sync reconciles the rest.`,
