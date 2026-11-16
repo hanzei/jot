@@ -17,7 +17,7 @@ appId: com.jot.app
     visible:
       id: "drawer-toggle"
     timeout: 30000
-- takeScreenshot: sso-15-first-login
+- takeScreenshot: sso-16-first-login
 
 - tapOn:
     id: "drawer-toggle"
@@ -52,4 +52,4 @@ appId: com.jot.app
     element:
       id: "settings-sso-disconnect"
     timeout: 20000
-- takeScreenshot: sso-15-settings-sso-account
+- takeScreenshot: sso-16-settings-sso-account

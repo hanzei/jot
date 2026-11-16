@@ -35,7 +35,7 @@ STATIC_DIR="$RUN_DIR/static"
 mkdir -p "$STATIC_DIR"
 readonly JOT_E2E_PORT SERVER_URL_FROM_EMULATOR RUN_DIR DB_DSN STATIC_DIR
 
-# The SSO flows (12-15) run against webapp/e2e/fixtures/mock-idp.ts, the same
+# The SSO flows (13-16) run against webapp/e2e/fixtures/mock-idp.ts, the same
 # dependency-free mock IdP the Playwright SSO project uses. Its issuer is fixed
 # at http://127.0.0.1:8091, which has to work from two places: the server's own
 # discovery and token calls (host loopback, fine), and the authorize page the
@@ -224,11 +224,11 @@ MAESTRO_JOT_SSE_NOTE="SSE-resync-note-${RUN_ID}"
 DEEP_LINK_URL="jot://settings?server=${SERVER_URL_FROM_EMULATOR}"
 # IdP usernames for the SSO flows, which become Jot usernames when an account
 # is provisioned from them, so they stay within the username rules (lower case,
-# at most 30 characters). Distinct from each other: the one flow 12 links to the
-# local account must not be the one flow 15 provisions a fresh account from.
+# at most 30 characters). Distinct from each other: the one flow 13 links to the
+# local account must not be the one flow 16 provisions a fresh account from.
 MAESTRO_JOT_SSO_LINK_USERNAME="link${RUN_ID}"
 MAESTRO_JOT_SSO_USERNAME="sso${RUN_ID}"
-# The files flow 17 imports through the system picker, and the content text of
+# The files flow 18 imports through the system picker, and the content text of
 # the note each one carries. prepare_import_files builds both and pushes them into
 # DEVICE_DOWNLOAD_DIR. The file names are per run so the picker can never offer
 # a stale copy a failed local run left behind.
@@ -395,10 +395,10 @@ create_note_via_api() {
   echo "Out-of-band note created on the server."
 }
 
-# Build the two files flow 17 imports and push them into the device's Downloads
+# Build the two files flow 18 imports and push them into the device's Downloads
 # folder, where the system picker finds them. Runs before the SSO flows: the
 # Jot backup is a real GET /notes/export of the account flow 01 registered, and
-# the SSO-only restart for flow 16 turns password login off. Exporting rather
+# the SSO-only restart for flow 17 turns password login off. Exporting rather
 # than committing a fixture keeps the backup in step with the bundle format.
 # The Keep file is shaped like a Takeout archive (Takeout/Keep/<note>.json).
 prepare_import_files() {
@@ -520,14 +520,14 @@ skip_chrome_first_run() {
   adb shell am set-debug-app --persistent com.android.chrome >/dev/null 2>&1 || true
 }
 
-# Start Chrome once, outside any flow, before flow 12 opens the first Custom Tab.
+# Start Chrome once, outside any flow, before flow 13 opens the first Custom Tab.
 # Twice on master (runs 136 and 154) that first tab never appeared: Connect sat
 # on its spinner, Chrome drew nothing, and the server never saw the start URL, so
 # all of mock-idp-page.yaml's retries hit a disabled button. Both were the run's
 # first Chrome launch, right after skip_chrome_first_run changed its switches, so
 # pay that cold start here. Chrome is left running in the background (HOME, not
 # force-stop) so the Custom Tab attaches to a warm process. Best-effort: a Chrome
-# that never takes focus is logged and flow 12 runs anyway.
+# that never takes focus is logged and flow 13 runs anyway.
 warm_up_chrome() {
   echo "==> Warming up Chrome"
   timeout 30 adb shell am start -W -a android.intent.action.VIEW \
@@ -672,15 +672,15 @@ fi
 maestro_flow 11-sse-resync-catchup.yaml "$@"
 
 # Before the SSO block below: building the Jot backup needs password login,
-# which the restart for flow 16 turns off. Flow 17 imports the files at the end.
+# which the restart for flow 17 turns off. Flow 18 imports the files at the end.
 prepare_import_files
 
-# 12-16 — SSO (#1016), against the mock IdP. The server restarts with OIDC on
+# 13-17 — SSO (#1016), against the mock IdP. The server restarts with OIDC on
 # (same database, so the app stays signed in) once the mock IdP is up and the
 # device can reach it. The IdP's authorize page opens in a Chrome Custom Tab,
-# which Maestro drives like any other app. 12 connects SSO from Settings for the
-# local account flows 01-11 used; 13 signs out and denies at the IdP; 14 closes
-# the sheet; 15 signs up through SSO, signs out, and signs back in. 16 runs after
+# which Maestro drives like any other app. 13 connects SSO from Settings for the
+# local account flows 01-12 used; 14 signs out and denies at the IdP; 15 closes
+# the sheet; 16 signs up through SSO, signs out, and signs back in. 17 runs after
 # a restart into SSO-only mode. The server checks prove what the UI can only
 # suggest: the link landed on the local account, and the second SSO sign-in
 # reused the account the first one provisioned instead of making another.
@@ -690,21 +690,21 @@ warm_up_chrome
 stop_server
 start_server "${OIDC_ENV[@]}"
 set_idp_username "$MAESTRO_JOT_SSO_LINK_USERNAME"
-maestro_flow 12-sso-connect-settings.yaml "$@"
+maestro_flow 13-sso-connect-settings.yaml "$@"
 assert_sso_linked 1 "$MAESTRO_JOT_USERNAME"
-maestro_flow 13-sso-deny.yaml "$@"
-maestro_flow 14-sso-close-sheet.yaml "$@"
+maestro_flow 14-sso-deny.yaml "$@"
+maestro_flow 15-sso-close-sheet.yaml "$@"
 set_idp_username "$MAESTRO_JOT_SSO_USERNAME"
-maestro_flow 15-sso-login-relogin.yaml "$@"
+maestro_flow 16-sso-login-relogin.yaml "$@"
 assert_sso_linked 2 "$MAESTRO_JOT_USERNAME" "$MAESTRO_JOT_SSO_USERNAME"
 
 stop_server
 start_server "${OIDC_ENV[@]}" JOT_LOCAL_LOGIN_ENABLED=false
 set_idp_username "$MAESTRO_JOT_SSO_USERNAME"
-maestro_flow 16-sso-only-login.yaml "$@"
+maestro_flow 17-sso-only-login.yaml "$@"
 
-# 17 — import from Settings (#1134): a Keep Takeout zip and a Jot backup, each
+# 18 — import from Settings (#1134): a Keep Takeout zip and a Jot backup, each
 # picked in the system file picker and uploaded to the real server. Imports
-# into the account flow 16 signed in; the files were pushed before the SSO
+# into the account flow 17 signed in; the files were pushed before the SSO
 # block, by prepare_import_files.
-maestro_flow 17-import-files.yaml "$@"
+maestro_flow 18-import-files.yaml "$@"
