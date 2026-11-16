@@ -429,14 +429,18 @@ export async function getSyncQueueStats(db: SQLiteDatabase): Promise<SyncQueueSt
  * the drain holds back behind an entry that fails (#1283).
  */
 async function getKeysByEntry(db: SQLiteDatabase): Promise<Map<number, string[]>> {
-  const rows = await db.getAllAsync<{ entry_id: number; key: string }>(
-    'SELECT entry_id, key FROM sync_queue_keys',
-  );
+  return groupByEntry(await db.getAllAsync<{ entry_id: number; value: string }>(
+    'SELECT entry_id, key AS value FROM sync_queue_keys',
+  ));
+}
+
+/** `sync_queue_keys`-derived rows grouped into a list of values per entry id. */
+function groupByEntry(rows: readonly { entry_id: number; value: string }[]): Map<number, string[]> {
   const byEntry = new Map<number, string[]>();
   for (const row of rows) {
-    const keys = byEntry.get(row.entry_id);
-    if (keys) keys.push(row.key);
-    else byEntry.set(row.entry_id, [row.key]);
+    const values = byEntry.get(row.entry_id);
+    if (values) values.push(row.value);
+    else byEntry.set(row.entry_id, [row.value]);
   }
   return byEntry;
 }
@@ -447,17 +451,10 @@ async function getKeysByEntry(db: SQLiteDatabase): Promise<Map<number, string[]>
  * and flags failed, and what the drain pulls afterwards.
  */
 async function getWrittenNoteIdsByEntry(db: SQLiteDatabase): Promise<Map<number, string[]>> {
-  const rows = await db.getAllAsync<{ entry_id: number; id: string }>(
-    `SELECT entry_id, ${keyIdExpression('key', 'note')} AS id FROM sync_queue_keys
+  return groupByEntry(await db.getAllAsync<{ entry_id: number; value: string }>(
+    `SELECT entry_id, ${keyIdExpression('key', 'note')} AS value FROM sync_queue_keys
      WHERE read_only = 0 AND ${keyKindCondition('key', 'note')}`,
-  );
-  const byEntry = new Map<number, string[]>();
-  for (const row of rows) {
-    const ids = byEntry.get(row.entry_id);
-    if (ids) ids.push(row.id);
-    else byEntry.set(row.entry_id, [row.id]);
-  }
-  return byEntry;
+  ));
 }
 
 /**

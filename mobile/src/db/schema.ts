@@ -57,16 +57,17 @@ const migration1 = async (db: SQLiteDatabase): Promise<void> => {
       method TEXT NOT NULL,
       body TEXT,
       created_at TEXT NOT NULL,
-      -- How many times draining this specific entry has failed transiently. Once
-      -- it reaches MAX_ENTRY_DRAIN_ATTEMPTS the entry is dead-lettered and the
-      -- drain continues past it, so one reproducibly-failing op can't wedge the
-      -- whole queue (issue #714).
+      -- How many times draining this specific entry has failed transiently
+      -- (issue #714). Only a non-HTTP processing error is dead-lettered at
+      -- MAX_ENTRY_DRAIN_ATTEMPTS; an HTTP failure stays queued and holds back
+      -- only the ops that share a key with it (#1283).
       attempts INTEGER NOT NULL DEFAULT 0
     );
 
     -- Dead-lettered sync operations: writes the server permanently rejected
-    -- (non-transient 4xx, excluding idempotent 409s), or a transient/processing
-    -- failure that never succeeded after MAX_ENTRY_DRAIN_ATTEMPTS tries (#714).
+    -- (non-transient 4xx, excluding idempotent 409s), or a non-HTTP processing
+    -- error that recurred MAX_ENTRY_DRAIN_ATTEMPTS times (#714; before #1283 a
+    -- transient HTTP failure was capped too).
     -- Preserved with their full body + metadata so a failed optimistic edit is
     -- never silently dropped and can later be surfaced/resolved (issue #492).
     -- note_id links the row to the affected note (NULL for ops not tied to a
@@ -181,10 +182,10 @@ const migration4 = async (db: SQLiteDatabase): Promise<void> => {
       status TEXT NOT NULL DEFAULT 'queued',
       error_message TEXT,
       created_at TEXT NOT NULL,
-      -- Transient-failure attempt counter, mirroring sync_queue.attempts: once it
-      -- reaches MAX_ENTRY_DRAIN_ATTEMPTS the upload is flagged error and the drain
-      -- continues, so one persistently-failing upload can't wedge the rest of the
-      -- queue (issue #714).
+      -- Transient-failure attempt counter, mirroring sync_queue.attempts: only a
+      -- non-HTTP error is capped, flagging the upload error at
+      -- MAX_ENTRY_DRAIN_ATTEMPTS (issue #714); an HTTP failure stays queued and
+      -- holds back only its note's later uploads (#1283).
       attempts INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
     );
