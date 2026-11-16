@@ -15,12 +15,26 @@ describe('probeServerConfig', () => {
 
   it('fetches /api/v1/config directly against the given URL with a short timeout', async () => {
     const config = { registration_enabled: false, password_min_length: 6, upload_max_bytes: 500 };
-    mockAxiosGet.mockResolvedValue({ data: config });
+    mockAxiosGet.mockImplementation(async (_url: string, opts: { headers: Record<string, string> }) => ({
+      data: config,
+      headers: { 'x-request-id': opts.headers['X-Request-Id'] },
+    }));
 
     const result = await probeServerConfig('https://Example.com');
 
     expect(result).toEqual(config);
-    expect(mockAxiosGet).toHaveBeenCalledWith('https://example.com/api/v1/config', { timeout: 5000 });
+    expect(mockAxiosGet).toHaveBeenCalledWith('https://example.com/api/v1/config', {
+      timeout: 5000,
+      headers: { 'X-Request-Id': expect.any(String) },
+    });
+  });
+
+  it('returns null for a 200 that does not echo the request ID, such as a captive portal page (#1266)', async () => {
+    mockAxiosGet.mockResolvedValue({ data: '<html>Sign in to Wi-Fi</html>', headers: {} });
+
+    const result = await probeServerConfig('https://example.com');
+
+    expect(result).toBeNull();
   });
 
   it('returns null for an invalid URL without making a request', async () => {

@@ -48,13 +48,22 @@ Treat these as distinct — conflating them is the root cause of the worst bugs.
 
 | State | How it's known | Cost to detect | Correct response |
 |---|---|---|---|
-| **Device offline** | NetInfo `isConnected` / `isInternetReachable` (`OfflineContext`) | Instant, free | Skip the network entirely; go straight to local + queue. |
+| **Device offline** | NetInfo `isConnected` (`OfflineContext`) | Instant, free | Skip the network entirely; go straight to local + queue. |
 | **Server unreachable, device online** | Not observable without trying. Tracked as a best-effort belief in `src/api/serverReachability.ts` (`isServerReachable()`), flipped by request outcomes + SSE. | One failed request (first time) | After the first failure, skip the doomed round-trip and fall back immediately. |
 | **Slow / flaky / half-open** | Looks online; a request is accepted but stalls | Only via a timeout | Finite, tiered timeouts + fast fallback to the local path. |
 
 The classic mistake is treating "device online" as "server usable." A device can
 have full WiFi while the Jot server is down, restarting, or unroutable. That gap
 is exactly what `serverReachability` exists to cover; NetInfo alone cannot.
+
+The reverse holds too: "no internet" does not mean "no server". NetInfo's
+`isInternetReachable` reports the public internet (Android's `VALIDATED`
+capability, or a probe to a Google host on iOS), so it is false on a LAN with no
+uplink or a network that filters those hosts, where a self-hosted server still
+answers. It is therefore not part of "device offline" (#1266). `OfflineContext`
+uses it only to notice a change of network while the device stays connected —
+another network, or a captive portal letting the device through — which starts
+a reconnect like an offline→online transition (`src/store/networkChange.ts`).
 
 ### 3.1 The server-reachability belief
 
@@ -65,17 +74,18 @@ to turn back on.
 
 **What sets it to `false`:** only an axios request that gets no response:
 connection refused, DNS failure, or a timeout, including the client's own
-(`WRITE_REQUEST_TIMEOUT_MS` is 5 s). Any HTTP status, 5xx included, proves the
-server answered and does not set it to `false`.
+(`WRITE_REQUEST_TIMEOUT_MS` is 5 s), or a response that did not come from Jot
+(§3.2). Any HTTP status from Jot, 5xx included, proves the server answered and
+does not set it to `false`.
 
 **What sets it back to `true`:**
 
 | Source | Where |
 |---|---|
-| Any axios response, of any status | response interceptor, `src/api/client.ts` |
-| SSE stream opens | `open` handler, `src/api/events.ts` |
+| Any axios response from Jot (§3.2), of any status | response interceptor, `src/api/client.ts` |
+| SSE stream opens, its response from Jot (§3.2) | `open` handler, `src/api/events.ts` |
 | SSE message, keepalives included | `message` handler, `src/api/events.ts` |
-| Device reconnect or app foreground | `handleReconnect`, `src/store/OfflineContext.tsx` |
+| Device reconnect, network change while connected, or app foreground | `handleReconnect`, `src/store/OfflineContext.tsx` |
 | Server switch (the flag is not per server) | `src/api/client.ts` |
 
 **What reads it, and what each does while it is `false`:**
@@ -123,6 +133,31 @@ Read syncs that aborted while the flag was `false` are not re-run on the flip;
 the open stream kept delivering live events meanwhile, and a full resync on
 every flip would repeat an expensive pull every keepalive in exactly that
 degraded case.
+
+
+### 3.2 Telling Jot's responses from anything else
+
+Without the internet check, a captive portal is reached as if it were the
+server: a plain-HTTP request is redirected to the portal's login page, which the
+HTTP stack follows to a `200` HTML response. Counted as the server answering, it
+would mark the server reachable, and the sync queue would delete a write as
+landed although it never reached Jot.
+
+So every request carries a fresh random `X-Request-Id`, and a response counts as
+Jot's only when it echoes that ID; the server returns a valid incoming ID
+verbatim (`server/internal/server/request_id.go`, since v0.17.0). The helpers
+are in `src/api/jotResponse.ts`; the checks are:
+
+| Path | A response that does not echo the ID |
+|---|---|
+| axios response interceptor, `src/api/client.ts` | Becomes an `AxiosError` with no `response`, and the flag goes `false`. Every caller reads that as a transport failure, so a queued write stays queued and a portal's `401` never logs the user out. Logged once per flip to `false`. |
+| SSE `open`, `src/api/events.ts` | Torn down and retried with backoff; does not re-arm the flag. react-native-sse passes no response to `open`, so this reads its private `_xhr`; without it the stream is used but `open` does not re-arm (the next message does). |
+| `probeServerReachability`, `src/api/client.ts` | `UNREACHABLE`. |
+| `probeServerConfig`, `src/api/config.ts` | `null`, like a failed request. |
+
+A reverse proxy that overwrites `X-Request-Id` on responses makes the server
+look permanently unreachable; the log line names that cause. HTTPS servers were
+never exposed: a portal cannot complete the TLS handshake.
 
 ---
 
@@ -507,6 +542,8 @@ its own edit times. Merging (§8.5) therefore loses nothing history would keep.
 |---|---|
 | Device connectivity + queue drain | `src/store/OfflineContext.tsx` |
 | Server-reachability belief + write gate | `src/api/serverReachability.ts` (`isServerReachable`, `isOnlineWriteAllowed`) |
+| Telling Jot's responses apart (request-ID echo, §3.2) | `src/api/jotResponse.ts` |
+| Network change while connected | `src/store/networkChange.ts` |
 | Timeouts + interceptors + reachability wiring | `src/api/client.ts` |
 | Local note rows, snapshot and response writes (§8.1, §8.3) | `src/db/noteQueries.ts`, `src/db/syncQueue.ts` (`saveServerNote`, `saveServerResponseNote`, `getProtectedNoteIds`, `getSnapshotSkipNoteIds`) |
 | Failed-change review and resolution (§8.4) | `src/hooks/useSyncFailures.ts` |

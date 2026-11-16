@@ -13,6 +13,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useQueryClient } from '@tanstack/react-query';
 import { drainQueue, getPendingCount, getDeadLetterCount, subscribeToEnqueue } from '../db/syncQueue';
 import { isServerReachable, markServerReachable, subscribeToServerReachability } from '../api/serverReachability';
+import { isNetworkChange, mergeNetworkIdentity, networkIdentity, type NetworkIdentity } from './networkChange';
 import { drainImageUploadQueue, getQueuedImageUploadCount } from '../db/imageUploadQueue';
 import { getPendingCreateNoteIds, getFailedNoteIds } from '../db/noteQueries';
 import { isClosedDatabaseError } from '../db/errors';
@@ -149,6 +150,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   }, []);
   const queryClient = useQueryClient();
   const prevConnectedRef = useRef(true);
+  const networkRef = useRef<NetworkIdentity | null>(null);
   const isConnectedRef = useRef(true);
   // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
@@ -409,9 +411,14 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     // so isConnected is accurate on first render (default useState(true) can be wrong).
     // If we start online and are already authenticated, drain any queued operations
     // that accumulated while the app was closed.
+    // Online means the device has a network, whatever NetInfo thinks of the
+    // internet behind it: a self-hosted server on a LAN with no uplink is
+    // reachable although the OS reports "no internet". Whether the server
+    // answers is the reachability flag's job (spec §3, #1266).
     NetInfo.fetch().then((initial) => {
-      const connected = initial.isConnected === true && initial.isInternetReachable !== false;
+      const connected = initial.isConnected === true;
       prevConnectedRef.current = connected;
+      networkRef.current = mergeNetworkIdentity(networkRef.current, networkIdentity(initial));
       setIsConnected(connected);
       if (connected) {
         handleReconnect().catch(() => {});
@@ -421,11 +428,16 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     });
 
     const unsubscribe = NetInfo.addEventListener((state) => {
-      const connected = state.isConnected === true && state.isInternetReachable !== false;
+      const connected = state.isConnected === true;
       setIsConnected(connected);
+      const network = networkIdentity(state);
+      const networkChanged = isNetworkChange(networkRef.current, network);
+      networkRef.current = mergeNetworkIdentity(networkRef.current, network);
 
-      if (connected && !prevConnectedRef.current) {
-        // Transitioned from offline → online
+      if (connected && (!prevConnectedRef.current || networkChanged)) {
+        // Transitioned from offline → online, or moved to another network (or
+        // a captive portal let the device through) while staying online: a
+        // server that was unreachable may answer now.
         handleReconnect().catch(() => {});
       } else if (!connected) {
         // Going offline: cancel any pending backoff/debounce drain so we don't

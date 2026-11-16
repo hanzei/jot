@@ -1,9 +1,10 @@
-import axios, { AxiosHeaders, CanceledError, type InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosError, AxiosHeaders, CanceledError, type InternalAxiosRequestConfig } from 'axios';
 import { Platform } from 'react-native';
 import type { AuthResponse, LoginRequest, NativeExchangeRequest, RegisterRequest } from '@jot/shared';
 import { apiPaths, apiRequestId, apiUrl, createJotApi, canonicalizeServerOrigin, isServerError } from '@jot/shared';
 import { randomUUID } from '../utils/random';
-import { markServerReachable, markServerUnreachable } from './serverReachability';
+import { isServerReachable, markServerReachable, markServerUnreachable } from './serverReachability';
+import { REQUEST_ID_HEADER, echoesRequestId, newRequestId, warnNotJotResponse } from './jotResponse';
 import { recordWriteResponse } from '../db/snapshotGate';
 import {
   addServer,
@@ -52,6 +53,38 @@ export type ServerReachabilityResult =
 interface SwitchAwareAxiosRequestConfig extends InternalAxiosRequestConfig {
   __serverSwitchGenerationId?: number;
   __serverSwitchAbortController?: AbortController;
+  /** The `X-Request-Id` sent; Jot echoes it, anything else answering does not (#1266). */
+  __jotRequestId?: string;
+}
+
+/**
+ * Whether a response to `config` came from the Jot server. A config without a
+ * recorded ID never went through the request interceptor (only tests build
+ * those), so there is nothing to compare and it counts as Jot's.
+ */
+function isJotResponse(config: SwitchAwareAxiosRequestConfig | undefined, headers: unknown): boolean {
+  const sentId = config?.__jotRequestId;
+  return sentId === undefined || echoesRequestId(sentId, headers);
+}
+
+/**
+ * Handle a response that did not come from Jot as if no response had arrived:
+ * the server is marked unreachable and the caller gets an AxiosError without a
+ * `response`, the shape every caller already treats as a transport failure. So
+ * a captive portal's `200` page never counts as a landed write (the sync queue
+ * keeps the entry) and a portal's `401` never logs the user out. Logged on the
+ * flip only, so a portal does not flood the persisted log.
+ */
+function notJotResponseError(
+  config: SwitchAwareAxiosRequestConfig | undefined,
+  status: number | undefined,
+  request: unknown,
+): AxiosError {
+  if (isServerReachable()) {
+    warnNotJotResponse(`API ${(config?.method ?? 'get').toUpperCase()} ${config?.url ?? ''}`, status);
+  }
+  markServerUnreachable();
+  return new AxiosError('Response did not come from the Jot server.', AxiosError.ERR_NETWORK, config, request);
 }
 
 const inflightControllersByGeneration = new Map<number, Set<AbortController>>();
@@ -187,13 +220,20 @@ export async function probeServerReachability(url: string): Promise<ServerReacha
   }
 
   try {
+    const requestId = newRequestId();
     const response = await axios.get(apiUrl(apiPaths.usersMe, canonical), {
       timeout: 5000,
       headers: {
         'User-Agent': `JotMobile/1.0 (${platformLabel[Platform.OS] ?? Platform.OS})`,
+        [REQUEST_ID_HEADER]: requestId,
       },
       validateStatus: () => true,
     });
+    // A captive portal answers 200 too; only Jot echoes the request ID (#1266).
+    if (!echoesRequestId(requestId, response.headers)) {
+      warnNotJotResponse('Server check', response.status);
+      return { ok: false, reason: 'UNREACHABLE' };
+    }
     if (response.status === 200 || response.status === 401) {
       return { ok: true, canonicalUrl: canonical };
     }
@@ -414,6 +454,19 @@ function extractSessionCookie(setCookieHeader: string | string[] | undefined): s
   return null;
 }
 
+// Axios always passes AxiosHeaders to the request interceptor; the plain-object
+// branch keeps hand-built configs (tests) working.
+function setRequestHeader(config: InternalAxiosRequestConfig, name: string, value: string): void {
+  if (!config.headers) {
+    config.headers = new AxiosHeaders();
+  }
+  if (typeof config.headers.set === 'function') {
+    config.headers.set(name, value);
+  } else {
+    (config.headers as Record<string, string>)[name] = value;
+  }
+}
+
 // Attach stored session cookie to every request
 api.interceptors.request.use(async (config) => {
   const method = (config.method || 'get').toUpperCase();
@@ -450,16 +503,17 @@ api.interceptors.request.use(async (config) => {
   switchAwareConfig.__serverSwitchAbortController = controller;
   trackInflightController(generationId, controller);
 
+  const requestId = newRequestId();
+  setRequestHeader(config, REQUEST_ID_HEADER, requestId);
+  switchAwareConfig.__jotRequestId = requestId;
+
   let token = sessionCache;
   if (token === undefined) {
     token = await getStoredSession();
     sessionCache = token ?? null;
   }
   if (token) {
-    if (!config.headers) {
-      config.headers = new AxiosHeaders();
-    }
-    config.headers.set('Cookie', `jot_session=${token}`);
+    setRequestHeader(config, 'Cookie', `jot_session=${token}`);
   }
   return config;
 });
@@ -501,16 +555,22 @@ export async function handleUnauthorizedSession(): Promise<void> {
 
 api.interceptors.response.use(
   (response) => {
-    // The server answered, so it is reachable — clear any prior unreachable
-    // belief so writes resume hitting the network instead of queueing.
-    markServerReachable();
     const config = response.config as SwitchAwareAxiosRequestConfig;
     releaseInflightController(config.__serverSwitchGenerationId, config.__serverSwitchAbortController);
-    // The write landed, even if the response is discarded below: a snapshot
-    // fetched before now must not roll its notes back (#1265).
-    recordWriteResponse(config.method, config.url, config.data);
+    const fromJot = isJotResponse(config, response.headers);
+    if (fromJot) {
+      // The server answered, so it is reachable — clear any prior unreachable
+      // belief so writes resume hitting the network instead of queueing.
+      markServerReachable();
+      // The write landed, even if the response is discarded below: a snapshot
+      // fetched before now must not roll its notes back (#1265).
+      recordWriteResponse(config.method, config.url, config.data);
+    }
     if (!isCurrentRequestGeneration(config.__serverSwitchGenerationId)) {
       throw new CanceledError('Discarded stale response after server switch.');
+    }
+    if (!fromJot) {
+      throw notJotResponseError(config, response.status, response.request);
     }
     return response;
   },
@@ -530,6 +590,10 @@ api.interceptors.response.use(
     // server answered, whereas the absence of a response (timeout / connection
     // refused / DNS failure) means it did not — flip to unreachable so later
     // writes skip the doomed network round-trip and queue immediately.
+    if (error.response && !isJotResponse(config, error.response.headers)) {
+      return Promise.reject(notJotResponseError(config, error.response.status, error.request));
+    }
+
     if (error.response) {
       markServerReachable();
       // One line per server error, carrying the server's request ID, so the

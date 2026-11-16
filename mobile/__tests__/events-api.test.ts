@@ -28,11 +28,22 @@ const mockAddEventListener = jest.fn();
 const mockRemoveAllEventListeners = jest.fn();
 const mockClose = jest.fn();
 
+// The library keeps its XMLHttpRequest on `_xhr`; by default the response
+// echoes the request ID, as the Jot server does. `mockResponseRequestId`
+// overrides what comes back (null: no header), and `mockNoXhr` hides `_xhr`.
+let mockResponseRequestId: string | null | undefined;
+let mockNoXhr = false;
+
 jest.mock('react-native-sse', () => {
-  return jest.fn().mockImplementation(() => ({
+  return jest.fn().mockImplementation((_url: string, opts: { headers: Record<string, string> }) => ({
     addEventListener: mockAddEventListener,
     removeAllEventListeners: mockRemoveAllEventListeners,
     close: mockClose,
+    _xhr: mockNoXhr ? undefined : {
+      getResponseHeader: (name: string) => (name.toLowerCase() === 'x-request-id'
+        ? (mockResponseRequestId === undefined ? opts.headers['X-Request-Id'] ?? null : mockResponseRequestId)
+        : null),
+    },
   }));
 });
 
@@ -45,6 +56,8 @@ describe('SSEConnectionManager', () => {
     // clearAllMocks keeps implementations, so a test that moved the generation
     // must not leak it into the next one.
     mockGetCurrentSwitchGenerationId.mockReturnValue(1);
+    mockResponseRequestId = undefined;
+    mockNoXhr = false;
     markServerReachable();
   });
 
@@ -57,7 +70,7 @@ describe('SSEConnectionManager', () => {
     expect(MockEventSource).toHaveBeenCalledWith(
       expect.stringContaining('/api/v1/events'),
       expect.objectContaining({
-        headers: { Cookie: 'jot_session=test-token' },
+        headers: { Cookie: 'jot_session=test-token', 'X-Request-Id': expect.any(String) },
         // The library's built-in fixed-interval reconnect must stay disabled:
         // SSEConnectionManager owns retries via its exponential backoff.
         pollingInterval: 0,
@@ -183,6 +196,65 @@ describe('SSEConnectionManager', () => {
     manager.disconnect();
   });
 
+  describe('a stream that did not come from Jot (#1266)', () => {
+    const fireOpen = () => {
+      const openHandler = mockAddEventListener.mock.calls.find(
+        (call: [string, unknown]) => call[0] === 'open',
+      )?.[1] as () => void;
+      openHandler();
+    };
+
+    it('re-arms server reachability when the stream that opened echoes the request ID', async () => {
+      const manager = new SSEConnectionManager();
+      await manager.connect(jest.fn());
+
+      markServerUnreachable();
+      fireOpen();
+
+      expect(isServerReachable()).toBe(true);
+      expect(manager.isConnected()).toBe(true);
+
+      manager.disconnect();
+    });
+
+    it.each([
+      ['carries no request ID', null],
+      ['carries another request ID', 'portal-request-id'],
+    ])('treats a stream whose response %s as a failed connect, such as a captive portal page', async (_name, id) => {
+      jest.useFakeTimers();
+      mockResponseRequestId = id;
+      const statuses: string[] = [];
+      const manager = new SSEConnectionManager();
+      await manager.connect(jest.fn(), (status) => statuses.push(status));
+
+      markServerUnreachable();
+      fireOpen();
+
+      expect(isServerReachable()).toBe(false);
+      expect(manager.isConnected()).toBe(false);
+      expect(statuses).not.toContain('connected');
+      expect(statuses).toContain('reconnecting');
+      expect(mockClose).toHaveBeenCalled();
+
+      manager.disconnect();
+      jest.useRealTimers();
+    });
+
+    it('uses a stream whose headers cannot be read, without re-arming reachability on open', async () => {
+      mockNoXhr = true;
+      const manager = new SSEConnectionManager();
+      await manager.connect(jest.fn());
+
+      markServerUnreachable();
+      fireOpen();
+
+      expect(manager.isConnected()).toBe(true);
+      expect(isServerReachable()).toBe(false);
+
+      manager.disconnect();
+    });
+  });
+
   it('cleans up on disconnect', async () => {
     const manager = new SSEConnectionManager();
     await manager.connect(jest.fn());
@@ -255,7 +327,7 @@ describe('SSEConnectionManager', () => {
     expect(MockEventSource).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
-        headers: { Cookie: 'jot_session=refreshed-token' },
+        headers: { Cookie: 'jot_session=refreshed-token', 'X-Request-Id': expect.any(String) },
       }),
     );
 

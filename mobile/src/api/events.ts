@@ -3,6 +3,7 @@ import { getBaseUrl, getStoredSession, handleUnauthorizedSession } from './clien
 import type { SSEEvent } from '@jot/shared';
 import { getCurrentSwitchGenerationId, isSseQuiesced } from '../store/serverSwitchLifecycle';
 import { markServerReachable } from './serverReachability';
+import { REQUEST_ID_HEADER, echoesRequestId, newRequestId } from './jotResponse';
 
 const BASE_RECONNECT_DELAY_MS = 3000;
 const MAX_RECONNECT_DELAY_MS = 60000;
@@ -15,6 +16,22 @@ const WATCHDOG_INTERVAL_MS = 15_000;
 const STALL_TIMEOUT_MS = 75_000;
 
 type SSECallback = (event: SSEEvent) => void;
+
+/**
+ * Whether the stream that just opened came from Jot (#1266): `jot` when it
+ * echoed the request ID, `other` when it did not (a captive portal's 200 page
+ * opens the stream too), `unknown` when the response headers cannot be read.
+ *
+ * react-native-sse (1.2.1) passes no response to its `open` event, so this reads
+ * the XMLHttpRequest it keeps on `_xhr`. That field is not part of its typed API;
+ * if an upgrade drops it, the answer is `unknown` and the stream is used without
+ * re-arming reachability on open, which the next message still does (spec §3.1).
+ */
+function streamOrigin(es: EventSource, sentId: string): 'jot' | 'other' | 'unknown' {
+  const xhr = (es as unknown as { _xhr?: { getResponseHeader?: (name: string) => string | null } })._xhr;
+  if (typeof xhr?.getResponseHeader !== 'function') return 'unknown';
+  return echoesRequestId(sentId, { [REQUEST_ID_HEADER]: xhr.getResponseHeader(REQUEST_ID_HEADER) }) ? 'jot' : 'other';
+}
 
 /**
  * Connection lifecycle state reported to {@link StatusChangeCallback}.
@@ -72,9 +89,11 @@ export class SSEConnectionManager {
       if (this.closed || !token || isSseQuiesced()) return;
 
       const url = `${getBaseUrl()}/api/v1/events`;
-      this.es = new EventSource(url, {
+      const requestId = newRequestId();
+      const es = new EventSource(url, {
         headers: {
           Cookie: `jot_session=${token}`,
+          [REQUEST_ID_HEADER]: requestId,
         },
         // Disable the library's own reconnect loop (default: retry every 5s).
         // This manager owns retries via scheduleReconnect's exponential backoff;
@@ -83,8 +102,18 @@ export class SSEConnectionManager {
         // race a second connection alongside the one we're about to open.
         pollingInterval: 0,
       });
+      this.es = es;
 
       this.es.addEventListener('open', () => {
+        const origin = streamOrigin(es, requestId);
+        if (origin === 'other') {
+          // Not Jot answering: retry with backoff, as for a failed connect. The
+          // reachability flag is left to the axios requests (spec §3.1).
+          this._isConnected = false;
+          this.cleanup();
+          this.scheduleReconnect();
+          return;
+        }
         this._isConnected = true;
         this._reconnectAttempts = 0;
         this.reconnectDelay = BASE_RECONNECT_DELAY_MS;
@@ -92,7 +121,7 @@ export class SSEConnectionManager {
         // The stream opened, so the server is reachable — an always-on recovery
         // signal that flips writes back to the network path even with no other
         // request in flight (e.g. the server came back while the note sat idle).
-        if (this.isCurrentStream()) markServerReachable();
+        if (origin === 'jot' && this.isCurrentStream()) markServerReachable();
         this.statusChangeCallback?.('connected');
       });
 
