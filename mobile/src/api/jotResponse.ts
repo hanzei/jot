@@ -7,7 +7,7 @@
  * the server answering would mark it reachable, and a queued write "landed"
  * would be deleted although it never reached Jot.
  *
- * Every Jot server (since v0.17.0) returns the incoming `X-Request-Id` verbatim
+ * Every Jot server (since v0.15.0) returns the incoming `X-Request-Id` verbatim
  * when it is at most 64 characters of `[A-Za-z0-9._-]` (server
  * `internal/server/request_id.go`). The client sends a fresh random ID with each
  * request and counts a response as Jot's only when the same ID comes back. A

@@ -145,7 +145,7 @@ landed although it never reached Jot.
 
 So every request carries a fresh random `X-Request-Id`, and a response counts as
 Jot's only when it echoes that ID; the server returns a valid incoming ID
-verbatim (`server/internal/server/request_id.go`, since v0.17.0). The helpers
+verbatim (`server/internal/server/request_id.go`, since v0.15.0). The helpers
 are in `src/api/jotResponse.ts`; the checks are:
 
 | Path | A response that does not echo the ID |
