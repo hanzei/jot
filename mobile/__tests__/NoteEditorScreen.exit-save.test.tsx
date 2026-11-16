@@ -9,7 +9,6 @@ import {
   mockShowToast,
 } from './helpers/noteEditorScreenTestSetup';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
-import { markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
 import { allowConsoleError } from './helpers/consoleGuard';
 
 type BeforeRemoveEvent = { preventDefault: jest.Mock; data: { action: object } };
@@ -36,201 +35,18 @@ describe('NoteEditorScreen exit save behavior', () => {
     mockUseOfflineNote.mockReturnValue({ data: null });
     mockCreateMutateAsync.mockResolvedValue({ id: 'created-note-id' });
     mockUpdateMutateAsync.mockResolvedValue({});
-    // The exit path branches on server reachability; keep the default (reachable)
-    // for the blocking-prompt cases below and reset any override from a prior test.
-    markServerReachable();
   });
 
   afterEach(() => {
     jest.useRealTimers();
     jest.restoreAllMocks();
-    markServerReachable();
   });
 
-  it('shows Retry/Discard dialog when save fails permanently at exit', async () => {
-    allowConsoleError('Failed to save note:');
-    mockCreateMutateAsync.mockRejectedValue(new Error('400 Bad Request'));
-
-    const { getByTestId, findByTestId } = await render(<NoteEditorScreen />);
-    await fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
-
-    const beforeRemove = getBeforeRemoveHandler()!;
-    expect(beforeRemove).toBeDefined();
-
-    const event = makeEvent();
-    await act(() => { beforeRemove(event); });
-
-    await findByTestId('confirm-dialog-confirm');
-
-    expect(event.preventDefault).toHaveBeenCalled();
-    expect(getByTestId('confirm-dialog-title').props.children).toBe('note.saveFailedExitTitle');
-    expect(getByTestId('confirm-dialog-message').props.children).toBe('note.saveFailedExitMessage');
-    expect(getByTestId('confirm-dialog-confirm').props.accessibilityLabel).toBe('note.discardAndLeave');
-    expect(getByTestId('confirm-dialog-cancel').props.accessibilityLabel).toBe('common.retry');
-  });
-
-  it('does not trigger a retry when the backdrop is tapped', async () => {
-    allowConsoleError('Failed to save note:');
-    mockCreateMutateAsync.mockRejectedValue(new Error('400 Bad Request'));
-
-    const { getByTestId, findByTestId } = await render(<NoteEditorScreen />);
-    await fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
-
-    const beforeRemove = getBeforeRemoveHandler()!;
-    const event = makeEvent();
-    await act(() => { beforeRemove(event); });
-
-    await findByTestId('confirm-dialog-cancel');
-    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
-
-    // The "cancel" slot is repurposed for Retry here, not a true dismiss —
-    // tapping outside the dialog must be a no-op, not a silent retry attempt.
-    await fireEvent.press(getByTestId('confirm-dialog-overlay'));
-
-    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
-    expect(mockDispatch).not.toHaveBeenCalled();
-    expect(getByTestId('confirm-dialog-cancel')).toBeTruthy();
-  });
-
-  it('dispatches navigation when Discard & leave is chosen', async () => {
-    allowConsoleError('Failed to save note:');
-    mockCreateMutateAsync.mockRejectedValue(new Error('400 Bad Request'));
-
-    const { getByTestId, findByTestId } = await render(<NoteEditorScreen />);
-    await fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
-
-    const beforeRemove = getBeforeRemoveHandler()!;
-    const event = makeEvent();
-    await act(() => { beforeRemove(event); });
-
-    await findByTestId('confirm-dialog-confirm');
-
-    await fireEvent.press(getByTestId('confirm-dialog-confirm'));
-
-    expect(mockDispatch).toHaveBeenCalledWith(event.data.action);
-    expect(mockDispatch).toHaveBeenCalledTimes(1);
-  });
-
-  it('dispatches navigation when Retry succeeds', async () => {
-    allowConsoleError('Failed to save note:');
-    // First save fails permanently, retry succeeds — user exits cleanly.
-    mockCreateMutateAsync.mockRejectedValue(new Error('400 Bad Request'));
-
-    const { getByTestId, findByTestId } = await render(<NoteEditorScreen />);
-    await fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
-
-    const beforeRemove = getBeforeRemoveHandler()!;
-    const event = makeEvent();
-    await act(() => { beforeRemove(event); });
-
-    await findByTestId('confirm-dialog-cancel');
-
-    // Swap mock to succeed so the Retry path exits cleanly.
-    mockCreateMutateAsync.mockResolvedValue({ id: 'new-note-id' });
-
-    await fireEvent.press(getByTestId('confirm-dialog-cancel'));
-
-    await waitFor(() => { expect(mockDispatch).toHaveBeenCalledWith(event.data.action); });
-  });
-
-  it('shows dialog again when Retry also fails', async () => {
-    allowConsoleError('Failed to save note:');
-    mockCreateMutateAsync.mockRejectedValue(new Error('400 Bad Request'));
-
-    const { getByTestId, findByTestId } = await render(<NoteEditorScreen />);
-    await fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
-
-    const beforeRemove = getBeforeRemoveHandler()!;
-    const event = makeEvent();
-    await act(() => { beforeRemove(event); });
-
-    await findByTestId('confirm-dialog-cancel');
-    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      await fireEvent.press(getByTestId('confirm-dialog-cancel'));
-    });
-
-    // A second failed save attempt means the retry actually ran, not just a no-op.
-    await waitFor(() => { expect(mockCreateMutateAsync).toHaveBeenCalledTimes(2); });
-    expect(getByTestId('confirm-dialog-cancel')).toBeTruthy();
-    expect(mockDispatch).not.toHaveBeenCalled();
-  });
-
-  it('disables both actions while a retry is in flight and ignores extra taps', async () => {
-    allowConsoleError('Failed to save note:');
-    mockCreateMutateAsync.mockRejectedValueOnce(new Error('400 Bad Request'));
-
-    const { getByTestId, findByTestId } = await render(<NoteEditorScreen />);
-    await fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
-
-    const beforeRemove = getBeforeRemoveHandler()!;
-    const event = makeEvent();
-    await act(() => { beforeRemove(event); });
-
-    await findByTestId('confirm-dialog-cancel');
-    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
-
-    // Keep the retry's save in flight so we can observe the busy state.
-    let resolveRetrySave!: (value: { id: string }) => void;
-    mockCreateMutateAsync.mockImplementationOnce(
-      () => new Promise((resolve) => { resolveRetrySave = resolve; }),
-    );
-
-    // Not awaited: the retry save is deliberately left pending, and awaiting
-    // fireEvent would wait for that whole chain to settle.
-    void fireEvent.press(getByTestId('confirm-dialog-cancel'));
-    await waitFor(() => {
-      expect(getByTestId('confirm-dialog-cancel').props.accessibilityState.disabled).toBe(true);
-    });
-    expect(getByTestId('confirm-dialog-confirm').props.accessibilityState.disabled).toBe(true);
-
-    // Extra taps while the retry is in flight must not fire a second save or
-    // a premature discard/dispatch.
-    await fireEvent.press(getByTestId('confirm-dialog-cancel'));
-    await fireEvent.press(getByTestId('confirm-dialog-confirm'));
-    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(2);
-    expect(mockDispatch).not.toHaveBeenCalled();
-
-    await act(async () => { resolveRetrySave({ id: 'new-note-id' }); });
-
-    await waitFor(() => { expect(mockDispatch).toHaveBeenCalledWith(event.data.action); });
-  });
-
-  it('shows only the discard action once retries are exhausted', async () => {
-    allowConsoleError('Failed to save note:');
-    mockCreateMutateAsync.mockRejectedValue(new Error('400 Bad Request'));
-
-    const { getByTestId, findByTestId, queryByTestId } = await render(<NoteEditorScreen />);
-    await fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
-
-    const beforeRemove = getBeforeRemoveHandler()!;
-    const event = makeEvent();
-    await act(() => { beforeRemove(event); });
-    await findByTestId('confirm-dialog-cancel');
-
-    // MAX_EXIT_SAVE_RETRIES is 3 — three failed retries exhaust the budget,
-    // after which only the discard action remains.
-    for (let attempt = 2; attempt <= 3; attempt++) {
-      await act(async () => {
-        await fireEvent.press(getByTestId('confirm-dialog-cancel'));
-      });
-      await waitFor(() => { expect(mockCreateMutateAsync).toHaveBeenCalledTimes(attempt); });
-    }
-    await act(async () => {
-      await fireEvent.press(getByTestId('confirm-dialog-cancel'));
-    });
-    await waitFor(() => { expect(mockCreateMutateAsync).toHaveBeenCalledTimes(4); });
-
-    expect(queryByTestId('confirm-dialog-cancel')).toBeNull();
-    expect(mockDispatch).not.toHaveBeenCalled();
-
-    await fireEvent.press(getByTestId('confirm-dialog-confirm'));
-    expect(mockDispatch).toHaveBeenCalledWith(event.data.action);
-  });
-
-  it('navigates without showing a dialog when save succeeds at exit', async () => {
-    mockCreateMutateAsync.mockResolvedValue({ id: 'new-note-id' });
+  // A save commits locally and queues for the drain (#1284): leaving never waits
+  // on it, and a server rejection shows up later as a failed change.
+  it('navigates without waiting for the save to finish', async () => {
+    // The save never settles: the exit must not depend on it.
+    mockCreateMutateAsync.mockImplementation(() => new Promise(() => {}));
 
     const { getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
     await fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
@@ -239,8 +55,12 @@ describe('NoteEditorScreen exit save behavior', () => {
     const event = makeEvent();
     await act(() => { beforeRemove(event); });
 
-    await waitFor(() => { expect(mockDispatch).toHaveBeenCalledWith(event.data.action); });
+    // Navigation proceeds (no preventDefault) and no Retry/Discard dialog is
+    // shown; the edit is flushed in the background.
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(mockDispatch).not.toHaveBeenCalled();
     expect(queryByTestId('confirm-dialog-confirm')).toBeNull();
+    await waitFor(() => { expect(mockCreateMutateAsync).toHaveBeenCalled(); });
   });
 
   it('does not drop edits typed while a save is in flight', async () => {
@@ -268,7 +88,6 @@ describe('NoteEditorScreen exit save behavior', () => {
     const beforeRemove = getBeforeRemoveHandler()!;
     const event = makeEvent();
     await act(() => { beforeRemove(event); });
-    expect(event.preventDefault).toHaveBeenCalled();
 
     await waitFor(() => {
       expect(mockUpdateMutateAsync).toHaveBeenCalledWith(
@@ -278,7 +97,54 @@ describe('NoteEditorScreen exit save behavior', () => {
         }),
       );
     });
-    await waitFor(() => { expect(mockDispatch).toHaveBeenCalledWith(event.data.action); });
+  });
+
+  it('updates the draft it is creating when the editor closes mid-create, instead of creating a second note', async () => {
+    jest.useFakeTimers();
+    let resolveCreate!: (value: { id: string; version: number }) => void;
+    mockCreateMutateAsync.mockImplementation(
+      () => new Promise((resolve) => { resolveCreate = resolve; }),
+    );
+
+    const { getByTestId, unmount } = await render(<NoteEditorScreen />);
+    await fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
+    // The autosave starts the create.
+    await act(() => { jest.advanceTimersByTime(1500); });
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
+
+    // More typing, then leave: the exit's flush queues behind the create.
+    await fireEvent.changeText(getByTestId('note-content-input'), 'Hello world');
+    const beforeRemove = getBeforeRemoveHandler()!;
+    await act(() => { beforeRemove(makeEvent()); });
+    await unmount();
+
+    await act(async () => { resolveCreate({ id: 'created-note-id', version: 1 }); });
+
+    await waitFor(() => {
+      expect(mockUpdateMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'created-note-id', data: expect.objectContaining({ content: 'Hello world' }) }),
+      );
+    });
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('swallows a second back press while a dirty editor zooms back onto its card', async () => {
+    mockUseRoute.mockReturnValue({ params: { noteId: null, originRect: { x: 0, y: 0, width: 100, height: 100 } } });
+    mockCreateMutateAsync.mockResolvedValue({ id: 'new-note-id', version: 1 });
+
+    const { getByTestId } = await render(<NoteEditorScreen />);
+    await fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
+
+    const beforeRemove = getBeforeRemoveHandler()!;
+    const first = makeEvent();
+    await act(() => { beforeRemove(first); });
+    expect(first.preventDefault).toHaveBeenCalled();
+
+    // Pressed again before the zoom-close animation dispatches: it must not pop
+    // the screen on its own, or the animation's dispatch would pop a second one.
+    const second = makeEvent();
+    await act(() => { beforeRemove(second); });
+    expect(second.preventDefault).toHaveBeenCalled();
   });
 
   it('does not block navigation when there are no pending changes', async () => {
@@ -292,32 +158,10 @@ describe('NoteEditorScreen exit save behavior', () => {
     expect(queryByTestId('confirm-dialog-confirm')).toBeNull();
   });
 
-  it('navigates immediately without a dialog when the server is unreachable', async () => {
-    // Server is known-down: leaving must not block on (or wait out) the network.
-    markServerUnreachable();
-    mockCreateMutateAsync.mockResolvedValue({ id: 'queued-note-id' });
-
-    const { getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
-    await fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
-
-    const beforeRemove = getBeforeRemoveHandler()!;
-    const event = makeEvent();
-    await act(() => { beforeRemove(event); });
-
-    // Navigation is allowed to proceed (no preventDefault) and no Retry/Discard
-    // dialog is shown — the edit is flushed to the local DB + queue in the
-    // background instead.
-    expect(event.preventDefault).not.toHaveBeenCalled();
-    expect(queryByTestId('confirm-dialog-confirm')).toBeNull();
-    await waitFor(() => { expect(mockCreateMutateAsync).toHaveBeenCalled(); });
-  });
-
-  it('surfaces a save-error toast when the offline background flush fails', async () => {
+  it('surfaces a save-error toast when the background flush fails', async () => {
     allowConsoleError('Failed to save note:');
-    // Server unreachable so we navigate immediately; if the background flush
-    // then genuinely fails, the in-editor banner is suppressed by the unmounting
-    // guard, so the failure must surface via a global toast instead.
-    markServerUnreachable();
+    // The in-editor banner is suppressed by the unmounting guard, so a save
+    // that fails locally must surface via a global toast instead.
     mockCreateMutateAsync.mockRejectedValue(new Error('local persist failed'));
 
     const { getByTestId } = await render(<NoteEditorScreen />);

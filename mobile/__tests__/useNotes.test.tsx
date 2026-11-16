@@ -1,9 +1,9 @@
 import React from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted, useUncheckAllItems, useDeleteCompletedItems, useShareNote, useUnshareNote, useLeaveNote, useMarkNoteViewed, NoteConversionCapError } from '../src/hooks/useNotes';
+import { useCreateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted, useUncheckAllItems, useDeleteCompletedItems, useShareNote, useUnshareNote, useLeaveNote, useMarkNoteViewed, NoteConversionCapError } from '../src/hooks/useNotes';
 import { VALIDATION } from '@jot/shared';
-import { noteLocalQueryKey, notesLocalQueryKey, notesLocalQueryScopeKey } from '../src/hooks/queryKeys';
+import { noteLocalQueryKey, notesLocalQueryScopeKey } from '../src/hooks/queryKeys';
 import * as noteQueriesModule from '../src/db/noteQueries';
 import * as clientModule from '../src/api/client';
 import { insertQueueEntry } from '../src/db/syncQueue';
@@ -25,6 +25,7 @@ const mockUseNetworkStatus = (
 
 jest.mock('../src/db/noteQueries', () => ({
   saveNote: jest.fn().mockResolvedValue(undefined),
+  saveNoteInTx: jest.fn().mockResolvedValue(undefined),
   saveNotes: jest.fn().mockResolvedValue(undefined),
   getLocalNote: jest.fn().mockResolvedValue(null),
   markLocalNoteDeleted: jest.fn().mockResolvedValue(undefined),
@@ -34,7 +35,6 @@ jest.mock('../src/db/noteQueries', () => ({
   updateLocalNote: jest.fn().mockResolvedValue(undefined),
   generateClientNoteId: jest.fn(() => 'ClientNoteId000000000A'),
   markNotePendingCreate: jest.fn().mockResolvedValue(undefined),
-  isNotePendingCreate: jest.fn().mockResolvedValue(false),
   getLocalNotePositions: jest.fn().mockResolvedValue(new Map()),
   getNextLocalPinnedPosition: jest.fn().mockResolvedValue(0),
   createLocalItem: jest.fn().mockResolvedValue(undefined),
@@ -44,6 +44,7 @@ jest.mock('../src/db/noteQueries', () => ({
   setLocalItemsCompleted: jest.fn().mockResolvedValue(undefined),
   deleteLocalItems: jest.fn().mockResolvedValue(undefined),
   reconcileLocalItems: jest.fn().mockResolvedValue(undefined),
+  reconcileLocalItemsInTx: jest.fn().mockResolvedValue(undefined),
   getStoredLabels: jest.fn().mockResolvedValue([]),
   upsertLabel: jest.fn().mockResolvedValue(undefined),
   generateClientLabelId: jest.fn(() => 'ClientLabelId00000000A'),
@@ -87,6 +88,17 @@ function makeAxiosError(status: number) {
 // A network failure produces an Axios error with no `response` (no HTTP status).
 function makeNetworkError() {
   return Object.assign(new Error('Network Error'), { isAxiosError: true });
+}
+
+// The note's create is still queued: every write to it must queue behind it.
+async function queueCreate(noteId: string): Promise<void> {
+  await insertQueueEntry(globalThis.testDb, {
+    operation: 'create',
+    endpoint: '/notes',
+    method: 'POST',
+    body: { id: noteId },
+    keys: [`note:${noteId}`],
+  });
 }
 
 function createWrapper() {
@@ -153,7 +165,7 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toEqual(newNote);
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newNote, expect.objectContaining({ serverSnapshot: true }));
+      expect(mockNoteQueries.saveNoteInTx).toHaveBeenCalledWith(expect.anything(), newNote, true);
     });
 
     it('sends the IDs it queues when the request times out after the server committed (#1278)', async () => {
@@ -203,7 +215,7 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toEqual(newListNote);
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newListNote, expect.objectContaining({ serverSnapshot: true }));
+      expect(mockNoteQueries.saveNoteInTx).toHaveBeenCalledWith(expect.anything(), newListNote, true);
     });
 
     it('blocks write when server switch is in progress', async () => {
@@ -433,7 +445,7 @@ describe('useNotes hooks', () => {
       // The source note has a server-valid id but its create hasn't drained, so a
       // direct API call would 404. The duplicate queues FIFO behind the create
       // and uses a server-valid client id so the replay is idempotent.
-      mockNoteQueries.isNotePendingCreate.mockResolvedValueOnce(true);
+      await queueCreate('ServerValidButPending00');
       mockNoteQueries.getLocalNote.mockResolvedValueOnce({
         id: 'ServerValidButPending00', title: '', content: 'Hi', note_type: 'text',
         color: '#ffffff', pinned: false, archived: false, position: 0, version: 1,
@@ -484,32 +496,20 @@ describe('useNotes hooks', () => {
       items: [{ id: 'i1', note_id: PENDING_ID, text: 'a', completed: false, position: 0, parent_id: null, assigned_to: '', created_at: '', updated_at: '' }],
     };
 
-    beforeEach(() => {
+    beforeEach(async () => {
       // The note is online-reachable in principle, but pending-create — so the
       // guard, not connectivity, is what must divert the write to the queue.
       mockUseNetworkStatus.mockReturnValue({ isConnected: true });
-      mockNoteQueries.isNotePendingCreate.mockResolvedValue(true);
+      await queueCreate(PENDING_ID);
       // Mutations that read the note locally need it present, else their offline
       // path throws "not found" before it can enqueue.
       mockNoteQueries.getLocalNote.mockResolvedValue(pendingListNote as never);
     });
 
-    // Restore the factory defaults so a persistent mockResolvedValue here can't
-    // leak "pending / present" into unrelated tests later in the file.
+    // Restore the factory default so a persistent mockResolvedValue here can't
+    // leak "present" into unrelated tests later in the file.
     afterEach(() => {
-      mockNoteQueries.isNotePendingCreate.mockResolvedValue(false);
       mockNoteQueries.getLocalNote.mockResolvedValue(null);
-    });
-
-    it('useUpdateNote queues a content edit', async () => {
-      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
-      await result.current.mutateAsync({ id: PENDING_ID, data: { content: 'New body' } });
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(mockJot.notes.update).not.toHaveBeenCalled();
-      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({ operation: 'update', endpoint: `/notes/${PENDING_ID}`, method: 'PATCH', keys: [`note:${PENDING_ID}`] }),
-      );
     });
 
     it('useConvertNoteType queues the conversion', async () => {
@@ -632,28 +632,6 @@ describe('useNotes hooks', () => {
         expect.anything(),
         expect.objectContaining({ operation: 'permanentDelete', endpoint: `/notes/${PENDING_ID}?permanent=true`, keys: [`note:${PENDING_ID}`] }),
       );
-    });
-  });
-
-  describe('useUpdateNote (online)', () => {
-    it('updates a note via API and caches locally', async () => {
-      const updated = {
-        id: '123', title: 'Updated', content: '', note_type: 'text',
-        color: '#ffffff', pinned: false, archived: false, position: 0,
-        checked_items_collapsed: false, is_shared: false, deleted_at: null,
-        user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
-      };
-      mockJot.notes.update.mockResolvedValueOnce(updated as never);
-
-      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
-
-      result.current.mutate({ id: '123', data: { title: 'Updated' } });
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-      expect(result.current.data).toEqual(updated);
-      expect(mockJot.notes.update).toHaveBeenCalledWith('123', { title: 'Updated' });
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), updated, expect.objectContaining({ serverSnapshot: true }));
     });
   });
 
@@ -796,232 +774,6 @@ describe('useNotes hooks', () => {
     });
   });
 
-  describe('useUpdateNote (offline)', () => {
-    const existingTextNote = {
-      id: '123', title: '', content: 'Old body', note_type: 'text', version: 7,
-      color: '#ffffff', pinned: false, archived: false, position: 0,
-      checked_items_collapsed: false, is_shared: false, deleted_at: null,
-      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
-    };
-    const existingListNote = {
-      id: '456', title: 'Old title', content: '', note_type: 'list', version: 3,
-      color: '#ffffff', pinned: false, archived: false, position: 0,
-      checked_items_collapsed: false, is_shared: false, deleted_at: null,
-      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
-      items: [],
-    };
-
-    it('queues only the changed fields for a text note (no full-snapshot clobber)', async () => {
-      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
-      mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingTextNote as never);
-
-      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
-
-      await result.current.mutateAsync({ id: '123', data: { content: 'New body' } });
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-      // Only the user-changed field is queued; pinned/archived/color are absent,
-      // so replaying this PATCH cannot overwrite them with the stale local snapshot.
-      // base_version is NOT stored in the queued body — drainQueue resolves it from
-      // the note's local version at replay time so a chain doesn't self-conflict (#489).
-      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          operation: 'update',
-          endpoint: '/notes/123',
-          method: 'PATCH',
-          body: { content: 'New body' },
-        }),
-      );
-    });
-
-    it('queues only the changed fields for a list note (no full-snapshot clobber)', async () => {
-      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
-      mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingListNote as never);
-
-      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
-
-      await result.current.mutateAsync({ id: '456', data: { title: 'New title' } });
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-      // title is a list-note-specific field; only it is queued — checked_items_collapsed,
-      // pinned, archived, and color stay absent so a replay cannot clobber them.
-      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          operation: 'update',
-          endpoint: '/notes/456',
-          method: 'PATCH',
-          body: { title: 'New title' },
-        }),
-      );
-    });
-
-    it('omits base_version for a per-user-only change (no content edit)', async () => {
-      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
-      mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingTextNote as never);
-
-      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
-
-      await result.current.mutateAsync({ id: '123', data: { pinned: true } });
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-      // pinned is a per-user field; it is not version-guarded, so no base_version
-      // is attached (sending one would cause false conflicts for other devices).
-      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          operation: 'update',
-          endpoint: '/notes/123',
-          method: 'PATCH',
-          body: { pinned: true },
-        }),
-      );
-    });
-
-    it('rejects and does not enqueue or write to DB when note is missing from local cache', async () => {
-      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
-      mockNoteQueries.getLocalNote.mockResolvedValueOnce(null);
-
-      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
-
-      await result.current.mutateAsync({ id: 'missing-id', data: { title: 'X' } }).catch(() => {});
-
-      await waitFor(() => expect(result.current.isError).toBe(true));
-
-      const { enqueueOperation } = jest.requireMock('../src/db/syncQueue') as { enqueueOperation: jest.Mock };
-      expect(result.current.error).toBeInstanceOf(Error);
-      expect((result.current.error as Error).message).toMatch(/not found in local DB/);
-      expect(enqueueOperation).not.toHaveBeenCalled();
-      expect(mockNoteQueries.updateLocalNote).not.toHaveBeenCalled();
-      expect(mockNoteQueries.saveNote).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('useUpdateNote (online write failures)', () => {
-    const existingNote = {
-      id: '123', title: 'Old', content: 'Old body', note_type: 'text', version: 9,
-      color: '#ffffff', pinned: false, archived: false, position: 0,
-      checked_items_collapsed: false, is_shared: false, deleted_at: null,
-      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
-    };
-
-    it('sends base_version on an online content update', async () => {
-      const updated = { ...existingNote, content: 'New body', version: 10 };
-      mockJot.notes.update.mockResolvedValueOnce(updated as never);
-      mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingNote as never);
-
-      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
-
-      await result.current.mutateAsync({ id: '123', data: { content: 'New body' } });
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-      // The note's current version is echoed so the server can reject a write
-      // that raced a concurrent edit (#489).
-      expect(mockJot.notes.update).toHaveBeenCalledWith('123', { content: 'New body', base_version: 9 });
-      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
-    });
-
-    it('sends the editor-supplied baseVersion instead of the row version (#1277)', async () => {
-      // A collaborator's snapshot (v9) landed in the row while the user was typing
-      // from v5: the write must carry v5 so the server answers 409.
-      mockJot.notes.update.mockResolvedValueOnce({ ...existingNote, version: 10 } as never);
-      mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingNote as never);
-
-      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
-      await result.current.mutateAsync({ id: '123', data: { content: 'Mine' }, baseVersion: 5 });
-
-      expect(mockJot.notes.update).toHaveBeenCalledWith('123', { content: 'Mine', base_version: 5 });
-    });
-
-    it('returns the caller baseVersion when the edit is queued, not the row version (#1277)', async () => {
-      mockJot.notes.update.mockRejectedValueOnce(makeAxiosError(503));
-      mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingNote as never);
-
-      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
-      const returned = await result.current.mutateAsync({ id: '123', data: { content: 'Mine' }, baseVersion: 5 });
-
-      expect(returned.version).toBe(5);
-    });
-
-    it('falls back to the local queue when a transient failure (5xx) occurs', async () => {
-      mockJot.notes.update.mockRejectedValueOnce(makeAxiosError(503));
-      mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingNote as never);
-
-      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
-
-      await result.current.mutateAsync({ id: '123', data: { content: 'New body' } });
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-      // The edit is persisted locally and queued for replay rather than lost,
-      // and the mutation resolves so the editor can exit normally.
-      expect(mockNoteQueries.updateLocalNote).toHaveBeenCalledWith(expect.anything(), '123', { content: 'New body' });
-      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({ operation: 'update', endpoint: '/notes/123', method: 'PATCH' }),
-      );
-      expect((result.current.data as { content: string }).content).toBe('New body');
-    });
-
-    it('falls back to the local queue on a network error (no response)', async () => {
-      mockJot.notes.update.mockRejectedValueOnce(makeNetworkError());
-      mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingNote as never);
-
-      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
-
-      await result.current.mutateAsync({ id: '123', data: { content: 'New body' } });
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalled();
-    });
-
-    it('surfaces a permanent failure (4xx) without queuing', async () => {
-      mockJot.notes.update.mockRejectedValueOnce(makeAxiosError(400));
-
-      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
-
-      await result.current.mutateAsync({ id: '123', data: { content: 'New body' } }).catch(() => {});
-
-      await waitFor(() => expect(result.current.isError).toBe(true));
-
-      // A real validation/auth error must reach the UI, not be silently queued
-      // or written to the local DB (the offline fallback path).
-      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
-      expect(mockNoteQueries.updateLocalNote).not.toHaveBeenCalled();
-    });
-
-    it('surfaces a 401 without queuing (the interceptor logs the user out)', async () => {
-      mockJot.notes.update.mockRejectedValueOnce(makeAxiosError(401));
-
-      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
-
-      await result.current.mutateAsync({ id: '123', data: { content: 'New body' } }).catch(() => {});
-
-      await waitFor(() => expect(result.current.isError).toBe(true));
-
-      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
-      expect(mockNoteQueries.updateLocalNote).not.toHaveBeenCalled();
-    });
-
-    it('rethrows a non-Axios (local) error instead of queuing it', async () => {
-      mockJot.notes.update.mockRejectedValueOnce(new Error('boom'));
-
-      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
-
-      await result.current.mutateAsync({ id: '123', data: { content: 'New body' } }).catch(() => {});
-
-      await waitFor(() => expect(result.current.isError).toBe(true));
-
-      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
-      expect(mockNoteQueries.updateLocalNote).not.toHaveBeenCalled();
-    });
-  });
-
   describe('item mutations (online write failures)', () => {
     it('useCreateNoteItem falls back to the local queue on a transient failure', async () => {
       mockJot.notes.createItem.mockRejectedValueOnce(makeAxiosError(503));
@@ -1157,12 +909,6 @@ describe('useNotes hooks', () => {
   });
 
   describe('optimistic cache updates on a stalled connection', () => {
-    const existingTextNote = {
-      id: '123', title: '', content: 'Old body', note_type: 'text',
-      color: '#ffffff', pinned: false, archived: false, position: 0,
-      checked_items_collapsed: false, is_shared: false, deleted_at: null,
-      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
-    };
     const listNote = {
       id: 'n1', title: 'L', note_type: 'list',
       color: '#ffffff', pinned: false, archived: false, position: 0,
@@ -1173,86 +919,6 @@ describe('useNotes hooks', () => {
         { id: 'c', note_id: 'n1', text: 'child', completed: false, position: 1, parent_id: 'p', assigned_to: '', created_at: '', updated_at: '' },
       ],
     };
-
-    it('useUpdateNote reflects the edit in the cache before the request resolves', async () => {
-      const { wrapper, queryClient } = createWrapperWithClient();
-      queryClient.setQueryData(noteLocalQueryKey('123'), existingTextNote);
-      queryClient.setQueryData(notesLocalQueryKey(undefined), [existingTextNote]);
-
-      // The server call stays in flight for the duration of the assertions.
-      // Reset first: clearAllMocks does not drain a leftover mock*Once queue.
-      const pending = deferred<typeof existingTextNote>();
-      mockJot.notes.update.mockReset();
-      mockJot.notes.update.mockReturnValueOnce(pending.promise as never);
-
-      const { result } = await renderHook(() => useUpdateNote(), { wrapper });
-      result.current.mutate({ id: '123', data: { content: 'New body' } });
-
-      // Optimistic update is visible while the request is still in flight (we
-      // have not resolved `pending` yet) — the UI does not wait on the network.
-      await waitFor(() => {
-        expect((queryClient.getQueryData(noteLocalQueryKey('123')) as { content: string }).content).toBe('New body');
-      });
-      expect(mockJot.notes.update).toHaveBeenCalledWith('123', { content: 'New body' });
-      expect((queryClient.getQueryData(notesLocalQueryKey(undefined)) as Array<{ content: string }>)[0]!.content).toBe('New body');
-
-      // Let the request finish so the hook settles cleanly.
-      pending.resolve({ ...existingTextNote, content: 'New body' } as never);
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    });
-
-    it('useUpdateNote rolls back the optimistic edit on a permanent (4xx) failure', async () => {
-      const { wrapper, queryClient } = createWrapperWithClient();
-      queryClient.setQueryData(noteLocalQueryKey('123'), existingTextNote);
-      queryClient.setQueryData(notesLocalQueryKey(undefined), [existingTextNote]);
-      mockJot.notes.update.mockRejectedValueOnce(makeAxiosError(400));
-
-      const { result } = await renderHook(() => useUpdateNote(), { wrapper });
-      await result.current.mutateAsync({ id: '123', data: { content: 'New body' } }).catch(() => {});
-
-      await waitFor(() => expect(result.current.isError).toBe(true));
-
-      // The phantom edit is reverted and nothing was queued.
-      expect((queryClient.getQueryData(noteLocalQueryKey('123')) as { content: string }).content).toBe('Old body');
-      expect((queryClient.getQueryData(notesLocalQueryKey(undefined)) as Array<{ content: string }>)[0]!.content).toBe('Old body');
-      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
-    });
-
-    it('rolling back a failed update preserves a concurrent optimistic edit to another note in the same list', async () => {
-      const { wrapper, queryClient } = createWrapperWithClient();
-      const noteA = { ...existingTextNote, id: 'a', content: 'A-old' };
-      const noteB = { ...existingTextNote, id: 'b', content: 'B-old' };
-      queryClient.setQueryData(noteLocalQueryKey('a'), noteA);
-      queryClient.setQueryData(notesLocalQueryKey(undefined), [noteA, noteB]);
-
-      // Note A's request stays in flight so we can interleave a concurrent edit.
-      const pending = deferred<typeof noteA>();
-      mockJot.notes.update.mockReset();
-      mockJot.notes.update.mockReturnValueOnce(pending.promise as never);
-
-      const { result } = await renderHook(() => useUpdateNote(), { wrapper });
-      result.current.mutate({ id: 'a', data: { content: 'A-new' } });
-
-      // Wait until A's optimistic edit lands (its onMutate has snapshotted the list).
-      await waitFor(() => {
-        const list = queryClient.getQueryData(notesLocalQueryKey(undefined)) as Array<{ id: string; content: string }>;
-        expect(list.find((n) => n.id === 'a')!.content).toBe('A-new');
-      });
-
-      // A different in-flight mutation optimistically edits note B in the same list.
-      queryClient.setQueryData<Array<{ id: string; content: string }>>(
-        notesLocalQueryKey(undefined),
-        (old) => old!.map((n) => (n.id === 'b' ? { ...n, content: 'B-new' } : n)),
-      );
-
-      // Now A fails permanently → its rollback runs.
-      pending.reject(makeAxiosError(400));
-      await waitFor(() => expect(result.current.isError).toBe(true));
-
-      const list = queryClient.getQueryData(notesLocalQueryKey(undefined)) as Array<{ id: string; content: string }>;
-      expect(list.find((n) => n.id === 'a')!.content).toBe('A-old'); // A reverted
-      expect(list.find((n) => n.id === 'b')!.content).toBe('B-new'); // B's concurrent edit preserved
-    });
 
     it('useToggleNoteItemCompleted toggles the cached item (and cascades) before the request resolves', async () => {
       const { wrapper, queryClient } = createWrapperWithClient();
@@ -1422,39 +1088,30 @@ describe('useNotes hooks', () => {
       expect(cachedZ()).toBe(false);
     });
 
-    // An earlier change queued for replay (offline, or after a transient
-    // failure) has not reached the server yet, so an online toggle's response
-    // still reports the queued item's old value: it must neither be written to
-    // SQLite nor handed to the editor.
-    it('useToggleNoteItemCompleted leaves alone an item a queued op has yet to replay', async () => {
+    // An earlier change queued for the note has not reached the server yet. An
+    // online toggle could overtake it, so it queues behind it (spec §8.2).
+    it('useToggleNoteItemCompleted queues behind an op already queued for the note', async () => {
       const { wrapper, queryClient } = createWrapperWithClient();
-      const note = { ...listNote, items: [
-        { ...listNote.items[0]!, id: 'wq', parent_id: null, completed: false },
-        { ...listNote.items[0]!, id: 'wt', parent_id: null, completed: false, position: 1 },
-      ] };
-      queryClient.setQueryData(noteLocalQueryKey('n1'), note);
-      mockNoteQueries.getLocalNote.mockResolvedValueOnce(note as never);
+      queryClient.setQueryData(noteLocalQueryKey('n1'), listNote);
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(listNote as never);
       await insertQueueEntry(globalThis.testDb, {
-        operation: 'setItemsCompleted',
-        endpoint: '/notes/n1/items/set-completed',
-        method: 'POST',
-        body: { item_ids: ['wq'], completed: false },
+        operation: 'update',
+        endpoint: '/notes/n1',
+        method: 'PATCH',
+        body: { title: 'Queued' },
         keys: ['note:n1'],
       });
       mockJot.notes.setItemsCompleted.mockReset();
-      mockJot.notes.setItemsCompleted.mockResolvedValueOnce([
-        { id: 'wq', completed: true, updated_at: '2026-01-01T00:00:00Z' },
-        { id: 'wt', completed: true, updated_at: '2026-01-01T00:00:01Z' },
-      ] as never);
 
       const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
-      const returned = await result.current.mutateAsync({ noteId: 'n1', itemId: 'wt', completed: true });
+      const returned = await result.current.mutateAsync({ noteId: 'n1', itemId: 'c', completed: true });
 
-      expect(returned.map((i) => i.id)).toEqual(['wt']);
-      expect(mockNoteQueries.setLocalItemsCompleted).not.toHaveBeenCalledWith(
-        expect.anything(), 'n1', expect.arrayContaining(['wq']), expect.anything(),
+      expect(returned).toEqual([]);
+      expect(mockJot.notes.setItemsCompleted).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ operation: 'setItemsCompleted', keys: ['note:n1'] }),
       );
-      await globalThis.testDb.runAsync('DELETE FROM sync_queue');
     });
 
     it('useToggleNoteItemCompleted takes the local rows back on a permanent failure', async () => {
@@ -1618,61 +1275,6 @@ describe('useNotes hooks', () => {
   // the PATCH is in flight is what any re-read in that window resolves to — and
   // that read overwrites the optimistic cache, flashing the old value on the
   // dashboard card until the response lands (#946).
-  describe('useUpdateNote writes SQLite before the request (#946)', () => {
-    const existingTextNote = {
-      id: '123', title: '', content: 'Old body', note_type: 'text', version: 7,
-      color: '#ffffff', pinned: false, archived: false, position: 0,
-      checked_items_collapsed: false, is_shared: false, deleted_at: null,
-      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
-    };
-
-    it('writes the edit to the local DB before the request goes out', async () => {
-      const { wrapper, queryClient } = createWrapperWithClient();
-      queryClient.setQueryData(noteLocalQueryKey('123'), existingTextNote);
-      mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingTextNote as never);
-
-      const pending = deferred<typeof existingTextNote>();
-      mockJot.notes.update.mockReset();
-      mockJot.notes.update.mockReturnValueOnce(pending.promise as never);
-
-      const { result } = await renderHook(() => useUpdateNote(), { wrapper });
-      result.current.mutate({ id: '123', data: { content: 'New body' } });
-
-      // Still in flight (pending unresolved), and SQLite already holds the edit,
-      // so a re-read in this window resolves to the new body instead of the
-      // stale row that would snap the card back.
-      await waitFor(() => {
-        expect(mockNoteQueries.updateLocalNote).toHaveBeenCalledWith(expect.anything(), '123', { content: 'New body' });
-      });
-      // The pre-flight write must not bump the version the server gates against:
-      // base_version stays the value read before the write (#489).
-      expect(mockJot.notes.update).toHaveBeenCalledWith('123', { content: 'New body', base_version: 7 });
-
-      pending.resolve({ ...existingTextNote, content: 'New body', version: 8 } as never);
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    });
-
-    it('takes the local row back on a permanent failure', async () => {
-      const { wrapper, queryClient } = createWrapperWithClient();
-      queryClient.setQueryData(noteLocalQueryKey('123'), existingTextNote);
-      mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingTextNote as never);
-      mockJot.notes.update.mockReset();
-      // A 409 (version conflict) is permanent, so it surfaces rather than queues.
-      mockJot.notes.update.mockRejectedValueOnce(makeAxiosError(409));
-
-      const { result } = await renderHook(() => useUpdateNote(), { wrapper });
-      await result.current.mutateAsync({ id: '123', data: { content: 'New body' } }).catch(() => {});
-
-      await waitFor(() => expect(result.current.isError).toBe(true));
-
-      // Both the pre-flight write and its revert ran, so SQLite ends up where it
-      // started rather than holding an edit the server rejected.
-      expect(mockNoteQueries.updateLocalNote).toHaveBeenNthCalledWith(1, expect.anything(), '123', { content: 'New body' });
-      expect(mockNoteQueries.updateLocalNote).toHaveBeenNthCalledWith(2, expect.anything(), '123', { content: 'Old body' });
-      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
-    });
-  });
-
   describe('useDuplicateNote (online)', () => {
     it('duplicates a note via API and caches it locally', async () => {
       const duplicated = {
@@ -1691,7 +1293,7 @@ describe('useNotes hooks', () => {
 
       expect(result.current.data).toEqual(duplicated);
       expect(mockJot.notes.duplicate).toHaveBeenCalledWith('123', {});
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), duplicated, expect.objectContaining({ serverSnapshot: true }));
+      expect(mockNoteQueries.saveNoteInTx).toHaveBeenCalledWith(expect.anything(), duplicated, true);
     });
   });
 
@@ -1739,6 +1341,8 @@ describe('useNotes hooks', () => {
       expect(localDuplicate.shared_with).toEqual([]);
       // A copy never inherits the source's public link (#1135).
       expect(localDuplicate.public_link).toBeNull();
+      // The server's copy starts at version 1 whatever the source's (#1284).
+      expect(localDuplicate.version).toBe(1);
       expect(localDuplicate.labels).toEqual(sourceTextNote.labels);
 
       expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), localDuplicate);
@@ -1919,7 +1523,7 @@ describe('useNotes hooks', () => {
           expect.objectContaining({ text: 'Buy eggs', position: 1, completed: false }),
         ],
       });
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), converted, expect.objectContaining({ serverSnapshot: true }));
+      expect(mockNoteQueries.saveNoteInTx).toHaveBeenCalledWith(expect.anything(), converted, true);
     });
 
     it('promotes a leading heading to the list title instead of an item', async () => {

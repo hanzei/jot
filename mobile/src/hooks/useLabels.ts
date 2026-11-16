@@ -14,9 +14,8 @@ import {
   getLocalLabelCounts,
   getLocalNote,
   generateClientLabelId,
-  isNotePendingCreate,
 } from '../db/noteQueries';
-import { enqueueOperation, rethrowIfNotQueueable, saveServerNotes, saveServerResponseNote, saveServerLabels, getPendingLabelIds } from '../db/syncQueue';
+import { enqueueOperation, hasQueuedWriteForNote, rethrowIfNotQueueable, saveServerNotes, saveServerResponseNote, saveServerLabels, getPendingLabelIds } from '../db/syncQueue';
 import { labelKey, noteKey } from '../db/queueKeys';
 import { snapshotMark } from '../db/snapshotGate';
 import { isClosedDatabaseError } from '../db/errors';
@@ -293,8 +292,9 @@ export function useAddLabelToNote() {
       // queued create drains FIFO before this label op, so queue rather than
       // calling online against a note the server doesn't know yet (a 404 would
       // surface as an error instead of syncing).
-      const pendingCreate = await isNotePendingCreate(db, noteId);
-      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
+      // Any other queued write to the note orders it the same way (spec §8.2).
+      const queuedBehind = await hasQueuedWriteForNote(db, noteId);
+      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
         try {
           const updatedNote = await jot.notes.addLabel(noteId, trimmed);
           await saveServerResponseNote(db, updatedNote);
@@ -347,8 +347,9 @@ export function useRemoveLabelFromNote() {
       // An offline-created note (#475) drains its create FIFO before this label
       // op, so queue rather than calling online against a note the server doesn't
       // know yet.
-      const pendingCreate = await isNotePendingCreate(db, noteId);
-      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
+      // Any other queued write to the note orders it the same way (spec §8.2).
+      const queuedBehind = await hasQueuedWriteForNote(db, noteId);
+      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
         try {
           const updatedNote = await jot.notes.removeLabel(noteId, labelId);
           await saveServerResponseNote(db, updatedNote);

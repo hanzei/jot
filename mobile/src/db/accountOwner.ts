@@ -1,6 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { withSerializedTransaction } from './transaction';
 import { deleteFileIfExists } from '../utils/fs';
+import { clearOwnVersionSteps } from './ownVersions';
 
 /**
  * Account ownership of a server's local database (issue #1264, spec §8.6).
@@ -93,6 +94,7 @@ export async function claimLocalData(db: SQLiteDatabase, userId: string): Promis
   });
   if (wiped.files === null) return false;
   deleteUploadFiles(wiped.files);
+  clearOwnVersionSteps(db);
   console.info('Local data belonged to another account; wiped it before sign-in.');
   return true;
 }
@@ -104,6 +106,7 @@ export async function wipeLocalData(db: SQLiteDatabase): Promise<void> {
     wiped.files = await wipeRows(db, NO_OWNER);
   });
   deleteUploadFiles(wiped.files);
+  clearOwnVersionSteps(db);
 }
 
 /**

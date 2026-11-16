@@ -95,10 +95,10 @@ does not set it to `false`.
 
 | Reader | While `false` |
 |---|---|
-| Writes (`isOnlineWriteAllowed`) | Commit locally and enqueue without trying the network. |
+| Write hooks not yet on the outbox (`isOnlineWriteAllowed`) | Commit locally and enqueue without trying the network. Outbox writes (§4.1) never read it. |
 | Queue drain (`performDrain`) | Returns without sending and without rescheduling. |
 | Read sync (`retrySync`) | Aborts with `SyncAbortedError('unreachable')`. |
-| Note editor exit, share-sheet user search, pending-action indicator, export and public-link sections | Leave without awaiting the save, search cached users, skip the pending bar, disable the online-only action. |
+| Share-sheet user search, pending-action indicator, export and public-link sections | Search cached users, skip the pending bar, disable the online-only action. |
 
 **Re-arm guarantee.** While the flag is `false` and the device is online, it
 turns back on within one SSE keepalive interval (30 s) if the stream is open.
@@ -117,9 +117,15 @@ parks: its backoff chain ends there. A flip from `false` to `true` resumes a
 parked drain, and does nothing when no drain parked. Anything that schedules or
 runs a drain itself clears the park, so the flip never shortcuts a pending
 backoff timer and never drains past the failure cap. The flip also keeps the
-failure count, so a write that keeps failing still reaches the cap. A write
-queued while a drain runs requests a rerun, so the finishing drain cannot strand
-it by clearing that write's pending timer.
+failure count, so a write that keeps failing still reaches the cap. So does a
+new write: every save enqueues whatever the connectivity (§4.1), so it says
+nothing about the server coming back. It leaves a pending debounce or backoff
+timer alone, and resets the count only once retries have paused at the cap.
+Only a row the pass loaded and left queued makes it a stall (`leftBehind`): a
+save queued while the pass ran is new work, drained by the rerun without
+charging the count. A
+write queued while a drain runs requests a rerun, so the finishing drain cannot
+strand it by clearing that write's pending timer.
 
 **Reconnect owns the drain while it runs.** `handleReconnect` re-arms the flag
 itself and drains after revalidating the session. While it is in progress, any
@@ -129,9 +135,11 @@ revalidation; the reconnect's own drain covers them.
 
 **Known cost.** If the API times out while the SSE stream stays healthy (an
 overloaded server, a proxy timing out only API routes), each keepalive re-arms
-the flag and the next write pays one `WRITE_REQUEST_TIMEOUT_MS` before falling
-back to the queue: at most one stalled write per keepalive interval, against
-syncing stopping outright. The drain's failure cap still bounds the replays.
+the flag and the next request pays its timeout: a drain's replay, or the
+online attempt of a write hook not yet on the outbox (§4.1), which then falls
+back to the queue. That is at most one stalled request per keepalive interval,
+against syncing stopping outright. Nothing the user waits on stalls: an outbox
+write has already returned. The drain's failure cap still bounds the replays.
 Read syncs that aborted while the flag was `false` are not re-run on the flip;
 the open stream kept delivering live events meanwhile, and a full resync on
 every flip would repeat an expensive pull every keepalive in exactly that
@@ -173,24 +181,44 @@ mode" for the write paths.
 
 | Class | Examples | Local fallback? | Correct behavior |
 |---|---|---|---|
-| **Writes** | note/item/label create·update·delete, share, reorder | Yes (queue) | Optimistic local commit + enqueue, return immediately. Gate the network attempt on `isOnlineWriteAllowed(isConnected)`. Roll back only on a *permanent* rejection. |
+| **Writes** | note/item/label create·update·delete, share, reorder | Yes (queue) | Commit the local edit and its queue row in one transaction, return immediately; the drain sends it (§4.1). |
 | **Reads** | note list, note body, labels | Yes (cached data) | Serve local cache immediately; refresh in the background with bounded retries; never block load/refresh on the network. |
 | **Auth / one-shot** | login, register, logout, server switch, PAT create/revoke, public link create·re-time·revoke | No | Finite timeout — the longer `DEFAULT_REQUEST_TIMEOUT_MS`, since auth is excluded from the short write budget — + visible pending state + honest error. Optimistic where the local outcome is authoritative (logout). |
 | **Uploads** | note images, profile icon | Partial (image queue for note images) | Finite timeout (never `0`), cancellable, fall back to the upload queue where one exists. |
 
 ### 4.1 Writes — never block, ever
 
-- Commit optimistically to local state and the DB, enqueue for replay, return.
-  The UI reflects the change instantly regardless of connectivity.
-- Attempt the network only when `isOnlineWriteAllowed(isConnected)` is true
-  *and the note has no queued op* (§8.2);
-  otherwise skip straight to the queue. On a *transient* online failure, catch and fall through
-  to the same queue path (`rethrowIfNotQueueable` draws the transient/permanent
-  line).
-- Surface *permanent* failures (validation 4xx, conflict 409) distinctly and
-  immediately — they are real errors, not "saved, syncing." *Transient* failures
-  are invisible to the user beyond the ambient "syncing" state.
+**Every write commits its local edit and its queue row in one transaction. The
+drain is the only code that sends writes** (a transactional outbox, #1284).
+
+- A write hook calls `enqueueWrite(db, { localApply, op })` (`src/db/syncQueue.ts`):
+  one `withSerializedTransaction` applies the edit to SQLite and inserts the
+  `sync_queue` row with its keys, then the hook returns. It makes no network
+  call, whatever the connectivity. The UI reflects the change instantly.
+- Enqueueing kicks the drain (`subscribeToEnqueue`, debounced by
+  `ENQUEUE_DRAIN_DEBOUNCE_MS` in `src/store/OfflineContext.tsx` to coalesce a
+  burst). The drain's own gates decide whether to send now (§3.1, §7).
+- A *permanent* rejection is reported later, through the failed-changes flow
+  (§8.4): the drain dead-letters the op and badges the note. It is never an
+  error from the action itself. *Transient* failures are invisible beyond the
+  ambient "syncing" state.
+- Local mode keeps the local edit and writes no queue row: there is no server
+  to send it to.
 - Replays must be idempotent (see §8).
+
+**Migration.** The outbox replaces the earlier pattern, where a hook called the
+server itself while `isOnlineWriteAllowed()` held and queued only after a
+transient failure. `useUpdateNote` (and so every save from the note editor) is
+on the outbox; the other write hooks still follow the earlier pattern until
+they are converted. Meanwhile those hooks go online only when the note has no
+queued write (`hasQueuedWriteForNote`: a queued op that writes it, or a pending
+create), so they cannot overtake a queued edit (§8.2); on a transient failure
+they fall through to the queue (`rethrowIfNotQueueable` draws the
+transient/permanent line), and a permanent one is surfaced at once.
+
+The outbox reverses the decision in #1261 to keep the online path and gate it
+per note: with the online path gone, the gate, the fallback copies of each
+local apply, and the in-flight bookkeeping go with it.
 
 ### 4.2 Reads — serve stale, refresh quietly
 
@@ -256,21 +284,21 @@ mode" for the write paths.
 ## 5. Timeouts
 
 - **Finite and tiered. Never `timeout: 0`.**
-- **Writes**: the short budget (`WRITE_REQUEST_TIMEOUT_MS`, currently 5 s) —
-  short *because* a local fallback is waiting; the timeout is just "how long
-  before we queue it." Applied to POST/PATCH/DELETE by the request interceptor
-  in `src/api/client.ts` (multipart + auth excluded).
-- **Queued-write replays**: a longer budget (`QUEUED_WRITE_TIMEOUT_MS` in
-  `src/db/syncQueue.ts`, currently 30 s), passed explicitly so the interceptor
-  leaves it alone. A replay has no fallback to hurry toward — it just stays
-  queued — and a replay that times out while the server answers is charged
-  toward dead-lettering (§7, Queue liveness), so the short online budget would
-  dead-letter a large write on a slow but working link.
+- **Queued-write replays**: `QUEUED_WRITE_TIMEOUT_MS` in `src/db/syncQueue.ts`,
+  currently 30 s, passed explicitly so the request interceptor leaves it alone.
+  A replay has no fallback to hurry toward — it just stays queued — so the
+  budget is generous enough for a large write on a slow but working link. It
+  is the only timeout an outbox write (§4.1) ever has.
+- **Online writes of the hooks not yet on the outbox**: the short budget
+  (`WRITE_REQUEST_TIMEOUT_MS`, currently 5 s), applied to POST/PATCH/DELETE by
+  the request interceptor in `src/api/client.ts` (multipart + auth excluded).
+  It is short only because a queue fallback is waiting, and goes away with the
+  last such hook.
 - **Reads / auth**: the longer default (`DEFAULT_REQUEST_TIMEOUT_MS`, currently
   15 s) — no fallback, and they can be legitimately slow.
 - The timeout is the **worst case**. In the common "server known-down" case,
-  `isServerReachable()` should make the code fall back *immediately*, not after
-  the timeout elapses.
+  `isServerReachable()` makes the drain and reads return at once instead of
+  waiting it out.
 
 ---
 
@@ -281,9 +309,7 @@ The user should always be able to answer three questions without doing anything:
 1. **Am I connected?** — one persistent, unobtrusive indicator (offline /
    reconnecting), not a modal.
 2. **Is my work safe?** — "saved locally" the instant they act, distinct from
-   "synced." They must never wonder whether a note survived. (One known
-   gap: an edit whose online request is still in flight when the app is
-   killed; §8.2.)
+   "synced." They must never wonder whether a note survived.
 3. **Did something fail to sync?** — a passive surface (the failed-note badge /
    sync-failures screen), not a blocking dialog.
 
@@ -390,9 +416,9 @@ handling and loop safety are two halves of the same system.)
 - Writes are **partial/field-level** where possible so a replayed op doesn't
   clobber fields another device changed concurrently.
 - Content edits are **version-guarded** (`base_version`); a 409 is *permanent*
-  (surface it), a network error is *transient* (queue it). This transient vs.
-  permanent split (`rethrowIfNotQueueable` / `isQueueableError`) is the same line
-  used everywhere else.
+  (a failed change, §8.4), a network error is *transient* (stays queued). The
+  drain draws this line with `isTransientHttpStatus`, as the online attempts of
+  the hooks not yet on the outbox do with `rethrowIfNotQueueable`.
 
 The rest of this section is about consistency: what the local copy of a note
 means, and which writes may change it. §3–§7 decide *when* to talk to the
@@ -416,32 +442,48 @@ edits the server has not confirmed yet.
 
 Writes to the same note reach the server in the order the user made them.
 
-- A write goes out online only when the note has **no queued op**. If it has
-  one, the write is queued behind it. This is the pending-create rule (#475)
-  applied to every queued op, not only a queued create.
-- The drain is the only sender of queued ops, in FIFO order per key (§7): an
-  op is sent only after every earlier queued op that touches the same note.
-- **At most one request per note is in flight**, counting online sends and the
-  drain's sends alike. A write made while another write to the same note is in
-  flight is queued, and the drain does not send an op for that note until the
-  in-flight request has finished. The "no queued op" check alone does not give
-  the order: two writes can both pass it while neither has a queue row.
-- A write that goes to the queue commits **its local edit and its queue row in
-  one transaction**. Committed separately, a snapshot that lands between the
-  two finds nothing queued and replaces the edit.
+- A write commits **its local edit and its queue row in one transaction**
+  (§4.1). Committed separately, a snapshot that lands between the two finds
+  nothing queued and replaces the edit, and a process kill between them leaves
+  an edit nothing will replay.
+- The drain is the only sender, in FIFO order per key (§7): an op is sent only
+  after every earlier queued op that touches the same note. With one drain
+  pass at a time, the drain has at most one request per note in flight.
+- A queue row stays until the drain has applied its response and deleted it in
+  one transaction (§8.3), so the note is protected from the moment the edit
+  commits until its outcome is in SQLite, across a restart too.
+- While some hooks still go online (§4.1, Migration), they do so only when the
+  note has no queued write; otherwise they queue behind it. A queue row covers
+  the drain's own request, so they cannot race a send already under way. The
+  reverse is still open: nothing tracks their own request while it is in
+  flight, so an outbox write queued meanwhile can be sent alongside it and the
+  two can land in either order. That gap closes when the last hook is
+  converted.
 
-Without this, a queued save replays after a newer online save and replaces it
-(the drain stamps the replay with the current local version, so the server
-accepts it), or the online save is sent with a version the replay has just made
-stale and is rejected as a conflict with itself.
+**The base of a queued content edit.** The row stores the `base_version` the
+editor was showing (#1277), not a value resolved when it is sent. An editor
+keeps that baseline while it is dirty, so a chain of saves from one editor can
+all carry the same base. The chain does not conflict with itself because of
+the own-version rule: when the drain lands a version-guarded edit sent at `b`
+and the server answers with `b` or `b + 1` (§8.3, `isOwnVersion`), the new
+version holds nothing but this device's edit, and in the same transaction the
+drain rebases every edit still queued for the note at base `b` onto it
+(`rebaseQueuedEdits`). Each step is also kept in memory, per server database
+since note ids are unique only within one server's data
+(`src/db/ownVersions.ts`): an edit queued afterwards from the same editor
+resolves its base through it at enqueue, and the drain resolves a stored base
+through it again when it sends, which covers the rows a running pass loaded
+before the rewrite. The record need not outlive the process: neither does an
+editor's baseline, and the rewritten rows do. A step only ever moves the
+version up. An offline duplicate starts at version 1 locally, like a create,
+since that is the version of the server's copy (§8.1); migration 15 resets the
+duplicates older builds queued with their source's version. An edit based on any other version is sent as it is, so a real
+conflict still gets its 409. Merging queued edits at enqueue (#1268) would
+make the chain one request; until then the rebase is what keeps it apart from
+a conflict.
 
-**Known limit.** An online write has no queue row while its request is in
-flight. The in-flight marker lives in memory, so it protects the note (§8.3)
-only while the app runs. If the app is killed in that window, the edit is in
-SQLite but nothing will replay it, and the next server snapshot replaces it. Closing this means
-writing the queue row in the same transaction as the local edit and sending
-everything through the drain (a transactional outbox). That is not planned
-yet; revisit it when background sync is.
+A row queued by an app version from before the outbox has no stored base; the
+drain resolves it from the note's local version at send time, as it used to.
 
 ### 8.3 Applying server state
 
@@ -450,8 +492,8 @@ SSE event) and the response to this device's own write.
 
 **Snapshots**
 
-- A **protected** note is one with a queued op, a write in flight (§8.2), or
-  an unresolved failed change (§8.4). A snapshot is not applied to a protected note. The one exception is a
+- A **protected** note is one with a queued op (or, for a hook not yet on the
+  outbox, a write in flight; §8.2), or an unresolved failed change (§8.4). A snapshot is not applied to a protected note. The one exception is a
   field only the server owns and no local edit can touch (the public link).
   It does not extend to a note skipped as older than this device's own write
   (below): that write may be the link change itself.
@@ -495,6 +537,10 @@ SSE event) and the response to this device's own write.
   later edit queued between the two would otherwise be replaced by the
   response. This relies on §8.2: an edit and its queue row commit together, so
   the check cannot see an edit without its row.
+- In the drain, that transaction also **deletes the op's queue row** and
+  rebases the note's queued edits (§8.2). There is no moment where a write has
+  landed but neither its row nor its applied response records it. A share
+  state that needs a follow-up GET is fetched before the transaction opens.
 
 **Convergence.** After a drain that sent anything, pull the notes it touched.
 The device does not receive the SSE echo of its own writes, so without the pull
@@ -559,10 +605,10 @@ its own edit times. Merging (§8.5) therefore loses nothing history would keep.
 
 | Rule | Issue |
 |---|---|
-| §8.2 a write to a note with a queued op or a write in flight is queued behind it; local edit and queue row commit together | #1261 |
+| §8.2 every write goes through the outbox; the hooks other than `useUpdateNote` still try the network first, gated on the note having no queued write | #1284 follow-up |
 | §8.4 protection lasts until the dead letter is resolved | #1263 |
 | §8.5 merging queued ops | #1268 |
-| §8.3 "take neither content nor version" while other ops are queued. Until queued ops are merged, a chain of queued edits to one note would conflict with itself, so the drain still adopts a response's version without its content when the version can only be its own write's: a create, or a version-guarded edit the server accepted at `base_version` or one above (`saveServerResponseNote`'s `ownVersion`). Remove the exception with #1268. | #1268 |
+| §8.3 "take neither content nor version" while other ops are queued. Until queued ops are merged, a chain of queued edits to one note would conflict with itself, so the drain still adopts a response's version without its content when the version can only be its own write's: a create, or a version-guarded edit the server accepted at `base_version` or one above (`saveServerResponseNote`'s `ownVersion`). An outbox edit no longer needs it (its rows are rebased, §8.2); a convert and a row from before the outbox still resolve their base from the local version. Remove the exception with #1268. | #1268 |
 
 ---
 
@@ -578,11 +624,13 @@ its own edit times. Merging (§8.5) therefore loses nothing history would keep.
 | Local note rows, snapshot and response writes (§8.1, §8.3) | `src/db/noteQueries.ts`, `src/db/syncQueue.ts` (`saveServerNote`, `saveServerResponseNote`, `getProtectedNoteIds`, `getSnapshotSkipNoteIds`) |
 | Failed-change review and resolution (§8.4) | `src/hooks/useSyncFailures.ts` |
 | Local-data ownership, logout wipe, unsynced count (§8.6) | `src/db/accountOwner.ts`, `src/store/AccountDataGate.tsx` (wired in `App.tsx`), `src/components/DrawerContent.tsx` |
+| Outbox write: local edit + queue row in one transaction (§4.1) | `src/db/syncQueue.ts` (`enqueueWrite`, `hasQueuedWriteForNote`) |
+| Own-version steps for queued content edits (§8.2) | `src/db/ownVersions.ts`, `rebaseQueuedEdits` in `src/db/syncQueue.ts` |
 | Sync queue + transient/permanent split + FIFO per key (§7) | `src/db/syncQueue.ts` (`rethrowIfNotQueueable`, `isQueueableError`, `isGlobalDrainFailure`, `drainQueue`, `MAX_ENTRY_DRAIN_ATTEMPTS`, `getSyncQueueStats`) |
 | What each queued op touches (`note:`/`label:`/`settings` keys, recorded at enqueue and kept by its dead letter); the protected set reads them | `src/db/queueKeys.ts` (`sync_queue_keys`, `dead_letter_keys`) |
 | Snapshot gate (own writes landed after a fetch started) | `src/db/snapshotGate.ts`, wired in `src/api/client.ts` |
 | Bounded read retries | `src/utils/retryWithBackoff.ts` (`retrySync`) |
-| Optimistic writes + offline fallback | `src/hooks/useNotes.ts`, `useLabels.ts`, `useNoteImages.ts` |
+| Write hooks (outbox and not yet converted) | `src/hooks/useNotes.ts`, `useLabels.ts`, `useNoteImages.ts` |
 | Local-first read queries | `src/hooks/useOfflineNotes.ts` |
 | SSE stream + reconnect | `src/api/events.ts` |
 | Catch-up resync signal on SSE reconnect | `src/store/resyncEvents.ts` (published by `src/hooks/useSSE.ts`) |
@@ -595,6 +643,9 @@ its own edit times. Merging (§8.5) therefore loses nothing history would keep.
 - **Blocking navigation/an action on a network flush** — the original
   unsaved-changes freeze; fixed for the note-editor exit in #693 by navigating
   immediately and flushing in the background when the server is unreachable.
+  Since #1284 the editor's saves go through the outbox, so the exit never
+  waits and its Retry/Discard prompt is gone: a rejected save is a failed
+  change on the note.
 - **`timeout: 0` on uploads** — infinite hang on a half-open server
   (note-image and profile-icon uploads); fixed in #695 by giving both a
   generous but finite timeout and, for note images, a cancel button on the

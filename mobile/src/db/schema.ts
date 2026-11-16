@@ -453,7 +453,16 @@ const migration14 = async (db: SQLiteDatabase): Promise<void> => {
   await addColumnIfMissing(db, 'pending_image_uploads', 'processing_errors', 'processing_errors INTEGER NOT NULL DEFAULT 0');
 };
 
-export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13, migration14];
+// Migration 15 (#1284): a queued content edit now stores the version it was
+// made against. An offline duplicate used to keep its source's version locally,
+// while the server's copy starts at 1, so an edit queued on it would conflict
+// with its own note. Every note still pending its create is at version 1 on the
+// server once that create lands.
+const migration15 = async (db: SQLiteDatabase): Promise<void> => {
+  await db.runAsync(`UPDATE notes SET version = 1 WHERE sync_state = 'pending'`);
+};
+
+export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13, migration14, migration15];
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   // Run PRAGMAs separately: sqlite3_exec (used by execAsync) stops on the

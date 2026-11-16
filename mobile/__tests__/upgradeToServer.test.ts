@@ -875,7 +875,7 @@ describe('configureMigrationApiClient', () => {
 // runMigrationDrainPass
 // ------------------------------------------------------------------
 
-const DRAIN_RESULT_EMPTY = { syncedNotes: [], discardedOperations: [], syncedSettings: false };
+const DRAIN_RESULT_EMPTY = { syncedNotes: [], discardedOperations: [], syncedSettings: false, leftBehind: 0 };
 
 describe('runMigrationDrainPass', () => {
   beforeEach(() => {

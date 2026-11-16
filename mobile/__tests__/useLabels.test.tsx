@@ -42,6 +42,7 @@ jest.mock('../src/db/noteQueries', () => {
   return {
     ...actual,
     saveNote: jest.fn(actual.saveNote),
+    saveNoteInTx: jest.fn(actual.saveNoteInTx),
     saveNotes: jest.fn(actual.saveNotes),
     renameLabelInLocalNotes: jest.fn(actual.renameLabelInLocalNotes),
     deleteLabelFromLocalNotes: jest.fn(actual.deleteLabelFromLocalNotes),
@@ -294,7 +295,7 @@ describe('useLabels write hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(mockJot.notes.addLabel).toHaveBeenCalledWith('n1', 'Work');
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), updatedNote, expect.objectContaining({ serverSnapshot: true }));
+      expect(mockNoteQueries.saveNoteInTx).toHaveBeenCalledWith(expect.anything(), updatedNote, true);
       // The label from the server response is persisted to the store so a newly
       // minted label shows in the drawer immediately (#691).
       expect(mockNoteQueries.upsertLabel).toHaveBeenCalledWith(
@@ -453,7 +454,7 @@ describe('useLabels write hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(mockJot.notes.removeLabel).toHaveBeenCalledWith('n1', 'l1');
-      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), sampleNote, expect.objectContaining({ serverSnapshot: true }));
+      expect(mockNoteQueries.saveNoteInTx).toHaveBeenCalledWith(expect.anything(), sampleNote, true);
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
 

@@ -7,10 +7,10 @@ import {
   getLocalNote,
   markLocalNoteDeleted,
   permanentDeleteLocalNote,
-  saveNote,
+  saveNoteInTx,
   saveServerSnapshotNotes,
   saveLabels,
-  reconcileLocalItems,
+  reconcileLocalItemsInTx,
   reconcileServerNotesScope,
   type ServerItemInput,
   markNoteSyncFailed,
@@ -34,7 +34,8 @@ import {
 import { withSerializedTransaction } from './transaction';
 import { rewriteLabelId, rewriteLabelKeys } from './labelIdRewrite';
 import { notesWrittenSince, recordWriteLanded, snapshotMark, type SnapshotMark } from './snapshotGate';
-import type { Label } from '@jot/shared';
+import { recordOwnVersionStep, resolveOwnBaseVersion } from './ownVersions';
+import type { Label, NoteShare } from '@jot/shared';
 
 export type QueueOperation =
   | 'create'
@@ -313,7 +314,8 @@ export function rethrowIfNotQueueable(err: unknown): void {
   }
 }
 
-type EnqueueListener = () => void;
+/** Called after a row is queued, with its operation (none for an image upload). */
+type EnqueueListener = (operation?: QueueOperation) => void;
 
 const enqueueListeners = new Set<EnqueueListener>();
 
@@ -336,10 +338,10 @@ export function subscribeToEnqueue(listener: EnqueueListener): () => void {
  * still wants to trigger OfflineContext's debounced drain like any other
  * freshly-queued write (issue #618).
  */
-export function notifyEnqueueListeners(): void {
+export function notifyEnqueueListeners(operation?: QueueOperation): void {
   for (const listener of enqueueListeners) {
     try {
-      listener();
+      listener(operation);
     } catch (err) {
       console.warn('Enqueue listener failed:', err);
     }
@@ -369,17 +371,63 @@ export async function insertQueueEntry(db: SQLiteDatabase, params: EnqueueParams
   await insertKeys(db, 'sync_queue_keys', result.lastInsertRowId, params);
 }
 
+/** Queue an op whose local edit the caller has already written: {@link enqueueWrite} with no local apply. */
 export async function enqueueOperation(db: SQLiteDatabase, params: EnqueueParams): Promise<void> {
+  await enqueueWrite(db, { localApply: async () => undefined, op: () => params });
+}
+
+/** One write through the outbox: see {@link enqueueWrite}. */
+export interface OutboxWrite<T> {
+  /** Applies the edit to SQLite. Runs inside the write's transaction; its result goes to `op`. */
+  localApply: () => Promise<T>;
+  /** The queue row that sends the edit, built in the same transaction from what `localApply` returned. */
+  op: (applied: T) => EnqueueParams;
+}
+
+/**
+ * The only way a converted write reaches the server (spec §4.1, §8.2, #1284):
+ * apply the edit to SQLite and insert its queue row in one transaction, then
+ * kick the drain. Nothing here touches the network; the drain sends the row.
+ *
+ * Committed together, a snapshot that lands between the two cannot find the
+ * edit without its row, and a process kill cannot leave an edit that nothing
+ * will replay. Local mode keeps the edit and writes no row: there is no server
+ * to send it to (#514). Resolves to what `localApply` returned.
+ */
+export async function enqueueWrite<T>(db: SQLiteDatabase, write: OutboxWrite<T>): Promise<T> {
   // Local mode has no server to sync to, so local writes are terminal the moment
-  // they land in SQLite (issue #514). Short-circuit before touching `sync_queue`
-  // so no ops ever accumulate there — and, by extension, nothing can dead-letter
-  // purely because a server is absent. The drain loop is also gated off in local
-  // mode (OfflineContext), so a stray queued op would otherwise sit pending forever.
-  if (isLocalModeActive()) {
-    return;
-  }
-  await withSerializedTransaction(db, () => insertQueueEntry(db, params));
-  notifyEnqueueListeners();
+  // they land in SQLite (#514): no row ever accumulates in `sync_queue`, and so
+  // nothing can dead-letter purely because a server is absent.
+  const queue = !isLocalModeActive();
+  let applied!: T;
+  let operation: QueueOperation | undefined;
+  await withSerializedTransaction(db, async () => {
+    applied = await write.localApply();
+    if (!queue) return;
+    const op = write.op(applied);
+    operation = op.operation;
+    await insertQueueEntry(db, op);
+  });
+  if (operation) notifyEnqueueListeners(operation);
+  return applied;
+}
+
+/**
+ * Whether a write to `noteId` must queue behind an earlier one rather than go
+ * online: the queue holds an op that writes the note, or its create has not
+ * landed. A converted write always queues, so this is only for the write hooks
+ * that still try the network first (#1284): sending past a queued op would
+ * reorder the note's writes (spec §8.2). A queue row stays until its response
+ * is applied, so this also covers a row the drain is sending.
+ */
+export async function hasQueuedWriteForNote(db: SQLiteDatabase, noteId: string): Promise<boolean> {
+  const row = await db.getFirstAsync<{ found: number }>(
+    `SELECT 1 AS found FROM sync_queue_keys WHERE key = ? AND read_only = 0
+     UNION ALL SELECT 1 FROM notes WHERE id = ? AND sync_state = 'pending'
+     LIMIT 1`,
+    [noteKey(noteId), noteId],
+  );
+  return row !== null;
 }
 
 export async function getPendingCount(db: SQLiteDatabase): Promise<number> {
@@ -542,6 +590,12 @@ export async function clearNoteSyncFailedIfResolved(
   noteId: string,
   exceptDeadLetterId?: number,
 ): Promise<void> {
+  // Nothing to clear on a note that is not flagged; skip the dead-letter scan.
+  const flagged = await db.getFirstAsync<{ failed: number }>(
+    `SELECT 1 AS failed FROM notes WHERE id = ? AND sync_state = 'failed'`,
+    [noteId],
+  );
+  if (flagged === null) return;
   if ((await getDeadLetteredNoteIds(db, exceptDeadLetterId)).has(noteId)) return;
   await clearNoteSyncFailed(db, noteId);
 }
@@ -762,6 +816,12 @@ export interface DrainResult {
   discardedOperations: DiscardedOperation[];
   /** True if at least one `updateSettings` operation was successfully drained. */
   syncedSettings: boolean;
+  /**
+   * Entries this pass loaded that are still queued: held back, failed
+   * transiently, or not reached after a connectivity stop. Rows queued while
+   * the pass ran are not counted; they are new work, not a stall (#1284).
+   */
+  leftBehind: number;
 }
 
 /** A dead-lettered op as stored in the `dead_letter` table (see issue #492). */
@@ -923,20 +983,6 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
   let stoppedOnConnectivity = false;
   let syncedSettings = false;
 
-  // Applies a replayed write's note response (see saveServerResponseNote).
-  // Returns the note when it was saved in full.
-  const applyResponse = async (
-    entryId: number,
-    data: unknown,
-    ownVersion: boolean,
-  ): Promise<Note | null> => {
-    if (!hasStringId(data)) return null;
-    const note = data as Note;
-    if (!(await saveServerResponseNote(db, note, { exceptEntryId: entryId, ownVersion }))) return null;
-    settledThisEntry.add(note.id);
-    return note;
-  };
-
   for (const entry of entries) {
     settledThisEntry = new Set<string>();
     // Declared outside the try so the catch can dead-letter using the endpoint
@@ -948,9 +994,21 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
     // not retry or dead-letter the entry (issue #714 — mirrors imageUploadQueue's
     // "the upload already landed, so remove the queue entry first").
     let requestLanded = false;
+    // The note this replay version-guarded, and the version its response
+    // reports, when that version is its own (see rebaseQueuedEdits).
+    let ownVersionStep: OwnVersionStep | null = null;
     // The notes this entry writes, and every key it touches.
     const targets = (): readonly string[] => noteIdsByEntry.get(entry.id) ?? [];
     const keys = keysByEntry.get(entry.id) ?? [];
+    // Deletes the landed entry and rebases the edits behind it, inside the
+    // caller's transaction. A note this response settled has no other queued
+    // op, so only the in-memory step is left to record.
+    const removeLandedEntry = async (): Promise<void> => {
+      await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
+      if (!ownVersionStep) return;
+      if (settledThisEntry.has(ownVersionStep.noteId)) recordOwnVersionStep(db, ownVersionStep.noteId, ownVersionStep.from, ownVersionStep.to);
+      else await rebaseQueuedEdits(db, ownVersionStep);
+    };
     try {
       // If this op targets a note whose create was just dead-lettered, replaying
       // it against a note the server never got is pointless — drop it (the note
@@ -979,114 +1037,146 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
 
       // The base_version this replay was sent with, if it was version-guarded.
       let baseVersion: number | null = null;
+      let response: { data?: unknown } | undefined;
       if (entry.method === 'POST') {
         if (entry.operation === 'convertNoteType' && body) {
           // Resolve base_version from the note's current local version at replay
-          // time, matching `update` (#489): a chain of offline edits to one note
-          // (e.g. a scalar update followed by a convert) then replays each op
-          // against the version the previous one left behind instead of the
-          // stale value captured when this op was first queued.
+          // time, matching a legacy `update` row (#489): a chain of offline edits
+          // to one note (e.g. a scalar update followed by a convert) then replays
+          // each op against the version the previous one left behind instead of
+          // the stale value captured when this op was first queued.
           const noteId = targets()[0];
           baseVersion = noteId ? await getLocalNoteVersion(db, noteId) : null;
           if (baseVersion !== null) body.base_version = baseVersion;
         }
-        const response = await api.post(endpoint, body, REPLAY_REQUEST_CONFIG);
-        requestLanded = true;
-
-        if (entry.operation === 'create' || entry.operation === 'duplicate') {
-          // The server keeps the client-supplied `id`, so the id is stable —
-          // adopt the canonical note (server item ids etc.) and clear the
-          // pending-create marker. Nobody else can have
-          // edited a note the server only just created, so its version is ours.
-          const clientId = body?.id as string | undefined;
-          const data = response?.data;
-          if (clientId && hasStringId(data)) {
-            const serverNote = await applyResponse(entry.id, data, true);
-            if (serverNote) syncedNotes.push(serverNote);
-            await clearNotePendingCreate(db, clientId);
-          }
-        } else if (entry.operation === 'addLabelToNote') {
-          // The server returns the updated note; persist it so labels_json
-          // reflects the server-assigned label id (replacing any local id).
-          // Labels are not version-guarded, so its version may carry a
-          // collaborator's edit.
-          await applyResponse(entry.id, response?.data, false);
-        } else if (
-          entry.operation === 'setItemsCompleted' ||
-          entry.operation === 'deleteCompletedItems'
-        ) {
-          // endpoints: .../items/set-completed and
-          // .../items/delete. Both return the note's full, authoritative
-          // item list (the delete endpoint's is the post-delete remainder), so
-          // reconcile every field and prune any local row absent from it —
-          // not just patch `completed` on the rows present — otherwise a
-          // stale local row (e.g. leftover parent_id/position from an earlier
-          // partial sync, or one deleted by another session while this
-          // device was offline) never gets corrected.
-          await reconcileItemsFromResponse(db, endpoint.split('/')[2]!, response?.data, entry.id);
-        } else if (entry.operation === 'share') {
-          // Share returns 204 (no body) and the optimistic local note carries a
-          // synthetic `optimistic_<userId>` share row; re-fetch the canonical note
-          // so shared_with reflects the server-assigned share ids.
-          await reconcileNoteFromServer(db, targets()[0]);
-        } else if (entry.operation === 'convertNoteType') {
-          // The server returns the full converted note (authoritative version,
-          // updated_at, and item ids); persist it rather than trusting the local
-          // optimistic apply to still be in sync after other edits may have
-          // queued in between.
-          await applyResponse(entry.id, response?.data, isOwnVersion(response?.data, baseVersion));
-        }
+        response = await api.post(endpoint, body, REPLAY_REQUEST_CONFIG);
       } else if (entry.method === 'PATCH') {
         const updateNoteID =
           entry.operation === 'update' ? targets()[0] : undefined;
         if (updateNoteID !== undefined && body && ('content' in body || 'title' in body)) {
-          // Resolve the optimistic-concurrency base from the note's current local
-          // version at replay time. applyResponse below advances that version
-          // after each drained edit, so a chain of offline edits to one note
-          // replays against the right base even across separate drains; a note
-          // changed on another device keeps its stale local version (it's
-          // protected from server overwrite while queued, #487), so a real
-          // conflict is still caught (#489).
-          baseVersion = await getLocalNoteVersion(db, updateNoteID);
-          if (baseVersion !== null) body.base_version = baseVersion;
+          if (typeof body.base_version === 'number') {
+            // The version the editor was showing, stored at enqueue (#1277,
+            // #1284), advanced past this device's own edits that landed since
+            // (rebaseQueuedEdits rewrites the row too, for after a restart).
+            baseVersion = resolveOwnBaseVersion(db, updateNoteID, body.base_version);
+            body.base_version = baseVersion;
+          } else {
+            // A row queued before edits stored their base: resolve it from the
+            // note's local version at replay time, as the drain used to (#489).
+            // applyResponse below advances that version after each drained
+            // edit, so a chain of such edits replays against the right base.
+            baseVersion = await getLocalNoteVersion(db, updateNoteID);
+            if (baseVersion !== null) body.base_version = baseVersion;
+          }
         }
-        const response = await api.patch(endpoint, body, REPLAY_REQUEST_CONFIG);
-        requestLanded = true;
-        if (entry.operation === 'updateSettings') {
-          syncedSettings = true;
-        } else if (updateNoteID !== undefined) {
-          // A per-user change (pinned, color, …) is not version-guarded, so its
-          // response version may include a collaborator's edit this device has
-          // not seen; adopting it would let the next content edit pass the
-          // base_version check and overwrite that edit (#1262).
-          await applyResponse(entry.id, response?.data, isOwnVersion(response?.data, baseVersion));
-        }
+        response = await api.patch(endpoint, body, REPLAY_REQUEST_CONFIG);
       } else if (entry.method === 'DELETE') {
-        const response = await api.delete(endpoint, REPLAY_REQUEST_CONFIG);
-        requestLanded = true;
-        if (entry.operation === 'removeLabelFromNote') {
-          // The server returns the updated note; persist it so the local
-          // labels_json drops the removed label and stays consistent.
-          await applyResponse(entry.id, response?.data, false);
-        } else if (entry.operation === 'unshare') {
-          // Unshare returns 204 (no body); re-fetch so shared_with/is_shared
-          // reflect the server state after the removal.
-          await reconcileNoteFromServer(db, targets()[0]);
-        }
+        response = await api.delete(endpoint, REPLAY_REQUEST_CONFIG);
       }
+      requestLanded = true;
+      const data = response?.data;
+      const responseNote = hasStringId(data) ? data as Note : null;
+
+      // A version-guarded write (only an update or a convert sets baseVersion)
+      // the server accepted at baseVersion: its version is this device's own,
+      // so content edits queued against the same base are rebased onto it (#1284).
+      if (baseVersion !== null && responseNote && isOwnVersion(responseNote, baseVersion)) {
+        ownVersionStep = { noteId: responseNote.id, from: baseVersion, to: responseNote.version };
+      }
+
+      // Share and unshare return 204: their share state needs a GET, which
+      // must not run inside the landing transaction.
+      const shares = entry.operation === 'share' || entry.operation === 'unshare'
+        ? await fetchNoteShares(targets()[0])
+        : null;
+
+      // Applies a replayed write's note response (see saveServerResponseNote).
+      const applyResponse = async (ownVersion: boolean): Promise<Note | null> => {
+        if (!responseNote) return null;
+        if (!(await saveServerResponseNoteInTx(db, responseNote, { exceptEntryId: entry.id, ownVersion }))) return null;
+        settledThisEntry.add(responseNote.id);
+        return responseNote;
+      };
+
+      // The response and the row's removal commit together (spec §8.3, #1284):
+      // there is no moment where the write has landed but neither its row nor
+      // its result protects the note.
+      let syncedNote: Note | null = null;
+      await withSerializedTransaction(db, async () => {
+        switch (entry.operation) {
+          case 'create':
+          case 'duplicate': {
+            // The server keeps the client-supplied `id`, so the id is stable —
+            // adopt the canonical note (server item ids etc.) and clear the
+            // pending-create marker. Nobody else can have
+            // edited a note the server only just created, so its version is ours.
+            const clientId = body?.id as string | undefined;
+            if (clientId && responseNote) {
+              syncedNote = await applyResponse(true);
+              await clearNotePendingCreate(db, clientId);
+            }
+            break;
+          }
+          case 'addLabelToNote':
+          case 'removeLabelFromNote':
+            // The server returns the updated note; persist it so labels_json
+            // reflects the server's label ids. Labels are not version-guarded,
+            // so its version may carry a collaborator's edit.
+            await applyResponse(false);
+            break;
+          case 'setItemsCompleted':
+          case 'deleteCompletedItems':
+            // endpoints: .../items/set-completed and
+            // .../items/delete. Both return the note's full, authoritative
+            // item list (the delete endpoint's is the post-delete remainder), so
+            // reconcile every field and prune any local row absent from it —
+            // not just patch `completed` on the rows present — otherwise a
+            // stale local row (e.g. leftover parent_id/position from an earlier
+            // partial sync, or one deleted by another session while this
+            // device was offline) never gets corrected.
+            await reconcileItemsFromResponseInTx(db, endpoint.split('/')[2]!, data, entry.id);
+            break;
+          case 'share':
+          case 'unshare':
+            if (shares) await updateLocalNoteShares(db, shares.id, shares);
+            break;
+          case 'convertNoteType':
+            // Returns the full converted note (authoritative version,
+            // updated_at, and item ids).
+            await applyResponse(ownVersionStep !== null);
+            break;
+          case 'update':
+            // A per-user change (pinned, color, …) is not version-guarded, so its
+            // response version may include a collaborator's edit this device has
+            // not seen; adopting it would let the next content edit pass the
+            // base_version check and overwrite that edit (#1262).
+            if (targets()[0] !== undefined) await applyResponse(ownVersionStep !== null);
+            break;
+          case 'updateSettings':
+            syncedSettings = true;
+            break;
+          default:
+            break;
+        }
+
+        await removeLandedEntry();
+
+        // The write landed: if this note was carrying a prior failure that no
+        // dead letter still records, clear it so it resumes syncing from the
+        // server normally (#492). An unresolved dead letter keeps it (#1263).
+        for (const noteId of targets()) {
+          await clearNoteSyncFailedIfResolved(db, noteId);
+        }
+      });
+      if (syncedNote) syncedNotes.push(syncedNote);
 
       // The API client already recorded this landing from the request, except
       // for a removeImage replay: it sends no body, so its note id is only
       // here (#1265). Recording a landing twice would skip a snapshot fetched
       // between the two.
       if (entry.operation === 'removeImage') recordWriteLanded(targets());
-      await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
 
-      // The write landed: if this note was carrying a prior failure that no
-      // dead letter still records, clear it so it resumes syncing from the
-      // server normally (#492). An unresolved dead letter keeps it (#1263).
       for (const noteId of targets()) {
-        await clearNoteSyncFailedIfResolved(db, noteId);
         // A trashed or deleted note has nothing left to pull; one this
         // response settled is already current.
         const gone = entry.operation === 'delete' || entry.operation === 'permanentDelete';
@@ -1103,7 +1193,20 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // reserved for failures *before* the request lands (issue #714).
         console.warn(`Queue entry id=${entry.id} landed server-side; post-response reconciliation failed:`, err);
         if (entry.operation === 'removeImage') recordWriteLanded(targets());
-        await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
+        // The landing transaction rolled back, rebase and create bookkeeping
+        // included: the edits queued at this write's base would otherwise replay
+        // against a version its own landing has left, and a create would stay
+        // pending with nothing left to clear it. Pull the notes afterwards for
+        // the response this entry could not apply.
+        await withSerializedTransaction(db, async () => {
+          await removeLandedEntry();
+          if (entry.operation === 'create' || entry.operation === 'duplicate') {
+            for (const noteId of targets()) await clearNotePendingCreate(db, noteId);
+          }
+        });
+        if (entry.operation !== 'delete' && entry.operation !== 'permanentDelete') {
+          for (const noteId of targets()) pullNoteIds.add(noteId);
+        }
         continue;
       }
 
@@ -1307,7 +1410,14 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
     await pullTouchedNotes(db, pullNoteIds);
   }
 
-  return { syncedNotes, discardedOperations, syncedSettings };
+  // Ids are AUTOINCREMENT, never reused: a row above the last one this pass
+  // loaded was queued while it ran.
+  const lastLoadedId = entries.length > 0 ? entries[entries.length - 1]!.id : 0;
+  const leftRow = await db.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) AS count FROM sync_queue WHERE id <= ?',
+    [lastLoadedId],
+  );
+  return { syncedNotes, discardedOperations, syncedSettings, leftBehind: leftRow?.count ?? 0 };
 }
 
 /**
@@ -1324,9 +1434,7 @@ export const MAX_POST_DRAIN_NOTE_PULLS = 20;
  * in that range has no collaborator edit folded into it. Without a guard the
  * server applied the write on top of whatever version it held.
  */
-function isOwnVersion(data: unknown, baseVersion: number | null): boolean {
-  if (baseVersion === null || !hasStringId(data)) return false;
-  const { version } = data as Note;
+function isOwnVersion({ version }: Note, baseVersion: number): boolean {
   return version === baseVersion || version === baseVersion + 1;
 }
 
@@ -1421,8 +1529,8 @@ export interface ServerResponseOptions {
  *   made while the note was protected from snapshots. Its completed flags still
  *   go through localCompletedWrites like any server snapshot.
  *
- * The checks and the write share one transaction (saveNote's `guard`), so a
- * write serialized behind it cannot slip in between.
+ * The checks and the write share one transaction, so a write serialized
+ * behind it cannot slip in between.
  */
 export async function saveServerResponseNote(
   db: SQLiteDatabase,
@@ -1430,23 +1538,30 @@ export async function saveServerResponseNote(
   options: ServerResponseOptions = {},
 ): Promise<boolean> {
   let saved = false;
-  await saveNote(db, note, {
-    // No keepLocalCompletedIds: the guard only lets the save through when no
-    // other op, a queued completed op included, is waiting for the note.
-    serverSnapshot: true,
-    guard: async () => {
-      if (await hasUnresolvedFailure(db, note.id, options.exceptDeadLetterId)) return false;
-      if (await hasOtherQueuedOpForNote(db, note.id, options.exceptEntryId)) {
-        if (options.ownVersion && typeof note.version === 'number') {
-          await setLocalNoteVersion(db, note.id, note.version);
-        }
-        return false;
-      }
-      saved = true;
-      return true;
-    },
+  await withSerializedTransaction(db, async () => {
+    saved = await saveServerResponseNoteInTx(db, note, options);
   });
   return saved;
+}
+
+/** {@link saveServerResponseNote} without its own transaction: the caller runs it inside one. */
+async function saveServerResponseNoteInTx(
+  db: SQLiteDatabase,
+  note: Note,
+  options: ServerResponseOptions,
+): Promise<boolean> {
+  if (await hasUnresolvedFailure(db, note.id, options.exceptDeadLetterId)) return false;
+  if (await hasOtherQueuedOpForNote(db, note.id, options.exceptEntryId)) {
+    if (options.ownVersion && typeof note.version === 'number') {
+      await setLocalNoteVersion(db, note.id, note.version);
+    }
+    return false;
+  }
+  // Server snapshot semantics for the completed flags, but no
+  // keepLocalCompletedIds: the check above only lets the save through when no
+  // other op, a queued completed op included, is waiting for the note.
+  await saveNoteInTx(db, note, true);
+  return true;
 }
 
 /**
@@ -1462,46 +1577,80 @@ export async function reconcileServerItems(
   items: ServerItemInput[],
   options: { write?: number; exceptEntryId?: number } = {},
 ): Promise<void> {
+  await withSerializedTransaction(db, () => reconcileServerItemsInTx(db, noteId, items, options));
+}
+
+/** {@link reconcileServerItems} without its own transaction: the caller runs it inside one. */
+async function reconcileServerItemsInTx(
+  db: SQLiteDatabase,
+  noteId: string,
+  items: ServerItemInput[],
+  options: { write?: number; exceptEntryId?: number },
+): Promise<void> {
   const queued = await getQueuedCompletedItemIds(db, noteId, options.exceptEntryId);
-  await reconcileLocalItems(db, noteId, items, options.write ?? null, queued);
+  await reconcileLocalItemsInTx(db, noteId, items, options.write ?? null, queued);
 }
 
 /**
- * Reconciles local item rows against a server-authoritative full item list
- * returned during queue drain (set-completed/delete): upserts
- * every returned item and prunes any local row absent from it. `items` is
- * `unknown` since it's a raw response body; anything other than an array
- * (e.g. a malformed/legacy response) is skipped rather than wiping the note's
- * items.
+ * {@link reconcileServerItems} for a drain's response, inside the transaction
+ * that deletes its queue entry. `items` is `unknown` since it's a raw response
+ * body; anything other than an array (e.g. a malformed/legacy response) is
+ * skipped rather than wiping the note's items.
  */
-async function reconcileItemsFromResponse(db: SQLiteDatabase, noteId: string, items: unknown, entryId: number): Promise<void> {
+async function reconcileItemsFromResponseInTx(db: SQLiteDatabase, noteId: string, items: unknown, entryId: number): Promise<void> {
   if (!Array.isArray(items)) return;
-  await reconcileServerItems(db, noteId, items as NoteItem[], { exceptEntryId: entryId });
+  await reconcileServerItemsInTx(db, noteId, items as NoteItem[], { exceptEntryId: entryId });
 }
 
 /**
- * Re-fetch a note from the server and reconcile its share state during queue
- * drain. Used by share/unshare ops, which return 204 (no body) yet leave the
- * local note holding an optimistic `shared_with` (a synthetic `optimistic_<userId>`
- * row, or a row the unshare removed): a GET reconciles it to the server-assigned
- * share ids. Only the share columns are written (not a full saveNote) so a content
- * edit still queued for the same note isn't clobbered (the reason
- * saveServerResponseNote holds back a response while later ops are queued).
- * Best-effort: a failed fetch leaves the optimistic state for the next
- * background sync to reconcile.
+ * Fetch a note's share state after a share/unshare replay. Both return 204 (no
+ * body) yet leave the local note holding an optimistic `shared_with` (a
+ * synthetic `optimistic_<userId>` row, or a row the unshare removed): the GET
+ * gives the server-assigned share ids, which the landing transaction writes.
+ * Only the share columns are written (not a full saveNote) so a content edit
+ * still queued for the same note isn't clobbered. Best-effort: a failed fetch
+ * resolves to null and leaves the optimistic state for the next background sync.
  */
-async function reconcileNoteFromServer(db: SQLiteDatabase, noteId: string | undefined): Promise<void> {
-  if (!noteId) return;
+async function fetchNoteShares(
+  noteId: string | undefined,
+): Promise<{ id: string; is_shared: boolean; shared_with: NoteShare[] } | null> {
+  if (!noteId) return null;
   try {
     const data: unknown = await jot.notes.getById(noteId);
-    if (hasStringId(data)) {
-      const note = data as Note;
-      await updateLocalNoteShares(db, note.id, {
-        is_shared: note.is_shared,
-        shared_with: note.shared_with ?? [],
-      });
-    }
+    if (!hasStringId(data)) return null;
+    const note = data as Note;
+    return { id: note.id, is_shared: note.is_shared, shared_with: note.shared_with ?? [] };
   } catch (err) {
     console.warn(`Failed to reconcile note id=${noteId} after share/unshare drain:`, err);
+    return null;
   }
+}
+
+/** A version-guarded edit sent at `from` that the server accepted as `to`: this device's own version. */
+interface OwnVersionStep {
+  noteId: string;
+  from: number;
+  to: number;
+}
+
+/**
+ * Rebase the content edits still queued for a note from `from` to `to`, after
+ * this device's own edit sent at `from` landed as `to` (spec §8.2, #1284). Each
+ * queued edit stores the version its editor showed; one that was based on the
+ * same text as the landed edit would otherwise be sent against a version the
+ * note has left, and conflict with the device's own write. An edit based on
+ * any other version is left alone: if that version is stale, the 409 is real.
+ * Runs in the landing transaction, so a restart cannot separate the two; the
+ * rest of a running pass resolves the same step through ownVersions.ts.
+ */
+async function rebaseQueuedEdits(db: SQLiteDatabase, { noteId, from, to }: OwnVersionStep): Promise<void> {
+  recordOwnVersionStep(db, noteId, from, to);
+  if (from === to) return;
+  await db.runAsync(
+    `UPDATE sync_queue SET body = json_set(body, '$.base_version', ?)
+     WHERE operation = 'update'
+       AND json_extract(body, '$.base_version') = ?
+       AND id IN (SELECT entry_id FROM sync_queue_keys WHERE key = ? AND read_only = 0)`,
+    [to, from, noteKey(noteId)],
+  );
 }

@@ -94,18 +94,25 @@ truth, and the network is a background reconciler. Rationale and code map:
   §3.2): a captive portal answers plain HTTP with a `200`. The `api` instance
   checks it for you; a request that bypasses it (SSE, a probe on its own axios
   call) must use `src/api/jotResponse.ts` itself.
-- **Writes never block.** Commit locally, enqueue, return. Gate the network
-  attempt on `isOnlineWriteAllowed()`. Roll back only on a *permanent*
-  rejection. Note-image uploads follow this too, via the offline upload queue.
+- **Writes go through the outbox** (spec §4.1). A write hook calls
+  `enqueueWrite`: the local edit and its queue row commit in one transaction,
+  and the hook returns without touching the network. The drain is the only
+  sender, and a permanent rejection surfaces later as a failed change, never as
+  an error from the action. Hooks not converted yet (all but `useUpdateNote`)
+  still try the network first: gated on `isOnlineWriteAllowed()` and on
+  `hasQueuedWriteForNote()` being false, rolling back only on a *permanent*
+  rejection. Convert, don't extend, that pattern. Note-image uploads use their
+  own offline upload queue.
 - **Reads serve the local cache immediately** and refresh in the background with
   bounded, backed-off retries (`retrySync`) that respect `isServerReachable()`.
 - **Auth and one-shot ops** (login, logout, PAT) may hit the network on the
   critical path, but only with a finite timeout and a visible pending state.
   Be optimistic where the local outcome is authoritative (logout clears locally,
   POSTs in the background).
-- **Timeouts are finite and tiered; never `timeout: 0`.** Writes use
-  `WRITE_REQUEST_TIMEOUT_MS`, queue replays `QUEUED_WRITE_TIMEOUT_MS`,
-  reads/auth `DEFAULT_REQUEST_TIMEOUT_MS`.
+- **Timeouts are finite and tiered; never `timeout: 0`.** Queue replays use
+  `QUEUED_WRITE_TIMEOUT_MS`, the only timeout an outbox write has; the online
+  attempts of unconverted hooks `WRITE_REQUEST_TIMEOUT_MS`; reads/auth
+  `DEFAULT_REQUEST_TIMEOUT_MS`.
 - **Feedback is ambient** (banners, failed-note badge), not spinners or dialogs
   per action. Distinguish transient (queued) from permanent failures.
 - **Recovery:** nothing that stops while the reachability flag is `false` may
@@ -121,11 +128,17 @@ What the device may believe after a sync (spec §8). These are the target; spec
 
 - **`version` and content move together.** Never store a server version without
   the content it belongs to, or the reverse.
-- **Writes to one note stay in order.** Send online only when the note has no
-  queued op and no write in flight; otherwise queue behind it. One request per
-  note at a time, the drain's included.
-- **A queued write commits its local edit and its queue row in one
-  transaction.**
+- **Writes to one note stay in order.** The drain sends them FIFO per key; an
+  unconverted hook goes online only when the note has no queued write, and
+  queues behind it otherwise. Its own in-flight request is not tracked, so an
+  outbox write can overtake it until that hook is converted.
+- **A write commits its local edit and its queue row in one transaction**
+  (`enqueueWrite`), and the drain applies the response and deletes the row in
+  one transaction.
+- **A queued content edit stores the `base_version` its editor showed.** When
+  the drain lands one as this device's own version, it rebases the edits
+  queued at the same base in that transaction (`rebaseQueuedEdits`); an edit
+  enqueued later resolves its base through `src/db/ownVersions.ts`.
 - **A protected note** (queued op, write in flight, or an unresolved failed
   change) takes no server content, from a snapshot or from the response to
   another write. Check and write in one transaction.

@@ -22,7 +22,6 @@ import type {
   ShareNoteRequest,
   ConvertToListCapViolation,
 } from '@jot/shared';
-import type { LocalNoteChanges } from '../db/noteQueries';
 import {
   saveNote,
   saveNotes,
@@ -34,7 +33,6 @@ import {
   updateLocalNote,
   generateClientNoteId,
   markNotePendingCreate,
-  isNotePendingCreate,
   getPendingCreateNoteIds,
   getLocalNotePositions,
   getNextLocalPinnedPosition,
@@ -48,10 +46,14 @@ import {
   upsertLabel,
 } from '../db/noteQueries';
 import { localCompletedWrites } from '../db/localCompletedWrites';
+import { resolveOwnBaseVersion } from '../db/ownVersions';
 import { labelKey, noteKey } from '../db/queueKeys';
 import {
   enqueueOperation,
+  enqueueWrite,
+  getPendingNoteIds,
   getQueuedCompletedItemIds,
+  hasQueuedWriteForNote,
   isQueueableError,
   reconcileServerItems,
   rethrowIfNotQueueable,
@@ -152,9 +154,9 @@ async function runLocalCompletedWrite(
   const write = localCompletedWrites.begin(op.priorById);
   try {
     await op.writeLocal();
-    // Queue instead of calling online while the note's create is still pending:
-    // it drains FIFO first (#475), and a direct call would 404 and drop the edit.
-    if (isOnlineWriteAllowed(isConnected) && !(await isNotePendingCreate(db, noteId))) {
+    // Queue behind any queued write to the note, its create included (#475): a
+    // direct call would 404 or overtake an earlier edit (spec §8.2).
+    if (isOnlineWriteAllowed(isConnected) && !(await hasQueuedWriteForNote(db, noteId))) {
       try {
         const serverItems = await op.send();
         const queued = await getQueuedCompletedItemIds(db, noteId);
@@ -412,29 +414,6 @@ export function useCreateNote() {
   });
 }
 
-/**
- * Builds the `updateLocalNote` changes that put a note's scalar fields back to
- * their pre-write values, for exactly the fields `data` touched. Used to revert
- * the pre-flight local write in {@link useUpdateNote} when the server
- * permanently rejects the edit. Only the fields the write could have changed are
- * restored, so a concurrent change to a different field is left alone. Title is
- * a list-note field and content a text-note one, so each is restored only for
- * the matching type.
- */
-function buildLocalNoteRevert(existing: Note, data: UpdateNoteRequest): LocalNoteChanges {
-  const changed = data as Record<string, unknown>;
-  const revert: LocalNoteChanges = {};
-  if ('pinned' in changed) revert.pinned = existing.pinned;
-  if ('archived' in changed) revert.archived = existing.archived;
-  if ('color' in changed) revert.color = existing.color;
-  if ('content' in changed && existing.note_type === 'text') revert.content = existing.content;
-  if ('title' in changed && existing.note_type === 'list') revert.title = existing.title;
-  if ('checked_items_collapsed' in changed && existing.note_type === 'list') {
-    revert.checked_items_collapsed = existing.checked_items_collapsed;
-  }
-  return revert;
-}
-
 interface UpdateNoteVariables {
   id: string;
   data: UpdateNoteRequest;
@@ -445,99 +424,56 @@ interface UpdateNoteVariables {
 export function useUpdateNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
-  const { isConnected } = useNetworkStatus();
 
   return useMutation({
     onMutate: async ({ id, data }: UpdateNoteVariables) => {
       // Cancel in-flight note reads before patching the cache, so a refetch
-      // already on the wire can't resolve over the optimistic edit (the same
-      // revert a re-read *during* the request causes, from the other direction).
+      // already on the wire can't resolve over the optimistic edit.
       await cancelNoteReads(queryClient, id);
       const now = new Date().toISOString();
       return applyOptimisticNote(queryClient, id, (note) => ({ ...note, ...data, updated_at: now }));
     },
     mutationFn: async ({ id, data, baseVersion }: UpdateNoteVariables): Promise<Note> => {
       assertSwitchWriteAllowed();
-
-      const existing = await getLocalNote(db, id);
       // Only content edits (title/content) are version-guarded; per-user fields
       // (color/pinned/archived/collapsed) live in note_user_state and aren't.
       const touchesContent = patchTouchesSharedContent(data);
-
-      // Write the edit to SQLite up front, before the request goes out (same
-      // reasoning as useToggleNoteItemCompleted / #945): both note reads are
-      // SQLite-backed with staleTime: Infinity, so while the row still holds the
-      // pre-edit note any invalidation in the request window (the queue drain,
-      // an unrelated note's SSE update, the background sync) refetches the old
-      // value and overwrites the optimistic cache — the dashboard card flashes
-      // the pre-edit note for a round trip. Writing first keeps the local row in
-      // step with the optimistic cache for the whole flight, so a re-read is a
-      // no-op. base_version stays pinned to the version read above: updateLocalNote
-      // never touches the version column, so the pre-flight write can't bump the
-      // value the server gates against, and a queued retry resolves it fresh at
-      // drain time (#489).
-      if (existing) {
-        await updateLocalNote(db, id, data);
-      }
-
-      // Queue instead of calling online while the note's create is still pending:
-      // it drains FIFO first (#475), and a direct call would 404 and drop the edit.
-      const pendingCreate = await isNotePendingCreate(db, id);
-      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
-        try {
-          // Online: gate on the version we currently hold locally so the server
-          // can reject a write that raced a concurrent edit on another device
-          // (#489). A 409 is permanent, so rethrowIfNotQueueable surfaces it.
-          // An editor passes the version its text was based on (`baseVersion`):
-          // the row may already hold a collaborator's newer snapshot the user
-          // never saw, and sending that would turn their conflict into a silent
-          // overwrite (#1277). Callers without an editor baseline fall back to the row.
-          const guardVersion = baseVersion ?? existing?.version;
-          const body: UpdateNoteRequest =
-            touchesContent && guardVersion !== undefined ? { ...data, base_version: guardVersion } : data;
-          const updatedNote = await jot.notes.update(id, body);
-          await saveServerResponseNote(db, updatedNote);
-          return updatedNote;
-        } catch (err) {
-          // Transient failure: fall through to the offline path so the edit is
-          // queued for replay instead of being lost. A permanent one takes the
-          // pre-flight local write back with it, mirroring the cache rollback in
-          // onError — otherwise the write above would outlive the failed edit.
-          try {
-            rethrowIfNotQueueable(err);
-          } catch (permanent) {
-            if (existing) await updateLocalNote(db, id, buildLocalNoteRevert(existing, data));
-            throw permanent;
-          }
-        }
-      }
-
-      // Offline (or a transient online failure): the edit is already in the local
-      // DB, so only the replay op is left to enqueue.
-      if (!existing) {
-        throw new Error(`Note ${id} not found in local DB`);
-      }
       const now = new Date().toISOString();
 
-      // Queue only the fields the user actually changed. The server PATCH is a
-      // partial update (absent fields are left unchanged), so sending the full
-      // snapshot would re-assert stale values and clobber fields edited
-      // concurrently on another device when this op replays later. base_version is
-      // intentionally NOT stored here: drainQueue resolves it from the note's
-      // local version at replay time, so a chain of offline edits to one note
-      // replays against the advancing version instead of self-conflicting (#489).
-      await enqueueOperation(db, {
-        operation: 'update',
-        endpoint: apiPaths.note(id),
-        method: 'PATCH',
-        keys: [noteKey(id)],
-        body: data as Record<string, unknown>,
+      // Through the outbox (#1284): the edit and its queue row commit together,
+      // and the drain sends it. A rejection surfaces later as a failed change.
+      return enqueueWrite(db, {
+        localApply: async () => {
+          const existing = await getLocalNote(db, id);
+          if (!existing) {
+            throw new Error(`Note ${id} not found in local DB`);
+          }
+          await updateLocalNote(db, id, data);
+          // The version the edit was made against: the one the editor's text is
+          // based on (`baseVersion`), since the row may already hold a
+          // collaborator's newer snapshot the user never saw (#1277). Callers
+          // without an editor baseline fall back to the row. Either is advanced
+          // past this device's own edits that landed since (ownVersions.ts), so
+          // a dirty editor does not conflict with its own earlier save.
+          const guardVersion = touchesContent
+            ? resolveOwnBaseVersion(db, id, baseVersion ?? existing.version)
+            : undefined;
+          // The editor adopts the returned version as its baseline for a content
+          // save; keep the caller's otherwise (#1277).
+          return { ...existing, ...data, version: guardVersion ?? baseVersion ?? existing.version, updated_at: now } as Note;
+        },
+        // Queue only the fields the user actually changed. The server PATCH is a
+        // partial update (absent fields are left unchanged), so sending the full
+        // snapshot would re-assert stale values and clobber fields edited
+        // concurrently on another device when this op replays later.
+        op: (note) => ({
+          operation: 'update',
+          endpoint: apiPaths.note(id),
+          method: 'PATCH',
+          keys: [noteKey(id)],
+          body: (touchesContent ? { ...data, base_version: note.version } : data) as Record<string, unknown>,
+        }),
       });
-
-      // Build the optimistic return from the data we already have.
-      // Keep the caller's baseline: the editor adopts the returned version, and the
-      // row's may already be a collaborator's snapshot it has not applied (#1277).
-      return { ...existing, ...data, version: baseVersion ?? existing.version, updated_at: now };
     },
     // Roll back the optimistic edit so a failed write doesn't leave a phantom on screen.
     onError: (_err, { id }, context) => rollbackOptimisticNote(queryClient, id, context),
@@ -670,12 +606,15 @@ export function useConvertNoteType() {
       }
       const data = buildConvertNoteTypeRequest(existing);
 
-      // Queue instead of calling online while the note's create is still pending:
-      // it drains FIFO first (#475), and a direct call would 404 and drop the edit.
-      const pendingCreate = await isNotePendingCreate(db, id);
-      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
+      // Queue behind any queued write to the note, its create included (#475): a
+      // direct call would 404 or overtake an earlier edit (spec §8.2).
+      const queuedBehind = await hasQueuedWriteForNote(db, id);
+      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
         try {
-          const convertedNote = await jot.notes.convert(id, { ...data, base_version: baseVersion ?? existing.version });
+          // The editor's baseline may predate its own saves that the drain has
+          // landed since; advance it past them (ownVersions.ts).
+          const guardVersion = resolveOwnBaseVersion(db, id, baseVersion ?? existing.version);
+          const convertedNote = await jot.notes.convert(id, { ...data, base_version: guardVersion });
           await saveServerResponseNote(db, convertedNote);
           return convertedNote;
         } catch (err) {
@@ -741,10 +680,10 @@ export function useCreateNoteItem() {
         parent_id: itemWithId.parent_id ?? null,
         assigned_to: itemWithId.assigned_to ?? '',
       };
-      // Queue instead of calling online while the note's create is still pending:
-      // it drains FIFO first (#475), and a direct call would 404 and drop the edit.
-      const pendingCreate = await isNotePendingCreate(db, noteId);
-      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
+      // Queue behind any queued write to the note, its create included (#475): a
+      // direct call would 404 or overtake an earlier edit (spec §8.2).
+      const queuedBehind = await hasQueuedWriteForNote(db, noteId);
+      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
         try {
           await jot.notes.createItem(noteId, itemWithId);
           await createLocalItem(db, noteId, local);
@@ -778,10 +717,10 @@ export function useUpdateNoteItem() {
   return useMutation({
     mutationFn: async ({ noteId, itemId, data }: { noteId: string; itemId: string; data: PatchNoteItemRequest }): Promise<void> => {
       assertSwitchWriteAllowed();
-      // Queue instead of calling online while the note's create is still pending:
-      // it drains FIFO first (#475), and a direct call would 404 and drop the edit.
-      const pendingCreate = await isNotePendingCreate(db, noteId);
-      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
+      // Queue behind any queued write to the note, its create included (#475): a
+      // direct call would 404 or overtake an earlier edit (spec §8.2).
+      const queuedBehind = await hasQueuedWriteForNote(db, noteId);
+      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
         try {
           await jot.notes.updateItem(noteId, itemId, data);
           await patchLocalItem(db, noteId, itemId, data);
@@ -815,10 +754,10 @@ export function useDeleteNoteItem() {
   return useMutation({
     mutationFn: async ({ noteId, itemId }: { noteId: string; itemId: string }): Promise<void> => {
       assertSwitchWriteAllowed();
-      // Queue instead of calling online while the note's create is still pending:
-      // it drains FIFO first (#475), and a direct call would 404 and drop the edit.
-      const pendingCreate = await isNotePendingCreate(db, noteId);
-      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
+      // Queue behind any queued write to the note, its create included (#475): a
+      // direct call would 404 or overtake an earlier edit (spec §8.2).
+      const queuedBehind = await hasQueuedWriteForNote(db, noteId);
+      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
         try {
           await jot.notes.deleteItem(noteId, itemId);
           await deleteLocalItem(db, noteId, itemId);
@@ -851,10 +790,10 @@ export function useReorderNoteItems() {
   return useMutation({
     mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<void> => {
       assertSwitchWriteAllowed();
-      // Queue instead of calling online while the note's create is still pending:
-      // it drains FIFO first (#475), and a direct call would 404 and drop the edit.
-      const pendingCreate = await isNotePendingCreate(db, noteId);
-      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
+      // Queue behind any queued write to the note, its create included (#475): a
+      // direct call would 404 or overtake an earlier edit (spec §8.2).
+      const queuedBehind = await hasQueuedWriteForNote(db, noteId);
+      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
         try {
           await jot.notes.reorderItems(noteId, itemIds);
           await reorderLocalItems(db, noteId, itemIds);
@@ -891,8 +830,9 @@ export function useDeleteNote() {
       // An offline-created note (#475) drains its create FIFO before this delete,
       // so queue rather than calling online against a note the server doesn't know
       // yet — a direct call would 404 (permanent) and surface as an error.
-      const pendingCreate = await isNotePendingCreate(db, id);
-      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
+      // Any other queued write to the note orders it the same way (spec §8.2).
+      const queuedBehind = await hasQueuedWriteForNote(db, id);
+      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
         try {
           await jot.notes.delete(id);
           await markLocalNoteDeleted(db, id);
@@ -931,7 +871,8 @@ export function useDuplicateNote() {
       // queued create drains FIFO before this duplicate, so queue rather than
       // calling online against a note the server doesn't know yet (a 404 would
       // surface as an error instead of syncing).
-      const pendingCreate = await isNotePendingCreate(db, id);
+      // Any other queued write to the note orders it the same way (spec §8.2).
+      const queuedBehind = await hasQueuedWriteForNote(db, id);
       // Pick the copy's ID and item IDs before the online attempt and send them
       // on it too, so a request that times out after the server committed is
       // replayed under the same IDs (a 409, already applied) instead of making a
@@ -943,7 +884,7 @@ export function useDuplicateNote() {
       for (const item of source?.note_type === 'list' ? (source.items ?? []) : []) {
         idRemap.set(item.id, generateId());
       }
-      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
+      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
         try {
           const duplicatedNote = await jot.notes.duplicate(
             id,
@@ -969,6 +910,9 @@ export function useDuplicateNote() {
       const now = new Date().toISOString();
       const resetFields = {
         id: clientId,
+        // The server's copy starts at version 1 like any new note (spec §8.1:
+        // the row's version is the server version of its content).
+        version: 1,
         pinned: false,
         archived: false,
         position: 0,
@@ -1039,8 +983,9 @@ export function useRestoreNote() {
       // An offline-created note (#475) drains its create FIFO before this restore,
       // so queue rather than calling online against a note the server doesn't know
       // yet — a direct call would 404 (permanent) and surface as an error.
-      const pendingCreate = await isNotePendingCreate(db, id);
-      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
+      // Any other queued write to the note orders it the same way (spec §8.2).
+      const queuedBehind = await hasQueuedWriteForNote(db, id);
+      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
         try {
           await jot.notes.restore(id);
           await markLocalNoteRestored(db, id);
@@ -1125,8 +1070,9 @@ export function usePermanentDeleteNote() {
       // An offline-created note (#475) drains its create FIFO before this delete,
       // so queue rather than calling online against a note the server doesn't know
       // yet — a direct call would 404 (permanent) and surface as an error.
-      const pendingCreate = await isNotePendingCreate(db, id);
-      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
+      // Any other queued write to the note orders it the same way (spec §8.2).
+      const queuedBehind = await hasQueuedWriteForNote(db, id);
+      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
         try {
           await jot.notes.delete(id, { permanent: true });
           await permanentDeleteLocalNote(db, id);
@@ -1209,7 +1155,10 @@ export function useReorderNotes() {
       // position, not just the pending one's (#956). The queued reorder drains
       // FIFO after the create lands, and the create carries the note's position,
       // so the brief gap before the reorder replays is harmless.
-      const pendingIds = await getPendingCreateNoteIds(db);
+      // Likewise behind any queued op for a note in the batch, so the note's
+      // writes stay in order (spec §8.2).
+      const [pendingIds, queuedIds] = await Promise.all([getPendingCreateNoteIds(db), getPendingNoteIds(db)]);
+      for (const id of queuedIds) pendingIds.add(id);
       const batchHasPending = noteIds.some((id) => pendingIds.has(id));
 
       // Snapshot the current positions before touching them, so a permanently
@@ -1322,9 +1271,10 @@ export function useShareNote() {
       // queued create drains FIFO before this share, so queue the share rather than
       // attempting it online — the server doesn't know the note yet, so a direct
       // call would 404 (permanent) and surface as an error instead of syncing.
-      const pendingCreate = await isNotePendingCreate(db, noteId);
+      // Any other queued write to the note orders it the same way (spec §8.2).
+      const queuedBehind = await hasQueuedWriteForNote(db, noteId);
 
-      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
+      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
         try {
           await jot.notes.share(noteId, { user_id: user.id });
           // Fetch updated note so shared_with_json in SQLite reflects server state
@@ -1384,9 +1334,10 @@ export function useUnshareNote() {
       assertSwitchWriteAllowed();
       // An offline-created note (#475) drains its create FIFO before this unshare,
       // so queue rather than calling online against a note the server doesn't know yet.
-      const pendingCreate = await isNotePendingCreate(db, noteId);
+      // Any other queued write to the note orders it the same way (spec §8.2).
+      const queuedBehind = await hasQueuedWriteForNote(db, noteId);
 
-      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
+      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
         try {
           await jot.notes.unshare(noteId, userId);
           try {
@@ -1607,10 +1558,10 @@ export function useDeleteCompletedItems() {
     mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<NoteItem[]> => {
       assertSwitchWriteAllowed();
       if (itemIds.length === 0) return [];
-      // Queue instead of calling online while the note's create is still pending:
-      // it drains FIFO first (#475), and a direct call would 404 and drop the edit.
-      const pendingCreate = await isNotePendingCreate(db, noteId);
-      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
+      // Queue behind any queued write to the note, its create included (#475): a
+      // direct call would 404 or overtake an earlier edit (spec §8.2).
+      const queuedBehind = await hasQueuedWriteForNote(db, noteId);
+      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
         try {
           const serverItems = await jot.notes.deleteItems(noteId, itemIds);
           // The server returns the note's full, authoritative remaining item
