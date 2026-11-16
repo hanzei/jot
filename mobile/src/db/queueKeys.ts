@@ -8,12 +8,18 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 // | Operation                                        | Keys                          |
 // |--------------------------------------------------|-------------------------------|
 // | note ops (create, update, items, share, …)       | note:<id>                     |
-// | duplicate                                        | note:<clone>, note:<source>   |
+// | duplicate                                        | note:<clone>; note:<source> read-only |
 // | reorder                                          | note:<id> per note named      |
 // | addLabelToNote, removeLabelFromNote              | note:<id>, label:<id>         |
 // | createLabel, renameLabel, deleteLabel            | label:<id>                    |
 // | create naming labels                             | also label:<id> per label     |
 // | updateSettings                                   | settings                      |
+//
+// A read-only key (`read_only = 1`) names something the op depends on but does
+// not write: a duplicate copies its source on the server, so the source's
+// queued writes must land first, yet the duplicate changes nothing in it. Such
+// a key orders the op; it does not make the note protected, nor count as an op
+// queued for it.
 
 export type QueueKey = `note:${string}` | `label:${string}` | 'settings';
 
@@ -54,21 +60,34 @@ export function parseJsonObject(text: string | null): Record<string, unknown> | 
   }
 }
 
-/** Record `keys` for row `rowId` of the queue (or dead letter) the key table belongs to. */
+/** What an op touches: the keys it writes, and those it only reads. */
+export interface OpKeys {
+  keys: readonly QueueKey[];
+  readKeys?: readonly QueueKey[] | undefined;
+}
+
+/**
+ * Record an op's keys for row `rowId` of the queue (or dead letter) the key
+ * table belongs to. A key in both lists is a written one.
+ */
 export async function insertKeys(
   db: SQLiteDatabase,
   table: 'sync_queue_keys' | 'dead_letter_keys',
   rowId: number,
-  keys: Iterable<string>,
+  { keys, readKeys = [] }: OpKeys,
 ): Promise<void> {
   const column = table === 'sync_queue_keys' ? 'entry_id' : 'dead_letter_id';
-  const unique = [...new Set(keys)];
+  const written = new Set<string>(keys);
+  const rows: [string, number][] = [
+    ...[...written].map((key): [string, number] => [key, 0]),
+    ...[...new Set<string>(readKeys)].filter((key) => !written.has(key)).map((key): [string, number] => [key, 1]),
+  ];
   // One statement per chunk, well under SQLite's bound-parameter limit.
-  for (let start = 0; start < unique.length; start += 400) {
-    const chunk = unique.slice(start, start + 400);
+  for (let start = 0; start < rows.length; start += 300) {
+    const chunk = rows.slice(start, start + 300);
     await db.runAsync(
-      `INSERT OR IGNORE INTO ${table} (${column}, key) VALUES ${chunk.map(() => '(?, ?)').join(', ')}`,
-      chunk.flatMap((key) => [rowId, key]),
+      `INSERT OR IGNORE INTO ${table} (${column}, key, read_only) VALUES ${chunk.map(() => '(?, ?, ?)').join(', ')}`,
+      chunk.flatMap(([key, readOnly]) => [rowId, key, readOnly]),
     );
   }
 }
@@ -113,8 +132,9 @@ export function legacyQueueKeys(
   endpoint: string,
   body: Record<string, unknown> | null,
   labelIdsByName: ReadonlyMap<string, string>,
-): QueueKey[] {
+): { keys: QueueKey[]; readKeys: QueueKey[] } {
   const keys = new Set<QueueKey>();
+  const readKeys = new Set<QueueKey>();
   const segments = endpoint.split('?')[0]!.split('/').filter(Boolean);
   const str = (value: unknown): string | null => (typeof value === 'string' && value !== '' ? value : null);
   const addNote = (id: unknown): void => {
@@ -158,11 +178,14 @@ export function legacyQueueKeys(
       addNote(body?.id);
       if (Array.isArray(body?.labels)) for (const name of body.labels) addLabelByName(name);
       break;
-    case 'duplicate':
-      // /notes/{source}/duplicate: the clone is the client-supplied id.
+    case 'duplicate': {
+      // /notes/{source}/duplicate: the clone is the client-supplied id; the
+      // source is only read.
       addNote(body?.id);
-      addNote(segments[1]);
+      const sourceId = str(segments[1]);
+      if (sourceId) readKeys.add(noteKey(sourceId));
       break;
+    }
     case 'reorder':
       if (Array.isArray(body?.note_ids)) for (const id of body.note_ids) addNote(id);
       break;
@@ -170,5 +193,5 @@ export function legacyQueueKeys(
       // /notes/{id}/…
       if (segments[0] === 'notes') addNote(segments[1]);
   }
-  return [...keys];
+  return { keys: [...keys], readKeys: [...readKeys] };
 }

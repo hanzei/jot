@@ -408,6 +408,8 @@ const migration13 = async (db: SQLiteDatabase): Promise<void> => {
       CREATE TABLE IF NOT EXISTS sync_queue_keys (
         entry_id INTEGER NOT NULL REFERENCES sync_queue(id) ON DELETE CASCADE,
         key TEXT NOT NULL,
+        -- 1: the op depends on the key but does not write it (a duplicate's source).
+        read_only INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (entry_id, key)
       );
       CREATE INDEX IF NOT EXISTS idx_sync_queue_keys_key ON sync_queue_keys (key);
@@ -415,6 +417,7 @@ const migration13 = async (db: SQLiteDatabase): Promise<void> => {
       CREATE TABLE IF NOT EXISTS dead_letter_keys (
         dead_letter_id INTEGER NOT NULL REFERENCES dead_letter(id) ON DELETE CASCADE,
         key TEXT NOT NULL,
+        read_only INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (dead_letter_id, key)
       );
       CREATE INDEX IF NOT EXISTS idx_dead_letter_keys_key ON dead_letter_keys (key);

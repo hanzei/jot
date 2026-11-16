@@ -12,6 +12,7 @@ import {
   getProtectedNoteIds,
   getDeadLetteredOperations,
   saveServerNote,
+  saveServerResponseNote,
   QUEUED_WRITE_TIMEOUT_MS,
 } from '../src/db/syncQueue';
 import { reconcileDiscard } from '../src/hooks/useSyncFailures';
@@ -175,10 +176,11 @@ describe('drainQueue dead-letter persistence', () => {
       endpoint: '/notes/src/duplicate',
       method: 'POST',
       body: { id: 'clone' },
-      keys: ['note:clone', 'note:src'],
+      keys: ['note:clone'],
+      readKeys: ['note:src'],
     });
-    // While it is queued, the source it copies is protected too.
-    expect(await getProtectedNoteIds(db)).toEqual(new Set(['clone', 'src']));
+    // The source it only reads is not protected while it is queued.
+    expect(await getProtectedNoteIds(db)).toEqual(new Set(['clone']));
     mockApi.post.mockRejectedValueOnce(makeAxiosError(400));
 
     await drainQueue(db);
@@ -186,6 +188,29 @@ describe('drainQueue dead-letter persistence', () => {
     expect(await deadLetters()).toMatchObject([{ operation: 'duplicate', note_id: 'clone' }]);
     expect(await failedNoteIds()).toEqual(['clone']);
     expect(await getProtectedNoteIds(db)).toEqual(new Set(['clone']));
+    // The dead letter keeps the source as a read-only key.
+    expect(await db.getAllAsync('SELECT key, read_only FROM dead_letter_keys ORDER BY key')).toEqual([
+      { key: 'note:clone', read_only: 0 },
+      { key: 'note:src', read_only: 1 },
+    ]);
+  });
+
+  it('applies the response to a write on a note a queued duplicate only reads (#1282)', async () => {
+    await saveNote(db, buildTextNote({ id: 'src', content: 'local' }));
+    await seedQueueEntry(db, {
+      operation: 'duplicate',
+      endpoint: '/notes/src/duplicate',
+      method: 'POST',
+      body: { id: 'clone' },
+      keys: ['note:clone'],
+      readKeys: ['note:src'],
+    });
+
+    expect(await saveServerResponseNote(db, buildTextNote({ id: 'src', content: 'server', version: 2 }))).toBe(true);
+    expect(await db.getFirstAsync('SELECT content, version FROM notes WHERE id = ?', ['src'])).toEqual({
+      content: 'server',
+      version: 2,
+    });
   });
 
   it('does not dead-letter or flag an idempotent 409 conflict', async () => {

@@ -348,15 +348,18 @@ describe('migrateDatabase', () => {
 
     const keysOf = async (db: TestDatabase, table: 'sync_queue_keys' | 'dead_letter_keys', id: number): Promise<string[]> => {
       const column = table === 'sync_queue_keys' ? 'entry_id' : 'dead_letter_id';
-      const rows = await db.getAllAsync<{ key: string }>(`SELECT key FROM ${table} WHERE ${column} = ? ORDER BY key`, [id]);
-      return rows.map((r) => r.key);
+      const rows = await db.getAllAsync<{ key: string; read_only: number }>(
+        `SELECT key, read_only FROM ${table} WHERE ${column} = ? ORDER BY key`,
+        [id],
+      );
+      return rows.map((r) => (r.read_only ? `${r.key} (read)` : r.key));
     };
 
     // Every queue operation, as its hook (or the local→server upgrade seed)
     // queued it before keys existed, with the keys the backfill must give it.
     const everyOperation: [string, string, string, unknown, string[]][] = [
       ['create', '/notes', 'POST', { id: 'n1', note_type: 'text', content: '', labels: ['Work', 'Unknown'] }, ['label:l1', 'note:n1']],
-      ['duplicate', '/notes/src/duplicate', 'POST', { id: 'clone' }, ['note:clone', 'note:src']],
+      ['duplicate', '/notes/src/duplicate', 'POST', { id: 'clone' }, ['note:clone', 'note:src (read)']],
       ['update', '/notes/n1', 'PATCH', { content: 'x' }, ['note:n1']],
       ['convertNoteType', '/notes/n1/convert', 'POST', { note_type: 'list' }, ['note:n1']],
       ['delete', '/notes/n1', 'DELETE', null, ['note:n1']],

@@ -225,7 +225,7 @@ describe('reconcileDiscard', () => {
        VALUES ('reorder', '/notes/reorder', 'POST', ?, 400, NULL, '', '')`,
       [JSON.stringify({ note_ids: ['a', 'b', 'c'] })],
     );
-    await insertKeys(db, 'dead_letter_keys', dlId, ['note:a', 'note:b', 'note:c']);
+    await insertKeys(db, 'dead_letter_keys', dlId, { keys: ['note:a', 'note:b', 'note:c'] });
     const [row] = await getDeadLetteredOperations(db);
 
     await reconcileDiscard(db, row!);

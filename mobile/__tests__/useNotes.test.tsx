@@ -1,5 +1,5 @@
 import React from 'react';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted, useUncheckAllItems, useDeleteCompletedItems, useShareNote, useUnshareNote, useLeaveNote, useMarkNoteViewed, NoteConversionCapError } from '../src/hooks/useNotes';
 import { VALIDATION } from '@jot/shared';
@@ -454,8 +454,9 @@ describe('useNotes hooks', () => {
           endpoint: '/notes/ServerValidButPending00/duplicate',
           method: 'POST',
           body: { id: 'ClientNoteId000000000A' },
-          // The clone, and the source the server copies.
-          keys: ['note:ClientNoteId000000000A', 'note:ServerValidButPending00'],
+          // The clone it writes, and the source the server copies.
+          keys: ['note:ClientNoteId000000000A'],
+          readKeys: ['note:ServerValidButPending00'],
         }),
       );
       expect(mockNoteQueries.markNotePendingCreate).toHaveBeenCalledWith(
@@ -705,7 +706,9 @@ describe('useNotes hooks', () => {
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(sharedNote as never);
 
       const { result } = await renderHook(() => useShareNote(), { wrapper: createWrapper() });
-      await result.current.mutateAsync({ noteId: '123', user: targetUser as never });
+      await act(async () => {
+        await result.current.mutateAsync({ noteId: '123', user: targetUser as never });
+      });
 
       expect(mockJot.notes.share).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(expect.anything(), {

@@ -54,8 +54,8 @@ export function makeNoteItem(overrides: Partial<NoteItem> & { id: string; note_i
 /**
  * Append a sync-queue entry and return its generated id. `attempts` seeds the
  * transient-failure counter that migration 6 added, for tests that start an
- * entry partway to the dead-letter cap. `keys` defaults to what the migration
- * 13 backfill derives from the endpoint and body.
+ * entry partway to the dead-letter cap. Without `keys`, the keys are what the
+ * migration 13 backfill derives from the endpoint and body.
  */
 export async function seedQueueEntry(
   db: TestDatabase,
@@ -74,7 +74,8 @@ export async function seedQueueEntry(
     ],
   );
   const keys = params.keys
-    ?? legacyQueueKeys(params.operation, params.endpoint, params.body ?? null, await loadLabelIdsByName(db));
+    ? { keys: params.keys, readKeys: params.readKeys }
+    : legacyQueueKeys(params.operation, params.endpoint, params.body ?? null, await loadLabelIdsByName(db));
   await insertKeys(db, 'sync_queue_keys', result.lastInsertRowId, keys);
   return result.lastInsertRowId;
 }

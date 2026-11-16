@@ -1011,8 +1011,10 @@ export function useDuplicateNote() {
         operation: 'duplicate',
         endpoint: apiPaths.noteDuplicate(id),
         method: 'POST',
-        // The server copies the source, so its queued writes must land first.
-        keys: [noteKey(clientId), noteKey(id)],
+        keys: [noteKey(clientId)],
+        // The server copies the source, so its queued writes must land first;
+        // the duplicate does not write it.
+        readKeys: [noteKey(id)],
         body: body as Record<string, unknown>,
       });
       return localDuplicate;

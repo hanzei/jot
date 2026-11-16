@@ -98,11 +98,16 @@ export interface EnqueueParams {
   method: 'POST' | 'PATCH' | 'DELETE';
   body?: Record<string, unknown>;
   /**
-   * What the op touches (see queueKeys.ts): every note it writes or reads, and
-   * every label it names. Recorded in `sync_queue_keys`, which is what the
-   * protected set and the per-note queue lookups read (#1282).
+   * What the op writes (see queueKeys.ts): every note it changes, and every
+   * label it names. Recorded in `sync_queue_keys`, which is what the protected
+   * set and the per-note queue lookups read (#1282).
    */
   keys: readonly QueueKey[];
+  /**
+   * What the op depends on without writing it: a duplicate's source note. It
+   * orders the op but does not protect the note or count as an op queued for it.
+   */
+  readKeys?: readonly QueueKey[];
 }
 
 /**
@@ -359,7 +364,7 @@ export async function insertQueueEntry(db: SQLiteDatabase, params: EnqueueParams
       new Date().toISOString(),
     ],
   );
-  await insertKeys(db, 'sync_queue_keys', result.lastInsertRowId, params.keys);
+  await insertKeys(db, 'sync_queue_keys', result.lastInsertRowId, params);
 }
 
 export async function enqueueOperation(db: SQLiteDatabase, params: EnqueueParams): Promise<void> {
@@ -420,29 +425,14 @@ export async function getSyncQueueStats(db: SQLiteDatabase): Promise<SyncQueueSt
 }
 
 /**
- * The notes a queued op writes, from the notes it keys. A duplicate also keys
- * its source note, which it only reads (so the source's queued writes land
- * first); it writes the clone alone, its client-supplied `id`. This is what a
- * landing is recorded for, what a dead letter links and flags failed, and what
- * the drain pulls afterwards.
+ * The notes each queued entry writes, by entry id: its written (not read-only)
+ * note keys. This is what a landing is recorded for, what a dead letter links
+ * and flags failed, and what the drain pulls afterwards.
  */
-function writtenNoteIds(
-  operation: QueueOperation,
-  keyedNoteIds: readonly string[],
-  body: Record<string, unknown> | undefined,
-): string[] {
-  if (operation === 'duplicate') {
-    const cloneId = body?.id;
-    return typeof cloneId === 'string' ? [cloneId] : [];
-  }
-  return [...keyedNoteIds];
-}
-
-/** The notes each queued entry keys, by entry id. */
-async function getKeyedNoteIdsByEntry(db: SQLiteDatabase): Promise<Map<number, string[]>> {
+async function getWrittenNoteIdsByEntry(db: SQLiteDatabase): Promise<Map<number, string[]>> {
   const rows = await db.getAllAsync<{ entry_id: number; id: string }>(
     `SELECT entry_id, ${keyIdExpression('key', 'note')} AS id FROM sync_queue_keys
-     WHERE ${keyKindCondition('key', 'note')}`,
+     WHERE read_only = 0 AND ${keyKindCondition('key', 'note')}`,
   );
   const byEntry = new Map<number, string[]>();
   for (const row of rows) {
@@ -463,7 +453,7 @@ async function getKeyedNoteIdsByEntry(db: SQLiteDatabase): Promise<Map<number, s
 export async function getDeadLetterNoteIds(db: SQLiteDatabase, deadLetterId: number): Promise<string[]> {
   const rows = await db.getAllAsync<{ id: string }>(
     `SELECT ${keyIdExpression('key', 'note')} AS id FROM dead_letter_keys
-     WHERE dead_letter_id = ? AND ${keyKindCondition('key', 'note')}`,
+     WHERE dead_letter_id = ? AND read_only = 0 AND ${keyKindCondition('key', 'note')}`,
     [deadLetterId],
   );
   return rows.map((row) => row.id);
@@ -478,7 +468,7 @@ export async function getDeadLetterNoteIds(db: SQLiteDatabase, deadLetterId: num
 export async function getPendingNoteIds(db: SQLiteDatabase): Promise<Set<string>> {
   const rows = await db.getAllAsync<{ id: string }>(
     `SELECT DISTINCT ${keyIdExpression('key', 'note')} AS id FROM sync_queue_keys
-     WHERE ${keyKindCondition('key', 'note')}`,
+     WHERE read_only = 0 AND ${keyKindCondition('key', 'note')}`,
   );
   return new Set(rows.map((row) => row.id));
 }
@@ -497,7 +487,7 @@ async function getDeadLetteredNoteIds(db: SQLiteDatabase, exceptDeadLetterId?: n
      UNION
      SELECT ${keyIdExpression('k.key', 'note')} FROM dead_letter_keys k
        JOIN dead_letter d ON d.id = k.dead_letter_id
-     WHERE d.note_id IS NULL AND d.id IS NOT ? AND ${keyKindCondition('k.key', 'note')}`,
+     WHERE d.note_id IS NULL AND d.id IS NOT ? AND k.read_only = 0 AND ${keyKindCondition('k.key', 'note')}`,
     [except, except],
   );
   return new Set(rows.map((row) => row.id));
@@ -817,7 +807,8 @@ async function recordDeadLetter(
   );
   // The dead letter keeps the entry's keys, so it names its notes without a parse.
   await db.runAsync(
-    'INSERT OR IGNORE INTO dead_letter_keys (dead_letter_id, key) SELECT ?, key FROM sync_queue_keys WHERE entry_id = ?',
+    `INSERT OR IGNORE INTO dead_letter_keys (dead_letter_id, key, read_only)
+     SELECT ?, key, read_only FROM sync_queue_keys WHERE entry_id = ?`,
     [result.lastInsertRowId, entry.id],
   );
 }
@@ -860,7 +851,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
     'SELECT * FROM sync_queue ORDER BY id ASC',
   );
   // A label-id rewrite mid-drain moves only `label:` keys, so this holds throughout.
-  const noteIdsByEntry = await getKeyedNoteIdsByEntry(db);
+  const noteIdsByEntry = await getWrittenNoteIdsByEntry(db);
 
   const syncedNotes: Note[] = [];
   const discardedOperations: DiscardedOperation[] = [];
@@ -908,8 +899,8 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
     // not retry or dead-letter the entry (issue #714 — mirrors imageUploadQueue's
     // "the upload already landed, so remove the queue entry first").
     let requestLanded = false;
-    // The notes this entry writes; reads `body` once it is parsed.
-    const targets = (): string[] => writtenNoteIds(entry.operation, noteIdsByEntry.get(entry.id) ?? [], body);
+    // The notes this entry writes.
+    const targets = (): readonly string[] => noteIdsByEntry.get(entry.id) ?? [];
     try {
       if (entry.body) {
         body = JSON.parse(entry.body) as Record<string, unknown>;
@@ -1297,7 +1288,7 @@ async function hasOtherQueuedOpForNote(
   exceptEntryId: number | undefined,
 ): Promise<boolean> {
   const row = await db.getFirstAsync<{ found: number }>(
-    'SELECT 1 AS found FROM sync_queue_keys WHERE key = ? AND entry_id IS NOT ? LIMIT 1',
+    'SELECT 1 AS found FROM sync_queue_keys WHERE key = ? AND read_only = 0 AND entry_id IS NOT ? LIMIT 1',
     [noteKey(noteId), exceptEntryId ?? null],
   );
   return row !== null;
