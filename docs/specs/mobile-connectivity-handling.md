@@ -517,6 +517,7 @@ its own edit times. Merging (§8.5) therefore loses nothing history would keep.
 | Failed-change review and resolution (§8.4) | `src/hooks/useSyncFailures.ts` |
 | Local-data ownership, logout wipe, unsynced count (§8.6) | `src/db/accountOwner.ts`, `src/store/AccountDataGate.tsx` (wired in `App.tsx`), `src/components/DrawerContent.tsx` |
 | Sync queue + transient/permanent split + head-of-line dead-lettering | `src/db/syncQueue.ts` (`rethrowIfNotQueueable`, `isQueueableError`, `isGlobalDrainFailure`, `MAX_ENTRY_DRAIN_ATTEMPTS`, `getSyncQueueStats`) |
+| What each queued op touches (`note:`/`label:`/`settings` keys, recorded at enqueue and kept by its dead letter); the protected set reads them | `src/db/queueKeys.ts` (`sync_queue_keys`, `dead_letter_keys`) |
 | Snapshot gate (own writes landed after a fetch started) | `src/db/snapshotGate.ts`, wired in `src/api/client.ts` |
 | Bounded read retries | `src/utils/retryWithBackoff.ts` (`retrySync`) |
 | Optimistic writes + offline fallback | `src/hooks/useNotes.ts`, `useLabels.ts`, `useNoteImages.ts` |

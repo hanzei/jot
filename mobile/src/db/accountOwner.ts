@@ -15,14 +15,17 @@ import { deleteFileIfExists } from '../utils/fs';
 const NO_OWNER = '';
 
 // Children before parents: `note_items` and `pending_image_uploads` reference
-// `notes`. Every table that holds account data, the queues included.
+// `notes`, and the key tables their queue rows. Every table that holds account
+// data, the queues included.
 const ACCOUNT_DATA_TABLES = [
   'note_items',
   'pending_image_uploads',
   'notes',
   'labels',
   'users',
+  'sync_queue_keys',
   'sync_queue',
+  'dead_letter_keys',
   'dead_letter',
 ] as const;
 

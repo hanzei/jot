@@ -14,7 +14,7 @@ import { publishReconnectResync } from '../src/store/resyncEvents';
 import * as noteQueriesModule from '../src/db/noteQueries';
 import * as syncQueueModule from '../src/db/syncQueue';
 import type { Note } from '@jot/shared';
-import { makeTextNote as buildTextNote } from './helpers/fixtures';
+import { makeTextNote as buildTextNote, seedQueueEntry } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
 import { jot } from '../src/api/jot';
 
@@ -116,10 +116,7 @@ describe('useOfflineNotes background sync (#487)', () => {
     // The end-to-end form of #487: the queue row, the protected-set read, and the
     // skipped write are all real here.
     await noteQueriesModule.saveNote(db, buildTextNote({ id: 'n1', content: 'local edit' }));
-    await db.runAsync(
-      `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
-       VALUES ('update', '/notes/n1', 'PATCH', '{}', '')`,
-    );
+    await seedQueueEntry(db, { operation: 'update', endpoint: '/notes/n1', method: 'PATCH', body: {} });
     mockJot.notes.getAll.mockResolvedValue([makeTextNote('n1')]);
 
     await renderHook(() => useOfflineNotes(), { wrapper: createWrapper() });
@@ -224,10 +221,7 @@ describe('useOfflineNote background fetch (#487)', () => {
     // the version we're preserving; let the drain/resolution reconcile it rather
     // than hide the optimistic edit.
     await noteQueriesModule.saveNote(db, buildTextNote({ id: 'racing' }));
-    await db.runAsync(
-      `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
-       VALUES ('restore', '/notes/racing/restore', 'POST', NULL, '')`,
-    );
+    await seedQueueEntry(db, { operation: 'restore', endpoint: '/notes/racing/restore', method: 'POST' });
     mockJot.notes.getById.mockRejectedValue(makeAxiosError(404));
 
     await renderHook(() => useOfflineNote('racing'), { wrapper: createWrapper() });

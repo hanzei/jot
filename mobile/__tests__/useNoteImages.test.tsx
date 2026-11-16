@@ -470,12 +470,14 @@ describe('useNoteImages hooks', () => {
         operation: 'removeImage',
         endpoint: '/images/img-1',
         method: 'DELETE',
-        body: { note_id: 'note-1' },
+        keys: ['note:note-1'],
       });
       // The op is really in sync_queue for the drain to replay.
       expect(await queuedOps()).toEqual([
-        { operation: 'removeImage', endpoint: '/images/img-1', body: '{"note_id":"note-1"}' },
+        { operation: 'removeImage', endpoint: '/images/img-1', body: null },
       ]);
+      // The endpoint names no note, so the key does.
+      expect(await db.getAllAsync('SELECT key FROM sync_queue_keys')).toEqual([{ key: 'note:note-1' }]);
     });
 
     it('hides the image from the note locally when the delete is queued offline', async () => {
@@ -529,7 +531,7 @@ describe('useNoteImages hooks', () => {
         operation: 'removeImage',
         endpoint: '/images/img-1',
         method: 'DELETE',
-        body: { note_id: 'note-1' },
+        keys: ['note:note-1'],
       });
     });
   });

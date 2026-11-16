@@ -213,6 +213,9 @@ describe('reconcileDiscard', () => {
     // otherwise they'd stay stuck until an unrelated write happened to touch each
     // note. No content is fetched/forked (there's no single note to reconcile).
     const db = makeDb(null);
+    // The dead letter's recorded keys name the notes (#1282).
+    db.getAllAsync.mockImplementation(async (sql: string) =>
+      /WHERE dead_letter_id = \?/.test(sql) ? [{ id: 'a' }, { id: 'b' }, { id: 'c' }] : []);
     await reconcileDiscard(
       db as never,
       dl({

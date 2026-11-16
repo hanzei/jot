@@ -1,12 +1,12 @@
-// Which notes a write touches, recovered from its endpoint and body. Shared by
-// the sync queue (protected set, dead-letter badges) and the write-landing gate
-// (snapshotGate.ts), which sees every write the API client sends.
+// Which notes a write touches, recovered from its URL and body. Used by the
+// write-landing gate (snapshotGate.ts), which sees every request the API client
+// sends. Queued ops record what they touch when they are enqueued instead
+// (queueKeys.ts, #1282).
 
 /**
- * Add the note IDs touched by a single queued op (identified by its endpoint and
- * already-parsed body) to `ids`. Note IDs are recovered from the endpoint shapes
- * enqueued by useNotes/useLabels (see the per-branch comments below). Label-only
- * endpoints (/labels/…) aren't tied to a single note and contribute nothing.
+ * Add the note IDs a request writes (identified by its URL and already-parsed
+ * body) to `ids`. Requests that write no note (labels, settings, image deletes)
+ * contribute nothing.
  */
 export function collectNoteIds(
   endpoint: string,
@@ -16,14 +16,6 @@ export function collectNoteIds(
   // Drop any query string (e.g. "/notes/{id}?permanent=true") before splitting,
   // and filter out the empty segment from the leading slash.
   const segments = endpoint.split('?')[0]!.split('/').filter(Boolean);
-  if (segments[0] === 'images') {
-    // DELETE /images/{id}: the endpoint has no note id in it, so `removeImage`
-    // ops (see useNoteImages.ts) carry it in the body purely for this
-    // bookkeeping — it is never sent to the server (DELETE has no body).
-    const noteId = body?.note_id;
-    if (typeof noteId === 'string') ids.add(noteId);
-    return;
-  }
   if (segments[0] !== 'notes') return;
 
   if (segments.length === 1) {

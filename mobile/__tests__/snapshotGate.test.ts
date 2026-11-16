@@ -8,7 +8,7 @@ import { applyServerRemoval, getSnapshotSkipNoteIds, saveServerNote, saveServerN
 import { notesWrittenSince, recordWriteLanded, recordWriteResponse, snapshotMark } from '../src/db/snapshotGate';
 import { removeLocalNotesNotIn, saveNote } from '../src/db/noteQueries';
 import { withSerializedTransaction } from '../src/db/transaction';
-import { makeTextNote } from './helpers/fixtures';
+import { makeTextNote, seedQueueEntry } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
 
 let db: TestDatabase;
@@ -127,10 +127,7 @@ describe('server snapshot writers (#1265)', () => {
   });
 
   it('getSnapshotSkipNoteIds joins the protected set with the landings', async () => {
-    await db.runAsync(
-      `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
-       VALUES ('update', '/notes/queued', 'PATCH', NULL, '')`,
-    );
+    await seedQueueEntry(db, { operation: 'update', endpoint: '/notes/queued', method: 'PATCH' });
     const since = snapshotMark();
     recordWriteLanded(['landed']);
 
@@ -146,10 +143,7 @@ describe('server snapshot writers (#1265)', () => {
 
     const save = saveServerNote(db, makeTextNote({ id: 'x', content: 'server' }), snapshotMark());
     // A local edit is queued while the save waits.
-    await db.runAsync(
-      `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
-       VALUES ('update', '/notes/x', 'PATCH', NULL, '')`,
-    );
+    await seedQueueEntry(db, { operation: 'update', endpoint: '/notes/x', method: 'PATCH' });
     release();
     await held;
     await save;
@@ -162,11 +156,7 @@ describe('applyServerRemoval (#1265)', () => {
   const deletedAt = async (id: string) =>
     (await db.getFirstAsync<{ deleted_at: string | null }>('SELECT deleted_at FROM notes WHERE id = ?', [id]));
   const queueUpdate = (id: string) =>
-    db.runAsync(
-      `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
-       VALUES ('update', ?, 'PATCH', NULL, '')`,
-      [`/notes/${id}`],
-    );
+    seedQueueEntry(db, { operation: 'update', endpoint: `/notes/${id}`, method: 'PATCH' });
 
   it('tombstones or deletes a note nothing protects', async () => {
     await saveNote(db, makeTextNote({ id: 'gone' }));

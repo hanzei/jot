@@ -6,6 +6,7 @@ import { useAuth } from '../../store/AuthContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { cacheAuthProfile } from '../../api/client';
 import { enqueueOperation, isQueueableError } from '../../db/syncQueue';
+import { SETTINGS_KEY } from '../../db/queueKeys';
 import { isOnlineWriteAllowed } from '../../api/serverReachability';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { displayMessage, extractApiError } from '../../i18n/utils';
@@ -73,6 +74,7 @@ export default function AccountSection() {
           operation: 'updateSettings',
           endpoint: apiPaths.usersMe,
           method: 'PATCH',
+          keys: [SETTINGS_KEY],
           body: profileUpdate,
         });
         setProfileSuccess('settings.profileUpdated');
@@ -100,6 +102,7 @@ export default function AccountSection() {
           operation: 'updateSettings',
           endpoint: apiPaths.usersMe,
           method: 'PATCH',
+          keys: [SETTINGS_KEY],
           body: profileUpdate,
         });
         setProfileSuccess('settings.profileUpdated');

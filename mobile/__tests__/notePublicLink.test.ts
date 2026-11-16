@@ -7,7 +7,7 @@ import { getAllLocalNotes, getLocalNote, getLocalNotes, saveNote, setLocalNotePu
 import { saveServerNote, saveServerNotesScope } from '../src/db/syncQueue';
 import { snapshotMark } from '../src/db/snapshotGate';
 import { migrateDatabase, MIGRATIONS } from '../src/db/schema';
-import { makeListNote, makeTextNote } from './helpers/fixtures';
+import { makeListNote, makeTextNote, seedQueueEntry } from './helpers/fixtures';
 import { createTestDb, type TestDatabase } from './helpers/testDb';
 
 const link: PublicLink = {
@@ -56,9 +56,7 @@ describe('note public link', () => {
 
   it('takes the server link even for a note a pending edit protects', async () => {
     await saveNote(db, makeTextNote({ id: 'n1', content: 'local edit' }));
-    await db.runAsync(
-      `INSERT INTO sync_queue (operation, endpoint, method, body, created_at) VALUES ('update', '/notes/n1', 'PATCH', '{}', '')`,
-    );
+    await seedQueueEntry(db, { operation: 'update', endpoint: '/notes/n1', method: 'PATCH', body: {} });
 
     await saveServerNote(db, makeTextNote({ id: 'n1', content: 'server copy', public_link: link }), snapshotMark());
     await saveServerNotesScope(db, [makeTextNote({ id: 'n1', content: 'server copy', public_link: null })], undefined, snapshotMark());
