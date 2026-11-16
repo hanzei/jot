@@ -60,7 +60,7 @@ integration. **Anything testable in Jest belongs in Jest.**
 - The import flow drives Android's system file picker the same way
   (`flows/helpers/pick-download.yaml`); `run.sh` pushes the files it picks into
   `/sdcard/Download`.
-- Maestro cannot shell out mid-flow, so `adb` steps (airplane mode, force-stop,
+- Maestro cannot shell out mid-flow, so `adb` steps (airplane mode, Wi-Fi probe, force-stop,
   intents) are sequenced in `run.sh` between flows.
 - No drag-and-drop flows (Maestro has no press-hold-then-move) and no quick
   action flows (`adb` cannot build that intent) — cover both in Jest.

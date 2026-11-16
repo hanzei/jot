@@ -1,0 +1,45 @@
+# Wi-Fi without internet (#1266): a self-hosted server on a LAN with no uplink,
+# a VPN-less home network, or one whose DNS blocks the OS's check hosts. run.sh
+# fails Android's connectivity probe before this flow, so the Wi-Fi is connected
+# but unvalidated ("Connected, no internet") and NetInfo reports
+# isInternetReachable false, while the Jot server at 10.0.2.2 still answers.
+#
+# The app must treat itself as online: no offline banner, and a note written
+# here syncs. That it actually reached the server is proven in run.sh, which
+# polls the server API for it after this flow, before the probe is restored.
+appId: com.jot.app
+---
+# No clearState: same account and session as flows 01-11. launchApp stops the
+# app first, so it cold-starts on the unvalidated network and reads NetInfo's
+# initial state there.
+- launchApp
+
+- extendedWaitUntil:
+    visible:
+      id: "create-note-fab"
+    timeout: 20000
+
+# Same steps as 02: a text note has no title field, so the identifying text
+# goes in the content.
+- tapOn:
+    id: "create-note-fab"
+- tapOn:
+    id: "note-content-input"
+- inputText: "${MAESTRO_JOT_NO_INTERNET_NOTE}"
+- hideKeyboard
+- tapOn:
+    id: "editor-back"
+
+- extendedWaitUntil:
+    visible: "${MAESTRO_JOT_NO_INTERNET_NOTE}"
+    timeout: 20000
+
+# Taken before the assertions, so a failing run still shows what the app showed.
+- takeScreenshot: wifi-no-internet-12
+
+# By now NetInfo has long since emitted (launch, editor round trip), so the
+# banner's absence is settled rather than a race with its first render.
+- assertNotVisible:
+    id: "offline-banner"
+- assertNotVisible:
+    id: "note-failed-badge-.*"
