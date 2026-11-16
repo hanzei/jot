@@ -19,6 +19,7 @@
     "logout": "Log out",
     "logoutConfirmTitle": "Log out",
     "logoutConfirmMessage": "Are you sure you want to log out?",
+    "logoutFailed": "Couldn't clear this device's data, so you are still logged in. Try again.",
     "logoutUnsyncedMessage_one": "You have {{count}} change that hasn't synced to the server yet. Logging out deletes it from this device.",
     "logoutUnsyncedMessage_other": "You have {{count}} changes that haven't synced to the server yet. Logging out deletes them from this device.",
     "openMenu": "Open menu"

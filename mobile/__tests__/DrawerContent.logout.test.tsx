@@ -5,6 +5,7 @@
  */
 
 import React from 'react';
+import { Alert } from 'react-native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import type { DrawerContentComponentProps } from '@react-navigation/drawer';
 import DrawerContent from '../src/components/DrawerContent';
@@ -13,6 +14,8 @@ import { claimLocalData, getAccountOwner } from '../src/db/accountOwner';
 import { saveNote } from '../src/db/noteQueries';
 import { makeTextNote, seedImageUpload, seedQueueEntry } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
+import { silenceConsole } from './helpers/consoleGuard';
+import * as accountOwner from '../src/db/accountOwner';
 
 const mockLogout = jest.fn(async () => undefined);
 let mockIsLocalMode = false;
@@ -138,6 +141,40 @@ describe('DrawerContent logout', () => {
     expect(mockLogout).not.toHaveBeenCalled();
     expect(await getAccountOwner(db)).toBe('user-1');
     expect(await noteCount()).toBe(1);
+  });
+
+  it('stays logged in, with the data, when the wipe fails', async () => {
+    silenceConsole('warn', /Failed to wipe local data on logout/);
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const wipe = jest.spyOn(accountOwner, 'wipeLocalData').mockRejectedValueOnce(new Error('disk I/O error'));
+
+    await pressLogout(true);
+
+    await waitFor(() => expect(alert).toHaveBeenCalledWith('common.error', 'nav.logoutFailed'));
+    expect(mockLogout).not.toHaveBeenCalled();
+    wipe.mockRestore();
+    alert.mockRestore();
+  });
+
+  it('does not offer the logout when the unsynced count cannot be read', async () => {
+    silenceConsole('warn', /Failed to count unsynced changes/);
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const count = jest.spyOn(accountOwner, 'getUnsyncedChangeCount').mockRejectedValueOnce(new Error('disk I/O error'));
+    const confirm = jest.fn(async () => true);
+    const { getByTestId } = await render(
+      <ConfirmContext.Provider value={{ confirm }}>
+        <DrawerContent {...props} />
+      </ConfirmContext.Provider>,
+    );
+
+    await fireEvent.press(getByTestId('drawer-logout'));
+
+    await waitFor(() => expect(alert).toHaveBeenCalledWith('common.error', 'nav.logoutFailed'));
+    expect(confirm).not.toHaveBeenCalled();
+    expect(mockLogout).not.toHaveBeenCalled();
+    expect(await noteCount()).toBe(1);
+    count.mockRestore();
+    alert.mockRestore();
   });
 
   it('leaves local-mode data alone', async () => {

@@ -74,12 +74,17 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
   // (spec §8.6, #1264), so changes the server has not accepted would be lost:
   // say how many before the user commits. Local mode keeps its own rules.
   const handleLogout = useCallback(async () => {
-    const unsynced = isLocalMode
-      ? 0
-      : await getUnsyncedChangeCount(db).catch((error: unknown) => {
+    let unsynced = 0;
+    if (!isLocalMode) {
+      try {
+        unsynced = await getUnsyncedChangeCount(db);
+      } catch (error) {
+        // An unknown count is not zero: stop rather than wipe without the warning.
         console.warn('Failed to count unsynced changes before logout:', error);
-        return 0;
-      });
+        Alert.alert(t('common.error'), t('nav.logoutFailed'));
+        return;
+      }
+    }
     const confirmed = await confirm({
       title: t('nav.logoutConfirmTitle'),
       message: unsynced > 0 ? t('nav.logoutUnsyncedMessage', { count: unsynced }) : t('nav.logoutConfirmMessage'),
@@ -94,11 +99,17 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     // Wipe before ending the session: if the app dies in between, the user is
     // still signed in with nothing left to lose. The other order would keep the
     // changes the user just agreed to discard, and the next sign-in by the same
-    // user would drain them. The wipe leaves the data ownerless, so anything a
-    // write in flight stores afterwards goes at the next sign-in.
-    await wipeLocalData(db).catch((error: unknown) => {
+    // user would drain them. For the same reason a failed wipe stops the logout:
+    // the session and the data stay together for a retry. The wipe leaves the
+    // data ownerless, so anything a write in flight stores afterwards goes at
+    // the next sign-in.
+    try {
+      await wipeLocalData(db);
+    } catch (error) {
       console.warn('Failed to wipe local data on logout:', error);
-    });
+      Alert.alert(t('common.error'), t('nav.logoutFailed'));
+      return;
+    }
     try {
       await logout();
     } catch (error) {

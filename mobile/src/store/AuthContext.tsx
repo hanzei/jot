@@ -124,6 +124,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUserServerId(serverId);
   }, []);
 
+  // The `setUser` consumers get: profile edits of the signed-in user only. A
+  // different account (a save response or rollback that outlived a server
+  // switch) would keep the current `userServerId` and be judged against the
+  // wrong database by AccountDataGate (#1264), and signing in or out has its
+  // own paths. Either way the update is dropped.
+  const setProfileUser = useCallback<React.Dispatch<React.SetStateAction<User | null>>>((action) => {
+    setUser((prev) => {
+      const next = typeof action === 'function' ? action(prev) : action;
+      return prev && next && next.id === prev.id ? next : prev;
+    });
+  }, []);
+
   const clearAuth = useCallback((reason?: SessionEndedReason) => {
     setUser(null);
     setUserServerId(null);
@@ -214,7 +226,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // stale-while-revalidate pattern revalidateSession() uses on later
         // app foregrounds.
         const mePromise = auth.me();
-        cachedProfile = await getCachedAuthProfile();
+        cachedProfile = await getCachedAuthProfile(restoreServerId ?? undefined);
         if (cachedProfile?.user && cachedProfile?.settings && !cancelled) {
           applyServerProfile(cachedProfile.user, cachedProfile.settings, restoreServerId);
           setIsLoading(false);
@@ -223,7 +235,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const response = await mePromise;
         if (!cancelled) {
           applyServerProfile(response.user, response.settings, restoreServerId);
-          await cacheAuthProfile(response);
+          await cacheAuthProfile(response, restoreServerId ?? undefined);
         }
       } catch (error) {
         if (isUnauthorizedError(error)) {
@@ -237,7 +249,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // the user out — fall back to the cached profile and stay authenticated
           // when we have one. A server hiccup on launch must not force a re-login
           // and discard a valid cached session (issue: cold-start forced logout).
-          const cached = cachedProfile !== undefined ? cachedProfile : await getCachedAuthProfile();
+          const cached = cachedProfile !== undefined ? cachedProfile : await getCachedAuthProfile(restoreServerId ?? undefined);
           if (cached?.user && cached?.settings && !cancelled) {
             applyServerProfile(cached.user, cached.settings, restoreServerId);
             // Surface the revalidation warning only for permanent non-401 HTTP
@@ -277,7 +289,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const response = await auth.login({ username, password });
     applyServerProfile(response.user, response.settings, serverId);
     setSessionEndedReason(null);
-    await cacheAuthProfile(response);
+    await cacheAuthProfile(response, serverId ?? undefined);
   }, [applyServerProfile]);
 
   const register = useCallback(async (username: string, password: string) => {
@@ -285,7 +297,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const response = await auth.register({ username, password });
     applyServerProfile(response.user, response.settings, serverId);
     setSessionEndedReason(null);
-    await cacheAuthProfile(response);
+    await cacheAuthProfile(response, serverId ?? undefined);
   }, [applyServerProfile]);
 
   const loginWithSso = useCallback(async (): Promise<'signedIn' | 'cancelled'> => {
@@ -318,7 +330,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const serverId = getActiveServerId();
       const response = await auth.me();
       applyServerProfile(response.user, response.settings, serverId);
-      await cacheAuthProfile(response);
+      await cacheAuthProfile(response, serverId ?? undefined);
     } catch (err) {
       if (isUnauthorizedError(err)) {
         // Invalid session — clear auth state so the user lands on the login screen.
@@ -369,7 +381,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const response = await auth.me();
       applyServerProfile(response.user, response.settings, serverId);
-      await cacheAuthProfile(response);
+      await cacheAuthProfile(response, serverId ?? undefined);
       setRevalidationFailed(false);
       return true;
     } catch (error) {
@@ -395,8 +407,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // context. Fall back to the newly-active server's own cached profile,
       // mirroring restoreSession()'s stale-while-revalidate fallback, so state
       // matches the server that's actually active even when offline.
-      const cached = await getCachedAuthProfile();
-      if (cached?.user && cached?.settings) {
+      const cached = await getCachedAuthProfile(serverId ?? undefined);
+      // A switch while auth.me() was in flight: this answer is for a server
+      // that is no longer active, and the switch's own revalidation sets the user.
+      if (cached?.user && cached?.settings && getActiveServerId() === serverId) {
         applyServerProfile(cached.user, cached.settings, serverId);
       }
       return true;
@@ -422,7 +436,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logout,
       clearAuth,
       revalidateSession,
-      setUser,
+      setUser: setProfileUser,
       setSettings,
     }),
     [
@@ -442,6 +456,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logout,
       clearAuth,
       revalidateSession,
+      setProfileUser,
     ],
   );
 

@@ -19,6 +19,7 @@
     "logout": "Esci",
     "logoutConfirmTitle": "Esci",
     "logoutConfirmMessage": "Sei sicuro di voler uscire?",
+    "logoutFailed": "Impossibile cancellare i dati di questo dispositivo, quindi sei ancora connesso. Riprova.",
     "logoutUnsyncedMessage_one": "Hai {{count}} modifica non ancora sincronizzata con il server. Uscendo verrà eliminata da questo dispositivo.",
     "logoutUnsyncedMessage_many": "Hai {{count}} modifiche non ancora sincronizzate con il server. Uscendo verranno eliminate da questo dispositivo.",
     "logoutUnsyncedMessage_other": "Hai {{count}} modifiche non ancora sincronizzate con il server. Uscendo verranno eliminate da questo dispositivo.",
