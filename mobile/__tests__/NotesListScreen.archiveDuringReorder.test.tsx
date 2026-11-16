@@ -214,8 +214,6 @@ describe('NotesListScreen: archive during an in-flight manual reorder', () => {
 
     const reorderDeferred = deferred<void>();
     notesApi.reorder.mockImplementation(() => reorderDeferred.promise);
-    const updateDeferred = deferred<Note>();
-    notesApi.update.mockImplementation(() => updateDeferred.promise);
 
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -249,16 +247,15 @@ describe('NotesListScreen: archive during an in-flight manual reorder', () => {
 
     // The regression signature would be note-A reverting to the front (its
     // pre-drag position) instead of staying at the end where the
-    // still-unconfirmed drag put it. Both mutations' network calls are still
-    // pending here (deferred), so this snapshot is only the effect of the two
-    // onMutate handlers — nothing else has had a chance to run yet.
+    // still-unconfirmed drag put it. The reorder's request is still pending
+    // here; the archive commits locally and queues (#1284), so note-A may
+    // already be gone.
     const midRaceOrder = orderedCardIds();
 
-    // Let everything settle: both mutations' network calls finally resolve,
-    // and their invalidateQueries refetches complete.
+    // Let everything settle: the reorder's request finally resolves, and the
+    // invalidateQueries refetches complete.
     await act(async () => {
       reorderDeferred.resolve();
-      updateDeferred.resolve({ ...makeNote('note-A', 0), archived: true });
       await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();
@@ -271,6 +268,7 @@ describe('NotesListScreen: archive during an in-flight manual reorder', () => {
 
     // The actual assertion under test: note-A must never have been shown back
     // at the front while it was still (correctly) sitting at the end.
-    expect(midRaceOrder).toEqual(['note-B', 'note-C', 'note-D', 'note-E', 'note-F', 'note-A']);
+    expect(midRaceOrder.filter((id) => id !== 'note-A')).toEqual(['note-B', 'note-C', 'note-D', 'note-E', 'note-F']);
+    expect(midRaceOrder.indexOf('note-A')).not.toBe(0);
   }, 30000);
 });

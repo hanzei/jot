@@ -40,7 +40,6 @@ import { useFailedNoteIds } from '../store/OfflineContext';
 import { useTopBanners } from '../hooks/useTopBanners';
 import { useToast } from '../hooks/useToast';
 import { useConfirm } from '../hooks/useConfirm';
-import ConfirmDialog from '../components/ConfirmDialog';
 import Markdown from '../components/Markdown';
 import ColorPicker from '../components/ColorPicker';
 import LabelChip from '../components/LabelChip';
@@ -394,10 +393,6 @@ export default function NoteEditorScreen() {
     intentionalExitRef,
     isClosingRef,
     saveInFlightRef,
-    exitSavePrompt,
-    isExitRetrying,
-    handleExitRetry,
-    handleExitDiscard,
   } = sync;
 
   // Mark the exit as intentional (so beforeRemove doesn't re-handle it), zoom
@@ -2052,19 +2047,6 @@ export default function NoteEditorScreen() {
           setAssigneePickerVisible(false);
           setAssigningItemId(null);
         }}
-      />
-
-      <ConfirmDialog
-        visible={!!exitSavePrompt}
-        title={t('note.saveFailedExitTitle')}
-        message={t('note.saveFailedExitMessage')}
-        confirmLabel={t('note.discardAndLeave')}
-        destructive
-        cancelLabel={exitSavePrompt && exitSavePrompt.retriesLeft > 0 ? t('common.retry') : undefined}
-        onCancel={exitSavePrompt && exitSavePrompt.retriesLeft > 0 ? handleExitRetry : undefined}
-        onConfirm={handleExitDiscard}
-        busy={isExitRetrying}
-        dismissible={false}
       />
 
       <Modal

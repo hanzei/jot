@@ -87,8 +87,12 @@ const DRAIN_BACKOFF_BASE_MS = 1000;
 const DRAIN_BACKOFF_MAX_MS = 60000;
 /** Consecutive failed drains tolerated before we stop auto-retrying and surface an error. */
 const MAX_CONSECUTIVE_DRAIN_FAILURES = 6;
-/** Debounce applied to drains triggered by a fresh enqueue, to coalesce bursts of writes. */
-const ENQUEUE_DRAIN_DEBOUNCE_MS = 1000;
+/**
+ * Debounce applied to drains triggered by a fresh enqueue, to coalesce bursts
+ * of writes. Kept short: every converted write reaches the server only through
+ * the drain (#1284), so this is added to its latency.
+ */
+const ENQUEUE_DRAIN_DEBOUNCE_MS = 300;
 
 /** True when two string sets hold exactly the same ids (order-independent). */
 function sameStringSet(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {

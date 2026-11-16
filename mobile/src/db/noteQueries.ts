@@ -211,7 +211,9 @@ async function pruneLocalItems(
 // markers are always set and cleared by their own explicit UPDATEs
 // (markNotePendingCreate / clearNotePendingCreate / markNoteSyncFailed /
 // clearNoteSyncFailed).
-async function saveNoteInTx(
+//
+// Opens no transaction of its own: the caller runs it inside one.
+export async function saveNoteInTx(
   db: SQLiteDatabase,
   note: Note,
   serverSnapshot = false,
@@ -1304,32 +1306,41 @@ export async function reconcileLocalItems(
   write: number | null = null,
   keepLocalCompletedIds?: ReadonlySet<string>,
 ): Promise<void> {
+  await withSerializedTransaction(db, () => reconcileLocalItemsInTx(db, noteId, items, write, keepLocalCompletedIds));
+}
+
+/** {@link reconcileLocalItems} without its own transaction: the caller runs it inside one. */
+export async function reconcileLocalItemsInTx(
+  db: SQLiteDatabase,
+  noteId: string,
+  items: ServerItemInput[],
+  write: number | null = null,
+  keepLocalCompletedIds?: ReadonlySet<string>,
+): Promise<void> {
   const now = new Date().toISOString();
   // The completed flags go through localCompletedWrites: `write` is the token of
   // the local write this list answers, or null for one it does not (a queue
   // drain's replay, a bulk delete). `keepLocalCompletedIds` keeps the local value
   // of items a queued op has yet to replay. Every other field is taken as reported.
   const completedById = localCompletedWrites.accept(write, items);
-  await withSerializedTransaction(db, async () => {
-    for (const item of items) {
-      const completed = completedBinding(completedById, item, keepLocalCompletedIds);
-      await db.runAsync(
-        `UPDATE note_items SET text = ?, completed = CASE WHEN ? THEN completed ELSE ? END, position = ?, parent_id = ?, assigned_to = ?, updated_at = ?
-         WHERE id = ? AND note_id = ?`,
-        [item.text, completed.keepLocal, completed.value, item.position, item.parent_id, item.assigned_to, now, item.id, noteId],
-      );
-      // No-ops (via INSERT OR IGNORE) unless the UPDATE above matched zero rows,
-      // i.e. this item doesn't exist locally yet (e.g. created on another
-      // device while this one was offline).
-      await db.runAsync(
-        `INSERT OR IGNORE INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [item.id, noteId, item.text, completed.value, item.position, item.parent_id, item.assigned_to, now, now],
-      );
-    }
-    await pruneLocalItems(db, noteId, items, true);
-    await touchLocalNote(db, noteId);
-  });
+  for (const item of items) {
+    const completed = completedBinding(completedById, item, keepLocalCompletedIds);
+    await db.runAsync(
+      `UPDATE note_items SET text = ?, completed = CASE WHEN ? THEN completed ELSE ? END, position = ?, parent_id = ?, assigned_to = ?, updated_at = ?
+       WHERE id = ? AND note_id = ?`,
+      [item.text, completed.keepLocal, completed.value, item.position, item.parent_id, item.assigned_to, now, item.id, noteId],
+    );
+    // No-ops (via INSERT OR IGNORE) unless the UPDATE above matched zero rows,
+    // i.e. this item doesn't exist locally yet (e.g. created on another
+    // device while this one was offline).
+    await db.runAsync(
+      `INSERT OR IGNORE INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [item.id, noteId, item.text, completed.value, item.position, item.parent_id, item.assigned_to, now, now],
+    );
+  }
+  await pruneLocalItems(db, noteId, items, true);
+  await touchLocalNote(db, noteId);
 }
 
 /**

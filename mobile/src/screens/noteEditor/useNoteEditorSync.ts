@@ -25,20 +25,10 @@ import {
   useUpdateNoteItem,
 } from '../../hooks/useNotes';
 import { useSSESubscription } from '../../store/SSEContext';
-import { isServerReachable } from '../../api/serverReachability';
 import type { ToastType } from '../../hooks/useToast';
 import { isBlankDraft, itemSnapshot, serializeItems, toLocalItems, type ItemSnapshot, type LocalItem } from './listItemModel';
 import type { EditorDocHandle } from './useEditorDoc';
 import type { CachedNote, EditorNavProp } from './types';
-
-const MAX_EXIT_SAVE_RETRIES = 3;
-
-/** The prompt shown when a save failed on the way out of the editor. */
-interface ExitSavePrompt {
-  navAction: NavigationAction;
-  wantsZoom: boolean;
-  retriesLeft: number;
-}
 
 export interface UseNoteEditorSyncParams {
   doc: EditorDocHandle;
@@ -109,17 +99,12 @@ export interface NoteEditorSync {
   withItemWriteInFlight: <T>(op: () => Promise<T>) => Promise<T>;
   /** The editor's completed-write tracker; see completedWrites in @jot/shared. */
   completedWrites: CompletedWriteTracker;
-
-  exitSavePrompt: ExitSavePrompt | null;
-  isExitRetrying: boolean;
-  handleExitRetry: () => Promise<void>;
-  handleExitDiscard: () => void;
 }
 
 /**
  * The editor's persistence layer: the debounced save engine and its baseline,
  * the reconciliation that keeps the editor in step with the note underneath it,
- * and the save-on-exit flow (including the retry prompt when that save fails).
+ * and the save-on-exit flow.
  *
  * Everything here is about getting editor state to and from the server. The
  * screen owns the state itself (`useEditorDoc`) and the rendering; this hook
@@ -175,8 +160,6 @@ export function useNoteEditorSync({
   // pop.
   const isClosingRef = useRef(false);
   const hasPendingChangesRef = useRef(false);
-  const [exitSavePrompt, setExitSavePrompt] = useState<ExitSavePrompt | null>(null);
-  const [isExitRetrying, setIsExitRetrying] = useState(false);
   // Bumped on every edit (markDirtyAndScheduleUpdate). flushSave snapshots it
   // alongside the state refs so it can tell whether new edits arrived while its
   // network calls were in flight — clearing the dirty flag then would mark
@@ -582,7 +565,6 @@ export function useNoteEditorSync({
   // so a back press that lands mid-animation still hits beforeRemove and gets
   // swallowed there rather than falling through to an unguarded second pop.
   const exitWith = useCallback((navAction: NavigationAction, wantsZoom: boolean) => {
-    setExitSavePrompt(null);
     const dispatch = () => {
       intentionalExitRef.current = true;
       navigation.dispatch(navAction);
@@ -595,8 +577,8 @@ export function useNoteEditorSync({
     }
   }, [animateClose, navigation]);
 
-  // Flush pending edits without blocking navigation — used when we deliberately
-  // let the user leave (server known-unreachable) and on an unexpected unmount.
+  // Flush pending edits without blocking navigation — on every exit with pending
+  // edits, and on an unexpected unmount.
   // flushSave(true) still reports failure via its return value even though its
   // `unmounting` guard suppresses the in-editor error banner (the editor is on
   // its way out), so a genuine background-save failure would otherwise vanish
@@ -653,61 +635,21 @@ export function useNoteEditorSync({
         return;
       }
 
-      // Server known-unreachable: an online write would only stall for the
-      // request timeout before falling back to the local-persist + queue path,
-      // so there is nothing to wait for. Flush in the background and let the exit
-      // proceed — blocking here is what made leaving a note with unsaved edits
-      // feel frozen while the server was down. The edit stays durable: flushSave
-      // writes it to the local DB and enqueues it for replay. Mark the exit
-      // intentional so the unmount cleanup below doesn't flush a second time; when
-      // a zoom-back is wanted we still preventDefault and drive it via exitWith.
-      if (!isServerReachable()) {
-        intentionalExitRef.current = true;
-        flushInBackground();
-        if (wantsZoom) {
-          event.preventDefault();
-          exitWith(action, wantsZoom);
-        }
-        return;
-      }
-
-      // Server reachable: await the save so a genuine, non-queueable failure
-      // (validation/conflict) can still prompt Retry/Discard instead of silently
-      // dropping the edit. A reachable server responds promptly, so this path no
-      // longer reintroduces the long stall.
-      event.preventDefault();
-      void (async () => {
-        const saveSucceeded = await flushSave();
-        if (!saveSucceeded) {
-          setExitSavePrompt({ navAction: action, wantsZoom, retriesLeft: MAX_EXIT_SAVE_RETRIES });
-          return;
-        }
+      // The save commits locally and queues for the drain (spec §4.1, #1284),
+      // so there is nothing to wait for: flush in the background and let the
+      // exit proceed. A save the server rejects later shows up as a failed
+      // change on the note, not here. Mark the exit intentional so the unmount
+      // cleanup below doesn't flush a second time; when a zoom-back is wanted we
+      // still preventDefault and drive it via exitWith.
+      intentionalExitRef.current = true;
+      flushInBackground();
+      if (wantsZoom) {
+        event.preventDefault();
         exitWith(action, wantsZoom);
-      })();
+      }
     });
     return unsubscribe;
-  }, [cancelScheduledSave, exitWith, flushSave, flushInBackground, navigation, zoomEnabled]);
-
-  const handleExitDiscard = useCallback(() => {
-    if (!exitSavePrompt || isExitRetrying) return;
-    exitWith(exitSavePrompt.navAction, exitSavePrompt.wantsZoom);
-  }, [exitSavePrompt, exitWith, isExitRetrying]);
-
-  // Guarded by isExitRetrying so a retry in flight can't race a second tap on
-  // Retry or Discard into a double dispatch or a stale retriesLeft update —
-  // the dialog also disables both buttons via `busy` while this is true.
-  const handleExitRetry = useCallback(async () => {
-    if (!exitSavePrompt || isExitRetrying) return;
-    setIsExitRetrying(true);
-    const { navAction, wantsZoom, retriesLeft } = exitSavePrompt;
-    const retrySucceeded = await flushSave();
-    if (retrySucceeded) {
-      exitWith(navAction, wantsZoom);
-    } else {
-      setExitSavePrompt({ navAction, wantsZoom, retriesLeft: retriesLeft - 1 });
-    }
-    setIsExitRetrying(false);
-  }, [exitSavePrompt, exitWith, flushSave, isExitRetrying]);
+  }, [cancelScheduledSave, exitWith, flushInBackground, navigation, zoomEnabled]);
 
   // Flush pending save on unmount (prevent data loss), skip if intentionally exiting
   useEffect(() => {
@@ -744,9 +686,5 @@ export function useNoteEditorSync({
     saveInFlightRef,
     withItemWriteInFlight,
     completedWrites,
-    exitSavePrompt,
-    isExitRetrying,
-    handleExitRetry,
-    handleExitDiscard,
   };
 }

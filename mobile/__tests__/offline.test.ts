@@ -6,7 +6,7 @@
  * the SQL text passed to a mock.
  */
 
-import { generateClientNoteId, isUnsyncedNoteId, removeLocalNotesNotIn, getLocalLabelCounts, saveNote, addLabelToLocalNote, removeLabelFromLocalNote, getLocalNotes, upsertLabel, getStoredLabels } from '../src/db/noteQueries';
+import { generateClientNoteId, isUnsyncedNoteId, removeLocalNotesNotIn, getLocalLabelCounts, saveNote, saveNoteInTx, addLabelToLocalNote, removeLabelFromLocalNote, getLocalNotes, upsertLabel, getStoredLabels } from '../src/db/noteQueries';
 import { drainQueue, getSyncQueueStats, isTransientHttpStatus, getDeadLetteredOperations, MAX_ENTRY_DRAIN_ATTEMPTS, PROCESSING_ERROR_STATUS, QUEUED_WRITE_TIMEOUT_MS } from '../src/db/syncQueue';
 import api from '../src/api/client';
 import { makeLabel, makeListNote, makeNoteItem, makeTextNote, remainingQueueIds, seedQueueEntry } from './helpers/fixtures';
@@ -36,17 +36,17 @@ jest.mock('../src/api/client', () => ({
   },
 }));
 
-// saveNote runs for real (writes land in the test database) but stays a spy so
+// saveNoteInTx (the drain's response write) runs for real but stays a spy so
 // the reconciliation-failure case below can make one call throw.
 jest.mock('../src/db/noteQueries', () => {
   const actual = jest.requireActual('../src/db/noteQueries');
-  return { ...actual, saveNote: jest.fn(actual.saveNote) };
+  return { ...actual, saveNoteInTx: jest.fn(actual.saveNoteInTx) };
 });
 
 const mockApi = api as jest.Mocked<typeof api>;
 // Every replayed queue write carries the longer queued-write timeout (#1211).
 const REPLAY_CONFIG = { timeout: QUEUED_WRITE_TIMEOUT_MS };
-const mockSaveNote = saveNote as jest.MockedFunction<typeof saveNote>;
+const mockSaveNoteInTx = saveNoteInTx as jest.MockedFunction<typeof saveNoteInTx>;
 
 let db: TestDatabase;
 beforeEach(() => {
@@ -741,7 +741,7 @@ describe('drainQueue', () => {
       attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1,
     });
     mockApi.post.mockResolvedValueOnce({ data: makeTextNote({ id: clientId }) } as never); // request lands
-    mockSaveNote.mockRejectedValueOnce(new Error('local db write failed')); // reconciliation throws
+    mockSaveNoteInTx.mockRejectedValueOnce(new Error('local db write failed')); // reconciliation throws
 
     const { discardedOperations } = await drainQueue(db);
 
