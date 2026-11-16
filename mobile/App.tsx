@@ -20,6 +20,7 @@ import { AuthProvider, useAuth } from './src/store/AuthContext';
 import MobileI18nProvider from './src/i18n/MobileI18nProvider';
 import { UsersProvider } from './src/store/UsersContext';
 import { OfflineProvider } from './src/store/OfflineContext';
+import { AccountDataGate } from './src/store/AccountDataGate';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import RootNavigator, { type RootStackParamList } from './src/navigation/RootNavigator';
 import { ToastProvider } from './src/components/Toast';
@@ -219,15 +220,18 @@ function AppContent() {
               >
                 <MobileI18nProvider>
                   <ThemeProvider>
-                    <OfflineProvider>
-                      <UsersProvider>
-                        <ToastProvider>
-                          <ConfirmProvider>
-                            <NavigationWrapper />
-                          </ConfirmProvider>
-                        </ToastProvider>
-                      </UsersProvider>
-                    </OfflineProvider>
+                    {/* Nothing below reads the database or drains its queue until the signed-in user owns it (#1264). */}
+                    <AccountDataGate serverId={activeServerId}>
+                      <OfflineProvider>
+                        <UsersProvider>
+                          <ToastProvider>
+                            <ConfirmProvider>
+                              <NavigationWrapper />
+                            </ConfirmProvider>
+                          </ToastProvider>
+                        </UsersProvider>
+                      </OfflineProvider>
+                    </AccountDataGate>
                   </ThemeProvider>
                 </MobileI18nProvider>
               </SQLiteProvider>

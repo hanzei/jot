@@ -22,9 +22,16 @@ import {
   updateLocalNoteShares,
 } from './noteQueries';
 import { isLocalModeActive } from '../store/localMode';
-import { collectNoteIds } from './affectedNoteIds';
+import {
+  insertKeys,
+  keyIdExpression,
+  keyKindCondition,
+  noteKey,
+  parseJsonObject,
+  type QueueKey,
+} from './queueKeys';
 import { withSerializedTransaction } from './transaction';
-import { rewriteLabelId } from './labelIdRewrite';
+import { rewriteLabelId, rewriteLabelKeys } from './labelIdRewrite';
 import { notesWrittenSince, recordWriteLanded, snapshotMark, type SnapshotMark } from './snapshotGate';
 import type { Label } from '@jot/shared';
 
@@ -90,6 +97,17 @@ export interface EnqueueParams {
   endpoint: string;
   method: 'POST' | 'PATCH' | 'DELETE';
   body?: Record<string, unknown>;
+  /**
+   * What the op writes (see queueKeys.ts): every note it changes, and every
+   * label it names. Recorded in `sync_queue_keys`, which is what the protected
+   * set and the per-note queue lookups read (#1282).
+   */
+  keys: readonly QueueKey[];
+  /**
+   * What the op depends on without writing it: a duplicate's source note. It
+   * orders the op but does not protect the note or count as an op queued for it.
+   */
+  readKeys?: readonly QueueKey[];
 }
 
 /**
@@ -327,14 +345,15 @@ export function notifyEnqueueListeners(): void {
 }
 
 /**
- * Insert a single entry directly into the sync queue, bypassing the local-mode
- * guard and enqueue listeners. Used exclusively by the local→server upgrade seed
- * path (seedReplayQueue): local mode is still active while the queue is being
- * pre-populated for replay, so the normal `enqueueOperation` guard would be a
- * no-op. Do NOT call this from any other code path.
+ * Insert a single entry and its keys into the sync queue, bypassing the
+ * local-mode guard and enqueue listeners. The local→server upgrade seed path
+ * (seedReplayQueue) calls it directly, because local mode is still active while
+ * the queue is being pre-populated for replay and `enqueueOperation`'s guard
+ * would make that a no-op; everything else goes through `enqueueOperation`. The
+ * row and its keys are separate statements: run it inside a transaction.
  */
 export async function insertQueueEntry(db: SQLiteDatabase, params: EnqueueParams): Promise<void> {
-  await db.runAsync(
+  const result = await db.runAsync(
     `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
      VALUES (?, ?, ?, ?, ?)`,
     [
@@ -345,6 +364,7 @@ export async function insertQueueEntry(db: SQLiteDatabase, params: EnqueueParams
       new Date().toISOString(),
     ],
   );
+  await insertKeys(db, 'sync_queue_keys', result.lastInsertRowId, params);
 }
 
 export async function enqueueOperation(db: SQLiteDatabase, params: EnqueueParams): Promise<void> {
@@ -356,7 +376,7 @@ export async function enqueueOperation(db: SQLiteDatabase, params: EnqueueParams
   if (isLocalModeActive()) {
     return;
   }
-  await insertQueueEntry(db, params);
+  await withSerializedTransaction(db, () => insertQueueEntry(db, params));
   notifyEnqueueListeners();
 }
 
@@ -404,33 +424,39 @@ export async function getSyncQueueStats(db: SQLiteDatabase): Promise<SyncQueueSt
   };
 }
 
-function parseQueueBody(body: string | null): Record<string, unknown> | null {
-  if (!body) return null;
-  try {
-    return JSON.parse(body) as Record<string, unknown>;
-  } catch {
-    return null;
+/**
+ * The notes each queued entry writes, by entry id: its written (not read-only)
+ * note keys. This is what a landing is recorded for, what a dead letter links
+ * and flags failed, and what the drain pulls afterwards.
+ */
+async function getWrittenNoteIdsByEntry(db: SQLiteDatabase): Promise<Map<number, string[]>> {
+  const rows = await db.getAllAsync<{ entry_id: number; id: string }>(
+    `SELECT entry_id, ${keyIdExpression('key', 'note')} AS id FROM sync_queue_keys
+     WHERE read_only = 0 AND ${keyKindCondition('key', 'note')}`,
+  );
+  const byEntry = new Map<number, string[]>();
+  for (const row of rows) {
+    const ids = byEntry.get(row.entry_id);
+    if (ids) ids.push(row.id);
+    else byEntry.set(row.entry_id, [row.id]);
   }
-}
-
-/** The note IDs a single queued op touches, as an array (see {@link collectNoteIds}). */
-function affectedNoteIds(endpoint: string, body: Record<string, unknown> | undefined): string[] {
-  const ids = new Set<string>();
-  collectNoteIds(endpoint, body ?? null, ids);
-  return [...ids];
+  return byEntry;
 }
 
 /**
- * The note IDs a dead-lettered op touched, recovered from its stored (effective)
- * endpoint/body. A multi-note op like `reorder` records its dead_letter row with
- * `note_id = NULL` yet still flags every affected note `sync_state = 'failed'`,
- * so the sync-failure resolution flow uses this to clear all of those per-note
- * badges — not just the single linked note (#493).
+ * The notes a dead-lettered op touched, from its recorded keys. A multi-note op
+ * like `reorder` records its dead_letter row with `note_id = NULL` yet still
+ * flags every affected note `sync_state = 'failed'`, so the sync-failure
+ * resolution flow uses this to clear all of those per-note badges — not just
+ * the single linked note (#493).
  */
-export function deadLetterAffectedNoteIds(
-  dl: Pick<DeadLetteredOperation, 'endpoint' | 'body'>,
-): string[] {
-  return affectedNoteIds(dl.endpoint, parseQueueBody(dl.body) ?? undefined);
+export async function getDeadLetterNoteIds(db: SQLiteDatabase, deadLetterId: number): Promise<string[]> {
+  const rows = await db.getAllAsync<{ id: string }>(
+    `SELECT ${keyIdExpression('key', 'note')} AS id FROM dead_letter_keys
+     WHERE dead_letter_id = ? AND read_only = 0 AND ${keyKindCondition('key', 'note')}`,
+    [deadLetterId],
+  );
+  return rows.map((row) => row.id);
 }
 
 /**
@@ -440,31 +466,66 @@ export function deadLetterAffectedNoteIds(
  * edit before its queued op has drained (see issue #487).
  */
 export async function getPendingNoteIds(db: SQLiteDatabase): Promise<Set<string>> {
-  const entries = await db.getAllAsync<Pick<QueueEntry, 'endpoint' | 'body'>>(
-    'SELECT endpoint, body FROM sync_queue',
+  const rows = await db.getAllAsync<{ id: string }>(
+    `SELECT DISTINCT ${keyIdExpression('key', 'note')} AS id FROM sync_queue_keys
+     WHERE read_only = 0 AND ${keyKindCondition('key', 'note')}`,
   );
+  return new Set(rows.map((row) => row.id));
+}
 
-  const ids = new Set<string>();
-  for (const entry of entries) {
-    collectNoteIds(entry.endpoint, parseQueueBody(entry.body), ids);
-  }
-  return ids;
+/**
+ * Notes a dead letter still covers: the note it is linked to, or every note a
+ * multi-note op (`note_id = NULL`, e.g. reorder) touched. `exceptDeadLetterId`
+ * leaves out the row being resolved. The dead letters are what the user has
+ * yet to review, so they — not the `failed` flag alone — decide whether a
+ * note's preserved local content is still needed (#1263).
+ */
+async function getDeadLetteredNoteIds(db: SQLiteDatabase, exceptDeadLetterId?: number): Promise<Set<string>> {
+  const except = exceptDeadLetterId ?? null;
+  const rows = await db.getAllAsync<{ id: string }>(
+    `SELECT note_id AS id FROM dead_letter WHERE note_id IS NOT NULL AND id IS NOT ?
+     UNION
+     SELECT ${keyIdExpression('k.key', 'note')} FROM dead_letter_keys k
+       JOIN dead_letter d ON d.id = k.dead_letter_id
+     WHERE d.note_id IS NULL AND d.id IS NOT ? AND k.read_only = 0 AND ${keyKindCondition('k.key', 'note')}`,
+    [except, except],
+  );
+  return new Set(rows.map((row) => row.id));
+}
+
+/**
+ * Clear the note's `sync_state = 'failed'` flag unless a dead letter other than
+ * `exceptDeadLetterId` still covers it. A later write that lands for the note
+ * does not resolve an earlier failure: "Keep my version" forks the local row,
+ * so the row must stay protected until the user has reviewed every failure on
+ * it (#1263).
+ */
+export async function clearNoteSyncFailedIfResolved(
+  db: SQLiteDatabase,
+  noteId: string,
+  exceptDeadLetterId?: number,
+): Promise<void> {
+  if ((await getDeadLetteredNoteIds(db, exceptDeadLetterId)).has(noteId)) return;
+  await clearNoteSyncFailed(db, noteId);
 }
 
 /**
  * Notes that server-sourced writes must leave untouched: those with a pending
  * queue op (#487), those with a queued or errored image upload (#1279), plus
- * those marked `sync_state = 'failed'` after a dead-lettered op (#492). A dead-lettered note no longer has a queue row, so the failed flag
- * is what keeps its preserved local content from being overwritten or pruned by
- * a later background fetch / SSE event.
+ * those with an unresolved failure (#492): flagged `sync_state = 'failed'`, or
+ * still covered by a dead letter (#1263). A dead-lettered note no longer has a
+ * queue row, so this is what keeps its preserved local content from being
+ * overwritten or pruned by a later background fetch / SSE event.
  */
 export async function getProtectedNoteIds(db: SQLiteDatabase): Promise<Set<string>> {
-  const [pending, failed, uploads] = await Promise.all([
+  const [pending, failed, deadLettered, uploads] = await Promise.all([
     getPendingNoteIds(db),
     getFailedNoteIds(db),
+    getDeadLetteredNoteIds(db),
     getNoteIdsWithPendingUploads(db),
   ]);
   for (const id of failed) pending.add(id);
+  for (const id of deadLettered) pending.add(id);
   for (const id of uploads) pending.add(id);
   return pending;
 }
@@ -560,17 +621,15 @@ export async function getQueuedCompletedItemIds(
   noteId: string,
   exceptEntryId?: number,
 ): Promise<Set<string>> {
-  const entries = await db.getAllAsync<Pick<QueueEntry, 'id' | 'operation' | 'endpoint' | 'body'>>(
-    "SELECT id, operation, endpoint, body FROM sync_queue WHERE operation = 'setItemsCompleted'",
+  const entries = await db.getAllAsync<Pick<QueueEntry, 'body'>>(
+    `SELECT q.body FROM sync_queue q JOIN sync_queue_keys k ON k.entry_id = q.id
+     WHERE q.operation = 'setItemsCompleted' AND k.key = ? AND q.id IS NOT ?`,
+    [noteKey(noteId), exceptEntryId ?? null],
   );
   const ids = new Set<string>();
   let localItems: NoteItem[] | null = null;
   for (const entry of entries) {
-    if (entry.id === exceptEntryId) continue;
-    // /notes/{noteId}/items/set-completed
-    const segments = entry.endpoint.split('/');
-    if (segments[2] !== noteId) continue;
-    const body = parseQueueBody(entry.body);
+    const body = parseJsonObject(entry.body);
     const itemIds = body?.item_ids;
     if (!Array.isArray(itemIds)) continue;
     // The op names only the tapped items; each one's cascade is recovered from
@@ -604,16 +663,12 @@ export async function saveServerNotes(db: SQLiteDatabase, notes: Note[], since: 
  * when reconciling the label store (see {@link saveServerLabels}).
  */
 export async function getPendingLabelIds(db: SQLiteDatabase): Promise<Set<string>> {
-  const entries = await db.getAllAsync<Pick<QueueEntry, 'operation' | 'body'>>(
-    "SELECT operation, body FROM sync_queue WHERE operation = 'createLabel'",
+  const rows = await db.getAllAsync<{ id: string }>(
+    `SELECT DISTINCT ${keyIdExpression('k.key', 'label')} AS id FROM sync_queue_keys k
+       JOIN sync_queue q ON q.id = k.entry_id
+     WHERE q.operation = 'createLabel' AND ${keyKindCondition('k.key', 'label')}`,
   );
-  const ids = new Set<string>();
-  for (const entry of entries) {
-    const body = parseQueueBody(entry.body);
-    const id = body?.id;
-    if (typeof id === 'string') ids.add(id);
-  }
-  return ids;
+  return new Set(rows.map((row) => row.id));
 }
 
 /**
@@ -734,7 +789,7 @@ async function recordDeadLetter(
   noteId: string | null,
   options?: { attempts?: number; errorMessage?: string | null },
 ): Promise<void> {
-  await db.runAsync(
+  const result = await db.runAsync(
     `INSERT INTO dead_letter (operation, endpoint, method, body, status, note_id, created_at, failed_at, attempts, error_message)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
@@ -749,6 +804,12 @@ async function recordDeadLetter(
       options?.attempts ?? 0,
       options?.errorMessage ?? null,
     ],
+  );
+  // The dead letter keeps the entry's keys, so it names its notes without a parse.
+  await db.runAsync(
+    `INSERT OR IGNORE INTO dead_letter_keys (dead_letter_id, key, read_only)
+     SELECT ?, key, read_only FROM sync_queue_keys WHERE entry_id = ?`,
+    [result.lastInsertRowId, entry.id],
   );
 }
 
@@ -789,6 +850,8 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
   const entries = await db.getAllAsync<QueueEntry>(
     'SELECT * FROM sync_queue ORDER BY id ASC',
   );
+  // A label-id rewrite mid-drain moves only `label:` keys, so this holds throughout.
+  const noteIdsByEntry = await getWrittenNoteIdsByEntry(db);
 
   const syncedNotes: Note[] = [];
   const discardedOperations: DiscardedOperation[] = [];
@@ -836,6 +899,8 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
     // not retry or dead-letter the entry (issue #714 — mirrors imageUploadQueue's
     // "the upload already landed, so remove the queue entry first").
     let requestLanded = false;
+    // The notes this entry writes.
+    const targets = (): readonly string[] => noteIdsByEntry.get(entry.id) ?? [];
     try {
       if (entry.body) {
         body = JSON.parse(entry.body) as Record<string, unknown>;
@@ -845,7 +910,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
       // it against a note the server never got is pointless — drop it (the note
       // stays flagged failed) rather than round-tripping to a guaranteed 404.
       if (abandonedCreateNoteIds.size > 0) {
-        const touched = affectedNoteIds(endpoint, body);
+        const touched = targets();
         if (touched.length > 0 && touched.every((id) => abandonedCreateNoteIds.has(id))) {
           console.warn(
             `Dropping queued operation id=${entry.id} (${entry.operation}): its note's create was dead-lettered.`,
@@ -864,7 +929,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           // (e.g. a scalar update followed by a convert) then replays each op
           // against the version the previous one left behind instead of the
           // stale value captured when this op was first queued.
-          const noteId = affectedNoteIds(endpoint, body)[0];
+          const noteId = targets()[0];
           baseVersion = noteId ? await getLocalNoteVersion(db, noteId) : null;
           if (baseVersion !== null) body.base_version = baseVersion;
         }
@@ -906,7 +971,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           // Share returns 204 (no body) and the optimistic local note carries a
           // synthetic `optimistic_<userId>` share row; re-fetch the canonical note
           // so shared_with reflects the server-assigned share ids.
-          await reconcileNoteFromServer(db, affectedNoteIds(endpoint, body)[0]);
+          await reconcileNoteFromServer(db, targets()[0]);
         } else if (entry.operation === 'convertNoteType') {
           // The server returns the full converted note (authoritative version,
           // updated_at, and item ids); persist it rather than trusting the local
@@ -916,7 +981,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         }
       } else if (entry.method === 'PATCH') {
         const updateNoteID =
-          entry.operation === 'update' ? affectedNoteIds(endpoint, body)[0] : undefined;
+          entry.operation === 'update' ? targets()[0] : undefined;
         if (updateNoteID !== undefined && body && ('content' in body || 'title' in body)) {
           // Resolve the optimistic-concurrency base from the note's current local
           // version at replay time. applyResponse below advances that version
@@ -949,7 +1014,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         } else if (entry.operation === 'unshare') {
           // Unshare returns 204 (no body); re-fetch so shared_with/is_shared
           // reflect the server state after the removal.
-          await reconcileNoteFromServer(db, affectedNoteIds(endpoint, body)[0]);
+          await reconcileNoteFromServer(db, targets()[0]);
         }
       }
 
@@ -957,14 +1022,14 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
       // for a removeImage replay: it sends no body, so its note id is only
       // here (#1265). Recording a landing twice would skip a snapshot fetched
       // between the two.
-      if (entry.operation === 'removeImage') recordWriteLanded(affectedNoteIds(endpoint, body));
+      if (entry.operation === 'removeImage') recordWriteLanded(targets());
       await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
 
-      // The write landed: if this note was carrying a prior failure, clear it so
-      // it resumes syncing from the server normally (#492). Guarded UPDATE, so a
-      // no-op for the common (already-synced) case.
-      for (const noteId of affectedNoteIds(endpoint, body)) {
-        await clearNoteSyncFailed(db, noteId);
+      // The write landed: if this note was carrying a prior failure that no
+      // dead letter still records, clear it so it resumes syncing from the
+      // server normally (#492). An unresolved dead letter keeps it (#1263).
+      for (const noteId of targets()) {
+        await clearNoteSyncFailedIfResolved(db, noteId);
         // A trashed or deleted note has nothing left to pull; one this
         // response settled is already current.
         const gone = entry.operation === 'delete' || entry.operation === 'permanentDelete';
@@ -980,7 +1045,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // reconciled by the next server fetch / SSE event. Attempt counting is
         // reserved for failures *before* the request lands (issue #714).
         console.warn(`Queue entry id=${entry.id} landed server-side; post-response reconciliation failed:`, err);
-        if (entry.operation === 'removeImage') recordWriteLanded(affectedNoteIds(endpoint, body));
+        if (entry.operation === 'removeImage') recordWriteLanded(targets());
         await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
         continue;
       }
@@ -1053,9 +1118,10 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
                 // resolution so every later op (and local copy) uses that label.
                 // A failure here is a local processing error and propagates as
                 // one rather than dead-lettering a create the server did resolve.
-                await withSerializedTransaction(db, () =>
-                  rewriteLabelId(db, clientLabelId, serverLabel.id, serverLabel),
-                );
+                await withSerializedTransaction(db, async () => {
+                  await rewriteLabelId(db, clientLabelId, serverLabel.id, serverLabel);
+                  await rewriteLabelKeys(db, clientLabelId, serverLabel.id);
+                });
                 // The drain snapshot predates the rewrite: refresh the rows behind this one.
                 const rewritten = new Map(
                   (await db.getAllAsync<QueueEntry>('SELECT * FROM sync_queue WHERE id > ?', [entry.id]))
@@ -1077,7 +1143,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           // The edit is lost server-side (the failed-changes banner surfaces it),
           // so this one is worth a warning.
           console.warn(`Discarding queued operation id=${entry.id} ${entry.operation} ${endpoint} (HTTP ${status})`);
-          const noteIds = affectedNoteIds(endpoint, body);
+          const noteIds = targets();
           // Only link dead_letter.note_id when there's a single clear note (per the
           // schema contract); a multi-note op like reorder stores NULL. The note(s)
           // are still each flagged failed below regardless.
@@ -1096,7 +1162,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         } else if (entry.operation === 'create' || entry.operation === 'duplicate') {
           // Replaying a create/duplicate whose original already committed: the
           // note exists on the server, so clear its pending-create marker (#475).
-          for (const noteId of affectedNoteIds(endpoint, body)) {
+          for (const noteId of targets()) {
             await clearNotePendingCreate(db, noteId);
           }
         }
@@ -1112,7 +1178,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           // about to go: a snapshot in flight may predate it (#1265). The API
           // client records only 2xx responses, so this one is ours to record.
           // A viewed ping changes no content (see recordWriteResponse).
-          if (entry.operation !== 'markViewed') recordWriteLanded(affectedNoteIds(endpoint, body));
+          if (entry.operation !== 'markViewed') recordWriteLanded(targets());
         }
 
         await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
@@ -1167,7 +1233,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           `Dead-lettering queued operation id=${entry.id} after ${attempts} failed attempts ` +
             `(${deadLetterStatus === PROCESSING_ERROR_STATUS ? 'processing error' : `HTTP ${deadLetterStatus}`}): ${errorMessage}`,
         );
-        const noteIds = affectedNoteIds(endpoint, body);
+        const noteIds = targets();
         discardedOperations.push({ operation: entry.operation, endpoint, status: deadLetterStatus });
         await recordDeadLetter(db, entry, endpoint, body, deadLetterStatus, noteIds.length === 1 ? noteIds[0]! : null, {
           attempts,
@@ -1214,68 +1280,49 @@ function isOwnVersion(data: unknown, baseVersion: number | null): boolean {
 /**
  * Whether the queue holds an op for `noteId` other than entry `exceptEntryId`.
  * Reads the table rather than a snapshot taken when the drain started, so an
- * edit enqueued while the drain runs counts too. The `instr` prefilter only
- * narrows the scan; collectNoteIds decides.
+ * edit enqueued while the drain runs counts too.
  */
 async function hasOtherQueuedOpForNote(
   db: SQLiteDatabase,
   noteId: string,
   exceptEntryId: number | undefined,
 ): Promise<boolean> {
-  const rows = await db.getAllAsync<Pick<QueueEntry, 'endpoint' | 'body'>>(
-    `SELECT endpoint, body FROM sync_queue
-     WHERE id IS NOT ? AND (instr(endpoint, ?) > 0 OR instr(COALESCE(body, ''), ?) > 0)`,
-    [exceptEntryId ?? null, noteId, noteId],
+  const row = await db.getFirstAsync<{ found: number }>(
+    'SELECT 1 AS found FROM sync_queue_keys WHERE key = ? AND read_only = 0 AND entry_id IS NOT ? LIMIT 1',
+    [noteKey(noteId), exceptEntryId ?? null],
   );
-  for (const row of rows) {
-    const ids = new Set<string>();
-    collectNoteIds(row.endpoint, parseQueueBody(row.body), ids);
-    if (ids.has(noteId)) return true;
-  }
-  return false;
+  return row !== null;
 }
 
 /**
  * Whether the note has a failed change the user has not resolved (spec §8.4):
- * it is flagged `failed`, or a dead letter still names it. The dead letter
- * counts on its own because a later landed write clears the flag.
+ * it is flagged `failed`, or a dead letter other than `exceptDeadLetterId`
+ * still covers it (see {@link getDeadLetteredNoteIds}).
  */
 async function hasUnresolvedFailure(
   db: SQLiteDatabase,
   noteId: string,
   exceptDeadLetterId: number | undefined,
 ): Promise<boolean> {
-  const row = await db.getFirstAsync<{ failed: number }>(
-    `SELECT 1 AS failed FROM notes WHERE id = ? AND sync_state = 'failed'
-     UNION ALL
-     SELECT 1 FROM dead_letter WHERE note_id = ? AND id IS NOT ?
-     LIMIT 1`,
-    [noteId, noteId, exceptDeadLetterId ?? null],
+  const flagged = await db.getFirstAsync<{ failed: number }>(
+    `SELECT 1 AS failed FROM notes WHERE id = ? AND sync_state = 'failed'`,
+    [noteId],
   );
-  return row !== null;
-}
-
-/** IDs of notes a dead letter still names (see {@link hasUnresolvedFailure}). */
-async function getDeadLetteredNoteIds(db: SQLiteDatabase): Promise<Set<string>> {
-  const rows = await db.getAllAsync<{ note_id: string }>(
-    'SELECT DISTINCT note_id FROM dead_letter WHERE note_id IS NOT NULL',
-  );
-  return new Set(rows.map((r) => r.note_id));
+  return flagged !== null || (await getDeadLetteredNoteIds(db, exceptDeadLetterId)).has(noteId);
 }
 
 /**
  * Fetch the notes a drain touched whose local row no response settled
  * (#1262, spec §8.3). The device gets no SSE echo of its own writes, so
  * without this a row that fell behind stays behind until an unrelated sync
- * runs. Notes that are protected (queued op or failed flag) or still named by
- * a dead letter are skipped. Fetched one at a time: a batch would hold early
+ * runs. Protected notes (queued op, unresolved failure) are skipped. Fetched one at a time: a batch would hold early
  * results while a newer snapshot lands, and its slowest timeout would finish
  * last and mark the server unreachable. Best effort: a failed fetch leaves the
  * note for the next background sync.
  */
 async function pullTouchedNotes(db: SQLiteDatabase, noteIds: Set<string>): Promise<void> {
-  const [protectedIds, deadLettered] = await Promise.all([getProtectedNoteIds(db), getDeadLetteredNoteIds(db)]);
-  const toPull = [...noteIds].filter((id) => !protectedIds.has(id) && !deadLettered.has(id));
+  const protectedIds = await getProtectedNoteIds(db);
+  const toPull = [...noteIds].filter((id) => !protectedIds.has(id));
   if (toPull.length > MAX_POST_DRAIN_NOTE_PULLS) {
     console.info(
       `Pulling ${MAX_POST_DRAIN_NOTE_PULLS} of ${toPull.length} notes after the queue drain; the next sync reconciles the rest.`,

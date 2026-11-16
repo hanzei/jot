@@ -6,6 +6,7 @@
 import type { Label, ListNote, NoteItem, TextNote } from '@jot/shared';
 import type { EnqueueParams } from '../../src/db/syncQueue';
 import type { PendingImageUploadEntry } from '../../src/db/imageUploadQueue';
+import { insertKeys, legacyQueueKeys, loadLabelIdsByName } from '../../src/db/queueKeys';
 import { saveNote } from '../../src/db/noteQueries';
 import type { TestDatabase } from './testDb';
 
@@ -53,11 +54,12 @@ export function makeNoteItem(overrides: Partial<NoteItem> & { id: string; note_i
 /**
  * Append a sync-queue entry and return its generated id. `attempts` seeds the
  * transient-failure counter that migration 6 added, for tests that start an
- * entry partway to the dead-letter cap.
+ * entry partway to the dead-letter cap. Without `keys`, the keys are what the
+ * migration 13 backfill derives from the endpoint and body.
  */
 export async function seedQueueEntry(
   db: TestDatabase,
-  params: EnqueueParams & { attempts?: number; created_at?: string },
+  params: Omit<EnqueueParams, 'keys'> & { keys?: EnqueueParams['keys']; attempts?: number; created_at?: string },
 ): Promise<number> {
   const result = await db.runAsync(
     `INSERT INTO sync_queue (operation, endpoint, method, body, created_at, attempts)
@@ -71,6 +73,10 @@ export async function seedQueueEntry(
       params.attempts ?? 0,
     ],
   );
+  const keys = params.keys
+    ? { keys: params.keys, readKeys: params.readKeys }
+    : legacyQueueKeys(params.operation, params.endpoint, params.body ?? null, await loadLabelIdsByName(db));
+  await insertKeys(db, 'sync_queue_keys', result.lastInsertRowId, keys);
   return result.lastInsertRowId;
 }
 

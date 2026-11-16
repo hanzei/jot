@@ -7,7 +7,7 @@ import { useSSE } from '../src/hooks/useSSE';
 import { SSEConnectionManager } from '../src/api/events';
 import type { Note, SSEEvent, User } from '@jot/shared';
 import type { TestDatabase } from './helpers/testDb';
-import { makeLabel, makeListNote, makeTextNote } from './helpers/fixtures';
+import { makeLabel, makeListNote, makeTextNote, seedQueueEntry } from './helpers/fixtures';
 import { getLocalNote, saveNote } from '../src/db/noteQueries';
 import { silenceConsole } from './helpers/consoleGuard';
 import {
@@ -102,11 +102,7 @@ const storedImages = async (noteId: string): Promise<unknown[]> => {
 };
 
 const protectNote = (noteId: string) =>
-  db.runAsync(
-    `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
-     VALUES ('update', ?, 'PATCH', '{}', '')`,
-    [`/notes/${noteId}`],
-  );
+  seedQueueEntry(db, { operation: 'update', endpoint: `/notes/${noteId}`, method: 'PATCH', body: {} });
 
 // Mock SSEConnectionManager
 let capturedCallback: ((event: SSEEvent) => void) | null = null;

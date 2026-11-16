@@ -2,6 +2,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { DEFAULT_NOTE_COLOR } from '@jot/shared';
 import { generateClientId } from './clientId';
 import { rewriteLabelId } from './labelIdRewrite';
+import { insertKeys, legacyQueueKeys, loadLabelIdsByName, parseJsonObject } from './queueKeys';
 
 // Migration 1: creates initial schema; idempotent via IF NOT EXISTS and column probing.
 const migration1 = async (db: SQLiteDatabase): Promise<void> => {
@@ -381,7 +382,62 @@ const migration11 = async (db: SQLiteDatabase): Promise<void> => {
   });
 };
 
-export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11];
+// Migration 12 (issue #1264, spec §8.6): record which account the local data
+// belongs to. One row at most; `user_id = ''` means the data was wiped on a
+// deliberate logout and has no owner. No row is an install that predates the
+// table — accountOwner.ts stamps it with the next signed-in user rather than
+// wiping, so upgrading never discards a queue.
+const migration12 = async (db: SQLiteDatabase): Promise<void> => {
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS account_owner (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      user_id TEXT NOT NULL
+    );
+  `);
+};
+
+// Migration 13 (#1282): record the keys each queued and dead-lettered op
+// touches (`note:<id>`, `label:<id>`, `settings`; see queueKeys.ts), so the
+// protected set and the per-note lookups read an index instead of parsing every
+// row's endpoint and body. New rows get their keys when they are enqueued;
+// existing ones are backfilled from their endpoint and body. Idempotent: an
+// interrupted run is redone, and a key already recorded is ignored.
+const migration13 = async (db: SQLiteDatabase): Promise<void> => {
+  await db.withTransactionAsync(async () => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS sync_queue_keys (
+        entry_id INTEGER NOT NULL REFERENCES sync_queue(id) ON DELETE CASCADE,
+        key TEXT NOT NULL,
+        -- 1: the op depends on the key but does not write it (a duplicate's source).
+        read_only INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (entry_id, key)
+      );
+      CREATE INDEX IF NOT EXISTS idx_sync_queue_keys_key ON sync_queue_keys (key);
+
+      CREATE TABLE IF NOT EXISTS dead_letter_keys (
+        dead_letter_id INTEGER NOT NULL REFERENCES dead_letter(id) ON DELETE CASCADE,
+        key TEXT NOT NULL,
+        read_only INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (dead_letter_id, key)
+      );
+      CREATE INDEX IF NOT EXISTS idx_dead_letter_keys_key ON dead_letter_keys (key);
+    `);
+
+    const labelIdsByName = await loadLabelIdsByName(db);
+    for (const table of ['sync_queue', 'dead_letter'] as const) {
+      const rows = await db.getAllAsync<{ id: number; operation: string; endpoint: string; body: string | null }>(
+        `SELECT id, operation, endpoint, body FROM ${table}`,
+      );
+      for (const row of rows) {
+        // An unparseable body names nothing; the endpoint may still.
+        const keys = legacyQueueKeys(row.operation, row.endpoint, parseJsonObject(row.body), labelIdsByName);
+        await insertKeys(db, table === 'sync_queue' ? 'sync_queue_keys' : 'dead_letter_keys', row.id, keys);
+      }
+    }
+  });
+};
+
+export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13];
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   // Run PRAGMAs separately: sqlite3_exec (used by execAsync) stops on the

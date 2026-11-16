@@ -135,18 +135,23 @@ describe('migrateDatabase', () => {
 
       expect(await userVersion(db)).toBe(MIGRATIONS.length);
       expect(Object.keys(await schemaSnapshot(db)).sort()).toEqual([
+        'account_owner',
         'dead_letter',
+        'dead_letter_keys',
         'labels',
         'note_items',
         'notes',
         'pending_image_uploads',
         'sync_queue',
+        'sync_queue_keys',
         'users',
       ]);
       expect(await indexNames(db)).toEqual([
+        'idx_dead_letter_keys_key',
         'idx_note_items_note_id',
         'idx_notes_list',
         'idx_pending_image_uploads_note_id',
+        'idx_sync_queue_keys_key',
       ]);
     });
 
@@ -303,6 +308,144 @@ describe('migrateDatabase', () => {
       expect(create.id).not.toBe('local_1');
       expect(rows[1]!.endpoint).toBe(`/labels/${create.id}`);
       expect(rows[2]!.body).toBe('{"id":"Real0000000000000000A","name":"Home"}');
+      // Migration 13 keys the rows as rewritten.
+      expect(await db.getAllAsync('SELECT entry_id, key FROM sync_queue_keys ORDER BY entry_id')).toEqual([
+        { entry_id: 1, key: `label:${create.id}` },
+        { entry_id: 2, key: `label:${create.id}` },
+        { entry_id: 3, key: 'label:Real0000000000000000A' },
+      ]);
+    });
+  });
+
+  describe('queue keys backfill (#1282)', () => {
+    /** A database at user_version 12 — every table but the key tables. */
+    async function beforeKeys(): Promise<TestDatabase> {
+      const db = createTestDb();
+      for (let i = 0; i < 12; i++) {
+        await MIGRATIONS[i]!(db);
+        await db.runAsync(`PRAGMA user_version = ${i + 1}`);
+      }
+      return db;
+    }
+
+    const insertRow = async (
+      db: TestDatabase,
+      table: 'sync_queue' | 'dead_letter',
+      operation: string,
+      endpoint: string,
+      method: string,
+      body: unknown = null,
+    ): Promise<number> => {
+      const result = await db.runAsync(
+        table === 'sync_queue'
+          ? `INSERT INTO sync_queue (operation, endpoint, method, body, created_at) VALUES (?, ?, ?, ?, '2026-01-01T00:00:00Z')`
+          : `INSERT INTO dead_letter (operation, endpoint, method, body, status, created_at, failed_at)
+             VALUES (?, ?, ?, ?, 409, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
+        [operation, endpoint, method, body === null ? null : JSON.stringify(body)],
+      );
+      return result.lastInsertRowId;
+    };
+
+    const keysOf = async (db: TestDatabase, table: 'sync_queue_keys' | 'dead_letter_keys', id: number): Promise<string[]> => {
+      const column = table === 'sync_queue_keys' ? 'entry_id' : 'dead_letter_id';
+      const rows = await db.getAllAsync<{ key: string; read_only: number }>(
+        `SELECT key, read_only FROM ${table} WHERE ${column} = ? ORDER BY key`,
+        [id],
+      );
+      return rows.map((r) => (r.read_only ? `${r.key} (read)` : r.key));
+    };
+
+    // Every queue operation, as its hook (or the local→server upgrade seed)
+    // queued it before keys existed, with the keys the backfill must give it.
+    const everyOperation: [string, string, string, unknown, string[]][] = [
+      ['create', '/notes', 'POST', { id: 'n1', note_type: 'text', content: '', labels: ['Work', 'Unknown'] }, ['label:l1', 'note:n1']],
+      ['duplicate', '/notes/src/duplicate', 'POST', { id: 'clone' }, ['note:clone', 'note:src (read)']],
+      ['update', '/notes/n1', 'PATCH', { content: 'x' }, ['note:n1']],
+      ['convertNoteType', '/notes/n1/convert', 'POST', { note_type: 'list' }, ['note:n1']],
+      ['delete', '/notes/n1', 'DELETE', null, ['note:n1']],
+      ['restore', '/notes/n1/restore', 'POST', null, ['note:n1']],
+      ['permanentDelete', '/notes/n1?permanent=true', 'DELETE', null, ['note:n1']],
+      ['reorder', '/notes/reorder', 'POST', { note_ids: ['a', 'b', 'a'] }, ['note:a', 'note:b']],
+      ['createItem', '/notes/n1/items', 'POST', { id: 'i1', text: 'x' }, ['note:n1']],
+      ['updateItem', '/notes/n1/items/i1', 'PATCH', { text: 'y' }, ['note:n1']],
+      ['deleteItem', '/notes/n1/items/i1', 'DELETE', null, ['note:n1']],
+      ['reorderItems', '/notes/n1/items/reorder', 'POST', { item_ids: ['i1'] }, ['note:n1']],
+      ['setItemsCompleted', '/notes/n1/items/set-completed', 'POST', { item_ids: ['i1'], completed: true }, ['note:n1']],
+      ['deleteCompletedItems', '/notes/n1/items/delete', 'POST', { item_ids: ['i1'] }, ['note:n1']],
+      ['share', '/notes/n1/share', 'POST', { user_id: 'u2' }, ['note:n1']],
+      ['unshare', '/notes/n1/shares/u2', 'DELETE', null, ['note:n1']],
+      ['createLabel', '/labels', 'POST', { id: 'l2', name: 'Home' }, ['label:l2']],
+      ['renameLabel', '/labels/l1', 'PATCH', { name: 'Job' }, ['label:l1']],
+      ['deleteLabel', '/labels/l1', 'DELETE', null, ['label:l1']],
+      ['addLabelToNote', '/notes/n1/labels', 'POST', { name: 'work' }, ['label:l1', 'note:n1']],
+      ['addLabelToNote', '/notes/n1/labels/l2', 'POST', null, ['label:l2', 'note:n1']],
+      ['removeLabelFromNote', '/notes/n1/labels/l1', 'DELETE', null, ['label:l1', 'note:n1']],
+      ['updateSettings', '/users/me', 'PATCH', { theme: 'dark' }, ['settings']],
+      ['removeImage', '/images/img1', 'DELETE', { note_id: 'n1' }, ['note:n1']],
+      ['markViewed', '/notes/n1/viewed', 'POST', { viewed_at: '2026-01-01T00:00:00Z' }, ['note:n1']],
+    ];
+
+    it.each(['sync_queue', 'dead_letter'] as const)('backfills the keys of every operation type in %s', async (table) => {
+      const db = await beforeKeys();
+      await db.runAsync(`INSERT INTO labels (id, user_id, name) VALUES ('l1', 'u1', 'Work')`);
+      const ids: number[] = [];
+      for (const [operation, endpoint, method, body] of everyOperation) {
+        ids.push(await insertRow(db, table, operation, endpoint, method, body));
+      }
+
+      await migrateDatabase(db);
+
+      const keyTable = table === 'sync_queue' ? 'sync_queue_keys' : 'dead_letter_keys';
+      const actual = await Promise.all(ids.map((id) => keysOf(db, keyTable, id)));
+      expect(actual).toEqual(everyOperation.map(([, , , , keys]) => keys));
+    });
+
+    it('resolves a label renamed since by the name its queued create used', async () => {
+      const db = await beforeKeys();
+      // Created offline as 'Work', added to n1 by that name, then renamed.
+      await db.runAsync(`INSERT INTO labels (id, user_id, name) VALUES ('l9', 'u1', 'Job')`);
+      await insertRow(db, 'sync_queue', 'createLabel', '/labels', 'POST', { id: 'l9', name: 'Work' });
+      const add = await insertRow(db, 'sync_queue', 'addLabelToNote', '/notes/n1/labels', 'POST', { name: 'Work' });
+      await insertRow(db, 'sync_queue', 'renameLabel', '/labels/l9', 'PATCH', { name: 'Job' });
+
+      await migrateDatabase(db);
+
+      expect(await keysOf(db, 'sync_queue_keys', add)).toEqual(['label:l9', 'note:n1']);
+    });
+
+    it('keys what the endpoint names when a body does not parse', async () => {
+      const db = await beforeKeys();
+      await db.runAsync(
+        `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
+         VALUES ('update', '/notes/n1', 'PATCH', 'not-json', ''), ('create', '/notes', 'POST', 'not-json', '')`,
+      );
+
+      await migrateDatabase(db);
+
+      expect(await db.getAllAsync('SELECT entry_id, key FROM sync_queue_keys')).toEqual([{ entry_id: 1, key: 'note:n1' }]);
+    });
+
+    it('is idempotent when an interrupted run is redone', async () => {
+      const db = await beforeKeys();
+      const id = await insertRow(db, 'sync_queue', 'reorder', '/notes/reorder', 'POST', { note_ids: ['a', 'b'] });
+
+      await MIGRATIONS[12]!(db);
+      await migrateDatabase(db);
+
+      expect(await keysOf(db, 'sync_queue_keys', id)).toEqual(['note:a', 'note:b']);
+    });
+
+    it('drops an entry\'s keys with the entry', async () => {
+      const db = await beforeKeys();
+      const id = await insertRow(db, 'sync_queue', 'update', '/notes/n1', 'PATCH', { content: 'x' });
+      const dl = await insertRow(db, 'dead_letter', 'update', '/notes/n1', 'PATCH', { content: 'x' });
+      await migrateDatabase(db);
+
+      await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [id]);
+      await db.runAsync('DELETE FROM dead_letter WHERE id = ?', [dl]);
+
+      expect(await db.getAllAsync('SELECT * FROM sync_queue_keys')).toEqual([]);
+      expect(await db.getAllAsync('SELECT * FROM dead_letter_keys')).toEqual([]);
     });
   });
 

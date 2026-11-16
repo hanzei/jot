@@ -7,13 +7,13 @@ import type { CreateNoteRequest, Note } from '@jot/shared';
 import {
   getDeadLetteredOperations,
   deleteDeadLetter,
-  deadLetterAffectedNoteIds,
+  getDeadLetterNoteIds,
+  clearNoteSyncFailedIfResolved,
   saveServerResponseNote,
   type DeadLetteredOperation,
 } from '../db/syncQueue';
 import {
   getLocalNote,
-  clearNoteSyncFailed,
   permanentDeleteLocalNote,
   markLocalNoteDeleted,
 } from '../db/noteQueries';
@@ -72,7 +72,8 @@ function isGoneStatus(status: number | undefined): boolean {
  * reconcile with the server so the note reflects authoritative state (#493). A
  * dead-lettered create never reached the server, so accepting server state means
  * removing the orphan local note; otherwise we clear the failed flag (lifting the
- * overwrite gate) and pull the server's version (tombstoning it locally if it's
+ * overwrite gate, unless another unresolved dead letter still covers the note)
+ * and pull the server's version (tombstoning it locally if it's
  * gone for this user). Shared by both Discard and the tail of Keep-my-version.
  */
 export async function reconcileDiscard(db: SQLiteDatabase, dl: DeadLetteredOperation): Promise<void> {
@@ -80,7 +81,7 @@ export async function reconcileDiscard(db: SQLiteDatabase, dl: DeadLetteredOpera
     if (dl.operation === 'create') {
       await permanentDeleteLocalNote(db, dl.note_id);
     } else {
-      await clearNoteSyncFailed(db, dl.note_id);
+      await clearNoteSyncFailedIfResolved(db, dl.note_id, dl.id);
       try {
         const serverNote = await jot.notes.getById(dl.note_id);
         await saveServerResponseNote(db, serverNote, { exceptDeadLetterId: dl.id });
@@ -89,8 +90,8 @@ export async function reconcileDiscard(db: SQLiteDatabase, dl: DeadLetteredOpera
         if (isGoneStatus(status)) {
           await markLocalNoteDeleted(db, dl.note_id);
         }
-        // Offline or transient: the failed flag is already cleared, so a later
-        // background fetch reconciles the note normally.
+        // Offline or transient: once no dead letter covers the note, a later
+        // background fetch reconciles it normally.
       }
     }
   } else {
@@ -101,8 +102,8 @@ export async function reconcileDiscard(db: SQLiteDatabase, dl: DeadLetteredOpera
     // they'd stay stuck until an unrelated successful write happened to touch
     // each note. Ops with no note at all (e.g. updateSettings) yield an empty
     // list, so this is a no-op for them.
-    for (const noteId of deadLetterAffectedNoteIds(dl)) {
-      await clearNoteSyncFailed(db, noteId);
+    for (const noteId of await getDeadLetterNoteIds(db, dl.id)) {
+      await clearNoteSyncFailedIfResolved(db, noteId, dl.id);
     }
   }
 

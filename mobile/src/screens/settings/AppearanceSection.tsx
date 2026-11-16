@@ -14,6 +14,7 @@ import { useAuth } from '../../store/AuthContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { cacheAuthProfile } from '../../api/client';
 import { enqueueOperation, isQueueableError } from '../../db/syncQueue';
+import { SETTINGS_KEY } from '../../db/queueKeys';
 import { isOnlineWriteAllowed } from '../../api/serverReachability';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { SUPPORTED_LANGUAGES, getLanguagePreference, resolveLanguage, type LanguagePreference } from '../../i18n/language';
@@ -73,6 +74,7 @@ export default function AppearanceSection() {
           operation: 'updateSettings',
           endpoint: apiPaths.usersMe,
           method: 'PATCH',
+          keys: [SETTINGS_KEY],
           body: { language } satisfies UpdateMeRequest,
         });
       } catch (err: unknown) {
@@ -97,6 +99,7 @@ export default function AppearanceSection() {
           operation: 'updateSettings',
           endpoint: apiPaths.usersMe,
           method: 'PATCH',
+          keys: [SETTINGS_KEY],
           body: { language } satisfies UpdateMeRequest,
         });
       } else {
@@ -138,6 +141,7 @@ export default function AppearanceSection() {
           operation: 'updateSettings',
           endpoint: apiPaths.usersMe,
           method: 'PATCH',
+          keys: [SETTINGS_KEY],
           body: { theme } satisfies UpdateMeRequest,
         });
       } catch (err: unknown) {
@@ -161,6 +165,7 @@ export default function AppearanceSection() {
           operation: 'updateSettings',
           endpoint: apiPaths.usersMe,
           method: 'PATCH',
+          keys: [SETTINGS_KEY],
           body: { theme } satisfies UpdateMeRequest,
         });
       } else {

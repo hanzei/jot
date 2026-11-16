@@ -214,6 +214,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
           endpoint: '/users/me',
           method: 'PATCH',
           body: { language: 'de' },
+          keys: ['settings'],
         }),
       );
     });
@@ -305,6 +306,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
           endpoint: '/users/me',
           method: 'PATCH',
           body: { language: 'de' },
+          keys: ['settings'],
         }),
       );
     });
@@ -361,6 +363,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
           endpoint: '/users/me',
           method: 'PATCH',
           body: { theme: 'dark' },
+          keys: ['settings'],
         }),
       );
     });
@@ -449,6 +452,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
           endpoint: '/users/me',
           method: 'PATCH',
           body: { theme: 'dark' },
+          keys: ['settings'],
         }),
       );
     });
@@ -511,6 +515,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
           endpoint: '/users/me',
           method: 'PATCH',
           body: expect.objectContaining({ username: 'alice' }),
+          keys: ['settings'],
         }),
       );
     });
@@ -598,6 +603,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
           endpoint: '/users/me',
           method: 'PATCH',
           body: expect.objectContaining({ username: 'alice' }),
+          keys: ['settings'],
         }),
       );
     });

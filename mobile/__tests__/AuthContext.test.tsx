@@ -46,6 +46,7 @@ jest.mock('../src/api/client', () => ({
   cacheAuthProfile: jest.fn().mockResolvedValue(undefined),
   getCachedAuthProfile: jest.fn().mockResolvedValue(null),
   clearCachedProfile: jest.fn().mockResolvedValue(undefined),
+  getActiveServerId: jest.fn(() => 'server-1'),
 }));
 
 const mockAuth = auth as unknown as {
@@ -73,10 +74,11 @@ const mockUpdateLocalSettings = updateLocalSettings as jest.Mock;
 const mockUpdateLocalUser = updateLocalUser as jest.Mock;
 
 function TestConsumer() {
-  const { user, isAuthenticated, isLoading, revalidationFailed, sessionEndedReason, login, logout } = useAuth();
+  const { user, userServerId, isAuthenticated, isLoading, revalidationFailed, sessionEndedReason, login, logout } = useAuth();
   return (
     <>
       <Text testID="loading">{String(isLoading)}</Text>
+      <Text testID="user-server-id">{userServerId ?? 'none'}</Text>
       <Text testID="authenticated">{String(isAuthenticated)}</Text>
       <Text testID="revalidation-failed">{String(revalidationFailed)}</Text>
       <Text testID="session-ended-reason">{sessionEndedReason ?? 'none'}</Text>
@@ -415,7 +417,7 @@ describe('AuthContext', () => {
       expect(getByTestId('authenticated').props.children).toBe('true');
     });
 
-    expect(mockCacheAuthProfile).toHaveBeenCalledWith(response);
+    expect(mockCacheAuthProfile).toHaveBeenCalledWith(response, 'server-1');
     await unmount();
   });
 
@@ -641,7 +643,55 @@ describe('AuthContext', () => {
     await waitFor(() => {
       expect(getByTestId('username').props.children).toBe('revalidated');
     });
-    expect(mockCacheAuthProfile).toHaveBeenCalledWith({ user: { ...mockUser, username: 'revalidated' }, settings: mockSettings });
+    expect(mockCacheAuthProfile).toHaveBeenCalledWith({ user: { ...mockUser, username: 'revalidated' }, settings: mockSettings }, 'server-1');
+    await unmount();
+  });
+
+  it('records the server the signed-in user belongs to, and forgets it on logout (#1264)', async () => {
+    mockGetStoredSession.mockResolvedValue(null);
+    mockAuth.login.mockResolvedValue({ user: mockUser, settings: mockSettings });
+    mockAuth.logout.mockResolvedValue(undefined);
+
+    const { getByTestId, unmount } = await render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(getByTestId('loading').props.children).toBe('false'));
+    expect(getByTestId('user-server-id').props.children).toBe('none');
+
+    await fireEvent.press(getByTestId('login-button'));
+    await waitFor(() => expect(getByTestId('user-server-id').props.children).toBe('server-1'));
+
+    await fireEvent.press(getByTestId('logout-button'));
+    await waitFor(() => expect(getByTestId('user-server-id').props.children).toBe('none'));
+    await unmount();
+  });
+
+  it('setUser applies profile edits but never swaps in another account (#1264)', async () => {
+    mockGetStoredSession.mockResolvedValue(null);
+    mockAuth.login.mockResolvedValue({ user: mockUser, settings: mockSettings });
+    let setUserFn: ReturnType<typeof useAuth>['setUser'] | null = null;
+    function SetUserProbe() {
+      const auth = useAuth();
+      // eslint-disable-next-line react-hooks/globals -- test probe captures the setter by design
+      setUserFn = auth.setUser;
+      return <Text testID="probe-username">{auth.user?.username ?? 'none'}</Text>;
+    }
+
+    const { getByTestId, unmount } = await render(
+      <AuthProvider>
+        <LoginTrigger />
+        <SetUserProbe />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(getByTestId('probe-username').props.children).toBe('testuser'));
+
+    await act(async () => setUserFn!((prev) => (prev ? { ...prev, username: 'renamed' } : prev)));
+    expect(getByTestId('probe-username').props.children).toBe('renamed');
+
+    await act(async () => setUserFn!({ ...mockUser, id: 'someone-else', username: 'intruder' }));
+    expect(getByTestId('probe-username').props.children).toBe('renamed');
     await unmount();
   });
 
@@ -659,7 +709,7 @@ describe('AuthContext', () => {
       expect(getByTestId('username').props.children).toBe('testuser');
     });
 
-    expect(mockCacheAuthProfile).toHaveBeenCalledWith(response);
+    expect(mockCacheAuthProfile).toHaveBeenCalledWith(response, 'server-1');
     await unmount();
   });
 
@@ -690,7 +740,7 @@ describe('AuthContext', () => {
 
     expect(getByTestId('authenticated').props.children).toBe('true');
     expect(getByTestId('username').props.children).toBe('revalidated');
-    expect(mockCacheAuthProfile).toHaveBeenCalledWith(updatedResponse);
+    expect(mockCacheAuthProfile).toHaveBeenCalledWith(updatedResponse, 'server-1');
     await unmount();
   });
 

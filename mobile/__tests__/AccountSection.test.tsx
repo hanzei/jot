@@ -138,6 +138,7 @@ describe('AccountSection', () => {
         endpoint: '/users/me',
         method: 'PATCH',
         body: expect.objectContaining({ first_name: 'Renamed' }),
+        keys: ['settings'],
       }),
     );
   });

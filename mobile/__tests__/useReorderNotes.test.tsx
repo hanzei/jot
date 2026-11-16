@@ -123,6 +123,8 @@ describe('useReorderNotes', () => {
       expect.objectContaining({ operation: 'reorder', endpoint: '/notes/reorder' }),
     ]);
     expect(JSON.parse(queued[0]!.body)).toEqual({ note_ids: ['b', 'a'] });
+    // Keyed by every note it names (#1282).
+    expect(await db.getAllAsync('SELECT key FROM sync_queue_keys ORDER BY key')).toEqual([{ key: 'note:a' }, { key: 'note:b' }]);
 
     // The new positions are still written locally so the optimistic order holds.
     const positions = await getLocalNotePositions(db, ['a', 'b']);

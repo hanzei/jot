@@ -5,6 +5,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { getAllLocalNotes } from '../db/noteQueries';
 import { drainQueue, getPendingCount, getDeadLetterCount, insertQueueEntry, saveServerNotesScope } from '../db/syncQueue';
 import { snapshotMark } from '../db/snapshotGate';
+import { labelKey, noteKey, SETTINGS_KEY } from '../db/queueKeys';
 import type { LocalIdentity } from './localMode';
 import { disableLocalMode, setLocalModeActive } from './localMode';
 import { initializeServerContext, switchActiveServer } from '../api/client';
@@ -302,6 +303,7 @@ export async function seedReplayQueue(
         endpoint: apiPaths.labels,
         method: 'POST',
         body: { id: label.id, name: label.name } satisfies AddLabelRequest,
+        keys: [labelKey(label.id)],
       });
       totalEnqueued++;
     }
@@ -341,6 +343,7 @@ export async function seedReplayQueue(
         endpoint: apiPaths.notes,
         method: 'POST',
         body,
+        keys: [noteKey(note.id)],
       });
       totalEnqueued++;
     }
@@ -356,6 +359,7 @@ export async function seedReplayQueue(
           operation: 'addLabelToNote',
           endpoint: apiPaths.noteLabel(note.id, label.id),
           method: 'POST',
+          keys: [noteKey(note.id), labelKey(label.id)],
         });
         totalEnqueued++;
       }
@@ -377,6 +381,7 @@ export async function seedReplayQueue(
           endpoint: apiPaths.note(note.id),
           method: 'PATCH',
           body: patch,
+          keys: [noteKey(note.id)],
         });
         totalEnqueued++;
       }
@@ -386,6 +391,7 @@ export async function seedReplayQueue(
           operation: 'delete',
           endpoint: apiPaths.note(note.id),
           method: 'DELETE',
+          keys: [noteKey(note.id)],
         });
         totalEnqueued++;
       }
@@ -406,6 +412,7 @@ export async function seedReplayQueue(
       endpoint: apiPaths.usersMe,
       method: 'PATCH',
       body: settingsBody as Record<string, unknown>,
+      keys: [SETTINGS_KEY],
     });
     totalEnqueued++;
   });
