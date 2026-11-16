@@ -397,6 +397,19 @@ describe('migrateDatabase', () => {
       expect(actual).toEqual(everyOperation.map(([, , , , keys]) => keys));
     });
 
+    it('resolves a label renamed since by the name its queued create used', async () => {
+      const db = await beforeKeys();
+      // Created offline as 'Work', added to n1 by that name, then renamed.
+      await db.runAsync(`INSERT INTO labels (id, user_id, name) VALUES ('l9', 'u1', 'Job')`);
+      await insertRow(db, 'sync_queue', 'createLabel', '/labels', 'POST', { id: 'l9', name: 'Work' });
+      const add = await insertRow(db, 'sync_queue', 'addLabelToNote', '/notes/n1/labels', 'POST', { name: 'Work' });
+      await insertRow(db, 'sync_queue', 'renameLabel', '/labels/l9', 'PATCH', { name: 'Job' });
+
+      await migrateDatabase(db);
+
+      expect(await keysOf(db, 'sync_queue_keys', add)).toEqual(['label:l9', 'note:n1']);
+    });
+
     it('keys what the endpoint names when a body does not parse', async () => {
       const db = await beforeKeys();
       await db.runAsync(

@@ -340,12 +340,12 @@ export function notifyEnqueueListeners(): void {
 }
 
 /**
- * Insert a single entry directly into the sync queue, bypassing the local-mode
- * guard and enqueue listeners. Used exclusively by the local→server upgrade seed
- * path (seedReplayQueue): local mode is still active while the queue is being
- * pre-populated for replay, so the normal `enqueueOperation` guard would be a
- * no-op. Do NOT call this from any other code path. The row and its keys are
- * two statements: run it inside a transaction.
+ * Insert a single entry and its keys into the sync queue, bypassing the
+ * local-mode guard and enqueue listeners. The local→server upgrade seed path
+ * (seedReplayQueue) calls it directly, because local mode is still active while
+ * the queue is being pre-populated for replay and `enqueueOperation`'s guard
+ * would make that a no-op; everything else goes through `enqueueOperation`. The
+ * row and its keys are separate statements: run it inside a transaction.
  */
 export async function insertQueueEntry(db: SQLiteDatabase, params: EnqueueParams): Promise<void> {
   const result = await db.runAsync(

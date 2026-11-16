@@ -60,15 +60,45 @@ export async function insertKeys(
   keys: Iterable<string>,
 ): Promise<void> {
   const column = table === 'sync_queue_keys' ? 'entry_id' : 'dead_letter_id';
-  for (const key of new Set(keys)) {
-    await db.runAsync(`INSERT OR IGNORE INTO ${table} (${column}, key) VALUES (?, ?)`, [rowId, key]);
+  const unique = [...new Set(keys)];
+  // One statement per chunk, well under SQLite's bound-parameter limit.
+  for (let start = 0; start < unique.length; start += 400) {
+    const chunk = unique.slice(start, start + 400);
+    await db.runAsync(
+      `INSERT OR IGNORE INTO ${table} (${column}, key) VALUES ${chunk.map(() => '(?, ?)').join(', ')}`,
+      chunk.flatMap((key) => [rowId, key]),
+    );
   }
 }
 
-/** Every local label's id by its lower-cased name, for {@link legacyQueueKeys}. */
+/**
+ * Label ids by lower-cased name, for {@link legacyQueueKeys}: every label in the
+ * local store, plus the name each queued or dead-lettered `createLabel` was
+ * created under. An op that names a label offline-created and since renamed
+ * still carries the old name, which only the create's body remembers.
+ */
 export async function loadLabelIdsByName(db: SQLiteDatabase): Promise<Map<string, string>> {
-  const rows = await db.getAllAsync<{ id: string; name: string }>('SELECT id, name FROM labels');
-  return new Map(rows.map((row) => [row.name.toLowerCase(), row.id]));
+  const byName = new Map<string, string>();
+  const stored = await db.getAllAsync<{ id: string; name: string }>('SELECT id, name FROM labels');
+  for (const row of stored) byName.set(row.name.toLowerCase(), row.id);
+  for (const table of ['sync_queue', 'dead_letter']) {
+    const creates = await db.getAllAsync<{ body: string | null }>(
+      `SELECT body FROM ${table} WHERE operation = 'createLabel'`,
+    );
+    for (const row of creates) {
+      let body: { id?: unknown; name?: unknown } | null = null;
+      try {
+        body = JSON.parse(row.body ?? 'null') as { id?: unknown; name?: unknown } | null;
+      } catch {
+        continue;
+      }
+      if (typeof body?.id !== 'string' || typeof body.name !== 'string') continue;
+      const name = body.name.toLowerCase();
+      // The store holds the current names; a create's only fills a gap.
+      if (!byName.has(name)) byName.set(name, body.id);
+    }
+  }
+  return byName;
 }
 
 /**
