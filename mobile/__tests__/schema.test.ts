@@ -135,6 +135,7 @@ describe('migrateDatabase', () => {
 
       expect(await userVersion(db)).toBe(MIGRATIONS.length);
       expect(Object.keys(await schemaSnapshot(db)).sort()).toEqual([
+        'account_owner',
         'dead_letter',
         'labels',
         'note_items',

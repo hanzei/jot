@@ -381,7 +381,21 @@ const migration11 = async (db: SQLiteDatabase): Promise<void> => {
   });
 };
 
-export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11];
+// Migration 12 (issue #1264, spec §8.6): record which account the local data
+// belongs to. One row at most; `user_id = ''` means the data was wiped on a
+// deliberate logout and has no owner. No row is an install that predates the
+// table — accountOwner.ts stamps it with the next signed-in user rather than
+// wiping, so upgrading never discards a queue.
+const migration12 = async (db: SQLiteDatabase): Promise<void> => {
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS account_owner (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      user_id TEXT NOT NULL
+    );
+  `);
+};
+
+export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12];
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   // Run PRAGMAs separately: sqlite3_exec (used by execAsync) stops on the
