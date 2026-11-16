@@ -22,12 +22,12 @@ export interface PendingImageUploadEntry {
   created_at: string;
   /**
    * Count of transient upload failures for this entry (issue #714), for
-   * diagnostics. Defaults to 0 for rows written before migration 6. Only a
-   * non-HTTP error is capped: once one has failed the upload
-   * MAX_ENTRY_DRAIN_ATTEMPTS times it is flagged `error`. An HTTP failure
-   * leaves it queued (#1283).
+   * diagnostics. Defaults to 0 for rows written before migration 6. An HTTP
+   * failure leaves the upload queued (#1283).
    */
   attempts?: number;
+  /** How many of `attempts` were non-HTTP errors: at MAX_ENTRY_DRAIN_ATTEMPTS the upload is flagged `error` (#1283). */
+  processing_errors?: number;
 }
 
 /**
@@ -150,7 +150,10 @@ export async function reassignPendingImageUploads(
 
 /** Re-queue a permanently-failed upload (e.g. after the user fixes something) so the next drain retries it. Resets the attempt counter so the manual retry gets a fresh budget (#714). */
 export async function retryImageUpload(db: SQLiteDatabase, id: string): Promise<void> {
-  await db.runAsync(`UPDATE pending_image_uploads SET status = 'queued', error_message = NULL, attempts = 0 WHERE id = ?`, [id]);
+  await db.runAsync(
+    `UPDATE pending_image_uploads SET status = 'queued', error_message = NULL, attempts = 0, processing_errors = 0 WHERE id = ?`,
+    [id],
+  );
   notifyEnqueueListeners();
 }
 
@@ -252,8 +255,13 @@ export async function drainImageUploadQueue(db: SQLiteDatabase): Promise<ImageUp
       // cap, leaves the upload queued for a later pass and holds back only
       // its note's later uploads (#1283).
       const attempts = (entry.attempts ?? 0) + 1;
-      await db.runAsync('UPDATE pending_image_uploads SET attempts = ? WHERE id = ?', [attempts, entry.id]);
-      if (attempts < MAX_ENTRY_DRAIN_ATTEMPTS || axios.isAxiosError(err)) {
+      const processingError = !axios.isAxiosError(err);
+      const processingErrors = (entry.processing_errors ?? 0) + (processingError ? 1 : 0);
+      await db.runAsync(
+        'UPDATE pending_image_uploads SET attempts = ?, processing_errors = ? WHERE id = ?',
+        [attempts, processingErrors, entry.id],
+      );
+      if (!processingError || processingErrors < MAX_ENTRY_DRAIN_ATTEMPTS) {
         console.warn(
           `Image upload id=${entry.id} failed (attempt ${attempts}); holding back its note's later uploads: ${errorSummary(err)}`,
         );
@@ -265,7 +273,7 @@ export async function drainImageUploadQueue(db: SQLiteDatabase): Promise<ImageUp
       // retry/dismiss in the gallery) and go on.
       discardedCount += 1;
       const message = errorSummary(err);
-      console.warn(`Flagging image upload id=${entry.id} as failed after ${attempts} attempts:`, err);
+      console.warn(`Flagging image upload id=${entry.id} as failed after ${processingErrors} processing errors:`, err);
       await db.runAsync(
         `UPDATE pending_image_uploads SET status = 'error', error_message = ? WHERE id = ?`,
         [message, entry.id],

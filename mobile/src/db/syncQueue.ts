@@ -70,11 +70,12 @@ interface QueueEntry {
   created_at: string;
   /**
    * Count of entry-specific transient drain failures (issue #714), for
-   * diagnostics. Only a non-HTTP processing error is capped by it (see
-   * {@link MAX_ENTRY_DRAIN_ATTEMPTS}). Defaults to 0 for rows written before
-   * migration 6 / by older code paths.
+   * diagnostics. Defaults to 0 for rows written before migration 6 / by older
+   * code paths.
    */
   attempts?: number;
+  /** How many of `attempts` were non-HTTP processing errors: capped by {@link MAX_ENTRY_DRAIN_ATTEMPTS} (#1283). */
+  processing_errors?: number;
 }
 
 /**
@@ -1237,11 +1238,18 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // probe), or a non-HTTP error thrown while processing this entry
         // (corrupted body, a local DB error). Charge the entry's attempt
         // counter (issue #714).
+        // Non-HTTP errors are counted on their own: `attempts` also counts
+        // HTTP failures, which are never capped, so it would hit the cap on the
+        // first processing error after a long outage.
         const attempts = (entry.attempts ?? 0) + 1;
-        await db.runAsync('UPDATE sync_queue SET attempts = ? WHERE id = ?', [attempts, entry.id]);
-        const capped = attempts >= MAX_ENTRY_DRAIN_ATTEMPTS;
+        const processingError = !axios.isAxiosError(err);
+        const processingErrors = (entry.processing_errors ?? 0) + (processingError ? 1 : 0);
+        await db.runAsync(
+          'UPDATE sync_queue SET attempts = ?, processing_errors = ? WHERE id = ?',
+          [attempts, processingErrors, entry.id],
+        );
 
-        if (capped && entry.operation === 'markViewed') {
+        if (attempts >= MAX_ENTRY_DRAIN_ATTEMPTS && entry.operation === 'markViewed') {
           // Best-effort (see the permanent-failure branch above): a view that
           // keeps failing only leaves a badge the next server fetch reconciles,
           // so drop it rather than hold back its note's edits behind it.
@@ -1250,7 +1258,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           continue;
         }
 
-        if (!capped || axios.isAxiosError(err)) {
+        if (!processingError || processingErrors < MAX_ENTRY_DRAIN_ATTEMPTS) {
           // The server never rejected this op, so it stays queued and is
           // retried on a later pass. Hold back only the ops that depend on it
           // and go on with the rest (#1283).
@@ -1267,7 +1275,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // continue. Record the endpoint/body that was actually sent.
         const errorMessage = errorSummary(err);
         console.warn(
-          `Dead-lettering queued operation id=${entry.id} after ${attempts} failed attempts (processing error): ${errorMessage}`,
+          `Dead-lettering queued operation id=${entry.id} after ${processingErrors} processing errors: ${errorMessage}`,
         );
         const noteIds = targets();
         discardedOperations.push({ operation: entry.operation, endpoint, status: PROCESSING_ERROR_STATUS });

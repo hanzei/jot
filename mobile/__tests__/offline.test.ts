@@ -378,6 +378,7 @@ describe('drainQueue', () => {
       method: 'PATCH',
       body: {},
       attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1,
+      processing_errors: MAX_ENTRY_DRAIN_ATTEMPTS - 1,
     });
     await seedQueueEntry(db, { operation: 'update', endpoint: '/notes/ok', method: 'PATCH', body: {} });
     mockApi.patch.mockRejectedValueOnce(new Error('boom')); // non-axios throw processing the first entry
@@ -392,6 +393,27 @@ describe('drainQueue', () => {
     expect(await remainingQueueIds(db)).toEqual([]);
   });
 
+  it('caps processing errors on their own count, not on HTTP failures (#1283)', async () => {
+    // Many 500s during an outage, then one passing local error: not yet a
+    // processing error that recurred, so the entry stays queued.
+    const id = await seedQueueEntry(db, {
+      operation: 'update',
+      endpoint: '/notes/x',
+      method: 'PATCH',
+      body: {},
+      attempts: MAX_ENTRY_DRAIN_ATTEMPTS + 3,
+    });
+    mockApi.patch.mockRejectedValueOnce(new Error('database is locked'));
+
+    const { discardedOperations } = await drainQueue(db);
+
+    expect(discardedOperations).toEqual([]);
+    expect(await deadLetterRows()).toEqual([]);
+    expect(await remainingQueueIds(db)).toEqual([id]);
+    expect(await db.getFirstAsync('SELECT attempts, processing_errors FROM sync_queue WHERE id = ?', [id]))
+      .toEqual({ attempts: MAX_ENTRY_DRAIN_ATTEMPTS + 4, processing_errors: 1 });
+  });
+
   it('records attempts and error_message on the dead_letter row (#714)', async () => {
     await seedQueueEntry(db, {
       operation: 'update',
@@ -399,6 +421,7 @@ describe('drainQueue', () => {
       method: 'PATCH',
       body: {},
       attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1,
+      processing_errors: MAX_ENTRY_DRAIN_ATTEMPTS - 1,
       created_at: '2026-03-01T00:00:00Z',
     });
     mockApi.patch.mockRejectedValueOnce(new Error('boom'));
@@ -426,6 +449,7 @@ describe('drainQueue', () => {
       method: 'POST',
       body: { id: clientId, content: 'x', note_type: 'text' },
       attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1,
+      processing_errors: MAX_ENTRY_DRAIN_ATTEMPTS - 1,
     });
     await seedQueueEntry(db, {
       operation: 'update',

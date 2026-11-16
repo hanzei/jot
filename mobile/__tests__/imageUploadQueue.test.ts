@@ -396,12 +396,24 @@ describe('drainImageUploadQueue', () => {
     expect(result).toEqual({ uploadedNoteIds: ['n2'], discardedCount: 0 });
   });
 
+  it('does not flag an upload on its first non-HTTP error after many HTTP failures (#1283)', async () => {
+    await saveNote(db, makeTextNote({ id: 'n1' }));
+    await seedUpload({ id: 'up-outage', note_id: 'n1', attempts: MAX_ENTRY_DRAIN_ATTEMPTS + 3 });
+    mockUploadNoteImage.mockRejectedValueOnce(new Error('file unreadable'));
+
+    const result = await drainImageUploadQueue(db);
+
+    expect(await uploadRow('up-outage')).toEqual({ status: 'queued', error_message: null, attempts: MAX_ENTRY_DRAIN_ATTEMPTS + 4 });
+    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
+  });
+
   it('flags an upload whose processing keeps throwing a non-HTTP error at the cap and continues past it (#714)', async () => {
     await saveNote(db, makeTextNote({ id: 'n1' }));
     await saveNote(db, makeTextNote({ id: 'n2' }));
     await seedUpload({
       id: 'up-stuck', note_id: 'n1', local_path: 'file:///docs/pending-image-uploads/up-stuck',
       created_at: '2024-01-01T00:00:00Z', attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1,
+      processing_errors: MAX_ENTRY_DRAIN_ATTEMPTS - 1,
     });
     await seedUpload({
       id: 'up-ok', note_id: 'n2', local_path: 'file:///docs/pending-image-uploads/up-ok',

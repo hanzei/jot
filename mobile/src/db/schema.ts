@@ -58,10 +58,12 @@ const migration1 = async (db: SQLiteDatabase): Promise<void> => {
       body TEXT,
       created_at TEXT NOT NULL,
       -- How many times draining this specific entry has failed transiently
-      -- (issue #714). Only a non-HTTP processing error is dead-lettered at
-      -- MAX_ENTRY_DRAIN_ATTEMPTS; an HTTP failure stays queued and holds back
-      -- only the ops that share a key with it (#1283).
-      attempts INTEGER NOT NULL DEFAULT 0
+      -- (issue #714), for diagnostics. An HTTP failure stays queued and holds
+      -- back only the ops that share a key with it (#1283).
+      attempts INTEGER NOT NULL DEFAULT 0,
+      -- How many of those failures were non-HTTP processing errors: at
+      -- MAX_ENTRY_DRAIN_ATTEMPTS the entry is dead-lettered (#1283).
+      processing_errors INTEGER NOT NULL DEFAULT 0
     );
 
     -- Dead-lettered sync operations: writes the server permanently rejected
@@ -182,11 +184,13 @@ const migration4 = async (db: SQLiteDatabase): Promise<void> => {
       status TEXT NOT NULL DEFAULT 'queued',
       error_message TEXT,
       created_at TEXT NOT NULL,
-      -- Transient-failure attempt counter, mirroring sync_queue.attempts: only a
-      -- non-HTTP error is capped, flagging the upload error at
-      -- MAX_ENTRY_DRAIN_ATTEMPTS (issue #714); an HTTP failure stays queued and
-      -- holds back only its note's later uploads (#1283).
+      -- Transient-failure attempt counter, mirroring sync_queue.attempts (issue
+      -- #714): an HTTP failure stays queued and holds back only its note's later
+      -- uploads (#1283).
       attempts INTEGER NOT NULL DEFAULT 0,
+      -- Non-HTTP errors among them: at MAX_ENTRY_DRAIN_ATTEMPTS the upload is
+      -- flagged error (#1283).
+      processing_errors INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
     );
 
@@ -438,7 +442,18 @@ const migration13 = async (db: SQLiteDatabase): Promise<void> => {
   });
 };
 
-export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13];
+// Migration 14 (#1283): an HTTP failure no longer dead-letters a queued op or
+// flags an upload, so `attempts` keeps growing through a server outage and can
+// no longer double as the cap for non-HTTP processing errors (one such error
+// after five 500s would hit it at once). Count those separately. Existing rows
+// start at 0: their `attempts` were mostly HTTP failures. Fresh installs get the
+// columns from the CREATE statements above.
+const migration14 = async (db: SQLiteDatabase): Promise<void> => {
+  await addColumnIfMissing(db, 'sync_queue', 'processing_errors', 'processing_errors INTEGER NOT NULL DEFAULT 0');
+  await addColumnIfMissing(db, 'pending_image_uploads', 'processing_errors', 'processing_errors INTEGER NOT NULL DEFAULT 0');
+};
+
+export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13, migration14];
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   // Run PRAGMAs separately: sqlite3_exec (used by execAsync) stops on the

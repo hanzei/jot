@@ -353,7 +353,9 @@ Rules of thumb:
     consecutive passes that leave work behind (above; `syncError` surfaces it).
     Only a permanent rejection (non-transient 4xx) dead-letters, and so does a
     non-HTTP processing error once it has recurred `MAX_ENTRY_DRAIN_ATTEMPTS`
-    times (status `PROCESSING_ERROR_STATUS`, 0): it happens on the device, so a
+    times (counted on its own in `processing_errors`, since `attempts` also
+    grows through an outage; status `PROCESSING_ERROR_STATUS`, 0): it happens
+    on the device, so a
     retry is unlikely to help, and the queue needs a way past it. A dead-lettered
     `create` drops its note's dependent queued ops rather than 404-ing each one.
     A `markViewed` that keeps failing is dropped at the same count, so a view

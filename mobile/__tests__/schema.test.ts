@@ -481,6 +481,29 @@ describe('migrateDatabase', () => {
     });
   });
 
+  describe('processing-error counters (#1283)', () => {
+    it('adds them to queued rows, starting at 0, and keeps their attempts', async () => {
+      const db = createTestDb();
+      for (let i = 0; i < 13; i++) {
+        await MIGRATIONS[i]!(db);
+        await db.runAsync(`PRAGMA user_version = ${i + 1}`);
+      }
+      await db.runAsync("INSERT INTO sync_queue (operation, endpoint, method, created_at, attempts) VALUES ('update', '/notes/n1', 'PATCH', '2026-01-01T00:00:00Z', 4)");
+      await db.runAsync("INSERT INTO notes (id, user_id, created_at, updated_at) VALUES ('n1', 'u1', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')");
+      await db.runAsync(
+        `INSERT INTO pending_image_uploads (id, note_id, local_path, filename, mime_type, status, created_at, attempts)
+         VALUES ('up', 'n1', 'file:///x', 'x.png', 'image/png', 'queued', '2026-01-01T00:00:00Z', 3)`,
+      );
+
+      await migrateDatabase(db);
+
+      expect(await db.getAllAsync('SELECT attempts, processing_errors FROM sync_queue'))
+        .toEqual([{ attempts: 4, processing_errors: 0 }]);
+      expect(await db.getAllAsync('SELECT attempts, processing_errors FROM pending_image_uploads'))
+        .toEqual([{ attempts: 3, processing_errors: 0 }]);
+    });
+  });
+
   describe('pre-versioned install', () => {
     it('converges on the fresh-install schema', async () => {
       const db = await preVersionedInstall();
