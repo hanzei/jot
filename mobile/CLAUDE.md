@@ -142,6 +142,10 @@ What the device may believe after a sync (spec §8). These are the target; spec
 ## Sync Loop Safety
 
 - Exponential backoff on every retry (start ≥ 1 s, cap 60 s); never a tight loop.
+- The drain is **FIFO per key**, not strict FIFO (spec §7): an op that fails
+  transiently holds back only the later ops that share a key with it
+  (`sync_queue_keys`), and stays queued. Never dead-letter an op the server did
+  not reject; the attempt cap applies only to non-HTTP processing errors.
 - Skip a sync that starts while one is in progress rather than queueing it.
 - Cap consecutive sync attempts, then surface an error.
 - Idempotent writes: `INSERT … ON CONFLICT(id) DO UPDATE`, **never
