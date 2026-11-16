@@ -11,7 +11,9 @@ import {
   reconcileDiscard,
   keepThenDiscard,
 } from '../src/hooks/useSyncFailures';
-import type { DeadLetteredOperation } from '../src/db/syncQueue';
+import { getDeadLetteredOperations, type DeadLetteredOperation } from '../src/db/syncQueue';
+import { saveNote } from '../src/db/noteQueries';
+import { insertKeys } from '../src/db/queueKeys';
 import type { Note } from '@jot/shared';
 import { jot } from '../src/api/jot';
 
@@ -212,22 +214,29 @@ describe('reconcileDiscard', () => {
     // (#492). Resolving the banner must clear all of those per-note badges —
     // otherwise they'd stay stuck until an unrelated write happened to touch each
     // note. No content is fetched/forked (there's no single note to reconcile).
-    const db = makeDb(null);
-    await reconcileDiscard(
-      db as never,
-      dl({
-        id: 9,
-        operation: 'reorder',
-        endpoint: '/notes/reorder',
-        method: 'POST',
-        body: JSON.stringify({ note_ids: ['a', 'b', 'c'] }),
-        note_id: null,
-      }),
+    // Real SQLite: the notes come from the dead letter's recorded keys (#1282).
+    const db = globalThis.testDb;
+    for (const id of ['a', 'b', 'c']) {
+      await saveNote(db, makeTextNote(id));
+    }
+    await db.runAsync(`UPDATE notes SET sync_state = 'failed'`);
+    const { lastInsertRowId: dlId } = await db.runAsync(
+      `INSERT INTO dead_letter (operation, endpoint, method, body, status, note_id, created_at, failed_at)
+       VALUES ('reorder', '/notes/reorder', 'POST', ?, 400, NULL, '', '')`,
+      [JSON.stringify({ note_ids: ['a', 'b', 'c'] })],
     );
+    await insertKeys(db, 'dead_letter_keys', dlId, { keys: ['note:a', 'note:b', 'note:c'] });
+    const [row] = await getDeadLetteredOperations(db);
 
-    expect(runCalls(db, `UPDATE notes SET sync_state = 'synced'`)).toEqual([['a'], ['b'], ['c']]);
-    expect(runCalls(db, 'DELETE FROM dead_letter')).toEqual([[9]]);
-    expect(runCalls(db, 'DELETE FROM notes')).toHaveLength(0);
+    await reconcileDiscard(db, row!);
+
+    expect(await db.getAllAsync('SELECT id, sync_state FROM notes ORDER BY id')).toEqual([
+      { id: 'a', sync_state: 'synced' },
+      { id: 'b', sync_state: 'synced' },
+      { id: 'c', sync_state: 'synced' },
+    ]);
+    expect(await getDeadLetteredOperations(db)).toEqual([]);
+    expect(await db.getAllAsync('SELECT * FROM dead_letter_keys')).toEqual([]);
     expect(mockGetNote).not.toHaveBeenCalled();
   });
 

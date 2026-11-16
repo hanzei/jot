@@ -7,7 +7,7 @@ import type { CreateNoteRequest, Note } from '@jot/shared';
 import {
   getDeadLetteredOperations,
   deleteDeadLetter,
-  deadLetterAffectedNoteIds,
+  getDeadLetterNoteIds,
   clearNoteSyncFailedIfResolved,
   saveServerResponseNote,
   type DeadLetteredOperation,
@@ -102,7 +102,7 @@ export async function reconcileDiscard(db: SQLiteDatabase, dl: DeadLetteredOpera
     // they'd stay stuck until an unrelated successful write happened to touch
     // each note. Ops with no note at all (e.g. updateSettings) yield an empty
     // list, so this is a no-op for them.
-    for (const noteId of deadLetterAffectedNoteIds(dl)) {
+    for (const noteId of await getDeadLetterNoteIds(db, dl.id)) {
       await clearNoteSyncFailedIfResolved(db, noteId, dl.id);
     }
   }

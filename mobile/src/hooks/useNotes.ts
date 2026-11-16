@@ -48,6 +48,7 @@ import {
   upsertLabel,
 } from '../db/noteQueries';
 import { localCompletedWrites } from '../db/localCompletedWrites';
+import { labelKey, noteKey } from '../db/queueKeys';
 import {
   enqueueOperation,
   getQueuedCompletedItemIds,
@@ -388,6 +389,7 @@ export function useCreateNote() {
         operation: 'create',
         endpoint: apiPaths.notes,
         method: 'POST',
+        keys: [noteKey(clientId), ...labels.map((l) => labelKey(l.id))],
         // Carry the pre-assigned item IDs so the server keeps them (no
         // reconciliation) and the local rows stay valid for any per-item edit
         // queued behind this create (#513).
@@ -528,6 +530,7 @@ export function useUpdateNote() {
         operation: 'update',
         endpoint: apiPaths.note(id),
         method: 'PATCH',
+        keys: [noteKey(id)],
         body: data as Record<string, unknown>,
       });
 
@@ -692,6 +695,7 @@ export function useConvertNoteType() {
         operation: 'convertNoteType',
         endpoint: apiPaths.noteConvert(id),
         method: 'POST',
+        keys: [noteKey(id)],
         body: data as unknown as Record<string, unknown>,
       });
       return localConverted;
@@ -755,6 +759,7 @@ export function useCreateNoteItem() {
         operation: 'createItem',
         endpoint: apiPaths.noteItems(noteId),
         method: 'POST',
+        keys: [noteKey(noteId)],
         body: itemWithId as unknown as Record<string, unknown>,
       });
     },
@@ -791,6 +796,7 @@ export function useUpdateNoteItem() {
         operation: 'updateItem',
         endpoint: apiPaths.noteItem(noteId, itemId),
         method: 'PATCH',
+        keys: [noteKey(noteId)],
         body: data as Record<string, unknown>,
       });
     },
@@ -827,6 +833,7 @@ export function useDeleteNoteItem() {
         operation: 'deleteItem',
         endpoint: apiPaths.noteItem(noteId, itemId),
         method: 'DELETE',
+        keys: [noteKey(noteId)],
       });
     },
     onSuccess: (_data, { noteId }) => {
@@ -862,6 +869,7 @@ export function useReorderNoteItems() {
         operation: 'reorderItems',
         endpoint: apiPaths.noteItemsReorder(noteId),
         method: 'POST',
+        keys: [noteKey(noteId)],
         body: { item_ids: itemIds } satisfies ReorderNoteItemsRequest,
       });
     },
@@ -899,6 +907,7 @@ export function useDeleteNote() {
         operation: 'delete',
         endpoint: apiPaths.note(id),
         method: 'DELETE',
+        keys: [noteKey(id)],
       });
     },
     onSuccess: (_data, id) => {
@@ -1002,6 +1011,10 @@ export function useDuplicateNote() {
         operation: 'duplicate',
         endpoint: apiPaths.noteDuplicate(id),
         method: 'POST',
+        keys: [noteKey(clientId)],
+        // The server copies the source, so its queued writes must land first;
+        // the duplicate does not write it.
+        readKeys: [noteKey(id)],
         body: body as Record<string, unknown>,
       });
       return localDuplicate;
@@ -1042,6 +1055,7 @@ export function useRestoreNote() {
         operation: 'restore',
         endpoint: apiPaths.noteRestore(id),
         method: 'POST',
+        keys: [noteKey(id)],
       });
     },
     onSuccess: (_data, id) => {
@@ -1086,6 +1100,7 @@ export function useMarkNoteViewed() {
         operation: 'markViewed',
         endpoint: apiPaths.noteViewed(id),
         method: 'POST',
+        keys: [noteKey(id)],
         body: { viewed_at: viewedAt } satisfies MarkNoteViewedRequest,
       });
     },
@@ -1126,6 +1141,7 @@ export function usePermanentDeleteNote() {
         operation: 'permanentDelete',
         endpoint: apiPaths.notePermanentDelete(id),
         method: 'DELETE',
+        keys: [noteKey(id)],
       });
     },
     onSuccess: (_data, id) => {
@@ -1250,6 +1266,7 @@ export function useReorderNotes() {
           operation: 'reorder',
           endpoint: apiPaths.notesReorder,
           method: 'POST',
+          keys: noteIds.map(noteKey),
           body: { note_ids: noteIds } satisfies ReorderNotesRequest,
         });
       } catch (err) {
@@ -1345,6 +1362,7 @@ export function useShareNote() {
         operation: 'share',
         endpoint: apiPaths.noteShare(noteId),
         method: 'POST',
+        keys: [noteKey(noteId)],
         body: { user_id: user.id } satisfies ShareNoteRequest,
       });
     },
@@ -1392,6 +1410,7 @@ export function useUnshareNote() {
         operation: 'unshare',
         endpoint: apiPaths.noteShareUser(noteId, userId),
         method: 'DELETE',
+        keys: [noteKey(noteId)],
       });
     },
     onSuccess: (_data, { noteId }) => {
@@ -1454,6 +1473,7 @@ export function useLeaveNote() {
         operation: 'unshare',
         endpoint: apiPaths.noteShareUser(noteId, userId),
         method: 'DELETE',
+        keys: [noteKey(noteId)],
       });
     },
     onSuccess: (_data, { noteId }) => {
@@ -1499,6 +1519,7 @@ export function useToggleNoteItemCompleted() {
           operation: 'setItemsCompleted',
           endpoint: apiPaths.noteItemsSetCompleted(noteId),
           method: 'POST',
+          keys: [noteKey(noteId)],
           body: { item_ids: [itemId], completed } satisfies SetNoteItemsCompletedRequest,
         },
       });
@@ -1544,6 +1565,7 @@ export function useUncheckAllItems() {
           operation: 'setItemsCompleted',
           endpoint: apiPaths.noteItemsSetCompleted(noteId),
           method: 'POST',
+          keys: [noteKey(noteId)],
           body: { item_ids: itemIds, completed: false } satisfies SetNoteItemsCompletedRequest,
         },
       });
@@ -1610,6 +1632,7 @@ export function useDeleteCompletedItems() {
         operation: 'deleteCompletedItems',
         endpoint: apiPaths.noteItemsDelete(noteId),
         method: 'POST',
+        keys: [noteKey(noteId)],
         body: { item_ids: itemIds } satisfies DeleteNoteItemsRequest,
       });
       return [];

@@ -29,6 +29,7 @@ import type { RootStackParamList, LayoutRect } from '../navigation/RootNavigator
 import { isSortWarningDismissed, dismissSortWarning } from '../utils/sortWarningDismissed';
 import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
 import { enqueueOperation, isQueueableError } from '../db/syncQueue';
+import { SETTINGS_KEY } from '../db/queueKeys';
 import { recordWriteLanded } from '../db/snapshotGate';
 import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
@@ -189,6 +190,7 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
           operation: 'updateSettings',
           endpoint: apiPaths.usersMe,
           method: 'PATCH',
+          keys: [SETTINGS_KEY],
           body: { note_sort: nextSort } satisfies UpdateMeRequest,
         });
         return true;

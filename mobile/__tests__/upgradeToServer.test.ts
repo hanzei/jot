@@ -564,6 +564,23 @@ describe('seedReplayQueue', () => {
     expect(linkIdx).toBeGreaterThan(createIdx);
   });
 
+  it('records the keys of every seeded op (#1282)', async () => {
+    const note = { ...makeTextNote({ labels: [LABEL_A] }), pinned: true, deleted_at: '2026-01-01T00:00:00Z' };
+    mockGetAllLocalNotes.mockResolvedValue([note]);
+
+    await seedReplayQueue(mockDb, BASE_IDENTITY);
+
+    const ops = mockInsertQueueEntry.mock.calls.map(([, p]) => [p.operation, p.keys]);
+    expect(ops).toEqual([
+      ['createLabel', [`label:${LABEL_A.id}`]],
+      ['create', [`note:${note.id}`]],
+      ['addLabelToNote', [`note:${note.id}`, `label:${LABEL_A.id}`]],
+      ['update', [`note:${note.id}`]],
+      ['delete', [`note:${note.id}`]],
+      ['updateSettings', ['settings']],
+    ]);
+  });
+
   it('enqueues settings/profile last', async () => {
     const note = makeTextNote({ labels: [LABEL_A] });
     mockGetAllLocalNotes.mockResolvedValue([note]);

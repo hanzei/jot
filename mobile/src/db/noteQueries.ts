@@ -1,8 +1,9 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { deleteFileIfExists } from '../utils/fs';
-import { apiPaths, compareServerTimestamps, type Note, type NoteItem, type NoteUnread, type GetNotesParams, type Label, type NoteShare, type NoteImage, type PublicLink, type ShareHistorySource } from '@jot/shared';
+import { compareServerTimestamps, type Note, type NoteItem, type NoteUnread, type GetNotesParams, type Label, type NoteShare, type NoteImage, type PublicLink, type ShareHistorySource } from '@jot/shared';
 import { generateClientId } from './clientId';
 import { withSerializedTransaction } from './transaction';
+import { noteKey, parseJsonObject } from './queueKeys';
 import { localCompletedWrites } from './localCompletedWrites';
 import { isLocalModeActive } from '../store/localMode';
 
@@ -144,17 +145,15 @@ async function getItemsForNote(db: SQLiteDatabase, noteId: string): Promise<Note
  */
 async function getQueuedCreatedItemIds(db: SQLiteDatabase, noteId: string): Promise<string[]> {
   const rows = await db.getAllAsync<{ body: string | null }>(
-    "SELECT body FROM sync_queue WHERE operation = 'createItem' AND endpoint = ?",
-    [apiPaths.noteItems(noteId)],
+    `SELECT q.body FROM sync_queue q JOIN sync_queue_keys k ON k.entry_id = q.id
+     WHERE q.operation = 'createItem' AND k.key = ?`,
+    [noteKey(noteId)],
   );
   const ids: string[] = [];
   for (const row of rows) {
-    try {
-      const id = (JSON.parse(row.body ?? 'null') as { id?: unknown } | null)?.id;
-      if (typeof id === 'string') ids.push(id);
-    } catch {
-      // An unparseable body names no item to keep.
-    }
+    // An unparseable body names no item to keep.
+    const id = parseJsonObject(row.body)?.id;
+    if (typeof id === 'string') ids.push(id);
   }
   return ids;
 }

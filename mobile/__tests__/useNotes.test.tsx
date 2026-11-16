@@ -1,5 +1,5 @@
 import React from 'react';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted, useUncheckAllItems, useDeleteCompletedItems, useShareNote, useUnshareNote, useLeaveNote, useMarkNoteViewed, NoteConversionCapError } from '../src/hooks/useNotes';
 import { VALIDATION } from '@jot/shared';
@@ -292,6 +292,7 @@ describe('useNotes hooks', () => {
           endpoint: '/notes',
           method: 'POST',
           body: { id: 'ClientNoteId000000000A', content: 'Offline note', note_type: 'text' },
+          keys: ['note:ClientNoteId000000000A'],
         }),
       );
       expect(result.current.data?.id).toBe('ClientNoteId000000000A');
@@ -343,10 +344,16 @@ describe('useNotes hooks', () => {
       );
       const ops = mockSyncQueue.enqueueOperation.mock.calls.map((call) => call[1]);
       expect(ops).toEqual([
-        expect.objectContaining({ operation: 'createLabel', body: { id: 'ClientLabelId00000000A', name: 'Errands' } }),
+        expect.objectContaining({
+          operation: 'createLabel',
+          body: { id: 'ClientLabelId00000000A', name: 'Errands' },
+          keys: ['label:ClientLabelId00000000A'],
+        }),
         expect.objectContaining({
           operation: 'create',
           body: expect.objectContaining({ content: 'Labelled offline', labels: ['work', 'Errands'] }),
+          // The note, and every label it names: the label creates land first.
+          keys: ['note:ClientNoteId000000000A', 'label:label-work', 'label:ClientLabelId00000000A'],
         }),
       ]);
       mockNoteQueries.getStoredLabels.mockImplementation(async () => []);
@@ -447,6 +454,9 @@ describe('useNotes hooks', () => {
           endpoint: '/notes/ServerValidButPending00/duplicate',
           method: 'POST',
           body: { id: 'ClientNoteId000000000A' },
+          // The clone it writes, and the source the server copies.
+          keys: ['note:ClientNoteId000000000A'],
+          readKeys: ['note:ServerValidButPending00'],
         }),
       );
       expect(mockNoteQueries.markNotePendingCreate).toHaveBeenCalledWith(
@@ -498,7 +508,7 @@ describe('useNotes hooks', () => {
       expect(mockJot.notes.update).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'update', endpoint: `/notes/${PENDING_ID}`, method: 'PATCH' }),
+        expect.objectContaining({ operation: 'update', endpoint: `/notes/${PENDING_ID}`, method: 'PATCH', keys: [`note:${PENDING_ID}`] }),
       );
     });
 
@@ -509,7 +519,7 @@ describe('useNotes hooks', () => {
       expect(mockJot.notes.convert).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'convertNoteType', endpoint: `/notes/${PENDING_ID}/convert` }),
+        expect.objectContaining({ operation: 'convertNoteType', endpoint: `/notes/${PENDING_ID}/convert`, keys: [`note:${PENDING_ID}`] }),
       );
     });
 
@@ -520,7 +530,7 @@ describe('useNotes hooks', () => {
       expect(mockJot.notes.createItem).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'createItem', endpoint: `/notes/${PENDING_ID}/items` }),
+        expect.objectContaining({ operation: 'createItem', endpoint: `/notes/${PENDING_ID}/items`, keys: [`note:${PENDING_ID}`] }),
       );
     });
 
@@ -532,7 +542,7 @@ describe('useNotes hooks', () => {
       expect(mockJot.notes.updateItem).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'updateItem', endpoint: `/notes/${PENDING_ID}/items/i1`, method: 'PATCH' }),
+        expect.objectContaining({ operation: 'updateItem', endpoint: `/notes/${PENDING_ID}/items/i1`, method: 'PATCH', keys: [`note:${PENDING_ID}`] }),
       );
     });
 
@@ -543,7 +553,7 @@ describe('useNotes hooks', () => {
       expect(mockJot.notes.deleteItem).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'deleteItem', endpoint: `/notes/${PENDING_ID}/items/i1`, method: 'DELETE' }),
+        expect.objectContaining({ operation: 'deleteItem', endpoint: `/notes/${PENDING_ID}/items/i1`, method: 'DELETE', keys: [`note:${PENDING_ID}`] }),
       );
     });
 
@@ -554,7 +564,7 @@ describe('useNotes hooks', () => {
       expect(mockJot.notes.reorderItems).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'reorderItems', endpoint: `/notes/${PENDING_ID}/items/reorder` }),
+        expect.objectContaining({ operation: 'reorderItems', endpoint: `/notes/${PENDING_ID}/items/reorder`, keys: [`note:${PENDING_ID}`] }),
       );
     });
 
@@ -565,7 +575,7 @@ describe('useNotes hooks', () => {
       expect(mockJot.notes.setItemsCompleted).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'setItemsCompleted', endpoint: `/notes/${PENDING_ID}/items/set-completed` }),
+        expect.objectContaining({ operation: 'setItemsCompleted', endpoint: `/notes/${PENDING_ID}/items/set-completed`, keys: [`note:${PENDING_ID}`] }),
       );
     });
 
@@ -576,7 +586,7 @@ describe('useNotes hooks', () => {
       expect(mockJot.notes.setItemsCompleted).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'setItemsCompleted', endpoint: `/notes/${PENDING_ID}/items/set-completed` }),
+        expect.objectContaining({ operation: 'setItemsCompleted', endpoint: `/notes/${PENDING_ID}/items/set-completed`, keys: [`note:${PENDING_ID}`] }),
       );
     });
 
@@ -587,7 +597,7 @@ describe('useNotes hooks', () => {
       expect(mockJot.notes.deleteItems).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'deleteCompletedItems', endpoint: `/notes/${PENDING_ID}/items/delete` }),
+        expect.objectContaining({ operation: 'deleteCompletedItems', endpoint: `/notes/${PENDING_ID}/items/delete`, keys: [`note:${PENDING_ID}`] }),
       );
     });
 
@@ -598,7 +608,7 @@ describe('useNotes hooks', () => {
       expect(mockJot.notes.delete).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'delete', endpoint: `/notes/${PENDING_ID}`, method: 'DELETE' }),
+        expect.objectContaining({ operation: 'delete', endpoint: `/notes/${PENDING_ID}`, method: 'DELETE', keys: [`note:${PENDING_ID}`] }),
       );
     });
 
@@ -609,7 +619,7 @@ describe('useNotes hooks', () => {
       expect(mockJot.notes.restore).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'restore', endpoint: `/notes/${PENDING_ID}/restore` }),
+        expect.objectContaining({ operation: 'restore', endpoint: `/notes/${PENDING_ID}/restore`, keys: [`note:${PENDING_ID}`] }),
       );
     });
 
@@ -620,7 +630,7 @@ describe('useNotes hooks', () => {
       expect(mockJot.notes.delete).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'permanentDelete', endpoint: `/notes/${PENDING_ID}?permanent=true` }),
+        expect.objectContaining({ operation: 'permanentDelete', endpoint: `/notes/${PENDING_ID}?permanent=true`, keys: [`note:${PENDING_ID}`] }),
       );
     });
   });
@@ -690,6 +700,25 @@ describe('useNotes hooks', () => {
       expect(mockJot.notes.unshare).toHaveBeenCalledWith('123', 'u2');
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
     });
+
+    it('queues the share, keyed by its note, when offline', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(sharedNote as never);
+
+      const { result } = await renderHook(() => useShareNote(), { wrapper: createWrapper() });
+      await act(async () => {
+        await result.current.mutateAsync({ noteId: '123', user: targetUser as never });
+      });
+
+      expect(mockJot.notes.share).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(expect.anything(), {
+        operation: 'share',
+        endpoint: '/notes/123/share',
+        method: 'POST',
+        body: { user_id: 'u2' },
+        keys: ['note:123'],
+      });
+    });
   });
 
   // Leaving a note shared with the current user is the collaborator side of
@@ -735,6 +764,7 @@ describe('useNotes hooks', () => {
           operation: 'unshare',
           endpoint: '/notes/n1/shares/test-user-id',
           method: 'DELETE',
+          keys: ['note:n1'],
         }),
       );
     });
@@ -1409,6 +1439,7 @@ describe('useNotes hooks', () => {
         endpoint: '/notes/n1/items/set-completed',
         method: 'POST',
         body: { item_ids: ['wq'], completed: false },
+        keys: ['note:n1'],
       });
       mockJot.notes.setItemsCompleted.mockReset();
       mockJot.notes.setItemsCompleted.mockResolvedValueOnce([
@@ -2171,6 +2202,7 @@ describe('useNotes hooks', () => {
           // The open time travels with the queued view, so its replay cannot
           // count a collaborator's later change as seen.
           body: { viewed_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) },
+          keys: ['note:n1'],
         },
       );
     });

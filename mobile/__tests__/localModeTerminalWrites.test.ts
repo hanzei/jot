@@ -34,11 +34,13 @@ describe('local-mode terminal writes', () => {
         endpoint: '/notes',
         method: 'POST',
         body: { id: 'n1' },
+        keys: ['note:n1'],
       });
 
       expect(await db.getAllAsync('SELECT operation, endpoint, method, body FROM sync_queue')).toEqual([
         { operation: 'create', endpoint: '/notes', method: 'POST', body: '{"id":"n1"}' },
       ]);
+      expect(await db.getAllAsync('SELECT key FROM sync_queue_keys')).toEqual([{ key: 'note:n1' }]);
       expect(listener).toHaveBeenCalledTimes(1);
       unsubscribe();
     });
@@ -53,6 +55,7 @@ describe('local-mode terminal writes', () => {
         endpoint: '/notes/n1',
         method: 'PATCH',
         body: { title: 'x' },
+        keys: ['note:n1'],
       });
 
       expect(await db.getAllAsync('SELECT * FROM sync_queue')).toEqual([]);
