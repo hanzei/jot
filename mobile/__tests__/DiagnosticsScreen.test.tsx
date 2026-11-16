@@ -331,7 +331,8 @@ describe('DiagnosticsScreen', () => {
   describe('image upload queue', () => {
     beforeEach(async () => {
       const db = globalThis.testDb;
-      await seedImageUpload(db, { id: 'q1', created_at: '2024-01-02T00:00:00Z', attempts: 2 });
+      // HTTP failures are not capped (#1283), so a queued upload can pass the cap.
+      await seedImageUpload(db, { id: 'q1', created_at: '2024-01-02T00:00:00Z', attempts: 7 });
       await seedImageUpload(db, { id: 'q2', created_at: '2024-01-03T00:00:00Z' });
       await seedImageUpload(db, { id: 'q3', created_at: '2024-01-04T00:00:00Z' });
       for (const id of ['e1', 'e2', 'e3', 'e4']) {
@@ -348,7 +349,7 @@ describe('DiagnosticsScreen', () => {
       const orange = { color: '#f97316' };
       expect(getByText('3')).toHaveStyle(orange);
       expect(getByText('4')).toHaveStyle(orange);
-      expect(getByText(`2 / ${MAX_ENTRY_DRAIN_ATTEMPTS}`)).toHaveStyle(orange);
+      expect(getByText('7')).toHaveStyle(orange);
     });
 
     it('includes the image upload queue in the share report, without paths or filenames', async () => {
@@ -360,8 +361,8 @@ describe('DiagnosticsScreen', () => {
         queuedCount: 3,
         errorCount: 4,
         oldestQueuedAt: '2024-01-02T00:00:00Z',
-        oldestAttempts: 2,
-        maxAttempts: 2,
+        oldestAttempts: 7,
+        maxAttempts: 7,
       });
       const serialized = JSON.stringify(report.imageUploads);
       expect(serialized).not.toContain('photo.png');

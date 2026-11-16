@@ -27,7 +27,6 @@ import { getSseState, subscribeToSseState, type SseState } from '../api/sseState
 import {
   EMPTY_SYNC_QUEUE_STATS,
   getSyncQueueStats,
-  MAX_ENTRY_DRAIN_ATTEMPTS,
   type SyncQueueStats,
 } from '../db/syncQueue';
 import {
@@ -260,7 +259,7 @@ export default function DiagnosticsScreen() {
               />
               <DiagRow
                 label={t('diagnostics.headAttempts')}
-                value={`${snapshot.queue.head.attempts} / ${MAX_ENTRY_DRAIN_ATTEMPTS}`}
+                value={String(snapshot.queue.head.attempts)}
                 valueColor={snapshot.queue.head.attempts > 0 ? STATUS_ORANGE : undefined}
               />
             </>
@@ -317,7 +316,7 @@ export default function DiagnosticsScreen() {
               />
               <DiagRow
                 label={t('diagnostics.imageUploadsOldestAttempts')}
-                value={`${snapshot.imageUploads.oldest.attempts} / ${MAX_ENTRY_DRAIN_ATTEMPTS}`}
+                value={String(snapshot.imageUploads.oldest.attempts)}
                 valueColor={snapshot.imageUploads.oldest.attempts > 0 ? STATUS_ORANGE : undefined}
               />
             </>

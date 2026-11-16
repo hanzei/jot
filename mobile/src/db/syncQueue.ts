@@ -26,6 +26,7 @@ import {
   insertKeys,
   keyIdExpression,
   keyKindCondition,
+  noteIdOfKey,
   noteKey,
   parseJsonObject,
   type QueueKey,
@@ -69,23 +70,23 @@ interface QueueEntry {
   body: string | null;
   created_at: string;
   /**
-   * Count of transient drain failures for this specific entry (issue #714).
-   * Defaults to 0 for rows written before migration 6 / by older code paths.
+   * Count of entry-specific transient drain failures (issue #714), for
+   * diagnostics. Defaults to 0 for rows written before migration 6 / by older
+   * code paths.
    */
   attempts?: number;
+  /** How many of `attempts` were non-HTTP processing errors: capped by {@link MAX_ENTRY_DRAIN_ATTEMPTS} (#1283). */
+  processing_errors?: number;
 }
 
 /**
- * How many times a single queue entry may fail transiently before it is
- * dead-lettered and the drain continues past it (issue #714). A persistently
- * 5xx-ing op, or one whose processing throws a non-HTTP error, would otherwise
- * sit at the FIFO head forever and block every later write.
- *
- * Kept below OfflineContext's MAX_CONSECUTIVE_DRAIN_FAILURES so the backoff
- * retries within a single online session are enough to walk a poison entry to
- * its cap and unwedge the queue before the scheduler pauses auto-retries.
- * The counter also persists across reconnects/restarts, so even a paused
- * scheduler resumes the walk on the next external trigger.
+ * How many times processing a queue entry may throw a non-HTTP error (a
+ * corrupted body, a local DB error) before it is dead-lettered (issue #714).
+ * Such an error happens on the device, so retrying it later is unlikely to
+ * help. An HTTP failure is not capped (#1283): the server never rejected the
+ * op, so it stays queued and only the ops that share a key with it wait (see
+ * {@link drainQueue}). A best-effort op (markViewed, removeImage) is dropped
+ * at the cap whatever failed, so it never holds back its note's edits.
  */
 export const MAX_ENTRY_DRAIN_ATTEMPTS = 5;
 
@@ -123,8 +124,9 @@ export interface EnqueueParams {
  * Shared by two call sites so they stay in agreement:
  *   - online writes (useNotes): transient → fall back to the local queue instead
  *     of losing the edit; permanent → surface the error to the UI.
- *   - queue drain: transient → stop draining and retry on the next reconnect;
- *     permanent → discard (dead-letter) the entry so it cannot wedge the queue.
+ *   - queue drain: transient → keep the entry queued and retry it on a later
+ *     pass; permanent → discard (dead-letter) the entry so it cannot wedge the
+ *     queue.
  */
 export function isTransientHttpStatus(status: number | undefined): boolean {
   if (status === undefined) return true;
@@ -134,17 +136,17 @@ export function isTransientHttpStatus(status: number | undefined): boolean {
 
 /**
  * Of the *transient* failures, which ones block the whole queue rather than
- * being specific to the entry at the head (issue #714)? A global failure stops
- * the drain without charging the entry's attempt counter — every entry would
- * fail the same way — whereas an entry-specific transient failure walks that
- * entry toward being dead-lettered so it can't wedge the head forever.
+ * being specific to one entry (issue #714)? A global failure stops the drain
+ * pass without charging the entry's attempt counter — every entry would fail
+ * the same way — whereas an entry-specific transient failure holds back only
+ * the entry and the later ops that share a key with it, and the pass goes on
+ * (#1283).
  *
  * Global: a transport-level failure with no server response (network down or a
  * client timeout), plus statuses that apply queue-wide (401 needs re-auth, 408
  * request timeout, 429 rate limit). Entry-specific: a 5xx tied to this op's
  * payload, and any non-HTTP error thrown while processing the entry itself
- * (corrupted body, a local DB error) — those are charged and eventually
- * dead-lettered.
+ * (corrupted body, a local DB error) — those are charged to the entry.
  *
  * Two failures are ambiguous: a gateway status (502/503/504) and a client-side
  * timeout. Usually the server is down or unreachable (global), but a request
@@ -191,9 +193,9 @@ function isClientTimeout(err: unknown): boolean {
  * Timeout for a write replayed from the queue. An online write uses the short
  * WRITE_REQUEST_TIMEOUT_MS (api/client.ts) so it falls back to the queue
  * quickly; a replay has no such fallback — it simply stays queued — and a
- * replay that times out while the server answers the probe is charged toward
- * dead-lettering (#1211). So a replay gets a longer budget, letting a large
- * write on a slow but working link complete rather than be dead-lettered.
+ * replay that times out while the server answers the probe holds back its
+ * note's later ops until it gets through (#1211, #1283). So a replay gets a
+ * longer budget, letting a large write on a slow but working link complete.
  * Passed explicitly, so the client's write-timeout interceptor leaves it alone.
  */
 export const QUEUED_WRITE_TIMEOUT_MS = 30000;
@@ -207,16 +209,16 @@ const SERVER_PROBE_TIMEOUT_MS = 5000;
 /**
  * {@link isGlobalDrainFailure}, plus a decision on the ambiguous failures: when
  * the entry got a 502/503/504 or timed out client-side, probe the server with a
- * cheap read. If the server answers, the failure was specific to this entry and
- * is charged as usual, so a request that always times out — at the proxy or at
- * the client's own write timeout (#1211) — is still dead-lettered after
- * MAX_ENTRY_DRAIN_ATTEMPTS instead of wedging the queue. If it doesn't, the
- * server is down or unreachable: the failure is global and charges nothing, so
- * an outage no longer turns every queued change into a "couldn't be saved" one.
+ * cheap read. If the server answers, the failure was specific to this entry, so
+ * a request that always times out — at the proxy or at the client's own write
+ * timeout (#1211) — holds back only the ops that depend on it while the rest of
+ * the queue drains. If it doesn't, the server is down or unreachable: the
+ * failure is global, charges nothing, and stops the pass.
  * A plain network error (no response, not a timeout) is global without a probe.
  *
- * The drains stop at the first global or below-cap failure, so this probes at
- * most once per drain pass.
+ * Probed once per ambiguous failure, not once per pass: a server that goes
+ * down mid-pass then stops the pass at the next failure instead of letting
+ * every remaining entry run into the same timeout.
  */
 export async function isGlobalDrainFailureProbed(err: unknown): Promise<boolean> {
   const ambiguous = isClientTimeout(err)
@@ -389,9 +391,9 @@ export async function getPendingCount(db: SQLiteDatabase): Promise<number> {
 export interface SyncQueueStats {
   pendingCount: number;
   /**
-   * The oldest pending entry — the FIFO head that a wedge blocks on — or null
-   * when the queue is empty. `attempts` shows how many times draining it has
-   * failed transiently (approaching MAX_ENTRY_DRAIN_ATTEMPTS = dead-letter).
+   * The oldest pending entry, or null when the queue is empty. `attempts`
+   * shows how many times draining it has failed transiently; while it fails,
+   * the later ops that share a key with it wait behind it (#1283).
    */
   head: { id: number; operation: QueueOperation; created_at: string; attempts: number } | null;
   /** Highest attempt count across all pending entries. */
@@ -401,10 +403,10 @@ export interface SyncQueueStats {
 export const EMPTY_SYNC_QUEUE_STATS: SyncQueueStats = { pendingCount: 0, head: null, maxAttempts: 0 };
 
 /**
- * Summarize the sync queue for the Diagnostics screen so a head-of-line wedge is
- * legible: which op is stuck at the head, how old it is, and how many transient
- * failures it (or any entry) has racked up (issue #714). A pending count alone
- * can't distinguish "healthy backlog" from "one poison entry blocking the rest".
+ * Summarize the sync queue for the Diagnostics screen so a stuck entry is
+ * legible: which op is oldest, how old it is, and how many transient failures
+ * it (or any entry) has racked up (issue #714). A pending count alone can't
+ * distinguish "healthy backlog" from "one failing entry holding back its note".
  */
 export async function getSyncQueueStats(db: SQLiteDatabase): Promise<SyncQueueStats> {
   const head = await db.getFirstAsync<{
@@ -424,23 +426,58 @@ export async function getSyncQueueStats(db: SQLiteDatabase): Promise<SyncQueueSt
   };
 }
 
-/**
- * The notes each queued entry writes, by entry id: its written (not read-only)
- * note keys. This is what a landing is recorded for, what a dead letter links
- * and flags failed, and what the drain pulls afterwards.
- */
-async function getWrittenNoteIdsByEntry(db: SQLiteDatabase): Promise<Map<number, string[]>> {
-  const rows = await db.getAllAsync<{ entry_id: number; id: string }>(
-    `SELECT entry_id, ${keyIdExpression('key', 'note')} AS id FROM sync_queue_keys
-     WHERE read_only = 0 AND ${keyKindCondition('key', 'note')}`,
+/** What each queued entry touches, by entry id, from one read of `sync_queue_keys`. */
+interface EntryKeys {
+  /** Every key, read-only ones included: what the drain holds back behind an entry that fails (#1283). */
+  keys: Map<number, string[]>;
+  /**
+   * The notes the entry writes (its written `note:` keys): what a landing is
+   * recorded for, what a dead letter links and flags failed, and what the
+   * drain pulls afterwards.
+   */
+  writtenNoteIds: Map<number, string[]>;
+}
+
+async function loadEntryKeys(db: SQLiteDatabase): Promise<EntryKeys> {
+  const rows = await db.getAllAsync<{ entry_id: number; key: string; read_only: number }>(
+    'SELECT entry_id, key, read_only FROM sync_queue_keys',
   );
-  const byEntry = new Map<number, string[]>();
+  const keys = new Map<number, string[]>();
+  const writtenNoteIds = new Map<number, string[]>();
+  const add = (map: Map<number, string[]>, entryId: number, value: string): void => {
+    const values = map.get(entryId);
+    if (values) values.push(value);
+    else map.set(entryId, [value]);
+  };
   for (const row of rows) {
-    const ids = byEntry.get(row.entry_id);
-    if (ids) ids.push(row.id);
-    else byEntry.set(row.entry_id, [row.id]);
+    add(keys, row.entry_id, row.key);
+    const noteId = row.read_only === 0 ? noteIdOfKey(row.key) : null;
+    if (noteId !== null) add(writtenNoteIds, row.entry_id, noteId);
   }
-  return byEntry;
+  return { keys, writtenNoteIds };
+}
+
+/**
+ * Charge an entry's failed drain attempt to its counters (issue #714) and say
+ * whether it has reached the cap. `attempts` counts every entry-specific
+ * failure, for diagnostics and backoff; only a non-HTTP processing error is
+ * capped, on its own count, since `attempts` keeps growing through a server
+ * outage (#1283). Shared by both drains so they apply one rule.
+ */
+export async function chargeEntryFailure(
+  db: SQLiteDatabase,
+  table: 'sync_queue' | 'pending_image_uploads',
+  entry: { id: number | string; attempts?: number; processing_errors?: number },
+  err: unknown,
+): Promise<{ attempts: number; processingErrors: number; capped: boolean }> {
+  const attempts = (entry.attempts ?? 0) + 1;
+  const processingError = !axios.isAxiosError(err);
+  const processingErrors = (entry.processing_errors ?? 0) + (processingError ? 1 : 0);
+  await db.runAsync(
+    `UPDATE ${table} SET attempts = ?, processing_errors = ? WHERE id = ?`,
+    [attempts, processingErrors, entry.id],
+  );
+  return { attempts, processingErrors, capped: processingError && processingErrors >= MAX_ENTRY_DRAIN_ATTEMPTS };
 }
 
 /**
@@ -706,10 +743,10 @@ export interface DiscardedOperation {
   endpoint: string;
   /**
    * The status that caused the discard: a permanent (non-transient 4xx) HTTP
-   * status, a transient HTTP status (5xx) that never recovered after
-   * MAX_ENTRY_DRAIN_ATTEMPTS tries, or PROCESSING_ERROR_STATUS (0) for a
-   * failure with no HTTP status: a non-HTTP local processing error (issue #714)
-   * or a client timeout while the server answered the probe (#1211).
+   * status, or PROCESSING_ERROR_STATUS (0) for a non-HTTP local processing
+   * error that recurred MAX_ENTRY_DRAIN_ATTEMPTS times (issue #714). Dead
+   * letters written before #1283 may also hold a 5xx, or 0 for a client
+   * timeout, from when transient HTTP failures were capped too.
    */
   status: number;
 }
@@ -814,28 +851,34 @@ async function recordDeadLetter(
 }
 
 /**
- * Drain the sync queue in FIFO order. For each entry, make the corresponding API call.
- * On success, delete the entry. On a permanent client error (non-transient 4xx),
- * discard the entry and continue: idempotent 409 conflicts resolve silently, while
- * every other permanent status dead-letters the op (preserved in the `dead_letter`
- * table with the affected note flagged `sync_state = 'failed'`) so the optimistic
- * edit isn't lost (#492).
+ * Drain the sync queue in one pass, in insertion order, FIFO per key: an op is
+ * sent only after every earlier op that shares a key with it (a note, a label,
+ * the settings; see queueKeys.ts). For each entry, make the corresponding API
+ * call. On success, delete the entry. On a permanent client error
+ * (non-transient 4xx), discard the entry and continue: idempotent 409 conflicts
+ * resolve silently, while every other permanent status dead-letters the op
+ * (preserved in the `dead_letter` table with the affected note flagged
+ * `sync_state = 'failed'`) so the optimistic edit isn't lost (#492).
  *
  * Transient failures split two ways (issue #714):
  *   - *Global* connectivity failures — no server response (a network error, or a
  *     client timeout / gateway status while the server does not answer a probe)
  *     or a whole-queue-blocking status (401 re-auth, 408, 429 rate-limit) — stop
- *     the drain without charging the head entry, since every entry would fail the
- *     same way; the remainder retries on the next reconnect.
- *   - *Entry-specific* failures — a 5xx tied to this op's payload, or a non-HTTP
- *     error thrown while processing this entry (corrupted body, a local DB error)
- *     — increment the entry's `attempts` counter and stop. Once an entry has
- *     failed MAX_ENTRY_DRAIN_ATTEMPTS times it is dead-lettered and the drain
- *     continues *past* it, so one reproducibly-failing op can no longer wedge the
- *     FIFO head and starve later writes for unrelated notes (the head-of-line
- *     bug). A long server-wide 5xx outage can therefore dead-letter the head after
- *     the cap even though the op was fine — an accepted trade-off: the op is
- *     preserved in dead_letter and recoverable via the failed-changes review flow.
+ *     the pass without charging the entry, since every entry would fail the
+ *     same way; the remainder retries on the next pass.
+ *   - *Entry-specific* failures — a 5xx tied to this op's payload, a client
+ *     timeout or gateway status while the server answers the probe, or a
+ *     non-HTTP error thrown while processing this entry — increment the entry's
+ *     `attempts` counter. The entry stays queued, its keys join this pass's
+ *     *blocked set*, and the pass goes on (#1283). A later op that shares a key
+ *     with the blocked set is skipped without being sent, and its own keys join
+ *     the set too, so a chain of dependent ops stays in order while unrelated
+ *     notes drain. The entry is retried on later passes, under OfflineContext's
+ *     backoff and its cap on passes that leave work behind. Only a non-HTTP
+ *     processing error is dead-lettered, once it has recurred
+ *     MAX_ENTRY_DRAIN_ATTEMPTS times: the server never rejected an op that
+ *     failed over HTTP, so a long outage no longer turns queued changes into
+ *     failed ones.
  *
  * Handles offline-create ID reconciliation: when a `create` or `duplicate` operation
  * succeeds, the server echoes back the client-supplied ID unchanged. The canonical
@@ -850,8 +893,14 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
   const entries = await db.getAllAsync<QueueEntry>(
     'SELECT * FROM sync_queue ORDER BY id ASC',
   );
+  const entryKeys = await loadEntryKeys(db);
   // A label-id rewrite mid-drain moves only `label:` keys, so this holds throughout.
-  const noteIdsByEntry = await getWrittenNoteIdsByEntry(db);
+  const noteIdsByEntry = entryKeys.writtenNoteIds;
+  // Reloaded after a label-id rewrite, which moves `label:` keys.
+  let keysByEntry = entryKeys.keys;
+  // Keys of the entries this pass held back: one that failed transiently, and
+  // every later one that shares a key with it (#1283).
+  const blockedKeys = new Set<string>();
 
   const syncedNotes: Note[] = [];
   const discardedOperations: DiscardedOperation[] = [];
@@ -899,13 +948,10 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
     // not retry or dead-letter the entry (issue #714 — mirrors imageUploadQueue's
     // "the upload already landed, so remove the queue entry first").
     let requestLanded = false;
-    // The notes this entry writes.
+    // The notes this entry writes, and every key it touches.
     const targets = (): readonly string[] => noteIdsByEntry.get(entry.id) ?? [];
+    const keys = keysByEntry.get(entry.id) ?? [];
     try {
-      if (entry.body) {
-        body = JSON.parse(entry.body) as Record<string, unknown>;
-      }
-
       // If this op targets a note whose create was just dead-lettered, replaying
       // it against a note the server never got is pointless — drop it (the note
       // stays flagged failed) rather than round-tripping to a guaranteed 404.
@@ -918,6 +964,17 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
           continue;
         }
+      }
+
+      // An earlier op this op depends on failed this pass: it waits behind it,
+      // and so does every later op that depends on this one.
+      if (keys.some((key) => blockedKeys.has(key))) {
+        for (const key of keys) blockedKeys.add(key);
+        continue;
+      }
+
+      if (entry.body) {
+        body = JSON.parse(entry.body) as Record<string, unknown>;
       }
 
       // The base_version this replay was sent with, if it was version-guarded.
@@ -1123,6 +1180,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
                   await rewriteLabelKeys(db, clientLabelId, serverLabel.id);
                 });
                 // The drain snapshot predates the rewrite: refresh the rows behind this one.
+                keysByEntry = (await loadEntryKeys(db)).keys;
                 const rewritten = new Map(
                   (await db.getAllAsync<QueueEntry>('SELECT * FROM sync_queue WHERE id > ?', [entry.id]))
                     .map((row) => [row.id, row]),
@@ -1187,9 +1245,9 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // server does not answer the probe) or a status that blocks the whole
         // queue regardless of this entry (401 re-auth, 408, 429 rate-limit, or
         // a 502/503/504 from a proxy whose server is down).
-        // Every entry would fail the same way, so stop the drain without
+        // Every entry would fail the same way, so stop the pass without
         // charging this entry's attempt counter and retry the remainder on the
-        // next reconnect (issue #714). Expected whenever the
+        // next pass (issue #714). Expected whenever the
         // server drops away, so info, and the message alone: the stack of a
         // network error is bundle offsets that say nothing.
         console.info(`Queue drain stopped at entry id=${entry.id} (connectivity): ${errorSummary(err)}`);
@@ -1198,44 +1256,39 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
       } else {
         // Entry-specific transient failure: a 5xx tied to this op's payload (a
         // gateway status or a client timeout only when the server answered the
-        // probe), or a non-HTTP error thrown while processing this entry
-        // (corrupted body, a local DB error). Charge the entry's attempt counter; once it has failed
-        // MAX_ENTRY_DRAIN_ATTEMPTS times, dead-letter it and continue *past* it so
-        // it can't wedge the FIFO head forever (issue #714). Below the cap, stop
-        // and retry the whole queue on the next drain (preserving FIFO/backoff).
-        const attempts = (entry.attempts ?? 0) + 1;
-        await db.runAsync('UPDATE sync_queue SET attempts = ? WHERE id = ?', [attempts, entry.id]);
+        // probe), or a non-HTTP error thrown while processing this entry.
+        const { attempts, processingErrors, capped } = await chargeEntryFailure(db, 'sync_queue', entry, err);
 
-        if (attempts < MAX_ENTRY_DRAIN_ATTEMPTS) {
-          console.warn(
-            `Queue drain stopped at entry id=${entry.id} (attempt ${attempts}/${MAX_ENTRY_DRAIN_ATTEMPTS}):`,
-            err,
+        if (attempts >= MAX_ENTRY_DRAIN_ATTEMPTS && BEST_EFFORT_OPERATIONS.has(entry.operation)) {
+          // Best-effort (see the permanent-failure branch above): the next
+          // server sync reconciles what it would have done, so drop it rather
+          // than hold back its note's edits behind it.
+          console.info(
+            `Dropping queued operation id=${entry.id} ${entry.operation} ${endpoint} after ${attempts} failed attempts`,
           );
-          break;
-        }
-
-        if (entry.operation === 'markViewed') {
-          // Best-effort (see the permanent-failure branch above): a view that
-          // keeps failing only leaves a badge the next server fetch reconciles,
-          // so drop it rather than flag the note as failed to sync.
-          console.info(`Dropping queued operation id=${entry.id} markViewed ${endpoint} after ${attempts} failed attempts`);
           await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
           continue;
         }
 
-        // Cap reached — dead-letter and continue. Record the
-        // endpoint/body that was actually sent. HTTP 5xx
-        // keeps its status; a non-HTTP throw or a client timeout records
-        // PROCESSING_ERROR_STATUS (0).
-        const deadLetterStatus = status ?? PROCESSING_ERROR_STATUS;
+        if (!capped) {
+          // Not rejected by the server: stays queued, holds back its dependents (#1283).
+          console.warn(
+            `Queue entry id=${entry.id} ${entry.operation} failed (attempt ${attempts}); `
+              + `holding back the ops that depend on it: ${errorSummary(err)}`,
+          );
+          for (const key of keys) blockedKeys.add(key);
+          continue;
+        }
+
+        // A non-HTTP processing error at the cap: dead-letter it with
+        // PROCESSING_ERROR_STATUS (0) and the endpoint/body actually sent.
         const errorMessage = errorSummary(err);
         console.warn(
-          `Dead-lettering queued operation id=${entry.id} after ${attempts} failed attempts ` +
-            `(${deadLetterStatus === PROCESSING_ERROR_STATUS ? 'processing error' : `HTTP ${deadLetterStatus}`}): ${errorMessage}`,
+          `Dead-lettering queued operation id=${entry.id} after ${processingErrors} processing errors: ${errorMessage}`,
         );
         const noteIds = targets();
-        discardedOperations.push({ operation: entry.operation, endpoint, status: deadLetterStatus });
-        await recordDeadLetter(db, entry, endpoint, body, deadLetterStatus, noteIds.length === 1 ? noteIds[0]! : null, {
+        discardedOperations.push({ operation: entry.operation, endpoint, status: PROCESSING_ERROR_STATUS });
+        await recordDeadLetter(db, entry, endpoint, body, PROCESSING_ERROR_STATUS, noteIds.length === 1 ? noteIds[0]! : null, {
           attempts,
           errorMessage,
         });

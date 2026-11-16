@@ -3,7 +3,7 @@ import axios from 'axios';
 import type { NoteImage } from '@jot/shared';
 import { uploadNoteImage, type ImageUploadFile } from '../api/images';
 import { patchLocalNoteImages, getPendingCreateNoteIds, getFailedNoteIds } from './noteQueries';
-import { errorSummary, isTransientHttpStatus, isGlobalDrainFailureProbed, MAX_ENTRY_DRAIN_ATTEMPTS, notifyEnqueueListeners } from './syncQueue';
+import { chargeEntryFailure, errorSummary, isTransientHttpStatus, isGlobalDrainFailureProbed, notifyEnqueueListeners } from './syncQueue';
 import { copyFile, deleteFileIfExists, documentPath, ensureDirExists } from '../utils/fs';
 
 const PENDING_UPLOADS_DIR = documentPath('pending-image-uploads');
@@ -21,11 +21,13 @@ export interface PendingImageUploadEntry {
   error_message: string | null;
   created_at: string;
   /**
-   * Count of transient upload failures for this entry (issue #714). Defaults to 0
-   * for rows written before migration 6. Once it reaches MAX_ENTRY_DRAIN_ATTEMPTS
-   * the upload is flagged `error` and the drain continues past it.
+   * Count of transient upload failures for this entry (issue #714), for
+   * diagnostics. Defaults to 0 for rows written before migration 6. An HTTP
+   * failure leaves the upload queued (#1283).
    */
   attempts?: number;
+  /** How many of `attempts` were non-HTTP errors; see `chargeEntryFailure` (#1283). */
+  processing_errors?: number;
 }
 
 /**
@@ -85,7 +87,7 @@ export interface ImageUploadQueueStats {
    * The oldest queued upload, or null when none are queued. Not necessarily the
    * one the drain is stuck on: the drain skips uploads whose note still awaits
    * its create or is dead-lettered, so see `maxAttempts` for a wedged entry.
-   * `attempts` counts its transient failures against MAX_ENTRY_DRAIN_ATTEMPTS.
+   * `attempts` counts its transient failures.
    * Metadata only: no path, filename, or note id.
    */
   oldest: { created_at: string; attempts: number } | null;
@@ -148,7 +150,10 @@ export async function reassignPendingImageUploads(
 
 /** Re-queue a permanently-failed upload (e.g. after the user fixes something) so the next drain retries it. Resets the attempt counter so the manual retry gets a fresh budget (#714). */
 export async function retryImageUpload(db: SQLiteDatabase, id: string): Promise<void> {
-  await db.runAsync(`UPDATE pending_image_uploads SET status = 'queued', error_message = NULL, attempts = 0 WHERE id = ?`, [id]);
+  await db.runAsync(
+    `UPDATE pending_image_uploads SET status = 'queued', error_message = NULL, attempts = 0, processing_errors = 0 WHERE id = ?`,
+    [id],
+  );
   notifyEnqueueListeners();
 }
 
@@ -170,11 +175,15 @@ export interface ImageUploadDrainResult {
 }
 
 /**
- * Drain the offline image-upload queue in FIFO order, mirroring drainQueue's
- * transient/permanent split (see syncQueue.ts): a transient failure
- * (network/5xx/etc.) stops the drain so the rest retry on the next reconnect;
- * a permanent failure flags the row `error` (surfaced with retry/dismiss in the
- * gallery) rather than looping forever. A note whose own server-side existence
+ * Drain the offline image-upload queue in FIFO order per note, mirroring
+ * drainQueue's transient/permanent split (see syncQueue.ts): a global
+ * transient failure (no response, 401/408/429, or a timeout or gateway status
+ * while the server does not answer the probe) stops the pass so the rest
+ * retry on the next one; an entry-specific one (a 5xx, a timeout or gateway
+ * status while the server answers) leaves the upload queued and holds back
+ * that note's later uploads for this pass, while other notes' uploads go on
+ * (#1283); a permanent failure flags the row `error` (surfaced with
+ * retry/dismiss in the gallery) rather than looping forever. A note whose own server-side existence
  * isn't confirmed — its offline `create` is still queued (`sync_state =
  * 'pending'`), *or* that create was dead-lettered (`sync_state = 'failed'`) —
  * is skipped for this pass rather than attempted: either way an upload would
@@ -200,9 +209,13 @@ export async function drainImageUploadQueue(db: SQLiteDatabase): Promise<ImageUp
 
   const uploadedNoteIds: string[] = [];
   let discardedCount = 0;
+  // Notes whose uploads wait this pass: not yet confirmed on the server (see
+  // above), or with an upload that failed transiently this pass, so a note's
+  // images still land in the order they were added (#1283).
+  const skippedNoteIds = new Set([...pendingCreateNoteIds, ...failedNoteIds]);
 
   for (const entry of entries) {
-    if (pendingCreateNoteIds.has(entry.note_id) || failedNoteIds.has(entry.note_id)) continue;
+    if (skippedNoteIds.has(entry.note_id)) continue;
 
     let image: NoteImage;
     try {
@@ -231,28 +244,28 @@ export async function drainImageUploadQueue(db: SQLiteDatabase): Promise<ImageUp
       if (await isGlobalDrainFailureProbed(err)) {
         // Connectivity failure (network error/401/408/429, or a timeout or
         // 502/503/504 while the server does not answer) — every entry would fail the same
-        // way, so stop draining without charging this entry and retry on the
-        // next reconnect (issue #714).
+        // way, so stop the pass without charging this entry and retry on the
+        // next one (issue #714).
         console.info(`Image upload queue drain stopped at entry id=${entry.id} (connectivity): ${errorSummary(err)}`);
         break;
       }
       // Entry-specific transient failure (a 5xx tied to this upload, a timeout
-      // while the server answers the probe, or a non-HTTP throw): charge the
-      // attempt counter. Once it reaches the cap, flag the row
-      // `error` (surfaced with retry/dismiss in the gallery) and continue past it
-      // so one persistently-failing upload can't wedge the whole queue (#714).
-      const attempts = (entry.attempts ?? 0) + 1;
-      await db.runAsync('UPDATE pending_image_uploads SET attempts = ? WHERE id = ?', [attempts, entry.id]);
-      if (attempts < MAX_ENTRY_DRAIN_ATTEMPTS) {
+      // while the server answers the probe, or a non-HTTP throw). Below the
+      // cap it stays queued and holds back only its note's later uploads (#1283).
+      const { attempts, processingErrors, capped } = await chargeEntryFailure(db, 'pending_image_uploads', entry, err);
+      if (!capped) {
         console.warn(
-          `Image upload queue drain stopped at entry id=${entry.id} (attempt ${attempts}/${MAX_ENTRY_DRAIN_ATTEMPTS}):`,
-          err,
+          `Image upload id=${entry.id} failed (attempt ${attempts}); holding back its note's later uploads: ${errorSummary(err)}`,
         );
-        break;
+        skippedNoteIds.add(entry.note_id);
+        continue;
       }
+      // A non-HTTP error at the cap (the stable file copy is unreadable, say):
+      // retrying is unlikely to help, so flag the row `error` (surfaced with
+      // retry/dismiss in the gallery) and go on.
       discardedCount += 1;
       const message = errorSummary(err);
-      console.warn(`Flagging image upload id=${entry.id} as failed after ${attempts} attempts:`, err);
+      console.warn(`Flagging image upload id=${entry.id} as failed after ${processingErrors} processing errors:`, err);
       await db.runAsync(
         `UPDATE pending_image_uploads SET status = 'error', error_message = ? WHERE id = ?`,
         [message, entry.id],

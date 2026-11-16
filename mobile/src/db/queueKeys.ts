@@ -44,6 +44,11 @@ export function keyKindCondition(column: string, kind: 'note' | 'label'): string
   return `${column} >= '${kind}:' AND ${column} < '${kind};'`;
 }
 
+/** The note id inside a `note:` key, or null for any other key. */
+export function noteIdOfKey(key: string): string | null {
+  return key.startsWith(NOTE_PREFIX) ? key.slice(NOTE_PREFIX.length) : null;
+}
+
 /** SQL expression for the id inside a key of `kind` held in `column`. */
 export function keyIdExpression(column: string, kind: 'note' | 'label'): string {
   return `substr(${column}, ${kind.length + 2})`;

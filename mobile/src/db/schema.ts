@@ -57,16 +57,19 @@ const migration1 = async (db: SQLiteDatabase): Promise<void> => {
       method TEXT NOT NULL,
       body TEXT,
       created_at TEXT NOT NULL,
-      -- How many times draining this specific entry has failed transiently. Once
-      -- it reaches MAX_ENTRY_DRAIN_ATTEMPTS the entry is dead-lettered and the
-      -- drain continues past it, so one reproducibly-failing op can't wedge the
-      -- whole queue (issue #714).
-      attempts INTEGER NOT NULL DEFAULT 0
+      -- How many times draining this specific entry has failed transiently
+      -- (issue #714), for diagnostics. An HTTP failure stays queued and holds
+      -- back only the ops that share a key with it (#1283).
+      attempts INTEGER NOT NULL DEFAULT 0,
+      -- How many of those failures were non-HTTP processing errors: at
+      -- MAX_ENTRY_DRAIN_ATTEMPTS the entry is dead-lettered (#1283).
+      processing_errors INTEGER NOT NULL DEFAULT 0
     );
 
     -- Dead-lettered sync operations: writes the server permanently rejected
-    -- (non-transient 4xx, excluding idempotent 409s), or a transient/processing
-    -- failure that never succeeded after MAX_ENTRY_DRAIN_ATTEMPTS tries (#714).
+    -- (non-transient 4xx, excluding idempotent 409s), or a non-HTTP processing
+    -- error that recurred MAX_ENTRY_DRAIN_ATTEMPTS times (#714; before #1283 a
+    -- transient HTTP failure was capped too).
     -- Preserved with their full body + metadata so a failed optimistic edit is
     -- never silently dropped and can later be surfaced/resolved (issue #492).
     -- note_id links the row to the affected note (NULL for ops not tied to a
@@ -181,11 +184,13 @@ const migration4 = async (db: SQLiteDatabase): Promise<void> => {
       status TEXT NOT NULL DEFAULT 'queued',
       error_message TEXT,
       created_at TEXT NOT NULL,
-      -- Transient-failure attempt counter, mirroring sync_queue.attempts: once it
-      -- reaches MAX_ENTRY_DRAIN_ATTEMPTS the upload is flagged error and the drain
-      -- continues, so one persistently-failing upload can't wedge the rest of the
-      -- queue (issue #714).
+      -- Transient-failure attempt counter, mirroring sync_queue.attempts (issue
+      -- #714): an HTTP failure stays queued and holds back only its note's later
+      -- uploads (#1283).
       attempts INTEGER NOT NULL DEFAULT 0,
+      -- Non-HTTP errors among them: at MAX_ENTRY_DRAIN_ATTEMPTS the upload is
+      -- flagged error (#1283).
+      processing_errors INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
     );
 
@@ -437,7 +442,18 @@ const migration13 = async (db: SQLiteDatabase): Promise<void> => {
   });
 };
 
-export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13];
+// Migration 14 (#1283): an HTTP failure no longer dead-letters a queued op or
+// flags an upload, so `attempts` keeps growing through a server outage and can
+// no longer double as the cap for non-HTTP processing errors (one such error
+// after five 500s would hit it at once). Count those separately. Existing rows
+// start at 0: their `attempts` were mostly HTTP failures. Fresh installs get the
+// columns from the CREATE statements above.
+const migration14 = async (db: SQLiteDatabase): Promise<void> => {
+  await addColumnIfMissing(db, 'sync_queue', 'processing_errors', 'processing_errors INTEGER NOT NULL DEFAULT 0');
+  await addColumnIfMissing(db, 'pending_image_uploads', 'processing_errors', 'processing_errors INTEGER NOT NULL DEFAULT 0');
+};
+
+export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13, migration14];
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   // Run PRAGMAs separately: sqlite3_exec (used by execAsync) stops on the

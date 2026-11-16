@@ -71,9 +71,9 @@ beforeEach(() => {
   // below drive exactly those paths.
   silenceConsole(
     'warn',
-    /^Image upload queue drain stopped at entry/,
     /^Flagging image upload/,
     /^Failed to patch local images/,
+    /^Image upload id=\S+ failed \(attempt \d+\); holding back/,
   );
   silenceConsole('info', /^Image upload queue drain stopped at entry/);
 });
@@ -281,7 +281,7 @@ describe('drainImageUploadQueue', () => {
     expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
   });
 
-  it('charges the attempt counter and stops below the cap on a persistent 5xx (#714)', async () => {
+  it('charges the attempt counter and keeps the upload queued on a 5xx (#714)', async () => {
     await seedUpload({ id: 'up-5xx' });
     const err = Object.assign(new Error('Server Error'), { isAxiosError: true, response: { status: 500 } });
     mockUploadNoteImage.mockRejectedValueOnce(err);
@@ -307,7 +307,7 @@ describe('drainImageUploadQueue', () => {
 
   it('stops without charging on a gateway status while the server does not answer', async () => {
     await saveNote(db, makeTextNote({ id: 'n1' }));
-    await seedUpload({ id: 'up-gw', note_id: 'n1', created_at: '2024-01-01T00:00:00Z', attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 });
+    await seedUpload({ id: 'up-gw', note_id: 'n1', created_at: '2024-01-01T00:00:00Z' });
     await seedUpload({ id: 'up-next', note_id: 'n1', local_path: 'file:///docs/pending-image-uploads/up-next', created_at: '2024-01-02T00:00:00Z' });
     mockUploadNoteImage.mockRejectedValueOnce(
       Object.assign(new Error('Bad Gateway'), { isAxiosError: true, response: { status: 502 } }),
@@ -318,13 +318,13 @@ describe('drainImageUploadQueue', () => {
 
     expect(mockProbe).toHaveBeenCalledTimes(1);
     expect(mockUploadNoteImage).toHaveBeenCalledTimes(1);
-    expect(await uploadRow('up-gw')).toEqual({ status: 'queued', error_message: null, attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 });
+    expect(await uploadRow('up-gw')).toEqual({ status: 'queued', error_message: null, attempts: 0 });
     expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
   });
 
-  it('flags an upload that keeps timing out at the proxy while the server answers', async () => {
+  it('keeps an upload that keeps timing out at the proxy queued while the server answers (#1283)', async () => {
     await saveNote(db, makeTextNote({ id: 'n1' }));
-    await seedUpload({ id: 'up-slow', note_id: 'n1', attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 });
+    await seedUpload({ id: 'up-slow', note_id: 'n1' });
     mockUploadNoteImage.mockRejectedValueOnce(
       Object.assign(new Error('Gateway Timeout'), { isAxiosError: true, response: { status: 504 } }),
     );
@@ -332,17 +332,13 @@ describe('drainImageUploadQueue', () => {
 
     const result = await drainImageUploadQueue(db);
 
-    expect(await uploadRow('up-slow')).toEqual({
-      status: 'error',
-      error_message: 'Gateway Timeout',
-      attempts: MAX_ENTRY_DRAIN_ATTEMPTS,
-    });
-    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 1 });
+    expect(await uploadRow('up-slow')).toEqual({ status: 'queued', error_message: null, attempts: 1 });
+    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
   });
 
-  it('flags an upload that keeps timing out client-side while the server answers (#1211)', async () => {
+  it('keeps an upload that keeps timing out client-side queued while the server answers (#1211, #1283)', async () => {
     await saveNote(db, makeTextNote({ id: 'n1' }));
-    await seedUpload({ id: 'up-timeout', note_id: 'n1', attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 });
+    await seedUpload({ id: 'up-timeout', note_id: 'n1' });
     mockUploadNoteImage.mockRejectedValueOnce(
       Object.assign(new Error('timeout of 90000ms exceeded'), { isAxiosError: true, code: 'ECONNABORTED', response: undefined }),
     );
@@ -351,17 +347,13 @@ describe('drainImageUploadQueue', () => {
     const result = await drainImageUploadQueue(db);
 
     expect(mockProbe).toHaveBeenCalledTimes(1);
-    expect(await uploadRow('up-timeout')).toEqual({
-      status: 'error',
-      error_message: 'timeout of 90000ms exceeded',
-      attempts: MAX_ENTRY_DRAIN_ATTEMPTS,
-    });
-    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 1 });
+    expect(await uploadRow('up-timeout')).toEqual({ status: 'queued', error_message: null, attempts: 1 });
+    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
   });
 
   it('stops without charging on a client-side timeout while the server does not answer (#1211)', async () => {
     await saveNote(db, makeTextNote({ id: 'n1' }));
-    await seedUpload({ id: 'up-timeout', note_id: 'n1', attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 });
+    await seedUpload({ id: 'up-timeout', note_id: 'n1' });
     const timeout = () => Object.assign(new Error('timeout exceeded'), { isAxiosError: true, code: 'ECONNABORTED', response: undefined });
     mockUploadNoteImage.mockRejectedValueOnce(timeout());
     mockProbe.mockRejectedValueOnce(timeout());
@@ -369,11 +361,11 @@ describe('drainImageUploadQueue', () => {
     const result = await drainImageUploadQueue(db);
 
     expect(mockProbe).toHaveBeenCalledTimes(1);
-    expect(await uploadRow('up-timeout')).toEqual({ status: 'queued', error_message: null, attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 });
+    expect(await uploadRow('up-timeout')).toEqual({ status: 'queued', error_message: null, attempts: 0 });
     expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
   });
 
-  it('flags a persistently-failing upload as errored at the cap and continues past it (#714)', async () => {
+  it('holds back the failing upload\'s note and uploads the other notes\' images past it (#1283)', async () => {
     await saveNote(db, makeTextNote({ id: 'n1' }));
     await saveNote(db, makeTextNote({ id: 'n2' }));
     await seedUpload({
@@ -381,18 +373,59 @@ describe('drainImageUploadQueue', () => {
       created_at: '2024-01-01T00:00:00Z', attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1,
     });
     await seedUpload({
+      id: 'up-behind', note_id: 'n1', local_path: 'file:///docs/pending-image-uploads/up-behind',
+      created_at: '2024-01-02T00:00:00Z',
+    });
+    await seedUpload({
+      id: 'up-ok', note_id: 'n2', local_path: 'file:///docs/pending-image-uploads/up-ok',
+      created_at: '2024-01-03T00:00:00Z',
+    });
+    const err = Object.assign(new Error('Server Error'), { isAxiosError: true, response: { status: 500 } });
+    mockUploadNoteImage.mockRejectedValueOnce(err); // up-stuck fails again, past the old cap
+    mockUploadNoteImage.mockResolvedValueOnce(image); // up-ok uploads fine
+
+    const result = await drainImageUploadQueue(db);
+
+    // An HTTP failure is never capped: the upload stays queued, and so does
+    // the one behind it on the same note.
+    expect(await uploadRow('up-stuck')).toEqual({ status: 'queued', error_message: null, attempts: MAX_ENTRY_DRAIN_ATTEMPTS });
+    expect(await uploadRow('up-behind')).toEqual({ status: 'queued', error_message: null, attempts: 0 });
+    expect(mockUploadNoteImage).toHaveBeenCalledTimes(2);
+    expect(await uploadRow('up-ok')).toBeNull();
+    expect(result).toEqual({ uploadedNoteIds: ['n2'], discardedCount: 0 });
+  });
+
+  it('does not flag an upload on its first non-HTTP error after many HTTP failures (#1283)', async () => {
+    await saveNote(db, makeTextNote({ id: 'n1' }));
+    await seedUpload({ id: 'up-outage', note_id: 'n1', attempts: MAX_ENTRY_DRAIN_ATTEMPTS + 3 });
+    mockUploadNoteImage.mockRejectedValueOnce(new Error('file unreadable'));
+
+    const result = await drainImageUploadQueue(db);
+
+    expect(await uploadRow('up-outage')).toEqual({ status: 'queued', error_message: null, attempts: MAX_ENTRY_DRAIN_ATTEMPTS + 4 });
+    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
+  });
+
+  it('flags an upload whose processing keeps throwing a non-HTTP error at the cap and continues past it (#714)', async () => {
+    await saveNote(db, makeTextNote({ id: 'n1' }));
+    await saveNote(db, makeTextNote({ id: 'n2' }));
+    await seedUpload({
+      id: 'up-stuck', note_id: 'n1', local_path: 'file:///docs/pending-image-uploads/up-stuck',
+      created_at: '2024-01-01T00:00:00Z', attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1,
+      processing_errors: MAX_ENTRY_DRAIN_ATTEMPTS - 1,
+    });
+    await seedUpload({
       id: 'up-ok', note_id: 'n2', local_path: 'file:///docs/pending-image-uploads/up-ok',
       created_at: '2024-01-02T00:00:00Z',
     });
-    const err = Object.assign(new Error('Server Error'), { isAxiosError: true, response: { status: 500 } });
-    mockUploadNoteImage.mockRejectedValueOnce(err); // up-stuck hits the cap
+    mockUploadNoteImage.mockRejectedValueOnce(new Error('file unreadable')); // up-stuck hits the cap
     mockUploadNoteImage.mockResolvedValueOnce(image); // up-ok uploads fine
 
     const result = await drainImageUploadQueue(db);
 
     expect(await uploadRow('up-stuck')).toEqual({
       status: 'error',
-      error_message: 'Server Error',
+      error_message: 'file unreadable',
       attempts: MAX_ENTRY_DRAIN_ATTEMPTS,
     });
     // The drain continued past the flagged entry to the next upload.

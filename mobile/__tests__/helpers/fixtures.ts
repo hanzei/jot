@@ -59,11 +59,16 @@ export function makeNoteItem(overrides: Partial<NoteItem> & { id: string; note_i
  */
 export async function seedQueueEntry(
   db: TestDatabase,
-  params: Omit<EnqueueParams, 'keys'> & { keys?: EnqueueParams['keys']; attempts?: number; created_at?: string },
+  params: Omit<EnqueueParams, 'keys'> & {
+    keys?: EnqueueParams['keys'];
+    attempts?: number;
+    processing_errors?: number;
+    created_at?: string;
+  },
 ): Promise<number> {
   const result = await db.runAsync(
-    `INSERT INTO sync_queue (operation, endpoint, method, body, created_at, attempts)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO sync_queue (operation, endpoint, method, body, created_at, attempts, processing_errors)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [
       params.operation,
       params.endpoint,
@@ -71,6 +76,7 @@ export async function seedQueueEntry(
       params.body ? JSON.stringify(params.body) : null,
       params.created_at ?? '2026-01-01T00:00:00Z',
       params.attempts ?? 0,
+      params.processing_errors ?? 0,
     ],
   );
   const keys = params.keys
@@ -108,11 +114,12 @@ export async function seedImageUpload(
   }
   await db.runAsync(
     `INSERT INTO pending_image_uploads
-       (id, note_id, local_path, filename, mime_type, size_bytes, status, error_message, created_at, attempts)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, note_id, local_path, filename, mime_type, size_bytes, status, error_message, created_at, attempts, processing_errors)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       entry.id, entry.note_id, entry.local_path, entry.filename, entry.mime_type,
       entry.size_bytes, entry.status, entry.error_message, entry.created_at, entry.attempts ?? 0,
+      entry.processing_errors ?? 0,
     ],
   );
   globalThis.mockFileSystem.files.set(entry.local_path, 'png-bytes');

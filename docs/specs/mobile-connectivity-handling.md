@@ -321,35 +321,56 @@ Rules of thumb:
   time.
 - **Cap**: consecutive failures are capped before surfacing an error, so a
   persistently failing server doesn't busy-loop.
-- **Queue liveness (head-of-line safety)**: the drain is strict FIFO, so the
-  failure cap above protects CPU/network but *not* queue liveness — a single
-  entry that reproducibly fails (a server that 5xx's one payload forever, or a
-  non-HTTP error thrown while processing a corrupted body) would otherwise wedge
-  the head and starve every later write. Each entry therefore carries a
-  persisted `attempts` counter (`sync_queue.attempts`,
-  `pending_image_uploads.attempts`). A *global* connectivity failure (a network
-  error with no server response, or 401/408/429) stops the drain without charging the head entry; an
-  *entry-specific* failure (a 5xx, or a non-HTTP processing throw) charges it.
-  A gateway status (502/503/504) is decided by a probe (`isGlobalDrainFailureProbed`):
-  Jot's API never returns one, so it comes from a reverse proxy, either because
-  the Jot server is down (the probe gets no answer → global, so an outage does
-  not dead-letter every queued change) or because this one request keeps
-  timing out (the server answers the probe → charged as usual). A client-side
-  timeout (axios `ECONNABORTED`/`ETIMEDOUT`, no response) is decided by the
-  same probe: a write that always outlasts `QUEUED_WRITE_TIMEOUT_MS` (or an
-  upload that outlasts `NOTE_IMAGE_UPLOAD_TIMEOUT_MS`) while the server answers
-  is charged, so it dead-letters at the cap instead of wedging the queue
-  (#1211). A plain network error (no response, not a timeout) is global
-  without a probe. The probe (`GET /about`) goes through the shared API client,
-  so its outcome also updates the server-reachability flag like any request.
-  Once an entry has failed `MAX_ENTRY_DRAIN_ATTEMPTS` times it is **dead-lettered
-  and the drain continues past it** (`#492`'s dead-letter table gains the op, the
-  note is flagged `sync_state = 'failed'`), so unrelated later writes drain. A
-  dead-lettered `create` also drops its note's dependent queued ops rather than
-  404-ing each one. (A server that keeps answering 500 to every request can
-  still dead-letter the head after the cap even though the op was fine —
-  accepted, since the op is preserved and recoverable via the failed-changes
-  review flow.)
+- **Queue liveness: FIFO per key**: order matters only between ops that touch
+  the same thing, so a write that keeps failing holds back only the writes that
+  depend on it (#1283). Each queued op records the keys it touches — `note:<id>`,
+  `label:<id>`, `settings` (`sync_queue_keys`, §9). A drain is one pass in
+  insertion order:
+  - A *global* failure stops the pass without charging the entry: a network
+    error with no server response, or 401/408/429. Every entry would fail the
+    same way.
+  - An *entry-specific* transient failure (a 5xx, or a non-HTTP throw while
+    processing the entry) increments its persisted `attempts` counter
+    (`sync_queue.attempts`), puts its keys in a **blocked set for that pass**,
+    and the pass goes on. A later op that shares a key with the blocked set is
+    skipped without being sent, and its keys join the set, so a chain of
+    dependent ops stays in order. So an `addLabelToNote` behind a failing
+    `createLabel` waits, and so does everything queued behind it for that note;
+    a `reorder` waits if any note it names is blocked; a `duplicate` waits for
+    its source's queued writes. Writes to other notes drain.
+  - Ambiguous failures are decided by a probe (`isGlobalDrainFailureProbed`,
+    `GET /about`, through the shared API client so it also updates the
+    server-reachability flag). A gateway status (502/503/504) comes from a
+    reverse proxy, since Jot's API never returns one; a client-side timeout
+    (axios `ECONNABORTED`/`ETIMEDOUT`, no response) may be a request that always
+    outlasts `QUEUED_WRITE_TIMEOUT_MS` (or `NOTE_IMAGE_UPLOAD_TIMEOUT_MS`,
+    #1211). If the server answers the probe, the failure is entry-specific;
+    otherwise it is global. A plain network error is global without a probe.
+    Each ambiguous failure is probed, so a server that goes down mid-pass stops
+    the pass at the next one.
+  - An op the server never rejected is **never dead-lettered**: it stays queued
+    and is retried on later passes, under the backoff and the cap on
+    consecutive passes that leave work behind (above; `syncError` surfaces it).
+    Only a permanent rejection (non-transient 4xx) dead-letters, and so does a
+    non-HTTP processing error once it has recurred `MAX_ENTRY_DRAIN_ATTEMPTS`
+    times (counted on its own in `processing_errors`, since `attempts` also
+    grows through an outage; status `PROCESSING_ERROR_STATUS`, 0): it happens
+    on the device, so a
+    retry is unlikely to help, and the queue needs a way past it. A dead-lettered
+    `create` drops its note's dependent queued ops rather than 404-ing each one.
+    A best-effort op (`markViewed`, `removeImage`) that keeps failing is
+    dropped at the same count, as a permanent rejection of one is: the next
+    sync reconciles it, and it never holds back its note's edits.
+  - The image-upload queue (`pending_image_uploads.attempts`) follows the same
+    rules per note: a transiently failing upload stays queued and holds back its
+    note's later uploads for the pass; only a non-HTTP error at the cap flags it
+    `error` for a manual retry.
+
+  Dead letters written before #1283 may hold a 5xx, or status 0 for a timeout,
+  from when the drain capped every entry-specific failure. They stay for the
+  user to resolve rather than going back into the queue: the drain sent the
+  note's later ops past them, so replaying one now could overwrite a newer
+  edit with an older one.
 
 (These are the *Sync Loop Safety* rules in `mobile/CLAUDE.md`; connectivity
 handling and loop safety are two halves of the same system.)
@@ -398,7 +419,8 @@ Writes to the same note reach the server in the order the user made them.
 - A write goes out online only when the note has **no queued op**. If it has
   one, the write is queued behind it. This is the pending-create rule (#475)
   applied to every queued op, not only a queued create.
-- The drain is the only sender of queued ops, in FIFO order.
+- The drain is the only sender of queued ops, in FIFO order per key (§7): an
+  op is sent only after every earlier queued op that touches the same note.
 - **At most one request per note is in flight**, counting online sends and the
   drain's sends alike. A write made while another write to the same note is in
   flight is queued, and the drain does not send an op for that note until the
@@ -556,7 +578,7 @@ its own edit times. Merging (§8.5) therefore loses nothing history would keep.
 | Local note rows, snapshot and response writes (§8.1, §8.3) | `src/db/noteQueries.ts`, `src/db/syncQueue.ts` (`saveServerNote`, `saveServerResponseNote`, `getProtectedNoteIds`, `getSnapshotSkipNoteIds`) |
 | Failed-change review and resolution (§8.4) | `src/hooks/useSyncFailures.ts` |
 | Local-data ownership, logout wipe, unsynced count (§8.6) | `src/db/accountOwner.ts`, `src/store/AccountDataGate.tsx` (wired in `App.tsx`), `src/components/DrawerContent.tsx` |
-| Sync queue + transient/permanent split + head-of-line dead-lettering | `src/db/syncQueue.ts` (`rethrowIfNotQueueable`, `isQueueableError`, `isGlobalDrainFailure`, `MAX_ENTRY_DRAIN_ATTEMPTS`, `getSyncQueueStats`) |
+| Sync queue + transient/permanent split + FIFO per key (§7) | `src/db/syncQueue.ts` (`rethrowIfNotQueueable`, `isQueueableError`, `isGlobalDrainFailure`, `drainQueue`, `MAX_ENTRY_DRAIN_ATTEMPTS`, `getSyncQueueStats`) |
 | What each queued op touches (`note:`/`label:`/`settings` keys, recorded at enqueue and kept by its dead letter); the protected set reads them | `src/db/queueKeys.ts` (`sync_queue_keys`, `dead_letter_keys`) |
 | Snapshot gate (own writes landed after a fetch started) | `src/db/snapshotGate.ts`, wired in `src/api/client.ts` |
 | Bounded read retries | `src/utils/retryWithBackoff.ts` (`retrySync`) |
@@ -602,6 +624,9 @@ its own edit times. Merging (§8.5) therefore loses nothing history would keep.
 - **Breaking a FIFO queue drain on any transient error with no per-entry cap** —
   one reproducibly-failing entry (persistent 5xx, or a non-HTTP throw
   misclassified as transient) wedged the head and silently starved every later
-  write (issue #714); fixed by charging a per-entry `attempts` counter for
-  entry-specific failures (not global connectivity ones) and dead-lettering +
-  continuing past an entry once it hits `MAX_ENTRY_DRAIN_ATTEMPTS`.
+  write (issue #714); first fixed by charging a per-entry `attempts` counter
+  and dead-lettering an entry once it hit `MAX_ENTRY_DRAIN_ATTEMPTS`.
+- **Dead-lettering an op the server never rejected** — that cap turned any
+  server outage longer than about 30 s into "couldn't be saved" changes with
+  no retry, for edits that were fine; fixed in #1283 by draining FIFO per key,
+  so a failing op holds back only the ops that depend on it and stays queued.
