@@ -400,6 +400,7 @@ describe('NotesListScreen sorting', () => {
           endpoint: '/users/me',
           method: 'PATCH',
           body: { note_sort: 'created_at' },
+          keys: ['settings'],
         }),
       );
     });
@@ -478,6 +479,7 @@ describe('NotesListScreen sorting', () => {
           endpoint: '/users/me',
           method: 'PATCH',
           body: { note_sort: 'created_at' },
+          keys: ['settings'],
         }),
       );
     });

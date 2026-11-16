@@ -763,6 +763,8 @@ describe('drainQueue', () => {
 
     const queued = await db.getAllAsync<{ endpoint: string }>('SELECT endpoint FROM sync_queue');
     expect(queued).toEqual([{ endpoint: `/labels/${serverLabel.id}` }]);
+    // Its recorded key moves with it (#1282).
+    expect(await db.getAllAsync('SELECT key FROM sync_queue_keys')).toEqual([{ key: `label:${serverLabel.id}` }]);
     expect((await getStoredLabels(db)).map((l) => l.id)).toEqual([serverLabel.id]);
     const row = await db.getFirstAsync<{ labels_json: string }>("SELECT labels_json FROM notes WHERE id = 'n1'");
     expect((JSON.parse(row!.labels_json) as { id: string }[]).map((l) => l.id)).toEqual([serverLabel.id]);

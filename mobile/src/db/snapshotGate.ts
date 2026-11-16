@@ -1,4 +1,5 @@
 import { collectNoteIds } from './affectedNoteIds';
+import { parseJsonObject } from './queueKeys';
 
 // A server snapshot (a GET /notes list, a GET /notes/{id}, an SSE payload)
 // reflects the server as of when it was built, which can be before one of this
@@ -49,22 +50,14 @@ export function recordWriteResponse(method: string | undefined, url: string | un
   // POST /notes/{id}/viewed only marks the note read. It fires as the editor
   // opens, alongside the note's own refresh, which it must not hold back.
   if (url.split('?')[0]!.endsWith('/viewed')) return;
-  const ids = new Set<string>();
-  collectNoteIds(url, parseRequestBody(data), ids);
+  const ids = collectNoteIds(url, parseRequestBody(data));
   if (ids.size > 0) recordWriteLanded(ids);
 }
 
 // axios has already serialized a JSON body to a string by the time the
 // response interceptor sees the request config.
 function parseRequestBody(data: unknown): Record<string, unknown> | null {
-  if (typeof data === 'string') {
-    try {
-      const parsed: unknown = JSON.parse(data);
-      return parsed !== null && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
-    } catch {
-      return null;
-    }
-  }
+  if (typeof data === 'string') return parseJsonObject(data);
   return data !== null && typeof data === 'object' ? data as Record<string, unknown> : null;
 }
 

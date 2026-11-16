@@ -17,6 +17,7 @@ import {
   isNotePendingCreate,
 } from '../db/noteQueries';
 import { enqueueOperation, rethrowIfNotQueueable, saveServerNotes, saveServerResponseNote, saveServerLabels, getPendingLabelIds } from '../db/syncQueue';
+import { labelKey, noteKey } from '../db/queueKeys';
 import { snapshotMark } from '../db/snapshotGate';
 import { isClosedDatabaseError } from '../db/errors';
 import { isOnlineWriteAllowed } from '../api/serverReachability';
@@ -210,6 +211,7 @@ export async function resolveLocalLabel(db: SQLiteDatabase, name: string, userId
     operation: 'createLabel',
     endpoint: apiPaths.labels,
     method: 'POST',
+    keys: [labelKey(label.id)],
     body: { id: label.id, name } satisfies AddLabelRequest,
   });
   await upsertLabel(db, label);
@@ -262,6 +264,7 @@ export function useCreateLabel() {
         operation: 'createLabel',
         endpoint: apiPaths.labels,
         method: 'POST',
+        keys: [labelKey(localLabel.id)],
         body: { id: localLabel.id, name: trimmed } satisfies AddLabelRequest,
       });
       await upsertLabel(db, localLabel);
@@ -319,6 +322,7 @@ export function useAddLabelToNote() {
         operation: 'addLabelToNote',
         endpoint: apiPaths.noteLabels(noteId),
         method: 'POST',
+        keys: [noteKey(noteId), labelKey(label.id)],
         body: { name: trimmed } satisfies AddLabelRequest,
       });
       return note;
@@ -366,6 +370,7 @@ export function useRemoveLabelFromNote() {
         operation: 'removeLabelFromNote',
         endpoint: apiPaths.noteLabel(noteId, labelId),
         method: 'DELETE',
+        keys: [noteKey(noteId), labelKey(labelId)],
       });
       return note;
     },
@@ -425,6 +430,7 @@ export function useRenameLabel() {
         operation: 'renameLabel',
         endpoint: apiPaths.label(labelId),
         method: 'PATCH',
+        keys: [labelKey(labelId)],
         body: { name: trimmed } satisfies RenameLabelRequest,
       });
       const now = new Date().toISOString();
@@ -482,6 +488,7 @@ export function useDeleteLabel() {
         operation: 'deleteLabel',
         endpoint: apiPaths.label(labelId),
         method: 'DELETE',
+        keys: [labelKey(labelId)],
       });
     },
     onSuccess: () => {

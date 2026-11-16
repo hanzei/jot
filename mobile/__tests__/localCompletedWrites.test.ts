@@ -85,6 +85,7 @@ describe('completed values a queued op has yet to replay', () => {
       endpoint: `/notes/${noteId}/items/set-completed`,
       method: 'POST',
       body: { item_ids: [`${noteId}-p`], completed: true },
+      keys: [`note:${noteId}`],
     });
     return db;
   }

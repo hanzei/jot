@@ -7,7 +7,8 @@
 import { getPendingNoteIds, saveServerNote, saveServerNotes, saveServerNotesScope } from '../src/db/syncQueue';
 import { snapshotMark } from '../src/db/snapshotGate';
 import { saveNote, saveNotes, removeLocalNotesNotIn } from '../src/db/noteQueries';
-import { makeTextNote as buildTextNote } from './helpers/fixtures';
+import { labelKey, noteKey, SETTINGS_KEY } from '../src/db/queueKeys';
+import { makeTextNote as buildTextNote, seedQueueEntry } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
 
 const makeTextNote = (id: string) => buildTextNote({ id, content: 'body', created_at: '', updated_at: '' });
@@ -23,13 +24,9 @@ const localNoteIds = async (): Promise<string[]> => {
   return rows.map((r) => r.id);
 };
 
-/** Queue a raw entry: these tests care about the endpoint/body, not the op name. */
-const queue = (endpoint: string, body: unknown = null) =>
-  db.runAsync(
-    `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
-     VALUES ('update', ?, 'PATCH', ?, '2026-01-01T00:00:00Z')`,
-    [endpoint, body === null ? null : JSON.stringify(body)],
-  );
+/** Queue an op on `noteId`: these tests care about its key, not the op. */
+const queue = (noteId: string) =>
+  seedQueueEntry(db, { operation: 'update', endpoint: `/notes/${noteId}`, method: 'PATCH', keys: [noteKey(noteId)] });
 
 // ── getPendingNoteIds ───────────────────────────────────────────────────────
 
@@ -38,71 +35,45 @@ describe('getPendingNoteIds', () => {
     expect((await getPendingNoteIds(db)).size).toBe(0);
   });
 
-  it('extracts the note id from /notes/{id} update and delete endpoints', async () => {
-    await queue('/notes/n1', { title: 'x' });
-    await queue('/notes/n2');
+  it('reads the note keys the queued ops recorded (#1282)', async () => {
+    await queue('n1');
+    await queue('n1');
+    await seedQueueEntry(db, {
+      operation: 'reorder',
+      endpoint: '/notes/reorder',
+      method: 'POST',
+      body: { note_ids: ['a', 'b'] },
+      keys: [noteKey('a'), noteKey('b')],
+    });
 
-    expect(await getPendingNoteIds(db)).toEqual(new Set(['n1', 'n2']));
+    expect(await getPendingNoteIds(db)).toEqual(new Set(['n1', 'a', 'b']));
   });
 
-  it('strips a query string before extracting the id (permanent delete)', async () => {
-    await queue('/notes/n3?permanent=true');
-
-    expect(await getPendingNoteIds(db)).toEqual(new Set(['n3']));
-  });
-
-  it('extracts the note id from item, share, and label sub-resource endpoints', async () => {
-    for (const endpoint of [
-      '/notes/n1/items',
-      '/notes/n2/items/i1',
-      '/notes/n3/items/reorder',
-      '/notes/n4/items/set-completed',
-      '/notes/n5/share',
-      '/notes/n7/labels',
-    ]) {
-      await queue(endpoint, {});
-    }
-    await queue('/notes/n6/shares/u9');
-    await queue('/notes/n8/labels/l1');
-
-    expect(await getPendingNoteIds(db)).toEqual(
-      new Set(['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8']),
-    );
-  });
-
-  it('uses body.id for offline-create (POST /notes) entries', async () => {
-    await queue('/notes', { id: 'ClientNoteId000000000A', title: 'x' });
-
-    expect(await getPendingNoteIds(db)).toEqual(new Set(['ClientNoteId000000000A']));
-  });
-
-  it('tracks only the new id for a duplicate, not the source note it reads', async () => {
-    await queue('/notes/src-1/duplicate', { id: 'DupClientId000000000A' });
-
-    expect(await getPendingNoteIds(db)).toEqual(new Set(['DupClientId000000000A']));
-  });
-
-  it('expands body.note_ids for a /notes/reorder entry', async () => {
-    await queue('/notes/reorder', { note_ids: ['a', 'b', 'c'] });
-
-    expect(await getPendingNoteIds(db)).toEqual(new Set(['a', 'b', 'c']));
-  });
-
-  it('ignores label-only endpoints that are not tied to a single note', async () => {
-    await queue('/labels', { id: 'l0', name: 'Work' });
-    await queue('/labels/l1', { name: 'Renamed' });
+  it('does not read endpoints or bodies', async () => {
+    await seedQueueEntry(db, { operation: 'update', endpoint: '/notes/n1', method: 'PATCH', body: { title: 'x' }, keys: [] });
 
     expect((await getPendingNoteIds(db)).size).toBe(0);
   });
 
-  it('tolerates malformed JSON bodies without throwing', async () => {
-    await db.runAsync(
-      `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
-       VALUES ('create', '/notes', 'POST', 'not-json', ''), ('update', '/notes/reorder', 'POST', 'not-json', '')`,
-    );
-    await queue('/notes/n1');
+  it('ignores label and settings keys', async () => {
+    await seedQueueEntry(db, { operation: 'createLabel', endpoint: '/labels', method: 'POST', body: { id: 'l0', name: 'Work' }, keys: [labelKey('l0')] });
+    await seedQueueEntry(db, { operation: 'updateSettings', endpoint: '/users/me', method: 'PATCH', keys: [SETTINGS_KEY] });
+    await seedQueueEntry(db, {
+      operation: 'addLabelToNote',
+      endpoint: '/notes/n1/labels',
+      method: 'POST',
+      body: { name: 'Work' },
+      keys: [noteKey('n1'), labelKey('l0')],
+    });
 
     expect(await getPendingNoteIds(db)).toEqual(new Set(['n1']));
+  });
+
+  it('drops a note once its last op leaves the queue', async () => {
+    const id = await queue('n1');
+    await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [id]);
+
+    expect((await getPendingNoteIds(db)).size).toBe(0);
   });
 });
 
@@ -158,7 +129,7 @@ describe('saveNotes skipNoteIds', () => {
 
 describe('saveServerNote / saveServerNotes', () => {
   it('skips a single note that has a pending queue op, reading the queue itself', async () => {
-    await queue('/notes/n1');
+    await queue('n1');
 
     await saveServerNote(db, makeTextNote('n1'), snapshotMark());
 
@@ -172,7 +143,7 @@ describe('saveServerNote / saveServerNotes', () => {
   });
 
   it('skips only the pending notes in a batch and reads the protected set once', async () => {
-    await queue('/notes/pending');
+    await queue('pending');
     db.getAllAsync.mockClear();
 
     await saveServerNotes(db, [makeTextNote('keep'), makeTextNote('pending')], snapshotMark());
@@ -202,7 +173,7 @@ describe('saveServerNote / saveServerNotes', () => {
 
 describe('saveServerNotesScope', () => {
   it('persists fetched notes but skips ones with a pending op', async () => {
-    await queue('/notes/pending');
+    await queue('pending');
 
     await saveServerNotesScope(db, [makeTextNote('keep'), makeTextNote('pending')], undefined, snapshotMark());
 
@@ -214,7 +185,7 @@ describe('saveServerNotesScope', () => {
     // pruning it would destroy the optimistic edit, so it must be excluded (#487).
     await saveNote(db, makeTextNote('restored'));
     await saveNote(db, makeTextNote('stale'));
-    await queue('/notes/restored/restore');
+    await queue('restored');
 
     await saveServerNotesScope(db, [makeTextNote('on-server')], undefined, snapshotMark());
 

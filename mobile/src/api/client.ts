@@ -653,9 +653,14 @@ export async function cacheAuthProfile(response: AuthResponse, boundServerId?: s
   }
 }
 
-export async function getCachedAuthProfile(): Promise<AuthResponse | null> {
+/**
+ * The cached profile for `boundServerId`, or for the active server when omitted.
+ * Bind it when the read must belong to a server captured earlier (#1264): an
+ * unbound read after a server switch returns the new server's profile.
+ */
+export async function getCachedAuthProfile(boundServerId?: string): Promise<AuthResponse | null> {
   try {
-    const serverId = await resolveActiveServerId();
+    const serverId = boundServerId ?? await resolveActiveServerId();
     if (!serverId) {
       return null;
     }

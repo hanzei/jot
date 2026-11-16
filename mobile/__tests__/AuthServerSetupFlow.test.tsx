@@ -38,6 +38,7 @@ describe('Auth first-run server setup flow', () => {
 
     mockUseAuth.mockReturnValue({
       user: null,
+      userServerId: null,
       settings: null,
       isAuthenticated: false,
       isLoading: false,
@@ -358,6 +359,7 @@ describe('Auth first-run server setup flow', () => {
     const mockClearSessionEndedReason = jest.fn();
     mockUseAuth.mockReturnValue({
       user: null,
+      userServerId: null,
       settings: null,
       isAuthenticated: false,
       isLoading: false,
@@ -392,6 +394,7 @@ describe('Auth first-run server setup flow', () => {
     // AuthContext would after a real dismiss.
     mockUseAuth.mockReturnValue({
       user: null,
+      userServerId: null,
       settings: null,
       isAuthenticated: false,
       isLoading: false,

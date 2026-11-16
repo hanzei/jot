@@ -19,6 +19,11 @@
     "logout": "Wyloguj się",
     "logoutConfirmTitle": "Wyloguj się",
     "logoutConfirmMessage": "Czy na pewno chcesz się wylogować?",
+    "logoutFailed": "Nie udało się usunąć danych z tego urządzenia, więc nadal jesteś zalogowany. Spróbuj ponownie.",
+    "logoutUnsyncedMessage_one": "Masz {{count}} zmianę, która nie została jeszcze zsynchronizowana z serwerem. Wylogowanie usunie ją z tego urządzenia.",
+    "logoutUnsyncedMessage_few": "Masz {{count}} zmiany, które nie zostały jeszcze zsynchronizowane z serwerem. Wylogowanie usunie je z tego urządzenia.",
+    "logoutUnsyncedMessage_many": "Masz {{count}} zmian, które nie zostały jeszcze zsynchronizowane z serwerem. Wylogowanie usunie je z tego urządzenia.",
+    "logoutUnsyncedMessage_other": "Masz {{count}} zmian, które nie zostały jeszcze zsynchronizowane z serwerem. Wylogowanie usunie je z tego urządzenia.",
     "openMenu": "Otwórz menu"
   },
   "auth": {

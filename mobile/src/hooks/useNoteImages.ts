@@ -5,6 +5,7 @@ import { apiPaths, type NoteImage } from '@jot/shared';
 import { uploadNoteImage, type ImageUploadFile } from '../api/images';
 import { patchLocalNoteImages, isNotePendingCreate } from '../db/noteQueries';
 import { enqueueOperation, rethrowIfNotQueueable } from '../db/syncQueue';
+import { noteKey } from '../db/queueKeys';
 import { enqueueImageUpload } from '../db/imageUploadQueue';
 import { recordWriteLanded } from '../db/snapshotGate';
 import { deleteCachedNoteImage } from '../utils/noteImageCache';
@@ -155,15 +156,14 @@ export function useDeleteNoteImage() {
 
       // Offline, or a transient online failure above: hide the image locally
       // now (matching the online path's effect) and queue the hard-delete for
-      // replay. `/images/{id}` has no note id of its own, so it's carried in
-      // the body purely for the queue's note-id bookkeeping (see
-      // collectNoteIds in affectedNoteIds.ts) — DELETE sends no body to the server.
+      // replay. `/images/{id}` has no note id of its own, so the op's key
+      // names the note.
       await hideImageLocally(db, noteId, imageId);
       await enqueueOperation(db, {
         operation: 'removeImage',
         endpoint: apiPaths.image(imageId),
         method: 'DELETE',
-        body: { note_id: noteId },
+        keys: [noteKey(noteId)],
       });
     },
     onSuccess: (_data, { noteId }) => {

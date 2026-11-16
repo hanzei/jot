@@ -19,6 +19,10 @@
     "logout": "Se déconnecter",
     "logoutConfirmTitle": "Se déconnecter",
     "logoutConfirmMessage": "Êtes-vous sûr de vouloir vous déconnecter ?",
+    "logoutFailed": "Impossible d'effacer les données de cet appareil, vous êtes donc toujours connecté. Veuillez réessayer.",
+    "logoutUnsyncedMessage_one": "Vous avez {{count}} modification qui n'a pas encore été synchronisée avec le serveur. La déconnexion la supprimera de cet appareil.",
+    "logoutUnsyncedMessage_many": "Vous avez {{count}} modifications qui n'ont pas encore été synchronisées avec le serveur. La déconnexion les supprimera de cet appareil.",
+    "logoutUnsyncedMessage_other": "Vous avez {{count}} modifications qui n'ont pas encore été synchronisées avec le serveur. La déconnexion les supprimera de cet appareil.",
     "openMenu": "Ouvrir le menu"
   },
   "auth": {

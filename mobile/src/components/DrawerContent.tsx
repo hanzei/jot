@@ -6,7 +6,9 @@ import { CommonActions } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Archive, ChevronRight, Clipboard, FileText, LogOut, Settings, Trash2, type LucideIcon } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
+import { useSQLiteContext } from 'expo-sqlite';
 import { useAuth } from '../store/AuthContext';
+import { getUnsyncedChangeCount, wipeLocalData } from '../db/accountOwner';
 import { useCreateLabel, useDeleteLabel, useLabels, useRenameLabel } from '../hooks/useLabels';
 import { useTheme } from '../theme/ThemeContext';
 import UserAvatar from './UserAvatar';
@@ -42,6 +44,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const { confirm } = useConfirm();
+  const db = useSQLiteContext();
   const insets = useSafeAreaInsets();
   const topItems: NavItem[] = [
     { name: 'Notes', label: t('dashboard.tabNotes'), icon: FileText },
@@ -67,15 +70,52 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     | { labelId?: string } | undefined;
   const activeLabelId = activeRoute === 'Notes' ? activeParams?.labelId : undefined;
 
+  // A deliberate logout from a server account wipes this server's local data
+  // (spec §8.6, #1264), so changes the server has not accepted would be lost:
+  // say how many before the user commits. Local mode keeps its own rules.
   const handleLogout = useCallback(async () => {
+    let unsynced = 0;
+    if (!isLocalMode) {
+      try {
+        unsynced = await getUnsyncedChangeCount(db);
+      } catch (error) {
+        // An unknown count is not zero: stop rather than wipe without the warning.
+        console.warn('Failed to count unsynced changes before logout:', error);
+        Alert.alert(t('common.error'), t('nav.logoutFailed'));
+        return;
+      }
+    }
     const confirmed = await confirm({
       title: t('nav.logoutConfirmTitle'),
-      message: t('nav.logoutConfirmMessage'),
+      message: unsynced > 0 ? t('nav.logoutUnsyncedMessage', { count: unsynced }) : t('nav.logoutConfirmMessage'),
       confirmLabel: t('nav.logout'),
       destructive: true,
     });
-    if (confirmed) logout();
-  }, [confirm, logout, t]);
+    if (!confirmed) return;
+    if (isLocalMode) {
+      void logout();
+      return;
+    }
+    // Wipe before ending the session: if the app dies in between, the user is
+    // still signed in with nothing left to lose. The other order would keep the
+    // changes the user just agreed to discard, and the next sign-in by the same
+    // user would drain them. For the same reason a failed wipe stops the logout:
+    // the session and the data stay together for a retry. The wipe leaves the
+    // data ownerless, so anything a write in flight stores afterwards goes at
+    // the next sign-in.
+    try {
+      await wipeLocalData(db);
+    } catch (error) {
+      console.warn('Failed to wipe local data on logout:', error);
+      Alert.alert(t('common.error'), t('nav.logoutFailed'));
+      return;
+    }
+    try {
+      await logout();
+    } catch (error) {
+      console.warn('Logout failed:', error);
+    }
+  }, [confirm, db, isLocalMode, logout, t]);
 
   const handleNavPress = useCallback((name: keyof MainDrawerParamList) => {
     if (name === 'Notes') {

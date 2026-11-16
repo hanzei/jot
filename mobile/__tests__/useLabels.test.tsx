@@ -11,7 +11,7 @@ import {
 } from '../src/hooks/useLabels';
 import { publishReconnectResync } from '../src/store/resyncEvents';
 import * as noteQueriesModule from '../src/db/noteQueries';
-import { makeLabel, makeTextNote } from './helpers/fixtures';
+import { makeLabel, makeTextNote, seedQueueEntry } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
 import type { Label } from '@jot/shared';
 import { jot } from '../src/api/jot';
@@ -250,7 +250,7 @@ describe('useLabels write hooks', () => {
       expect(mockJot.labels.create).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'createLabel', body: { id: 'client_label_id', name: 'Home' } }),
+        expect.objectContaining({ operation: 'createLabel', body: { id: 'client_label_id', name: 'Home' }, keys: ['label:client_label_id'] }),
       );
       // The offline label is persisted to the store so it survives without a note.
       expect(mockNoteQueries.upsertLabel).toHaveBeenCalledWith(
@@ -319,7 +319,14 @@ describe('useLabels write hooks', () => {
       );
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'addLabelToNote', endpoint: '/notes/n1/labels', method: 'POST', body: { name: 'New' } }),
+        expect.objectContaining({
+          operation: 'addLabelToNote',
+          endpoint: '/notes/n1/labels',
+          method: 'POST',
+          body: { name: 'New' },
+          // The body names the label by name; the key by the id it resolved to.
+          keys: ['note:n1', 'label:client_label_id'],
+        }),
       );
       // The minted label is also written to the store.
       expect(mockNoteQueries.upsertLabel).toHaveBeenCalledWith(
@@ -461,7 +468,7 @@ describe('useLabels write hooks', () => {
       expect(mockNoteQueries.removeLabelFromLocalNote).toHaveBeenCalledWith(expect.anything(), 'n1', 'l1');
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'removeLabelFromNote', endpoint: '/notes/n1/labels/l1', method: 'DELETE' }),
+        expect.objectContaining({ operation: 'removeLabelFromNote', endpoint: '/notes/n1/labels/l1', method: 'DELETE', keys: ['note:n1', 'label:l1'] }),
       );
     });
 
@@ -513,7 +520,7 @@ describe('useLabels write hooks', () => {
       expect(mockNoteQueries.renameLabelInLocalNotes).toHaveBeenCalledWith(expect.anything(), 'l1', 'Offline');
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'renameLabel', endpoint: '/labels/l1', method: 'PATCH', body: { name: 'Offline' } }),
+        expect.objectContaining({ operation: 'renameLabel', endpoint: '/labels/l1', method: 'PATCH', body: { name: 'Offline' }, keys: ['label:l1'] }),
       );
     });
 
@@ -531,11 +538,7 @@ describe('useLabels write hooks', () => {
       // l1's createLabel op is still queued, so the server doesn't know the label
       // yet: a direct PATCH would 404 and drop the rename. It must queue FIFO
       // behind the create instead.
-      await db.runAsync(
-        `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
-         VALUES ('createLabel', '/labels', 'POST', ?, '')`,
-        [JSON.stringify({ id: 'l1', name: 'Work' })],
-      );
+      await seedQueueEntry(db, { operation: 'createLabel', endpoint: '/labels', method: 'POST', body: { id: 'l1', name: 'Work' } });
       await noteQueriesModule.upsertLabel(db, storedLabel('l1', 'Work'));
 
       const { result } = await renderHook(() => useRenameLabel(), { wrapper: createWrapper() });
@@ -584,7 +587,7 @@ describe('useLabels write hooks', () => {
       expect(mockNoteQueries.deleteLabelFromLocalNotes).toHaveBeenCalledWith(expect.anything(), 'l1');
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'deleteLabel', endpoint: '/labels/l1', method: 'DELETE' }),
+        expect.objectContaining({ operation: 'deleteLabel', endpoint: '/labels/l1', method: 'DELETE', keys: ['label:l1'] }),
       );
     });
 
@@ -602,11 +605,7 @@ describe('useLabels write hooks', () => {
       // l1's createLabel op is still queued, so the server doesn't know the label
       // yet: a direct DELETE would 404 and drop the deletion. It must queue FIFO
       // behind the create instead.
-      await db.runAsync(
-        `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
-         VALUES ('createLabel', '/labels', 'POST', ?, '')`,
-        [JSON.stringify({ id: 'l1', name: 'Work' })],
-      );
+      await seedQueueEntry(db, { operation: 'createLabel', endpoint: '/labels', method: 'POST', body: { id: 'l1', name: 'Work' } });
       await noteQueriesModule.upsertLabel(db, storedLabel('l1', 'Work'));
 
       const { result } = await renderHook(() => useDeleteLabel(), { wrapper: createWrapper() });
@@ -617,7 +616,7 @@ describe('useLabels write hooks', () => {
       expect(mockNoteQueries.deleteStoredLabel).toHaveBeenCalledWith(expect.anything(), 'l1');
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'deleteLabel', endpoint: '/labels/l1', method: 'DELETE' }),
+        expect.objectContaining({ operation: 'deleteLabel', endpoint: '/labels/l1', method: 'DELETE', keys: ['label:l1'] }),
       );
     });
   });
