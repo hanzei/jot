@@ -1,9 +1,10 @@
 import React from 'react';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useUpdateNote } from '../src/hooks/useNotes';
+import type { Note, UpdateNoteRequest } from '@jot/shared';
 import { getLocalNote, saveNote } from '../src/db/noteQueries';
-import { clearOwnVersionSteps, recordOwnVersionStep } from '../src/db/ownVersions';
+import { recordOwnVersionStep } from '../src/db/ownVersions';
 import { noteLocalQueryKey, notesLocalQueryKey } from '../src/hooks/queryKeys';
 import { makeListNote, makeTextNote } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
@@ -41,6 +42,18 @@ async function queuedRows(db: TestDatabase): Promise<QueuedRow[]> {
   return rows.map((row) => ({ ...row, body: JSON.parse(row.body) as Record<string, unknown> }));
 }
 
+/** Runs one save inside act, so the hook's state updates settle within it. */
+async function save(
+  mutateAsync: (vars: { id: string; data: UpdateNoteRequest; baseVersion?: number }) => Promise<Note>,
+  vars: { id: string; data: UpdateNoteRequest; baseVersion?: number },
+): Promise<Note> {
+  let returned!: Note;
+  await act(async () => {
+    returned = await mutateAsync(vars);
+  });
+  return returned;
+}
+
 /**
  * useUpdateNote writes through the outbox (#1284): the edit and its queue row
  * commit together, and the hook never calls the server, online or not.
@@ -52,7 +65,6 @@ describe('useUpdateNote (outbox)', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    clearOwnVersionSteps();
     db = globalThis.testDb;
     await saveNote(db, makeTextNote({ id: TEXT_ID, content: 'Old body', version: 7 }));
     await saveNote(db, makeListNote({ id: LIST_ID, title: 'Old title', version: 3 }));
@@ -62,7 +74,7 @@ describe('useUpdateNote (outbox)', () => {
     const { wrapper } = createWrapper();
     const { result } = await renderHook(() => useUpdateNote(), { wrapper });
 
-    const returned = await result.current.mutateAsync({ id: TEXT_ID, data: { content: 'New body' } });
+    const returned = await save(result.current.mutateAsync, { id: TEXT_ID, data: { content: 'New body' } });
 
     expect(mockJot.notes.update).not.toHaveBeenCalled();
     expect(await getLocalNote(db, TEXT_ID)).toMatchObject({ content: 'New body', version: 7 });
@@ -81,7 +93,7 @@ describe('useUpdateNote (outbox)', () => {
     const { wrapper } = createWrapper();
     const { result } = await renderHook(() => useUpdateNote(), { wrapper });
 
-    const returned = await result.current.mutateAsync({ id: TEXT_ID, data: { content: 'Mine' }, baseVersion: 5 });
+    const returned = await save(result.current.mutateAsync, { id: TEXT_ID, data: { content: 'Mine' }, baseVersion: 5 });
 
     expect((await queuedRows(db))[0]!.body).toEqual({ content: 'Mine', base_version: 5 });
     expect(returned.version).toBe(5);
@@ -89,11 +101,11 @@ describe('useUpdateNote (outbox)', () => {
 
   it('advances the editor baseline past its own edits that have landed', async () => {
     // The editor saved from v5 and that save landed as v6 while it stayed dirty.
-    recordOwnVersionStep(TEXT_ID, 5, 6);
+    recordOwnVersionStep(db, TEXT_ID, 5, 6);
     const { wrapper } = createWrapper();
     const { result } = await renderHook(() => useUpdateNote(), { wrapper });
 
-    const returned = await result.current.mutateAsync({ id: TEXT_ID, data: { content: 'Next' }, baseVersion: 5 });
+    const returned = await save(result.current.mutateAsync, { id: TEXT_ID, data: { content: 'Next' }, baseVersion: 5 });
 
     expect((await queuedRows(db))[0]!.body).toEqual({ content: 'Next', base_version: 6 });
     // The editor adopts it as its new baseline.
@@ -104,7 +116,7 @@ describe('useUpdateNote (outbox)', () => {
     const { wrapper } = createWrapper();
     const { result } = await renderHook(() => useUpdateNote(), { wrapper });
 
-    await result.current.mutateAsync({ id: LIST_ID, data: { title: 'New title' } });
+    await save(result.current.mutateAsync, { id: LIST_ID, data: { title: 'New title' } });
 
     expect((await queuedRows(db))[0]!.body).toEqual({ title: 'New title', base_version: 3 });
     expect(await getLocalNote(db, LIST_ID)).toMatchObject({ title: 'New title' });
@@ -114,7 +126,7 @@ describe('useUpdateNote (outbox)', () => {
     const { wrapper } = createWrapper();
     const { result } = await renderHook(() => useUpdateNote(), { wrapper });
 
-    await result.current.mutateAsync({ id: TEXT_ID, data: { pinned: true } });
+    await save(result.current.mutateAsync, { id: TEXT_ID, data: { pinned: true } });
 
     expect((await queuedRows(db))[0]!.body).toEqual({ pinned: true });
     expect(await getLocalNote(db, TEXT_ID)).toMatchObject({ pinned: true });
@@ -124,7 +136,7 @@ describe('useUpdateNote (outbox)', () => {
     const { wrapper } = createWrapper();
     const { result } = await renderHook(() => useUpdateNote(), { wrapper });
 
-    await expect(result.current.mutateAsync({ id: 'missing-id', data: { title: 'X' } })).rejects.toThrow(/not found in local DB/);
+    await expect(save(result.current.mutateAsync, { id: 'missing-id', data: { title: 'X' } })).rejects.toThrow(/not found in local DB/);
 
     expect(await queuedRows(db)).toEqual([]);
   });
@@ -136,7 +148,7 @@ describe('useUpdateNote (outbox)', () => {
     queryClient.setQueryData(notesLocalQueryKey(undefined), [cached]);
     const { result } = await renderHook(() => useUpdateNote(), { wrapper });
 
-    await result.current.mutateAsync({ id: TEXT_ID, data: { content: 'New body' } });
+    await save(result.current.mutateAsync, { id: TEXT_ID, data: { content: 'New body' } });
 
     await waitFor(() => {
       expect(queryClient.getQueryData<{ content: string }>(noteLocalQueryKey(TEXT_ID))!.content).toBe('New body');

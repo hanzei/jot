@@ -12,15 +12,24 @@
 // baseline predates it. It lives in memory: an editor's baseline does not
 // outlive the process either, since a fresh editor hydrates from the row.
 
-const stepsByNote = new Map<string, Map<number, number>>();
+import type { SQLiteDatabase } from 'expo-sqlite';
+
+// Kept per database: each server has its own, and note ids are only unique
+// within one server's data (a backup restored onto a second server shares them).
+const stepsByDb = new WeakMap<SQLiteDatabase, Map<string, Map<number, number>>>();
 
 /** Record that this device's edit to `noteId`, sent at `from`, produced `to`. */
-export function recordOwnVersionStep(noteId: string, from: number, to: number): void {
+export function recordOwnVersionStep(db: SQLiteDatabase, noteId: string, from: number, to: number): void {
   if (from === to) return;
-  let steps = stepsByNote.get(noteId);
+  let byNote = stepsByDb.get(db);
+  if (!byNote) {
+    byNote = new Map();
+    stepsByDb.set(db, byNote);
+  }
+  let steps = byNote.get(noteId);
   if (!steps) {
     steps = new Map();
-    stepsByNote.set(noteId, steps);
+    byNote.set(noteId, steps);
   }
   steps.set(from, to);
 }
@@ -31,14 +40,14 @@ export function recordOwnVersionStep(noteId: string, from: number, to: number): 
  * ever moves up (the server accepts an edit at `from` as `from + 1`), so the
  * walk ends.
  */
-export function resolveOwnBaseVersion(noteId: string, base: number): number {
-  const steps = stepsByNote.get(noteId);
+export function resolveOwnBaseVersion(db: SQLiteDatabase, noteId: string, base: number): number {
+  const steps = stepsByDb.get(db)?.get(noteId);
   let version = base;
   for (let next = steps?.get(version); next !== undefined; next = steps?.get(version)) version = next;
   return version;
 }
 
-/** Forget every recorded step. For a local-data wipe, and tests. */
-export function clearOwnVersionSteps(): void {
-  stepsByNote.clear();
+/** Forget every step recorded for `db`, whose local data was wiped. */
+export function clearOwnVersionSteps(db: SQLiteDatabase): void {
+  stepsByDb.delete(db);
 }

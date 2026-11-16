@@ -94,7 +94,7 @@ export async function claimLocalData(db: SQLiteDatabase, userId: string): Promis
   });
   if (wiped.files === null) return false;
   deleteUploadFiles(wiped.files);
-  clearOwnVersionSteps();
+  clearOwnVersionSteps(db);
   console.info('Local data belonged to another account; wiped it before sign-in.');
   return true;
 }
@@ -106,7 +106,7 @@ export async function wipeLocalData(db: SQLiteDatabase): Promise<void> {
     wiped.files = await wipeRows(db, NO_OWNER);
   });
   deleteUploadFiles(wiped.files);
-  clearOwnVersionSteps();
+  clearOwnVersionSteps(db);
 }
 
 /**

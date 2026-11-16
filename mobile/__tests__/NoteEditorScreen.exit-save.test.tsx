@@ -99,6 +99,54 @@ describe('NoteEditorScreen exit save behavior', () => {
     });
   });
 
+  it('updates the draft it is creating when the editor closes mid-create, instead of creating a second note', async () => {
+    jest.useFakeTimers();
+    let resolveCreate!: (value: { id: string; version: number }) => void;
+    mockCreateMutateAsync.mockImplementation(
+      () => new Promise((resolve) => { resolveCreate = resolve; }),
+    );
+
+    const { getByTestId, unmount } = await render(<NoteEditorScreen />);
+    await fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
+    // The autosave starts the create.
+    await act(() => { jest.advanceTimersByTime(1500); });
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
+
+    // More typing, then leave: the exit's flush queues behind the create.
+    await fireEvent.changeText(getByTestId('note-content-input'), 'Hello world');
+    const beforeRemove = getBeforeRemoveHandler()!;
+    await act(() => { beforeRemove(makeEvent()); });
+    await unmount();
+
+    await act(async () => { resolveCreate({ id: 'created-note-id', version: 1 }); });
+
+    await waitFor(() => {
+      expect(mockUpdateMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'created-note-id', data: expect.objectContaining({ content: 'Hello world' }) }),
+      );
+    });
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('swallows a second back press while a dirty editor zooms back onto its card', async () => {
+    mockUseRoute.mockReturnValue({ params: { noteId: null, originRect: { x: 0, y: 0, width: 100, height: 100 } } });
+    mockCreateMutateAsync.mockResolvedValue({ id: 'new-note-id', version: 1 });
+
+    const { getByTestId } = await render(<NoteEditorScreen />);
+    await fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
+
+    const beforeRemove = getBeforeRemoveHandler()!;
+    const first = makeEvent();
+    await act(() => { beforeRemove(first); });
+    expect(first.preventDefault).toHaveBeenCalled();
+
+    // Pressed again before the zoom-close animation dispatches: it must not pop
+    // the screen on its own, or the animation's dispatch would pop a second one.
+    const second = makeEvent();
+    await act(() => { beforeRemove(second); });
+    expect(second.preventDefault).toHaveBeenCalled();
+  });
+
   it('does not block navigation when there are no pending changes', async () => {
     const { queryByTestId } = await render(<NoteEditorScreen />);
 

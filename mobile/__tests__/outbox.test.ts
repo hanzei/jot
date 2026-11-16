@@ -6,11 +6,11 @@
 
 import { getLocalNote, getLocalNoteVersion, markNotePendingCreate, saveNote, updateLocalNote } from '../src/db/noteQueries';
 import { drainQueue, enqueueWrite, subscribeToEnqueue, type EnqueueParams } from '../src/db/syncQueue';
-import { clearOwnVersionSteps, recordOwnVersionStep, resolveOwnBaseVersion } from '../src/db/ownVersions';
+import { recordOwnVersionStep, resolveOwnBaseVersion } from '../src/db/ownVersions';
 import { setLocalModeActive } from '../src/store/localMode';
 import api from '../src/api/client';
 import { makeTextNote, remainingQueueIds, seedQueueEntry } from './helpers/fixtures';
-import type { TestDatabase } from './helpers/testDb';
+import { createTestDb, type TestDatabase } from './helpers/testDb';
 import { silenceConsole } from './helpers/consoleGuard';
 
 jest.mock('../src/api/client', () => ({
@@ -29,7 +29,6 @@ const NOTE_ID = 'OutboxNote000000000000';
 let db: TestDatabase;
 beforeEach(async () => {
   jest.clearAllMocks();
-  clearOwnVersionSteps();
   db = globalThis.testDb;
   // The drain pulls touched notes it could not settle; nothing here cares.
   mockApi.get.mockRejectedValue(Object.assign(new Error('Request failed with status code 404'), {
@@ -206,7 +205,7 @@ describe('drain of an outbox content edit', () => {
     await drainQueue(db);
 
     expect(await queuedBodies()).toEqual([{ content: 'Mine', base_version: 5 }]);
-    expect(resolveOwnBaseVersion(NOTE_ID, 5)).toBe(5);
+    expect(resolveOwnBaseVersion(db, NOTE_ID, 5)).toBe(5);
   });
 
   it('sends an edit queued on an offline duplicate against the copy\'s own version', async () => {
@@ -249,21 +248,55 @@ describe('drain of an outbox content edit', () => {
     await drainQueue(db);
 
     expect(await getLocalNoteVersion(db, NOTE_ID)).toBe(6);
-    expect(resolveOwnBaseVersion(NOTE_ID, 5)).toBe(6);
+    expect(resolveOwnBaseVersion(db, NOTE_ID, 5)).toBe(6);
+  });
+});
+
+describe('drain leftBehind', () => {
+  it('counts the rows the pass loaded and left queued, not rows queued while it ran', async () => {
+    await seedQueueEntry(db, { ...updateOp({ content: 'First', base_version: 5 }) });
+    // An autosave lands while the request is out.
+    mockApi.patch.mockImplementationOnce((async () => {
+      await seedQueueEntry(db, { ...updateOp({ content: 'Second', base_version: 5 }) });
+      return { data: makeTextNote({ id: NOTE_ID, content: 'First', version: 6 }) };
+    }) as never);
+
+    const { leftBehind } = await drainQueue(db);
+
+    expect(leftBehind).toBe(0);
+    expect(await remainingQueueIds(db)).toHaveLength(1);
+  });
+
+  it('counts a row that failed transiently', async () => {
+    await seedQueueEntry(db, { ...updateOp({ content: 'First', base_version: 5 }) });
+    mockApi.patch.mockRejectedValueOnce(Object.assign(new Error('Network Error'), { isAxiosError: true }));
+    silenceConsole('info', /^Queue drain stopped at entry/);
+
+    const { leftBehind } = await drainQueue(db);
+
+    expect(leftBehind).toBe(1);
   });
 });
 
 describe('ownVersions', () => {
   it('follows a chain of own steps and stops at an unknown version', () => {
-    recordOwnVersionStep('n', 1, 2);
-    recordOwnVersionStep('n', 2, 3);
-    expect(resolveOwnBaseVersion('n', 1)).toBe(3);
-    expect(resolveOwnBaseVersion('n', 7)).toBe(7);
-    expect(resolveOwnBaseVersion('other', 1)).toBe(1);
+    recordOwnVersionStep(db, 'n', 1, 2);
+    recordOwnVersionStep(db, 'n', 2, 3);
+    expect(resolveOwnBaseVersion(db, 'n', 1)).toBe(3);
+    expect(resolveOwnBaseVersion(db, 'n', 7)).toBe(7);
+    expect(resolveOwnBaseVersion(db, 'other', 1)).toBe(1);
+  });
+
+  it('keeps each database\'s steps to itself', () => {
+    // Another server's database: note ids can repeat across servers.
+    const other = createTestDb();
+    recordOwnVersionStep(db, 'n', 5, 6);
+    expect(resolveOwnBaseVersion(other, 'n', 5)).toBe(5);
+    expect(resolveOwnBaseVersion(db, 'n', 5)).toBe(6);
   });
 
   it('ignores a no-op step', () => {
-    recordOwnVersionStep('n', 4, 4);
-    expect(resolveOwnBaseVersion('n', 4)).toBe(4);
+    recordOwnVersionStep(db, 'n', 4, 4);
+    expect(resolveOwnBaseVersion(db, 'n', 4)).toBe(4);
   });
 });

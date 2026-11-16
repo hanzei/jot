@@ -267,7 +267,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     isDrainingRef.current = true;
     let stalled = false;
     try {
-      const { syncedNotes, syncedSettings } = await drainQueue(db);
+      const { syncedNotes, syncedSettings, leftBehind } = await drainQueue(db);
       for (const serverNote of syncedNotes) {
         queryClient.setQueryData(noteLocalQueryKey(serverNote.id), serverNote);
       }
@@ -301,11 +301,13 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       // inspect what's left to decide whether a backoff retry is warranted.
       // Uploads flagged `error` (permanent failures) need a manual retry, so
       // they don't count here — otherwise a doomed request would retry forever.
+      // A row queued while the pass ran (an autosave, #1284) is new work, not a
+      // stall: it gets a fresh drain without charging the failure budget.
       const [pendingCount, queuedImageUploadCount] = await Promise.all([
         getPendingCount(db),
         getQueuedImageUploadCount(db),
       ]);
-      const remaining = pendingCount + queuedImageUploadCount;
+      const remaining = leftBehind + queuedImageUploadCount;
       // Revalidate the session after a settings drain only when the *settings'
       // own* queue (sync_queue) is empty. The pre-drain revalidation had fetched
       // stale server values (before the PATCH ran), so we need a fresh GET /users/me to

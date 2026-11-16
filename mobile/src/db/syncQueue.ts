@@ -816,6 +816,12 @@ export interface DrainResult {
   discardedOperations: DiscardedOperation[];
   /** True if at least one `updateSettings` operation was successfully drained. */
   syncedSettings: boolean;
+  /**
+   * Entries this pass loaded that are still queued: held back, failed
+   * transiently, or not reached after a connectivity stop. Rows queued while
+   * the pass ran are not counted; they are new work, not a stall (#1284).
+   */
+  leftBehind: number;
 }
 
 /** A dead-lettered op as stored in the `dead_letter` table (see issue #492). */
@@ -1000,7 +1006,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
     const removeLandedEntry = async (): Promise<void> => {
       await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
       if (!ownVersionStep) return;
-      if (settledThisEntry.has(ownVersionStep.noteId)) recordOwnVersionStep(ownVersionStep.noteId, ownVersionStep.from, ownVersionStep.to);
+      if (settledThisEntry.has(ownVersionStep.noteId)) recordOwnVersionStep(db, ownVersionStep.noteId, ownVersionStep.from, ownVersionStep.to);
       else await rebaseQueuedEdits(db, ownVersionStep);
     };
     try {
@@ -1052,7 +1058,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
             // The version the editor was showing, stored at enqueue (#1277,
             // #1284), advanced past this device's own edits that landed since
             // (rebaseQueuedEdits rewrites the row too, for after a restart).
-            baseVersion = resolveOwnBaseVersion(updateNoteID, body.base_version);
+            baseVersion = resolveOwnBaseVersion(db, updateNoteID, body.base_version);
             body.base_version = baseVersion;
           } else {
             // A row queued before edits stored their base: resolve it from the
@@ -1187,10 +1193,20 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // reserved for failures *before* the request lands (issue #714).
         console.warn(`Queue entry id=${entry.id} landed server-side; post-response reconciliation failed:`, err);
         if (entry.operation === 'removeImage') recordWriteLanded(targets());
-        // The landing transaction rolled back, rebase included: the edits queued
-        // at this write's base would otherwise replay against a version its own
-        // landing has left, and conflict with it.
-        await withSerializedTransaction(db, removeLandedEntry);
+        // The landing transaction rolled back, rebase and create bookkeeping
+        // included: the edits queued at this write's base would otherwise replay
+        // against a version its own landing has left, and a create would stay
+        // pending with nothing left to clear it. Pull the notes afterwards for
+        // the response this entry could not apply.
+        await withSerializedTransaction(db, async () => {
+          await removeLandedEntry();
+          if (entry.operation === 'create' || entry.operation === 'duplicate') {
+            for (const noteId of targets()) await clearNotePendingCreate(db, noteId);
+          }
+        });
+        if (entry.operation !== 'delete' && entry.operation !== 'permanentDelete') {
+          for (const noteId of targets()) pullNoteIds.add(noteId);
+        }
         continue;
       }
 
@@ -1394,7 +1410,14 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
     await pullTouchedNotes(db, pullNoteIds);
   }
 
-  return { syncedNotes, discardedOperations, syncedSettings };
+  // Ids are AUTOINCREMENT, never reused: a row above the last one this pass
+  // loaded was queued while it ran.
+  const lastLoadedId = entries.length > 0 ? entries[entries.length - 1]!.id : 0;
+  const leftRow = await db.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) AS count FROM sync_queue WHERE id <= ?',
+    [lastLoadedId],
+  );
+  return { syncedNotes, discardedOperations, syncedSettings, leftBehind: leftRow?.count ?? 0 };
 }
 
 /**
@@ -1621,7 +1644,7 @@ interface OwnVersionStep {
  * rest of a running pass resolves the same step through ownVersions.ts.
  */
 async function rebaseQueuedEdits(db: SQLiteDatabase, { noteId, from, to }: OwnVersionStep): Promise<void> {
-  recordOwnVersionStep(noteId, from, to);
+  recordOwnVersionStep(db, noteId, from, to);
   if (from === to) return;
   await db.runAsync(
     `UPDATE sync_queue SET body = json_set(body, '$.base_version', ?)

@@ -456,7 +456,7 @@ export function useUpdateNote() {
           // past this device's own edits that landed since (ownVersions.ts), so
           // a dirty editor does not conflict with its own earlier save.
           const guardVersion = touchesContent
-            ? resolveOwnBaseVersion(id, baseVersion ?? existing.version)
+            ? resolveOwnBaseVersion(db, id, baseVersion ?? existing.version)
             : undefined;
           // The editor adopts the returned version as its baseline for a content
           // save; keep the caller's otherwise (#1277).
@@ -613,7 +613,7 @@ export function useConvertNoteType() {
         try {
           // The editor's baseline may predate its own saves that the drain has
           // landed since; advance it past them (ownVersions.ts).
-          const guardVersion = resolveOwnBaseVersion(id, baseVersion ?? existing.version);
+          const guardVersion = resolveOwnBaseVersion(db, id, baseVersion ?? existing.version);
           const convertedNote = await jot.notes.convert(id, { ...data, base_version: guardVersion });
           await saveServerResponseNote(db, convertedNote);
           return convertedNote;

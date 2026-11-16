@@ -437,8 +437,10 @@ export function useNoteEditorSync({
         // sent become the baseline for subsequent granular edits.
         captureBaseline();
         savedVersionRef.current = newNote.version;
-        if (!isMountedRef.current || unmounting) return true;
+        // Before the unmount guard: a flush chained behind this create (the exit's
+        // background flush) must update this note, not create a second one.
         noteIdRef.current = newNote.id;
+        if (!isMountedRef.current || unmounting) return true;
         doc.setNoteId(newNote.id);
         doc.setHasCreated(true);
         setSaveError(null);
@@ -626,15 +628,17 @@ export function useNoteEditorSync({
       // A save commits locally and queues for the drain (spec §4.1, #1284), so
       // there is nothing to wait for: flush in the background and let the exit
       // proceed. A save the server rejects later shows up as a failed change on
-      // the note, not here. Mark the exit intentional so the unmount cleanup
-      // below doesn't flush a second time.
-      if (hasPending) {
-        intentionalExitRef.current = true;
-        flushInBackground();
-      }
+      // the note, not here.
+      if (hasPending) flushInBackground();
       if (wantsZoom) {
+        // zoomOutWith marks the exit intentional just before it dispatches, so a
+        // back press during the animation still hits the isClosingRef guard.
         event.preventDefault();
         zoomOutWith(action);
+      } else if (hasPending) {
+        // The screen goes now: mark the exit intentional so the unmount cleanup
+        // below doesn't flush a second time.
+        intentionalExitRef.current = true;
       }
     });
     return unsubscribe;

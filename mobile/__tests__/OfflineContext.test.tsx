@@ -21,7 +21,7 @@ import { subscribeToReconnectResync } from '../src/store/resyncEvents';
 let enqueueListener: (() => void) | null = null;
 
 jest.mock('../src/db/syncQueue', () => ({
-  drainQueue: jest.fn().mockResolvedValue({ syncedNotes: [], discardedOperations: [], syncedSettings: false }),
+  drainQueue: jest.fn().mockResolvedValue({ syncedNotes: [], discardedOperations: [], syncedSettings: false, leftBehind: 0 }),
   getPendingCount: jest.fn().mockResolvedValue(0),
   getDeadLetterCount: jest.fn().mockResolvedValue(0),
   subscribeToEnqueue: jest.fn((listener: () => void) => {
@@ -105,7 +105,8 @@ describe('OfflineProvider queue draining', () => {
     lastConsecutiveFailureCount = 0;
     lastIsConnected = true;
     mockRevalidate.mockResolvedValue(true);
-    mockDrainQueue.mockResolvedValue({ syncedNotes: [], discardedOperations: [], syncedSettings: false });
+    // What a pass leaves behind is what the pending count reports, as before #1284.
+    mockDrainQueue.mockImplementation(async () => ({ syncedNotes: [], discardedOperations: [], syncedSettings: false, leftBehind: await mockGetPendingCount(globalThis.testDb) }));
     mockGetPendingCount.mockResolvedValue(0);
     mockGetQueuedImageUploadCount.mockResolvedValue(0);
     jest.spyOn(AppState, 'addEventListener');
@@ -183,7 +184,8 @@ describe('OfflineProvider queue draining', () => {
     // The note/settings queue (sync_queue) is empty, but an independent image
     // upload is still queued — that backlog must not hold the settings
     // revalidation hostage; it has nothing to do with the settings write.
-    mockDrainQueue.mockResolvedValue({ syncedNotes: [], discardedOperations: [], syncedSettings: true });
+    // What a pass leaves behind is what the pending count reports, as before #1284.
+    mockDrainQueue.mockImplementation(async () => ({ syncedNotes: [], discardedOperations: [], syncedSettings: true, leftBehind: await mockGetPendingCount(globalThis.testDb) }));
     mockGetPendingCount.mockResolvedValue(0);
     mockGetQueuedImageUploadCount.mockResolvedValue(2);
     await renderProvider();
@@ -202,7 +204,8 @@ describe('OfflineProvider queue draining', () => {
   });
 
   it('does not revalidate the session after a settings drain while the note queue itself is still pending', async () => {
-    mockDrainQueue.mockResolvedValue({ syncedNotes: [], discardedOperations: [], syncedSettings: true });
+    // What a pass leaves behind is what the pending count reports, as before #1284.
+    mockDrainQueue.mockImplementation(async () => ({ syncedNotes: [], discardedOperations: [], syncedSettings: true, leftBehind: await mockGetPendingCount(globalThis.testDb) }));
     mockGetPendingCount.mockResolvedValue(1);
     mockGetQueuedImageUploadCount.mockResolvedValue(0);
     await renderProvider();
@@ -240,7 +243,7 @@ describe('OfflineProvider queue draining', () => {
     mockDrainQueue.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
-          resolveFirst = () => resolve({ syncedNotes: [], discardedOperations: [], syncedSettings: false });
+          resolveFirst = () => resolve({ syncedNotes: [], discardedOperations: [], syncedSettings: false, leftBehind: 0 });
         }),
     );
 
@@ -520,7 +523,7 @@ describe('OfflineProvider queue draining', () => {
 
     // A slow drain is in flight and a write queued during it requests a rerun.
     mockDrainQueue.mockImplementationOnce(() => new Promise((resolve) => {
-      setTimeout(() => resolve({ syncedNotes: [], discardedOperations: [], syncedSettings: false }), 5000);
+      setTimeout(() => resolve({ syncedNotes: [], discardedOperations: [], syncedSettings: false, leftBehind: 0 }), 5000);
     }));
     await act(() => {
       enqueueListener?.();
@@ -609,7 +612,7 @@ describe('OfflineProvider queue draining', () => {
     const drainsAfterMount = mockDrainQueue.mock.calls.length;
 
     mockDrainQueue.mockImplementationOnce(() => new Promise((resolve) => {
-      setTimeout(() => resolve({ syncedNotes: [], discardedOperations: [], syncedSettings: false }), 5000);
+      setTimeout(() => resolve({ syncedNotes: [], discardedOperations: [], syncedSettings: false, leftBehind: 0 }), 5000);
     }));
     await act(() => {
       enqueueListener?.();
@@ -637,6 +640,18 @@ describe('OfflineProvider queue draining', () => {
     await flush();
 
     expect(mockDrainQueue).toHaveBeenCalledTimes(drainsAfterMount + 2);
+  });
+
+  it('does not count a row queued during a successful pass as a stall', async () => {
+    // An autosave lands while the pass runs: it is still queued afterwards, but
+    // the pass left nothing behind of what it loaded (#1284).
+    mockGetPendingCount.mockResolvedValue(1);
+    mockDrainQueue.mockResolvedValue({ syncedNotes: [], discardedOperations: [], syncedSettings: false, leftBehind: 0 });
+    await renderProvider();
+    await flush();
+
+    expect(lastConsecutiveFailureCount).toBe(0);
+    expect(lastSyncError).toBe(false);
   });
 
   it('leaves a scheduled backoff retry alone when a write is enqueued during it', async () => {

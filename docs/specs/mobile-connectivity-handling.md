@@ -120,7 +120,10 @@ backoff timer and never drains past the failure cap. The flip also keeps the
 failure count, so a write that keeps failing still reaches the cap. So does a
 new write: every save enqueues whatever the connectivity (§4.1), so it says
 nothing about the server coming back. It leaves a pending debounce or backoff
-timer alone, and resets the count only once retries have paused at the cap. A
+timer alone, and resets the count only once retries have paused at the cap.
+Only a row the pass loaded and left queued makes it a stall (`leftBehind`): a
+save queued while the pass ran is new work, drained by the rerun without
+charging the count. A
 write queued while a drain runs requests a rerun, so the finishing drain cannot
 strand it by clearing that write's pending timer.
 
@@ -465,7 +468,8 @@ the own-version rule: when the drain lands a version-guarded edit sent at `b`
 and the server answers with `b` or `b + 1` (§8.3, `isOwnVersion`), the new
 version holds nothing but this device's edit, and in the same transaction the
 drain rebases every edit still queued for the note at base `b` onto it
-(`rebaseQueuedEdits`). Each step is also kept in memory
+(`rebaseQueuedEdits`). Each step is also kept in memory, per server database
+since note ids are unique only within one server's data
 (`src/db/ownVersions.ts`): an edit queued afterwards from the same editor
 resolves its base through it at enqueue, and the drain resolves a stored base
 through it again when it sends, which covers the rows a running pass loaded
