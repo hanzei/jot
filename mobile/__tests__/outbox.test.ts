@@ -209,10 +209,10 @@ describe('drain of an outbox content edit', () => {
     expect(resolveOwnBaseVersion(NOTE_ID, 5)).toBe(5);
   });
 
-  it('rebases edits queued against a duplicate onto the version the server gave the copy', async () => {
-    // The local copy keeps its source's version (5); the server's copy starts at 1.
+  it('sends an edit queued on an offline duplicate against the copy\'s own version', async () => {
+    // The local copy starts at version 1, like the server's copy (useDuplicateNote).
     const copyId = 'OutboxCopy000000000000';
-    await saveNote(db, makeTextNote({ id: copyId, content: 'Old', version: 5 }));
+    await saveNote(db, makeTextNote({ id: copyId, content: 'Old', version: 1 }));
     await markNotePendingCreate(db, copyId);
     await seedQueueEntry(db, {
       operation: 'duplicate',
@@ -227,7 +227,7 @@ describe('drain of an outbox content edit', () => {
       endpoint: `/notes/${copyId}`,
       method: 'PATCH',
       keys: [`note:${copyId}`],
-      body: { content: 'Edited copy', base_version: 5 },
+      body: { content: 'Edited copy', base_version: 1 },
     });
     mockApi.post.mockResolvedValueOnce({ data: makeTextNote({ id: copyId, content: 'Old', version: 1 }) } as never);
     mockApi.patch.mockResolvedValueOnce({ data: makeTextNote({ id: copyId, content: 'Edited copy', version: 2 }) } as never);
@@ -239,7 +239,7 @@ describe('drain of an outbox content edit', () => {
       { content: 'Edited copy', base_version: 1 },
       expect.anything(),
     );
-    expect(resolveOwnBaseVersion(copyId, 5)).toBe(2);
+    expect(await getLocalNote(db, copyId)).toMatchObject({ content: 'Edited copy', version: 2 });
   });
 
   it('records the step for an edit enqueued after the landing (ownVersions)', async () => {
@@ -260,14 +260,6 @@ describe('ownVersions', () => {
     expect(resolveOwnBaseVersion('n', 1)).toBe(3);
     expect(resolveOwnBaseVersion('n', 7)).toBe(7);
     expect(resolveOwnBaseVersion('other', 1)).toBe(1);
-  });
-
-  it('drops a step from the old numbering once the versions reach it again', () => {
-    // A duplicate's local copy kept its source's v5; the server's copy started at 1.
-    recordOwnVersionStep('n', 5, 1);
-    for (let v = 1; v < 5; v++) recordOwnVersionStep('n', v, v + 1);
-    // An editor that stayed at v3 while its edits landed must reach v5, not loop back.
-    expect(resolveOwnBaseVersion('n', 3)).toBe(5);
   });
 
   it('ignores a no-op step', () => {

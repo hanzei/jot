@@ -559,22 +559,18 @@ export function useNoteEditorSync({
     }
   }, []);
 
-  // Mark the exit as intentional (so beforeRemove doesn't re-handle it) only
-  // once the navigation action is about to dispatch, optionally zooming back
-  // onto the originating card first. isClosingRef is set immediately instead,
-  // so a back press that lands mid-animation still hits beforeRemove and gets
-  // swallowed there rather than falling through to an unguarded second pop.
-  const exitWith = useCallback((navAction: NavigationAction, wantsZoom: boolean) => {
-    const dispatch = () => {
+  // Zoom back onto the originating card, then dispatch the navigation action.
+  // The exit is marked intentional (so beforeRemove doesn't re-handle it) only
+  // once the action is about to dispatch. isClosingRef is set immediately
+  // instead, so a back press that lands mid-animation still hits beforeRemove
+  // and gets swallowed there rather than falling through to an unguarded
+  // second pop.
+  const zoomOutWith = useCallback((navAction: NavigationAction) => {
+    isClosingRef.current = true;
+    void animateClose().then(() => {
       intentionalExitRef.current = true;
       navigation.dispatch(navAction);
-    };
-    if (wantsZoom) {
-      isClosingRef.current = true;
-      void animateClose().then(dispatch);
-    } else {
-      dispatch();
-    }
+    });
   }, [animateClose, navigation]);
 
   // Flush pending edits without blocking navigation — on every exit with pending
@@ -627,29 +623,22 @@ export function useNoteEditorSync({
       }
       cancelScheduledSave();
 
-      // No pending edits: nothing to save. Zoom back onto the card (a non-zoom
-      // back nav without pending edits already returned above).
-      if (!hasPending) {
-        event.preventDefault();
-        exitWith(action, wantsZoom);
-        return;
+      // A save commits locally and queues for the drain (spec §4.1, #1284), so
+      // there is nothing to wait for: flush in the background and let the exit
+      // proceed. A save the server rejects later shows up as a failed change on
+      // the note, not here. Mark the exit intentional so the unmount cleanup
+      // below doesn't flush a second time.
+      if (hasPending) {
+        intentionalExitRef.current = true;
+        flushInBackground();
       }
-
-      // The save commits locally and queues for the drain (spec §4.1, #1284),
-      // so there is nothing to wait for: flush in the background and let the
-      // exit proceed. A save the server rejects later shows up as a failed
-      // change on the note, not here. Mark the exit intentional so the unmount
-      // cleanup below doesn't flush a second time; when a zoom-back is wanted we
-      // still preventDefault and drive it via exitWith.
-      intentionalExitRef.current = true;
-      flushInBackground();
       if (wantsZoom) {
         event.preventDefault();
-        exitWith(action, wantsZoom);
+        zoomOutWith(action);
       }
     });
     return unsubscribe;
-  }, [cancelScheduledSave, exitWith, flushInBackground, navigation, zoomEnabled]);
+  }, [cancelScheduledSave, zoomOutWith, flushInBackground, navigation, zoomEnabled]);
 
   // Flush pending save on unmount (prevent data loss), skip if intentionally exiting
   useEffect(() => {

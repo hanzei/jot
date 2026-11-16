@@ -59,9 +59,9 @@ interface OfflineContextValue {
   /**
    * Current streak of stalled/failed drains (mirrors `failureCountRef`, the
    * counter behind `syncError`'s cap). Resets to 0 on a successful drain, and
-   * also on a fresh trigger (reconnect, foreground, or a new write) even
-   * before that trigger's own drain has resolved — the same reset points as
-   * `syncError`. Surfaced in Diagnostics alongside `syncError` so it's clear
+   * also on a reconnect or foreground even before that trigger's own drain has
+   * resolved. A new write resets it only once retries have paused at the cap
+   * (#1284), the point where it also clears `syncError`. Surfaced in Diagnostics alongside `syncError` so it's clear
    * *why* sync is stuck, not just that it is (#700).
    */
   consecutiveFailureCount: number;
@@ -476,33 +476,35 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   // Drain shortly after a write is queued while online, so a transient failure
   // re-syncs without waiting for a disconnect/reconnect cycle.
   useEffect(() => {
-    const unsubscribe = subscribeToEnqueue(() => {
+    const unsubscribe = subscribeToEnqueue((operation) => {
       // Refresh before the offline early-return: an offline create enqueues while
       // disconnected and must immediately reflect its pending-create marker (#475).
-      refreshPendingNoteIds();
+      // No other op changes that set, and every editor save enqueues (#1284).
+      if (operation === 'create' || operation === 'duplicate') refreshPendingNoteIds();
       if (!isConnectedRef.current) return;
-      // A backoff retry is already scheduled: the write goes with it. Every
-      // editor save enqueues (#1284), so resetting here would re-send a failing
-      // entry on each autosave and never reach the cap.
-      if (failureCountRef.current > 0 && drainTimerRef.current !== null) return;
-      // A fresh write is a new signal that the server may be reachable again, so
-      // give the queue a clean retry budget even if a prior streak had paused
-      // auto-retrying. scheduleDrain debounces bursts; performDrain's own guard
-      // handles the case where a drain is still in flight when the timer fires.
-      failureCountRef.current = 0;
-      setConsecutiveFailureCount(0);
-      setSyncError(false);
-      // A drain in flight may finish before this debounce fires and clear it on
-      // success; request its rerun so the write is not stranded.
+      // Every write enqueues now, whatever the connectivity (#1284), so a write
+      // says nothing about the server coming back: it keeps the failure count,
+      // and the cap still bounds an entry that keeps failing while the user
+      // types. Only once retries have given up does a new write resume them
+      // with a clean budget.
+      if (failureCountRef.current >= MAX_CONSECUTIVE_DRAIN_FAILURES) {
+        failureCountRef.current = 0;
+        setConsecutiveFailureCount(0);
+        setSyncError(false);
+      }
+      // A drain in flight may finish without this write and clear its timer;
+      // request its rerun so the write is not stranded.
       if (isDrainingRef.current) rerunRequestedRef.current = true;
+      // A pending timer (the debounce, or a backoff retry) already covers it.
+      if (drainTimerRef.current !== null) return;
       scheduleDrain(ENQUEUE_DRAIN_DEBOUNCE_MS);
     });
     return unsubscribe;
   }, [scheduleDrain, refreshPendingNoteIds]);
 
   // Resume a parked drain when the server becomes reachable again. Unlike a
-  // reconnect, foreground or new write, this keeps the failure count, so the
-  // cap still bounds a write that keeps failing (#1217, spec §3.1).
+  // reconnect or foreground, this keeps the failure count, so the cap still
+  // bounds a write that keeps failing (#1217, spec §3.1).
   useEffect(() => {
     return subscribeToServerReachability((reachable) => {
       if (reachable && drainParkedRef.current) scheduleDrain(ENQUEUE_DRAIN_DEBOUNCE_MS);

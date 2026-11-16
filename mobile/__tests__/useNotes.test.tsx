@@ -44,6 +44,7 @@ jest.mock('../src/db/noteQueries', () => ({
   setLocalItemsCompleted: jest.fn().mockResolvedValue(undefined),
   deleteLocalItems: jest.fn().mockResolvedValue(undefined),
   reconcileLocalItems: jest.fn().mockResolvedValue(undefined),
+  reconcileLocalItemsInTx: jest.fn().mockResolvedValue(undefined),
   getStoredLabels: jest.fn().mockResolvedValue([]),
   upsertLabel: jest.fn().mockResolvedValue(undefined),
   generateClientLabelId: jest.fn(() => 'ClientLabelId00000000A'),
@@ -1340,6 +1341,8 @@ describe('useNotes hooks', () => {
       expect(localDuplicate.shared_with).toEqual([]);
       // A copy never inherits the source's public link (#1135).
       expect(localDuplicate.public_link).toBeNull();
+      // The server's copy starts at version 1 whatever the source's (#1284).
+      expect(localDuplicate.version).toBe(1);
       expect(localDuplicate.labels).toEqual(sourceTextNote.labels);
 
       expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), localDuplicate);

@@ -323,17 +323,12 @@ interface SaveNoteOptions {
   /**
    * The notes are server snapshots, so their items' completed flags go through
    * localCompletedWrites rather than overwriting a toggle still in flight. Set
-   * only by the server-snapshot writers in syncQueue.ts (saveServerNote,
-   * saveServerResponseNote and friends); a raw saveNote is a local write.
+   * only by the server-snapshot writers in syncQueue.ts (saveServerNote and
+   * friends); a raw saveNote is a local write.
    */
   serverSnapshot?: boolean;
   /** Items that keep their local completed value whatever the snapshot says. */
   keepLocalCompletedIds?: ReadonlySet<string>;
-  /**
-   * Runs in the save's transaction, before the write; false skips the write.
-   * For a caller whose decision must not go stale before the write lands.
-   */
-  guard?: () => Promise<boolean>;
   /**
    * Of `skipNoteIds`, the notes this device wrote after the snapshot was
    * fetched. The snapshot is older than them in every field, so they do not
@@ -388,10 +383,8 @@ export async function saveNote(db: SQLiteDatabase, note: Note, options?: SaveNot
     await saveSkippedNote(db, note, options);
     return;
   }
-  await withSerializedTransaction(db, async () => {
-    if (options?.guard && !(await options.guard())) return;
-    await saveNoteInTx(db, note, options?.serverSnapshot, options?.keepLocalCompletedIds);
-  });
+  await withSerializedTransaction(db, () =>
+    saveNoteInTx(db, note, options?.serverSnapshot, options?.keepLocalCompletedIds));
 }
 
 /**

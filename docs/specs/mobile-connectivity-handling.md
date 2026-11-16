@@ -117,9 +117,12 @@ parks: its backoff chain ends there. A flip from `false` to `true` resumes a
 parked drain, and does nothing when no drain parked. Anything that schedules or
 runs a drain itself clears the park, so the flip never shortcuts a pending
 backoff timer and never drains past the failure cap. The flip also keeps the
-failure count, so a write that keeps failing still reaches the cap. A write
-queued while a drain runs requests a rerun, so the finishing drain cannot strand
-it by clearing that write's pending timer.
+failure count, so a write that keeps failing still reaches the cap. So does a
+new write: every save enqueues whatever the connectivity (§4.1), so it says
+nothing about the server coming back. It leaves a pending debounce or backoff
+timer alone, and resets the count only once retries have paused at the cap. A
+write queued while a drain runs requests a rerun, so the finishing drain cannot
+strand it by clearing that write's pending timer.
 
 **Reconnect owns the drain while it runs.** `handleReconnect` re-arms the flag
 itself and drains after revalidating the session. While it is in progress, any
@@ -462,12 +465,15 @@ the own-version rule: when the drain lands a version-guarded edit sent at `b`
 and the server answers with `b` or `b + 1` (§8.3, `isOwnVersion`), the new
 version holds nothing but this device's edit, and in the same transaction the
 drain rebases every edit still queued for the note at base `b` onto it
-(`rebaseQueuedEdits`). A landed create or duplicate does the same from the
-local copy's version to the server's (a duplicate's local copy keeps its
-source's version; the server's copy starts afresh). An edit queued afterwards
-from the same editor is rebased at enqueue, from an in-memory record of those steps
-(`src/db/ownVersions.ts`; an editor's baseline does not outlive the process
-either). An edit based on any other version is sent as it is, so a real
+(`rebaseQueuedEdits`). Each step is also kept in memory
+(`src/db/ownVersions.ts`): an edit queued afterwards from the same editor
+resolves its base through it at enqueue, and the drain resolves a stored base
+through it again when it sends, which covers the rows a running pass loaded
+before the rewrite. The record need not outlive the process: neither does an
+editor's baseline, and the rewritten rows do. A step only ever moves the
+version up. An offline duplicate starts at version 1 locally, like a create,
+since that is the version of the server's copy (§8.1); migration 15 resets the
+duplicates older builds queued with their source's version. An edit based on any other version is sent as it is, so a real
 conflict still gets its 409. Merging queued edits at enqueue (#1268) would
 make the chain one request; until then the rebase is what keeps it apart from
 a conflict.

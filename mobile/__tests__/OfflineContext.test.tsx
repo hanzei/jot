@@ -665,6 +665,9 @@ describe('OfflineProvider queue draining', () => {
     });
     await flush();
     expect(mockDrainQueue).toHaveBeenCalledTimes(drainsAfterMount + 1);
+    // The writes did not reset the budget: the stalled retry counts on from it,
+    // so the cap still bounds an entry that keeps failing while the user types.
+    expect(lastConsecutiveFailureCount).toBe(2);
   });
 
   it('resets the retry budget and resumes draining when a new write is enqueued after the cap', async () => {

@@ -910,6 +910,9 @@ export function useDuplicateNote() {
       const now = new Date().toISOString();
       const resetFields = {
         id: clientId,
+        // The server's copy starts at version 1 like any new note (spec §8.1:
+        // the row's version is the server version of its content).
+        version: 1,
         pinned: false,
         archived: false,
         position: 0,
@@ -1154,8 +1157,8 @@ export function useReorderNotes() {
       // so the brief gap before the reorder replays is harmless.
       // Likewise behind any queued op for a note in the batch, so the note's
       // writes stay in order (spec §8.2).
-      const pendingIds = await getPendingCreateNoteIds(db);
-      for (const id of await getPendingNoteIds(db)) pendingIds.add(id);
+      const [pendingIds, queuedIds] = await Promise.all([getPendingCreateNoteIds(db), getPendingNoteIds(db)]);
+      for (const id of queuedIds) pendingIds.add(id);
       const batchHasPending = noteIds.some((id) => pendingIds.has(id));
 
       // Snapshot the current positions before touching them, so a permanently

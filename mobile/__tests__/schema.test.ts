@@ -504,6 +504,27 @@ describe('migrateDatabase', () => {
     });
   });
 
+  describe('pending note versions (#1284)', () => {
+    it('resets a note still pending its create to version 1 and leaves the rest', async () => {
+      const db = createTestDb();
+      for (let i = 0; i < 14; i++) {
+        await MIGRATIONS[i]!(db);
+        await db.runAsync(`PRAGMA user_version = ${i + 1}`);
+      }
+      // An offline duplicate from before #1284 kept its source's version.
+      await db.runAsync(
+        `INSERT INTO notes (id, user_id, version, sync_state, created_at, updated_at) VALUES
+         ('dup', 'u1', 7, 'pending', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+         ('src', 'u1', 7, 'synced', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
+      );
+
+      await migrateDatabase(db);
+
+      expect(await db.getAllAsync('SELECT id, version FROM notes ORDER BY id'))
+        .toEqual([{ id: 'dup', version: 1 }, { id: 'src', version: 7 }]);
+    });
+  });
+
   describe('pre-versioned install', () => {
     it('converges on the fresh-install schema', async () => {
       const db = await preVersionedInstall();

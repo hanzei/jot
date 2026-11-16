@@ -22,26 +22,19 @@ export function recordOwnVersionStep(noteId: string, from: number, to: number): 
     steps = new Map();
     stepsByNote.set(noteId, steps);
   }
-  // A step out of `to` can only predate this one when the note's versions
-  // restarted (a duplicate's server copy starts afresh below its source's): it
-  // belongs to the old numbering, and following it would loop back past `to`.
-  steps.delete(to);
   steps.set(from, to);
 }
 
 /**
  * The version to send for an edit based on `base`: `base` advanced through
- * every version this device's own landed edits produced from it.
+ * every version this device's own landed edits produced from it. A step only
+ * ever moves up (the server accepts an edit at `from` as `from + 1`), so the
+ * walk ends.
  */
 export function resolveOwnBaseVersion(noteId: string, base: number): number {
   const steps = stepsByNote.get(noteId);
-  if (!steps) return base;
   let version = base;
-  const seen = new Set<number>();
-  for (let next = steps.get(version); next !== undefined && !seen.has(version); next = steps.get(version)) {
-    seen.add(version);
-    version = next;
-  }
+  for (let next = steps?.get(version); next !== undefined; next = steps?.get(version)) version = next;
   return version;
 }
 
