@@ -15,6 +15,7 @@ import { getQueuedImageUploadCount } from '../src/db/imageUploadQueue';
 import { setLocalModeActive } from '../src/store/localMode';
 import * as serverReachability from '../src/api/serverReachability';
 import { silenceConsole } from './helpers/consoleGuard';
+import { subscribeToReconnectResync } from '../src/store/resyncEvents';
 
 // Capture the enqueue listener registered by the provider so tests can fire it.
 let enqueueListener: (() => void) | null = null;
@@ -53,8 +54,11 @@ let lastSyncError = false;
 // Captures the latest lastSyncedAt/consecutiveFailureCount exposed through the context.
 let lastSyncedAt: string | null = null;
 let lastConsecutiveFailureCount = 0;
+let lastIsConnected = true;
 function SyncErrorProbe() {
-  const { syncError, lastSyncedAt: syncedAt, consecutiveFailureCount } = useOfflineContext();
+  const { syncError, lastSyncedAt: syncedAt, consecutiveFailureCount, isConnected } = useOfflineContext();
+  // eslint-disable-next-line react-hooks/globals -- test probe captures render output by design
+  lastIsConnected = isConnected;
   // eslint-disable-next-line react-hooks/globals -- test probe captures render output by design
   lastSyncError = syncError;
   // eslint-disable-next-line react-hooks/globals -- test probe captures render output by design
@@ -99,6 +103,7 @@ describe('OfflineProvider queue draining', () => {
     lastSyncError = false;
     lastSyncedAt = null;
     lastConsecutiveFailureCount = 0;
+    lastIsConnected = true;
     mockRevalidate.mockResolvedValue(true);
     mockDrainQueue.mockResolvedValue({ syncedNotes: [], discardedOperations: [], syncedSettings: false });
     mockGetPendingCount.mockResolvedValue(0);
@@ -723,5 +728,112 @@ describe('OfflineProvider queue draining', () => {
 
     warnSpy.mockRestore();
     infoSpy.mockRestore();
+  });
+  describe('a network without internet access (#1266)', () => {
+    type NetState = {
+      isConnected: boolean;
+      isInternetReachable: boolean | null;
+      type: string;
+      details: { ipAddress?: string; strength?: number } | null;
+    };
+    const getNetInfoListener = () =>
+      (NetInfo.addEventListener as jest.Mock).mock.calls[0][0] as (state: NetState) => void;
+    const wifi = (overrides: Partial<NetState> = {}): NetState => ({
+      isConnected: true,
+      isInternetReachable: true,
+      type: 'wifi',
+      details: { ipAddress: '192.168.1.20', strength: 80 },
+      ...overrides,
+    });
+    const mockFetch = NetInfo.fetch as jest.Mock;
+
+    afterEach(() => {
+      mockFetch.mockResolvedValue({ isConnected: true, isInternetReachable: true });
+    });
+
+    it('counts a network the OS reports as without internet as online, and drains', async () => {
+      mockFetch.mockResolvedValue(wifi({ isInternetReachable: false }));
+      mockGetPendingCount.mockResolvedValue(1);
+
+      await renderProvider();
+      await flush();
+
+      expect(lastIsConnected).toBe(true);
+      expect(mockRevalidate).toHaveBeenCalledTimes(1);
+      expect(mockDrainQueue).toHaveBeenCalled();
+    });
+
+    it('stays online when the OS decides an existing network has no internet', async () => {
+      mockFetch.mockResolvedValue(wifi());
+      await renderProvider();
+      await flush();
+
+      await act(async () => {
+        getNetInfoListener()(wifi({ isInternetReachable: false }));
+      });
+
+      expect(lastIsConnected).toBe(true);
+    });
+
+    it.each([
+      ['a captive portal letting the device through', wifi({ isInternetReachable: false }), wifi()],
+      ['moving to another Wi-Fi network', wifi(), wifi({ details: { ipAddress: '10.0.0.7', strength: 80 } })],
+      ['moving from Wi-Fi to cellular', wifi(), wifi({ type: 'cellular', details: null })],
+    ])('reconnects and re-syncs the read caches on %s while staying online', async (_name, before, after) => {
+      const resync = jest.fn();
+      const unsubscribe = subscribeToReconnectResync(resync);
+      mockFetch.mockResolvedValue(before);
+      await renderProvider();
+      await flush();
+      expect(mockRevalidate).toHaveBeenCalledTimes(1);
+      expect(resync).not.toHaveBeenCalled();
+
+      await act(async () => {
+        getNetInfoListener()(after);
+      });
+      await flush();
+
+      expect(mockRevalidate).toHaveBeenCalledTimes(2);
+      expect(resync).toHaveBeenCalledTimes(1);
+      unsubscribe();
+    });
+
+    it('leaves the read re-sync of an offline → online transition to the isConnected flip', async () => {
+      const resync = jest.fn();
+      const unsubscribe = subscribeToReconnectResync(resync);
+      mockFetch.mockResolvedValue(wifi());
+      await renderProvider();
+      await flush();
+
+      await act(async () => {
+        getNetInfoListener()({ isConnected: false, isInternetReachable: false, type: 'none', details: null });
+      });
+      await act(async () => {
+        getNetInfoListener()(wifi());
+      });
+      await flush();
+
+      expect(mockRevalidate).toHaveBeenCalledTimes(2);
+      expect(resync).not.toHaveBeenCalled();
+      unsubscribe();
+    });
+
+    it.each([
+      ['a signal strength change', wifi({ details: { ipAddress: '192.168.1.20', strength: 30 } })],
+      ['NetInfo finishing its internet check', wifi({ isInternetReachable: true })],
+      ['an update that does not report the IP address', wifi({ details: { strength: 80 } })],
+    ])('does not reconnect on %s', async (_name, after) => {
+      mockFetch.mockResolvedValue(wifi({ isInternetReachable: null }));
+      await renderProvider();
+      await flush();
+      expect(mockRevalidate).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        getNetInfoListener()(after);
+      });
+      await flush();
+
+      expect(mockRevalidate).toHaveBeenCalledTimes(1);
+    });
   });
 });

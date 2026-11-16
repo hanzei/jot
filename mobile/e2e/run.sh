@@ -35,7 +35,7 @@ STATIC_DIR="$RUN_DIR/static"
 mkdir -p "$STATIC_DIR"
 readonly JOT_E2E_PORT SERVER_URL_FROM_EMULATOR RUN_DIR DB_DSN STATIC_DIR
 
-# The SSO flows (12-15) run against webapp/e2e/fixtures/mock-idp.ts, the same
+# The SSO flows (13-16) run against webapp/e2e/fixtures/mock-idp.ts, the same
 # dependency-free mock IdP the Playwright SSO project uses. Its issuer is fixed
 # at http://127.0.0.1:8091, which has to work from two places: the server's own
 # discovery and token calls (host loopback, fine), and the authorize page the
@@ -61,9 +61,16 @@ IMPORT_FILES_PUSHED=0
 # touches the radio when this script was the one that changed it — a flow that
 # fails while offline must not leave a local emulator stuck that way.
 AIRPLANE_TOGGLED=0
+# Set once break_wifi_validation changes the device's probe settings, for the
+# same reason: a failed flow 12 must not leave the emulator without internet.
+PROBE_BROKEN=0
 cleanup() {
   if [ "$AIRPLANE_TOGGLED" -eq 1 ]; then
     adb shell cmd connectivity airplane-mode disable >/dev/null 2>&1 || true
+  fi
+  if [ "$PROBE_BROKEN" -eq 1 ]; then
+    reset_probe_settings >/dev/null 2>&1 || true
+    adb shell cmd wifi set-wifi-enabled enabled >/dev/null 2>&1 || true
   fi
   if [ "$IDP_REVERSED" -eq 1 ]; then
     adb reverse --remove "tcp:${MOCK_IDP_PORT}" >/dev/null 2>&1 || true
@@ -217,18 +224,110 @@ MAESTRO_JOT_KILL_NOTE="Kill-persist note ${RUN_ID}"
 # (10-11). No spaces: the card matches on this exact content text, and keeping it
 # one token mirrors the other note titles here.
 MAESTRO_JOT_SSE_NOTE="SSE-resync-note-${RUN_ID}"
+# Written while the device is on Wi-Fi that Android marks "no internet" (flow 12).
+MAESTRO_JOT_NO_INTERNET_NOTE="No-internet-note-${RUN_ID}"
 # Deep link delivered signed out (flow 05) that must resolve after sign-in (06).
 # The ?server= param is canonicalized identically on both sides so it matches the
 # known server (no "unknown server" prompt fires); `settings` is a protected path
 # that needs no pre-existing entity to resolve.
 DEEP_LINK_URL="jot://settings?server=${SERVER_URL_FROM_EMULATOR}"
+# Wi-Fi without internet (#1266). Android marks a network VALIDATED only once
+# its own connectivity probe succeeds; NetInfo reports isInternetReachable from
+# that flag. Pointing the probe URLs at a name that cannot resolve leaves the
+# emulator's Wi-Fi up but unvalidated, Android's "Connected, no internet", while
+# the Jot server at 10.0.2.2 still answers: to the OS and to NetInfo, a LAN with
+# no uplink. Mobile data goes off so Wi-Fi is the only network, and Wi-Fi is
+# cycled so Android probes again with the new URLs.
+PROBE_SETTINGS=(captive_portal_https_url captive_portal_http_url
+  captive_portal_fallback_url captive_portal_other_fallback_urls)
+UNREACHABLE_PROBE_URL="http://no-uplink.invalid/generate_204"
+readonly PROBE_SETTINGS UNREACHABLE_PROBE_URL
+
+reset_probe_settings() {
+  local key
+  for key in "${PROBE_SETTINGS[@]}"; do
+    adb shell settings delete global "$key" >/dev/null
+  done
+  adb shell svc data enable
+}
+
+cycle_wifi() {
+  adb shell cmd wifi set-wifi-enabled disabled
+  sleep 2
+  adb shell cmd wifi set-wifi-enabled enabled
+}
+
+# Prints the capability lists of the connected Wi-Fi networks, one per line, or
+# nothing when Wi-Fi is not connected.
+wifi_capabilities() {
+  adb shell dumpsys connectivity 2>/dev/null | tr -d '\r' \
+    | grep 'NetworkAgentInfo' | grep 'Transports: WIFI' \
+    | grep -o 'Capabilities: [^ ]*' || true
+}
+
+wifi_is_validated() {
+  wifi_capabilities | grep -Eq '(: |&)VALIDATED(&|$)'
+}
+
+break_wifi_validation() {
+  echo "==> Wi-Fi without internet: failing Android's connectivity probe"
+  PROBE_BROKEN=1
+  adb shell svc data disable
+  local key
+  for key in "${PROBE_SETTINGS[@]}"; do
+    adb shell settings put global "$key" "$UNREACHABLE_PROBE_URL"
+  done
+  cycle_wifi
+  # An unvalidated network is also what Wi-Fi looks like before its first probe
+  # finishes, so wait for Wi-Fi to connect, then give the probe time to fail and
+  # require the network to still be unvalidated afterwards.
+  local connected=0
+  for _ in $(seq 1 60); do
+    if [ -n "$(wifi_capabilities)" ]; then
+      connected=1
+      break
+    fi
+    sleep 1
+  done
+  if [ "$connected" -ne 1 ]; then
+    echo "Wi-Fi did not reconnect within 60s (or dumpsys changed format):" >&2
+    adb shell dumpsys connectivity 2>/dev/null | grep 'Transports: WIFI' | head -5 >&2 || true
+    return 1
+  fi
+  sleep 20
+  if wifi_is_validated; then
+    echo "Wi-Fi is still VALIDATED: the probe override did not take, so flow 12 would test nothing." >&2
+    wifi_capabilities >&2
+    return 1
+  fi
+  echo "Wi-Fi is connected and unvalidated:"
+  wifi_capabilities
+}
+
+restore_wifi_validation() {
+  echo "==> Restoring Android's connectivity probe"
+  reset_probe_settings
+  cycle_wifi
+  for _ in $(seq 1 60); do
+    if wifi_is_validated; then
+      PROBE_BROKEN=0
+      echo "Wi-Fi is validated again."
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Wi-Fi did not validate again within 60s." >&2
+  wifi_capabilities >&2
+  return 1
+}
+
 # IdP usernames for the SSO flows, which become Jot usernames when an account
 # is provisioned from them, so they stay within the username rules (lower case,
-# at most 30 characters). Distinct from each other: the one flow 12 links to the
-# local account must not be the one flow 15 provisions a fresh account from.
+# at most 30 characters). Distinct from each other: the one flow 13 links to the
+# local account must not be the one flow 16 provisions a fresh account from.
 MAESTRO_JOT_SSO_LINK_USERNAME="link${RUN_ID}"
 MAESTRO_JOT_SSO_USERNAME="sso${RUN_ID}"
-# The files flow 17 imports through the system picker, and the content text of
+# The files flow 18 imports through the system picker, and the content text of
 # the note each one carries. prepare_import_files builds both and pushes them into
 # DEVICE_DOWNLOAD_DIR. The file names are per run so the picker can never offer
 # a stale copy a failed local run left behind.
@@ -239,7 +338,7 @@ MAESTRO_JOT_KEEP_IMPORT_NOTE="Keep-import-note-${RUN_ID}"
 MAESTRO_JOT_JOT_IMPORT_NOTE="Jot-import-note-${RUN_ID}"
 readonly RUN_ID MAESTRO_JOT_USERNAME MAESTRO_JOT_PASSWORD MAESTRO_JOT_NOTE_TITLE \
   MAESTRO_JOT_OFFLINE_NOTE MAESTRO_JOT_SHARE_TEXT MAESTRO_JOT_KILL_NOTE \
-  MAESTRO_JOT_SSE_NOTE DEEP_LINK_URL MAESTRO_JOT_SSO_LINK_USERNAME \
+  MAESTRO_JOT_SSE_NOTE MAESTRO_JOT_NO_INTERNET_NOTE DEEP_LINK_URL MAESTRO_JOT_SSO_LINK_USERNAME \
   MAESTRO_JOT_SSO_USERNAME DEVICE_DOWNLOAD_DIR MAESTRO_JOT_KEEP_IMPORT_FILE \
   MAESTRO_JOT_JOT_IMPORT_FILE MAESTRO_JOT_KEEP_IMPORT_NOTE MAESTRO_JOT_JOT_IMPORT_NOTE
 
@@ -283,6 +382,7 @@ run_maestro_flow() {
     -e MAESTRO_JOT_SHARE_TEXT="$MAESTRO_JOT_SHARE_TEXT" \
     -e MAESTRO_JOT_KILL_NOTE="$MAESTRO_JOT_KILL_NOTE" \
     -e MAESTRO_JOT_SSE_NOTE="$MAESTRO_JOT_SSE_NOTE" \
+    -e MAESTRO_JOT_NO_INTERNET_NOTE="$MAESTRO_JOT_NO_INTERNET_NOTE" \
     -e MAESTRO_JOT_SSO_LINK_USERNAME="$MAESTRO_JOT_SSO_LINK_USERNAME" \
     -e MAESTRO_JOT_SSO_USERNAME="$MAESTRO_JOT_SSO_USERNAME" \
     -e MAESTRO_JOT_KEEP_IMPORT_FILE="$MAESTRO_JOT_KEEP_IMPORT_FILE" \
@@ -395,10 +495,10 @@ create_note_via_api() {
   echo "Out-of-band note created on the server."
 }
 
-# Build the two files flow 17 imports and push them into the device's Downloads
+# Build the two files flow 18 imports and push them into the device's Downloads
 # folder, where the system picker finds them. Runs before the SSO flows: the
 # Jot backup is a real GET /notes/export of the account flow 01 registered, and
-# the SSO-only restart for flow 16 turns password login off. Exporting rather
+# the SSO-only restart for flow 17 turns password login off. Exporting rather
 # than committing a fixture keeps the backup in step with the bundle format.
 # The Keep file is shaped like a Takeout archive (Takeout/Keep/<note>.json).
 prepare_import_files() {
@@ -520,14 +620,14 @@ skip_chrome_first_run() {
   adb shell am set-debug-app --persistent com.android.chrome >/dev/null 2>&1 || true
 }
 
-# Start Chrome once, outside any flow, before flow 12 opens the first Custom Tab.
+# Start Chrome once, outside any flow, before flow 13 opens the first Custom Tab.
 # Twice on master (runs 136 and 154) that first tab never appeared: Connect sat
 # on its spinner, Chrome drew nothing, and the server never saw the start URL, so
 # all of mock-idp-page.yaml's retries hit a disabled button. Both were the run's
 # first Chrome launch, right after skip_chrome_first_run changed its switches, so
 # pay that cold start here. Chrome is left running in the background (HOME, not
 # force-stop) so the Custom Tab attaches to a warm process. Best-effort: a Chrome
-# that never takes focus is logged and flow 12 runs anyway.
+# that never takes focus is logged and flow 13 runs anyway.
 warm_up_chrome() {
   echo "==> Warming up Chrome"
   timeout 30 adb shell am start -W -a android.intent.action.VIEW \
@@ -671,16 +771,28 @@ if [ "$sse_post_pid" != "$sse_pre_pid" ]; then
 fi
 maestro_flow 11-sse-resync-catchup.yaml "$@"
 
+# 12 — Wi-Fi without internet (#1266): a self-hosted server on a LAN with no
+# uplink. Android marks the Wi-Fi "no internet", but the Jot server answers, so
+# the app must stay online and sync. The note the flow writes must reach the
+# server while the probe is still failing, before anything is restored. Runs
+# here, before the SSO block, because assert_note_synced logs in with the
+# password account flows 01-11 use. The adb steps are sequenced here for the
+# reason on set_airplane_mode.
+break_wifi_validation
+maestro_flow 12-wifi-no-internet.yaml "$@"
+assert_note_synced "$MAESTRO_JOT_NO_INTERNET_NOTE"
+restore_wifi_validation
+
 # Before the SSO block below: building the Jot backup needs password login,
-# which the restart for flow 16 turns off. Flow 17 imports the files at the end.
+# which the restart for flow 17 turns off. Flow 18 imports the files at the end.
 prepare_import_files
 
-# 12-16 — SSO (#1016), against the mock IdP. The server restarts with OIDC on
+# 13-17 — SSO (#1016), against the mock IdP. The server restarts with OIDC on
 # (same database, so the app stays signed in) once the mock IdP is up and the
 # device can reach it. The IdP's authorize page opens in a Chrome Custom Tab,
-# which Maestro drives like any other app. 12 connects SSO from Settings for the
-# local account flows 01-11 used; 13 signs out and denies at the IdP; 14 closes
-# the sheet; 15 signs up through SSO, signs out, and signs back in. 16 runs after
+# which Maestro drives like any other app. 13 connects SSO from Settings for the
+# local account flows 01-12 used; 14 signs out and denies at the IdP; 15 closes
+# the sheet; 16 signs up through SSO, signs out, and signs back in. 17 runs after
 # a restart into SSO-only mode. The server checks prove what the UI can only
 # suggest: the link landed on the local account, and the second SSO sign-in
 # reused the account the first one provisioned instead of making another.
@@ -690,21 +802,21 @@ warm_up_chrome
 stop_server
 start_server "${OIDC_ENV[@]}"
 set_idp_username "$MAESTRO_JOT_SSO_LINK_USERNAME"
-maestro_flow 12-sso-connect-settings.yaml "$@"
+maestro_flow 13-sso-connect-settings.yaml "$@"
 assert_sso_linked 1 "$MAESTRO_JOT_USERNAME"
-maestro_flow 13-sso-deny.yaml "$@"
-maestro_flow 14-sso-close-sheet.yaml "$@"
+maestro_flow 14-sso-deny.yaml "$@"
+maestro_flow 15-sso-close-sheet.yaml "$@"
 set_idp_username "$MAESTRO_JOT_SSO_USERNAME"
-maestro_flow 15-sso-login-relogin.yaml "$@"
+maestro_flow 16-sso-login-relogin.yaml "$@"
 assert_sso_linked 2 "$MAESTRO_JOT_USERNAME" "$MAESTRO_JOT_SSO_USERNAME"
 
 stop_server
 start_server "${OIDC_ENV[@]}" JOT_LOCAL_LOGIN_ENABLED=false
 set_idp_username "$MAESTRO_JOT_SSO_USERNAME"
-maestro_flow 16-sso-only-login.yaml "$@"
+maestro_flow 17-sso-only-login.yaml "$@"
 
-# 17 — import from Settings (#1134): a Keep Takeout zip and a Jot backup, each
+# 18 — import from Settings (#1134): a Keep Takeout zip and a Jot backup, each
 # picked in the system file picker and uploaded to the real server. Imports
-# into the account flow 16 signed in; the files were pushed before the SSO
+# into the account flow 17 signed in; the files were pushed before the SSO
 # block, by prepare_import_files.
-maestro_flow 17-import-files.yaml "$@"
+maestro_flow 18-import-files.yaml "$@"

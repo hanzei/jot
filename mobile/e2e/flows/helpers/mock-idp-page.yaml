@@ -1,6 +1,6 @@
-# Shared by the SSO flows (12-16): tap OPEN_BUTTON_ID (passed in env) to open
+# Shared by the SSO flows (13-17): tap OPEN_BUTTON_ID (passed in env) to open
 # the mock IdP's authorize page in a browser sheet, and wait for the page. Not a
-# flow of its own — run.sh never runs it directly; flows 13-14 and
+# flow of its own — run.sh never runs it directly; flows 14-15 and
 # mock-idp-approve.yaml call it with runFlow.
 #
 # The sheet is a Chrome Custom Tab, so this is Chrome's UI, not Jot's: Maestro
@@ -11,7 +11,7 @@
 #
 # Chrome has drawn the page without ever exposing its content to accessibility,
 # so a retry closes the sheet and opens a fresh one. Back closes it, as in flow
-# 14, and only fires while Chrome's url_bar shows, never on Jot's own screen.
+# 15, and only fires while Chrome's url_bar shows, never on Jot's own screen.
 # The attempt counter keeps that check off the first attempt, where it would
 # only cost an optional-lookup wait.
 #

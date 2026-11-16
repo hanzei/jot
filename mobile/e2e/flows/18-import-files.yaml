@@ -10,7 +10,7 @@
 # run.sh built both files before the SSO flows (the Jot backup is a real export
 # of the local account, with MAESTRO_JOT_JOT_IMPORT_NOTE in it; the Keep zip holds
 # one note whose text is MAESTRO_JOT_KEEP_IMPORT_NOTE) and pushed them into the device's
-# Downloads folder. Continues the session flow 16 signed in, so the notes are
+# Downloads folder. Continues the session flow 17 signed in, so the notes are
 # imported into that account.
 appId: com.jot.app
 ---
@@ -56,7 +56,7 @@ appId: com.jot.app
     timeout: 30000
 - assertNotVisible:
     id: "settings-import-error"
-- takeScreenshot: import-17-keep-imported
+- takeScreenshot: import-18-keep-imported
 
 - scrollUntilVisible:
     element:
@@ -84,7 +84,7 @@ appId: com.jot.app
     timeout: 30000
 - assertNotVisible:
     id: "settings-import-error"
-- takeScreenshot: import-17-jot-imported
+- takeScreenshot: import-18-jot-imported
 
 # The section re-pulls notes from the server after an import, so both notes
 # reaching the list shows the server stored them, not only that it answered.

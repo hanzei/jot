@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { apiPaths, apiUrl, canonicalizeServerOrigin, UPLOAD_MAX_BYTES, VALIDATION, type ServerConfig } from '@jot/shared';
+import { REQUEST_ID_HEADER, echoesRequestId, newRequestId } from './jotResponse';
 
 export const DEFAULT_SERVER_CONFIG: ServerConfig = {
   registration_enabled: true,
@@ -18,8 +19,13 @@ export async function probeServerConfig(serverUrl: string): Promise<ServerConfig
     return null;
   }
   try {
-    const res = await axios.get<ServerConfig>(apiUrl(apiPaths.config, canonical), { timeout: 5000 });
-    return res.data;
+    const requestId = newRequestId();
+    const res = await axios.get<ServerConfig>(apiUrl(apiPaths.config, canonical), {
+      timeout: 5000,
+      headers: { [REQUEST_ID_HEADER]: requestId },
+    });
+    // A captive portal's 200 page is not a config (#1266).
+    return echoesRequestId(requestId, res.headers) ? res.data : null;
   } catch {
     return null;
   }

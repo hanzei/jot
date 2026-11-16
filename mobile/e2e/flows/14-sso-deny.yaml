@@ -1,6 +1,6 @@
 # SSO, part 2 — deny at the IdP (#1016).
 #
-# Signs out of the local account flow 12 linked and lands on the mixed-mode
+# Signs out of the local account flow 13 linked and lands on the mixed-mode
 # login screen: the SSO button above the local form. Denying at the IdP comes
 # back as `error=access_denied` on the jot://oidc-callback redirect, which the
 # app reports as a cancellation rather than a failure.
@@ -26,7 +26,7 @@ appId: com.jot.app
 # Mixed mode: the local form stays alongside the SSO button.
 - assertVisible:
     id: "username-input"
-- takeScreenshot: sso-13-login-mixed
+- takeScreenshot: sso-14-login-mixed
 
 - runFlow:
     file: helpers/mock-idp-page.yaml
@@ -39,4 +39,4 @@ appId: com.jot.app
       id: "login-error"
       text: "Sign-in was cancelled."
     timeout: 30000
-- takeScreenshot: sso-13-denied
+- takeScreenshot: sso-14-denied

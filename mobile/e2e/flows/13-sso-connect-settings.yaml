@@ -30,7 +30,7 @@ appId: com.jot.app
     element:
       id: "settings-sso-connect"
     timeout: 30000
-- takeScreenshot: sso-12-settings-unlinked
+- takeScreenshot: sso-13-settings-unlinked
 
 - runFlow:
     file: helpers/mock-idp-approve.yaml
@@ -44,4 +44,4 @@ appId: com.jot.app
     timeout: 30000
 - assertVisible:
     id: "settings-sso-disconnect"
-- takeScreenshot: sso-12-settings-linked
+- takeScreenshot: sso-13-settings-linked

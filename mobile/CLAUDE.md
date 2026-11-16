@@ -60,7 +60,7 @@ integration. **Anything testable in Jest belongs in Jest.**
 - The import flow drives Android's system file picker the same way
   (`flows/helpers/pick-download.yaml`); `run.sh` pushes the files it picks into
   `/sdcard/Download`.
-- Maestro cannot shell out mid-flow, so `adb` steps (airplane mode, force-stop,
+- Maestro cannot shell out mid-flow, so `adb` steps (airplane mode, Wi-Fi probe, force-stop,
   intents) are sequenced in `run.sh` between flows.
 - No drag-and-drop flows (Maestro has no press-hold-then-move) and no quick
   action flows (`adb` cannot build that intent) — cover both in Jest.
@@ -86,9 +86,14 @@ The app is **local-first**: the SQLite DB plus sync queue is the UI's source of
 truth, and the network is a background reconciler. Rationale and code map:
 `docs/specs/mobile-connectivity-handling.md`. The rules:
 
-- **Three connectivity states** — device offline (NetInfo `isConnected`), server
+- **Three connectivity states** — device offline (NetInfo `isConnected` only,
+  never `isInternetReachable`, #1266), server
   unreachable while online (`isServerReachable()`), and slow/flaky. Device
   online ≠ server usable.
+- **Only a response that echoes our `X-Request-Id` is the server's** (spec
+  §3.2): a captive portal answers plain HTTP with a `200`. The `api` instance
+  checks it for you; a request that bypasses it (SSE, a probe on its own axios
+  call) must use `src/api/jotResponse.ts` itself.
 - **Writes never block.** Commit locally, enqueue, return. Gate the network
   attempt on `isOnlineWriteAllowed()`. Roll back only on a *permanent*
   rejection. Note-image uploads follow this too, via the offline upload queue.

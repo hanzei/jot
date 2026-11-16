@@ -12,6 +12,7 @@ import {
   switchActiveServer,
   DEFAULT_REQUEST_TIMEOUT_MS,
   WRITE_REQUEST_TIMEOUT_MS,
+  probeServerReachability,
 } from '../src/api/client';
 import { getActiveServer, getServerScopedStorageKey } from '../src/store/serverAccounts';
 import { isServerReachable, markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
@@ -27,6 +28,21 @@ jest.mock('axios', () => {
       this.name = 'CanceledError';
     }
   }
+  class MockAxiosError extends Error {
+    static ERR_NETWORK = 'ERR_NETWORK';
+    isAxiosError = true;
+    code?: string | undefined;
+    config?: unknown;
+    request?: unknown;
+    response?: unknown;
+    constructor(message: string, errCode?: string, errConfig?: unknown, errRequest?: unknown) {
+      super(message);
+      this.name = 'AxiosError';
+      this.code = errCode;
+      this.config = errConfig;
+      this.request = errRequest;
+    }
+  }
   const mockInstance = {
     post: jest.fn(),
     get: jest.fn(),
@@ -40,6 +56,7 @@ jest.mock('axios', () => {
     value instanceof MockCanceledError || Boolean((value as { __CANCEL__?: boolean })?.__CANCEL__);
   const mockAxios = {
     create: jest.fn(() => mockInstance),
+    get: jest.fn(),
     __mockInstance: mockInstance,
     isCancel: mockIsCancel,
   };
@@ -47,6 +64,7 @@ jest.mock('axios', () => {
     __esModule: true,
     default: mockAxios,
     AxiosHeaders: jest.fn(),
+    AxiosError: MockAxiosError,
     CanceledError: MockCanceledError,
     isCancel: mockIsCancel,
   };
@@ -581,6 +599,148 @@ describe('API Client', () => {
       responseSuccessInterceptor({ config: { method: 'get', url: '/notes/n2' } });
 
       expect(notesWrittenSince(mark)).toEqual(new Set(['n1']));
+    });
+  });
+
+  describe('responses that did not come from Jot (#1266)', () => {
+    type Config = Record<string, unknown> & { headers: Record<string, string> };
+    const getRequestInterceptor = () =>
+      mockAxiosInstance.interceptors.request.use.mock.calls[0]?.[0] as (config: Record<string, unknown>) => Promise<Config>;
+    const getResponseHandlers = () => {
+      const call = mockAxiosInstance.interceptors.response.use.mock.calls[0];
+      return {
+        onSuccess: call?.[0] as (response: Record<string, unknown>) => unknown,
+        onError: call?.[1] as (error: unknown) => Promise<unknown>,
+      };
+    };
+    // A request config as the request interceptor leaves it.
+    const sentConfig = (method: string, url: string, data?: string) =>
+      getRequestInterceptor()({ method, url, data, headers: {}, timeout: DEFAULT_REQUEST_TIMEOUT_MS });
+    const echo = (config: Config) => ({ 'x-request-id': config.headers['X-Request-Id'] });
+
+    let warn: jest.SpyInstance;
+    beforeEach(() => {
+      warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      markServerReachable();
+    });
+    afterEach(() => {
+      warn.mockRestore();
+      setOnUnauthorized(null);
+      markServerReachable();
+    });
+
+    it('sends a fresh request ID with every request', async () => {
+      const first = await sentConfig('get', '/notes');
+      const second = await sentConfig('get', '/notes');
+
+      expect(first.headers['X-Request-Id']).toEqual(expect.any(String));
+      expect(first.headers['X-Request-Id']).not.toBe(second.headers['X-Request-Id']);
+    });
+
+    it('accepts a response that echoes the request ID', async () => {
+      const config = await sentConfig('patch', '/notes/jot1', '{"content":"x"}');
+      const mark = snapshotMark();
+      markServerUnreachable();
+      const response = { status: 200, config, headers: echo(config) };
+
+      expect(getResponseHandlers().onSuccess(response)).toBe(response);
+      expect(isServerReachable()).toBe(true);
+      expect(notesWrittenSince(mark)).toEqual(new Set(['jot1']));
+    });
+
+    it.each([
+      ['no request ID', () => ({})],
+      ['another request ID', () => ({ 'x-request-id': 'portal-id' })],
+    ])('turns a 2xx carrying %s into a no-response error: unreachable, and the write not landed', async (_name, headers) => {
+      const config = await sentConfig('patch', '/notes/portal1', '{"content":"x"}');
+      const mark = snapshotMark();
+
+      let thrown: unknown;
+      try {
+        getResponseHandlers().onSuccess({ status: 200, config, headers: headers(), data: '<html>Sign in</html>' });
+      } catch (err) {
+        thrown = err;
+      }
+
+      // The shape the sync queue reads as a transport failure: it keeps the entry.
+      expect(thrown).toMatchObject({ isAxiosError: true, code: 'ERR_NETWORK' });
+      expect((thrown as { response?: unknown }).response).toBeUndefined();
+      expect(isServerReachable()).toBe(false);
+      expect(notesWrittenSince(mark)).toEqual(new Set());
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('did not echo the request ID'));
+    });
+
+    it('logs only when the server flips to unreachable, not for every portal response', async () => {
+      for (let i = 0; i < 3; i++) {
+        const config = await sentConfig('get', '/notes');
+        expect(() => getResponseHandlers().onSuccess({ status: 200, config, headers: {} })).toThrow();
+      }
+
+      expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not log the user out on a 401 that did not come from Jot', async () => {
+      mockAxiosInstance.post.mockResolvedValueOnce({
+        data: { user: { id: '1', username: 'test' }, settings: {} },
+        headers: { 'set-cookie': ['jot_session=kept; Path=/'] },
+      });
+      await auth.login({ username: 'test', password: 'pass' });
+      const serverId = await getActiveTestServerId();
+      const onUnauthorized = jest.fn();
+      setOnUnauthorized(onUnauthorized);
+      const config = await sentConfig('get', '/notes');
+
+      const rejection = await getResponseHandlers().onError({ response: { status: 401, headers: {} }, config }).catch((err: unknown) => err);
+
+      expect((rejection as { response?: unknown }).response).toBeUndefined();
+      expect(onUnauthorized).not.toHaveBeenCalled();
+      expect(memory.get(getServerScopedStorageKey(serverId, 'session'))).toBe('kept');
+      expect(isServerReachable()).toBe(false);
+    });
+
+    it('still counts an error status from Jot as the server answering', async () => {
+      const config = await sentConfig('get', '/notes');
+      markServerUnreachable();
+
+      const rejection = await getResponseHandlers().onError({
+        response: { status: 500, headers: echo(config) },
+        config,
+      }).catch((err: unknown) => err);
+
+      expect((rejection as { response?: { status: number } }).response?.status).toBe(500);
+      expect(isServerReachable()).toBe(true);
+    });
+  });
+
+  describe('probeServerReachability', () => {
+    const mockGet = (axios as unknown as { get: jest.Mock }).get;
+    let warn: jest.SpyInstance;
+    beforeEach(() => {
+      warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+    afterEach(() => {
+      warn.mockRestore();
+    });
+
+    it('accepts a Jot server, which echoes the request ID', async () => {
+      mockGet.mockImplementationOnce(async (_url: string, opts: { headers: Record<string, string> }) => ({
+        status: 401,
+        headers: { 'x-request-id': opts.headers['X-Request-Id'] },
+      }));
+
+      await expect(probeServerReachability('http://192.168.1.10:8080')).resolves.toEqual({
+        ok: true,
+        canonicalUrl: 'http://192.168.1.10:8080',
+      });
+    });
+
+    it('reports a captive portal 200 page as unreachable', async () => {
+      mockGet.mockResolvedValueOnce({ status: 200, headers: {}, data: '<html>Sign in</html>' });
+
+      await expect(probeServerReachability('http://192.168.1.10:8080')).resolves.toEqual({
+        ok: false,
+        reason: 'UNREACHABLE',
+      });
     });
   });
 
