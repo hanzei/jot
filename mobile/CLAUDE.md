@@ -161,10 +161,16 @@ What the device may believe after a sync (spec §8). These are the target; spec
 - Exponential backoff on every retry (start ≥ 1 s, cap 60 s); never a tight loop.
 - The drain is **FIFO per key**, not strict FIFO (spec §7): an op that fails
   transiently holds back only the later ops that share a key with it
-  (`sync_queue_keys`), and stays queued. Never dead-letter an op the server did
-  not reject; the attempt cap applies only to non-HTTP processing errors.
+  (`sync_queue_keys`), stays queued, and waits its own backoff before it is
+  resent (`next_attempt_at`); one failing write never holds back unrelated ones.
+- A write the server keeps failing with 5xx reaches the failed-changes review
+  after a bounded time (`first_failed_at` a day old *and* several failures
+  minutes apart, `spaced_failures`, never either alone); never dead-letter one
+  sooner, or a short outage turns good edits into failed changes.
+- A broken server costs a bounded number of requests per pass: a pass stops
+  after a few failed sends in a row.
 - Skip a sync that starts while one is in progress rather than queueing it.
-- Cap consecutive sync attempts, then surface an error.
+- Cap consecutive connectivity failures, then surface an error.
 - Idempotent writes: `INSERT … ON CONFLICT(id) DO UPDATE`, **never
   `INSERT OR REPLACE`** — with `foreign_keys = ON`, REPLACE's delete fires
   `ON DELETE CASCADE` and silently wipes child rows (it once deleted queued image

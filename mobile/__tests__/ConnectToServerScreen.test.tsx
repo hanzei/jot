@@ -39,6 +39,7 @@ jest.mock('../src/store/localMode', () => ({
 
 jest.mock('../src/db/syncQueue', () => ({
   getDeadLetterCount: jest.fn().mockResolvedValue(0),
+  GIVE_UP_AFTER_ATTEMPTS: 5,
 }));
 
 jest.mock('../src/store/AuthContext', () => ({

@@ -588,6 +588,22 @@ describe('migrateDatabase', () => {
     });
   });
 
+  describe('retry waits (#1301)', () => {
+    it('adds the wait and failure-run columns, starting every existing row with neither', async () => {
+      const db = createTestDb();
+      for (let i = 0; i < 17; i++) {
+        await MIGRATIONS[i]!(db);
+        await db.runAsync(`PRAGMA user_version = ${i + 1}`);
+      }
+      await db.runAsync("INSERT INTO sync_queue (operation, endpoint, method, created_at, attempts) VALUES ('update', '/notes/a', 'PATCH', '2026-01-01T00:00:00Z', 9)");
+
+      await migrateDatabase(db);
+
+      expect(await db.getAllAsync('SELECT attempts, next_attempt_at, first_failed_at, spaced_failures, last_spaced_failure_at FROM sync_queue'))
+        .toEqual([{ attempts: 9, next_attempt_at: null, first_failed_at: null, spaced_failures: 0, last_spaced_failure_at: null }]);
+    });
+  });
+
   describe('pre-versioned install', () => {
     it('converges on the fresh-install schema', async () => {
       const db = await preVersionedInstall();
