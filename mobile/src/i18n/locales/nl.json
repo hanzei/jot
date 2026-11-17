@@ -410,7 +410,8 @@
     "deleteError": "Label verwijderen mislukt",
     "deleteConfirmTitle": "Label verwijderen",
     "deleteConfirmMessage": "Label \"{{name}}\" verwijderen? Het wordt verwijderd uit alle notities die het gebruiken.",
-    "nameRequired": "De labelnaam mag niet leeg zijn."
+    "nameRequired": "De labelnaam mag niet leeg zijn.",
+    "nameTaken": "Er bestaat al een label met deze naam."
   },
   "share": {
     "searchUsersPlaceholder": "Gebruikers zoeken op naam...",

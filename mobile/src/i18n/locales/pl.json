@@ -405,7 +405,8 @@
     "deleteError": "Nie udało się usunąć etykiety",
     "deleteConfirmTitle": "Usuń etykietę",
     "deleteConfirmMessage": "Usunąć etykietę \"{{name}}\"? Zostanie usunięta ze wszystkich notatek, które jej używają.",
-    "nameRequired": "Nazwa etykiety nie może być pusta."
+    "nameRequired": "Nazwa etykiety nie może być pusta.",
+    "nameTaken": "Etykieta o tej nazwie już istnieje."
   },
   "share": {
     "searchUsersPlaceholder": "Szukaj użytkowników po nazwie...",

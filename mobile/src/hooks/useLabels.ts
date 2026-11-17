@@ -11,7 +11,7 @@ import {
   renameStoredLabel,
   deleteStoredLabel,
   getLocalLabelCounts,
-  getLocalNote,
+  requireLocalNote,
   generateClientLabelId,
 } from '../db/noteQueries';
 import { enqueueWrite, saveServerLabels, type EnqueueParams } from '../db/syncQueue';
@@ -201,17 +201,17 @@ export function useCreateLabel() {
       assertSwitchWriteAllowed();
       const trimmed = name.trim();
       if (!trimmed) throw new LocalizedError('labels.nameRequired', 'Label name must not be empty');
-      const label = buildLocalLabel(trimmed, user?.id ?? '');
-      // Stored so an empty label shows in the drawer regardless of note state
-      // (#691). A replay of a create that already landed gets a 409, which the
+      // Get-or-create by name, as the server's POST /labels is: a name the
+      // device already knows returns that label and queues nothing, rather
+      // than listing a second label until the drain merges them. A new one is
+      // stored so an empty label shows in the drawer regardless of note state
+      // (#691); a replay of a create that already landed gets a 409, which the
       // drain resolves by name (#1278).
-      return enqueueWrite(db, {
-        localApply: async () => {
-          await upsertLabel(db, label);
-          return label;
-        },
-        op: () => createLabelOp(label),
+      const { label } = await enqueueWrite(db, {
+        localApply: () => resolveLocalLabel(db, trimmed, user?.id ?? ''),
+        op: ({ create }) => (create ? [create] : []),
       });
+      return label;
     },
     onSuccess: () => invalidateLabelReads(queryClient),
   });
@@ -231,7 +231,7 @@ export function useAddLabelToNote() {
       // created first, in the same transaction.
       await enqueueWrite(db, {
         localApply: async () => {
-          if (!(await getLocalNote(db, noteId))) throw new Error(`Note ${noteId} not found in local cache`);
+          await requireLocalNote(db, noteId);
           const resolved = await resolveLocalLabel(db, trimmed, user?.id ?? '');
           await addLabelToLocalNote(db, noteId, resolved.label);
           return resolved;
@@ -266,7 +266,7 @@ export function useRemoveLabelFromNote() {
       assertSwitchWriteAllowed();
       await enqueueWrite(db, {
         localApply: async () => {
-          if (!(await getLocalNote(db, noteId))) throw new Error(`Note ${noteId} not found in local cache`);
+          await requireLocalNote(db, noteId);
           await removeLabelFromLocalNote(db, noteId, labelId);
         },
         op: () => ({
@@ -297,6 +297,13 @@ export function useRenameLabel() {
       if (!trimmed) throw new LocalizedError('labels.nameRequired', 'Label name must not be empty');
       await enqueueWrite(db, {
         localApply: async () => {
+          // The server rejects a name another label has (case-insensitively).
+          // The rename is sent later, so catch that here, where the user can
+          // still pick another name, rather than as a failed change.
+          const folded = trimmed.toLowerCase();
+          if ((await getStoredLabels(db)).some((l) => l.id !== labelId && l.name.toLowerCase() === folded)) {
+            throw new LocalizedError('labels.nameTaken', 'A label with this name already exists');
+          }
           await renameStoredLabel(db, labelId, trimmed);
           await renameLabelInLocalNotes(db, labelId, trimmed);
         },

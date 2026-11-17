@@ -206,9 +206,11 @@ drain is the only code that sends writes** (a transactional outbox, #1284).
   taking the server's state (§8.4). *Transient* failures are invisible beyond
   the ambient "syncing" state.
 - So a write checks locally what it can before queueing: a list conversion
-  over the item caps throws `NoteConversionCapError` and writes nothing, and the
-  profile form validates the username (`getUsernameValidationError`) before the
-  save is queued.
+  over the item caps throws `NoteConversionCapError` and writes nothing, a label
+  rename to a name another label has is refused, creating a label by a name
+  the device already knows returns that label (as the server's get-or-create
+  does), and the profile form validates the username
+  (`getUsernameValidationError`) before the save is queued.
 - Settings and profile changes live in the in-memory session, not SQLite: the
   caller applies them there and queues the `PATCH /users/me` with
   `enqueueSettingsUpdate`.
@@ -570,8 +572,11 @@ note's content:
 
 The silent rows are `SERVER_STATE_ON_REJECTION_OPERATIONS` and
 `acceptsServerStateOnRejection` in `src/db/syncQueue.ts`; the best-effort ones
-`BEST_EFFORT_OPERATIONS`. A 404/410 of a destructive op and a 409 replay of a
-create stay idempotent successes ahead of this split (§8).
+`BEST_EFFORT_OPERATIONS`. A 404/410 of a destructive op and a 409 replay of an
+op that names what it creates (`create`, `duplicate`, `createItem`, `share`;
+`CONFLICT_IDEMPOTENT_OPERATIONS`) stay idempotent successes ahead of this split
+(§8). Every other 409 is a real rejection: a version conflict, or a username
+already taken.
 
 ### 8.5 Merging queued ops
 

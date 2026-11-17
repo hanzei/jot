@@ -301,6 +301,20 @@ function acceptsServerStateOnRejection(operation: QueueOperation, body: Record<s
 }
 
 /**
+ * Operations whose 409 on replay means "already applied": the request names
+ * the id it creates (or the share it adds), so a replay of one the server
+ * already committed conflicts with itself. Any other op's 409 is a real
+ * rejection: a version conflict, or a username already taken. `createLabel` is
+ * resolved by name instead (see drainQueue).
+ */
+const CONFLICT_IDEMPOTENT_OPERATIONS: ReadonlySet<QueueOperation> = new Set([
+  'create',
+  'duplicate',
+  'createItem',
+  'share',
+]);
+
+/**
  * Operations for which a "target is gone" replay status (404/410) is an
  * idempotent success rather than a failure to preserve. These are destructive /
  * state-transition ops whose desired end-state (the note/item/share/label is
@@ -1237,15 +1251,15 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         discardedOperations.push({ operation: entry.operation, endpoint, status });
         if (entry.operation === 'updateSettings') syncedSettings = true;
 
-        // A 409 from a create/duplicate replay is an idempotent already-applied
+        // A 409 from a create-like replay is an idempotent already-applied
         // conflict (the original request already committed): the local state is
-        // correct, so resolve it silently. A 409 from an `update` or
-        // `convertNoteType` is an optimistic-concurrency conflict — the note
-        // changed on another device since the edit's base_version (#489) — so it
-        // is real potential data loss and must be dead-lettered like any other
-        // permanent failure, so the edit is preserved and surfaced ("changed on
-        // another device") via the failed-changes banner instead of being
-        // silently dropped. Every other permanent status also dead-letters (#492).
+        // correct, so resolve it silently (see CONFLICT_IDEMPOTENT_OPERATIONS).
+        // Any other 409 is a real rejection: an `update` or `convertNoteType`
+        // conflict means the note changed on another device since the edit's
+        // base_version (#489), and an `updateSettings` one that the username is
+        // taken. Those go through the same split as any other permanent status
+        // (#492, #1285), so a content edit is preserved and surfaced via the
+        // failed-changes banner instead of being silently dropped.
         //
         // createLabel 409s require special handling: the conflict response body
         // doesn't include the canonical label ID, so we resolve it via GET /labels.
@@ -1273,10 +1287,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // rather than dead-lettering (see GONE_IDEMPOTENT_OPERATIONS).
         const targetGone = status === 404 || status === 410;
         let idempotentConflict =
-          (status === 409
-            && entry.operation !== 'update'
-            && entry.operation !== 'convertNoteType'
-            && entry.operation !== 'createLabel') ||
+          (status === 409 && CONFLICT_IDEMPOTENT_OPERATIONS.has(entry.operation)) ||
           BEST_EFFORT_OPERATIONS.has(entry.operation) ||
           (targetGone && GONE_IDEMPOTENT_OPERATIONS.has(entry.operation));
         if (status === 409 && entry.operation === 'createLabel') {

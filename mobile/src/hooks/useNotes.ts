@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
-import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
+import { useSQLiteContext } from 'expo-sqlite';
 import { useOfflineNote } from './useOfflineNotes';
 import { apiPaths, DEFAULT_NOTE_COLOR, generateId, textToListNote, listToText, checkConvertToListCaps, applyCompletedValues, completedCascadeScope, patchTouchesSharedContent } from '@jot/shared';
 import type {
@@ -26,6 +26,7 @@ import {
   saveNotes,
   saveNoteInTx,
   getLocalNote,
+  requireLocalNote,
   markLocalNoteDeleted,
   markLocalNoteRestored,
   clearLocalNoteUnread,
@@ -74,13 +75,6 @@ function applyToggleToItems(items: NoteItem[], itemId: string, completed: boolea
 function invalidateNoteReads(queryClient: QueryClient, noteId: string): void {
   queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
   queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-}
-
-/** Reads a note inside an outbox write's transaction, failing the write when it is not stored locally. */
-async function requireLocalNote(db: SQLiteDatabase, id: string): Promise<Note> {
-  const note = await getLocalNote(db, id);
-  if (!note) throw new Error(`Note ${id} not found in local DB`);
-  return note;
 }
 
 /**
@@ -330,10 +324,7 @@ export function useUpdateNote() {
       // and the drain sends it. A rejection surfaces later as a failed change.
       return enqueueWrite(db, {
         localApply: async () => {
-          const existing = await getLocalNote(db, id);
-          if (!existing) {
-            throw new Error(`Note ${id} not found in local DB`);
-          }
+          const existing = await requireLocalNote(db, id);
           await updateLocalNote(db, id, data);
           // The version the edit was made against: the one the editor's text is
           // based on (`baseVersion`), since the row may already hold a

@@ -470,6 +470,13 @@ export async function getLocalShareHistory(db: SQLiteDatabase): Promise<ShareHis
   });
 }
 
+/** {@link getLocalNote}, failing when the note is not stored locally: an outbox write has nothing to apply to. */
+export async function requireLocalNote(db: SQLiteDatabase, id: string): Promise<Note> {
+  const note = await getLocalNote(db, id);
+  if (!note) throw new Error(`Note ${id} not found in local DB`);
+  return note;
+}
+
 export async function getLocalNote(db: SQLiteDatabase, id: string): Promise<Note | null> {
   const row = await db.getFirstAsync<NoteRow>('SELECT * FROM notes WHERE id = ?', [id]);
   if (!row) return null;

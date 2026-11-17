@@ -132,6 +132,16 @@ describe('useLabels write hooks (outbox)', () => {
       }]);
     });
 
+    it('returns the label a name already belongs to and queues nothing, as the server get-or-creates', async () => {
+      const create = await mountMutation(() => useCreateLabel());
+
+      const label = await create({ name: work.name.toUpperCase() });
+
+      expect(label).toEqual(work);
+      expect(await storedLabels()).toEqual([work]);
+      expect(await queuedOps(db)).toEqual([]);
+    });
+
     it('rejects a whitespace-only name and writes nothing', async () => {
       const create = await mountMutation(() => useCreateLabel());
 
@@ -200,7 +210,7 @@ describe('useLabels write hooks (outbox)', () => {
     it('rolls back the minted label when the note is not stored locally', async () => {
       const add = await mountMutation(() => useAddLabelToNote());
 
-      await expect(add({ noteId: 'MissingNote00000000000', name: 'Errands' })).rejects.toThrow(/not found in local cache/);
+      await expect(add({ noteId: 'MissingNote00000000000', name: 'Errands' })).rejects.toThrow(/not found in local DB/);
 
       expect(await storedLabels()).toEqual([work]);
       expect(await queuedOps(db)).toEqual([]);
@@ -252,6 +262,26 @@ describe('useLabels write hooks (outbox)', () => {
         keys: [`label:${work.id}`],
         readKeys: [],
       }]);
+    });
+
+    it('rejects a name another label has and writes nothing, since the server would reject it later', async () => {
+      const create = await mountMutation(() => useCreateLabel());
+      const rename = await mountMutation(() => useRenameLabel());
+      const errands = await create({ name: 'Errands' });
+      const before = await queuedOps(db);
+
+      await expect(rename({ labelId: errands.id, name: ` ${work.name.toLowerCase()} ` })).rejects.toThrow('A label with this name already exists');
+
+      expect((await storedLabels()).map((l) => l.name)).toEqual(['Errands', 'Work']);
+      expect(await queuedOps(db)).toEqual(before);
+    });
+
+    it('allows a rename that only changes the case of its own name', async () => {
+      const rename = await mountMutation(() => useRenameLabel());
+
+      await rename({ labelId: work.id, name: work.name.toUpperCase() });
+
+      expect((await storedLabels()).map((l) => l.name)).toEqual([work.name.toUpperCase()]);
     });
 
     it('queues the rename of a label created here behind its create (#546)', async () => {

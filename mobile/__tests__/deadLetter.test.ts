@@ -531,6 +531,11 @@ describe('drainQueue dead-letter persistence', () => {
 // ── drainQueue: which rejections are failed changes (#1285, spec §8.4) ──────
 
 describe('drainQueue rejection policy', () => {
+  /** Rejects the next request of the entry's method only, so no unused rejection leaks into a later test. */
+  const rejectNext = (method: string, err: unknown): void => {
+    const fn = method === 'POST' ? mockApi.post : method === 'PATCH' ? mockApi.patch : mockApi.delete;
+    fn.mockRejectedValueOnce(err);
+  };
   type Seed = Parameters<typeof seedQueueEntry>[1];
   const n1 = (op: Omit<Seed, 'keys'>): Seed => ({ ...op, keys: ['note:n1'] });
 
@@ -554,10 +559,7 @@ describe('drainQueue rejection policy', () => {
   ])('takes the server\'s state for a rejected op: %s', async (_name, entry) => {
     await saveNote(db, buildTextNote({ id: 'n1', content: 'local' }));
     await seedQueueEntry(db, entry);
-    const rejection = makeAxiosError(400);
-    mockApi.post.mockRejectedValueOnce(rejection);
-    mockApi.patch.mockRejectedValueOnce(rejection);
-    mockApi.delete.mockRejectedValueOnce(rejection);
+    rejectNext(entry.method, makeAxiosError(400));
     mockApi.get.mockResolvedValue({ data: buildTextNote({ id: 'n1', content: 'server' }) });
 
     const { discardedOperations } = await drainQueue(db);
@@ -593,9 +595,7 @@ describe('drainQueue rejection policy', () => {
   ])('dead-letters a rejected op: %s', async (_name, entry) => {
     await saveNote(db, buildTextNote({ id: 'n1' }));
     await seedQueueEntry(db, entry);
-    const rejection = makeAxiosError(400);
-    mockApi.post.mockRejectedValueOnce(rejection);
-    mockApi.patch.mockRejectedValueOnce(rejection);
+    rejectNext(entry.method, makeAxiosError(400));
 
     await drainQueue(db);
 
@@ -603,11 +603,29 @@ describe('drainQueue rejection policy', () => {
     expect(await remainingQueueIds(db)).toEqual([]);
   });
 
-  it('has the settings re-read after a rejected settings change', async () => {
+  it('dead-letters a taken username (409) and has the settings re-read', async () => {
+    // Only a create-like op's 409 means "already applied"; a profile change's
+    // is a real rejection the user has to see (#1285).
     await seedQueueEntry(db, { operation: 'updateSettings', endpoint: '/users/me', method: 'PATCH', body: { username: 'x' }, keys: ['settings'] });
     mockApi.patch.mockRejectedValueOnce(makeAxiosError(409));
 
     expect((await drainQueue(db)).syncedSettings).toBe(true);
+    expect(await deadLetters()).toEqual([expect.objectContaining({ operation: 'updateSettings', status: 409 })]);
+  });
+
+  it.each<[string, Seed]>([
+    ['create', { operation: 'create', endpoint: '/notes', method: 'POST', body: { id: 'n1', note_type: 'text', content: 'x' }, keys: ['note:n1'] }],
+    ['createItem', n1({ operation: 'createItem', endpoint: '/notes/n1/items', method: 'POST', body: { id: 'i1', text: 'x', position: 0 } })],
+    ['share', n1({ operation: 'share', endpoint: '/notes/n1/shares', method: 'POST', body: { user_id: 'u2' } })],
+  ])('treats a 409 replay of %s as already applied', async (_name, entry) => {
+    await saveNote(db, buildTextNote({ id: 'n1' }));
+    await seedQueueEntry(db, entry);
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(409));
+
+    await drainQueue(db);
+
+    expect(await deadLetters()).toEqual([]);
+    expect(await remainingQueueIds(db)).toEqual([]);
   });
 });
 
