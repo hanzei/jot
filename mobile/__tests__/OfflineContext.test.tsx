@@ -1045,6 +1045,42 @@ describe('OfflineProvider queue draining', () => {
       expect(mockRevalidate).toHaveBeenCalledTimes(1);
     });
 
+    it('schedules no retry for a reconnect whose check was pending across a server switch', async () => {
+      let answer: (value: boolean) => void = () => {};
+      mockRevalidate.mockImplementationOnce(() => Promise.resolve(true)).mockImplementationOnce(() => new Promise<boolean>((resolve) => {
+        answer = resolve;
+      }));
+      await renderProvider();
+      await flush();
+      await act(async () => {
+        getNetInfoListener<NetState>()({ isConnected: false, isInternetReachable: false });
+      });
+      await act(async () => {
+        getNetInfoListener<NetState>()({ isConnected: true, isInternetReachable: null });
+      });
+
+      // A switch starts and aborts while the session check is pending; the
+      // check then comes back unanswered.
+      await act(() => {
+        beginServerSwitchLifecycle();
+      });
+      await act(() => {
+        abortServerSwitchLifecycle();
+      });
+      await act(async () => {
+        serverReachability.markServerUnreachable();
+        answer(true);
+      });
+      await flush();
+      mockRevalidate.mockClear();
+
+      await act(async () => {
+        jest.advanceTimersByTime(120000);
+      });
+      await flush();
+      expect(mockRevalidate).not.toHaveBeenCalled();
+    });
+
     it('schedules no retry for a reconnect that finishes after unmount', async () => {
       let answer: (value: boolean) => void = () => {};
       mockRevalidate.mockImplementationOnce(() => Promise.resolve(true)).mockImplementationOnce(() => new Promise<boolean>((resolve) => {
