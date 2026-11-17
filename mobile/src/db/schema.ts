@@ -66,7 +66,13 @@ const migration1 = async (db: SQLiteDatabase): Promise<void> => {
       processing_errors INTEGER NOT NULL DEFAULT 0,
       -- 1 once the drain has sent the entry: the server may hold it even if
       -- no response came back, so nothing is folded into it (#1268).
-      send_attempted INTEGER NOT NULL DEFAULT 0
+      send_attempted INTEGER NOT NULL DEFAULT 0,
+      -- Device-clock epoch ms before which the drain does not resend the entry
+      -- after an entry-specific failure; NULL when it may be sent now (#1301).
+      next_attempt_at INTEGER,
+      -- Device-clock epoch ms of the first failure in the entry's current run
+      -- of failures: what the give-up rule and the sync-error banner read (#1301).
+      first_failed_at INTEGER
     );
 
     -- Dead-lettered sync operations: writes the server permanently rejected
@@ -519,7 +525,15 @@ const migration17 = async (db: SQLiteDatabase): Promise<void> => {
   await db.runAsync('UPDATE sync_queue SET send_attempted = 1');
 };
 
-export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13, migration14, migration15, migration16, migration17];
+// Migration 18 (#1301): a queued write that keeps failing waits out its own
+// retry delay, and is given up on after failing for long enough. Existing rows
+// start with no wait and no failure run: their next failure starts one.
+const migration18 = async (db: SQLiteDatabase): Promise<void> => {
+  await addColumnIfMissing(db, 'sync_queue', 'next_attempt_at', 'next_attempt_at INTEGER');
+  await addColumnIfMissing(db, 'sync_queue', 'first_failed_at', 'first_failed_at INTEGER');
+};
+
+export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13, migration14, migration15, migration16, migration17, migration18];
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   // Run PRAGMAs separately: sqlite3_exec (used by execAsync) stops on the

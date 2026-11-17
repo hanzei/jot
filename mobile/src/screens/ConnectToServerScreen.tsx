@@ -43,6 +43,11 @@ import FadeInView from '../components/FadeInView';
 
 const DRAIN_BACKOFF_BASE_MS = 1000;
 const DRAIN_BACKOFF_MAX_MS = 60000;
+/**
+ * Drain passes before the upgrade gives up. More than GIVE_UP_AFTER_ATTEMPTS,
+ * so a seeded write the server keeps failing is dead-lettered and reaches the
+ * deadLetter step rather than a generic failure (#1301).
+ */
 const MAX_DRAIN_RETRIES = 6;
 
 type Step =

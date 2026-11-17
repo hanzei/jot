@@ -10,7 +10,7 @@ import { AppState, Text } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import NetInfo from '@react-native-community/netinfo';
 import { OfflineProvider, useOfflineContext } from '../src/store/OfflineContext';
-import { drainQueue, getPendingCount } from '../src/db/syncQueue';
+import { clearQueuedWriteWaits, drainQueue, getOldestFailingSince, getPendingCount, type DrainResult } from '../src/db/syncQueue';
 import { setLocalModeActive } from '../src/store/localMode';
 import * as serverReachability from '../src/api/serverReachability';
 import { silenceConsole } from './helpers/consoleGuard';
@@ -20,9 +20,14 @@ import { subscribeToReconnectResync } from '../src/store/resyncEvents';
 let enqueueListener: (() => void) | null = null;
 
 jest.mock('../src/db/syncQueue', () => ({
-  drainQueue: jest.fn().mockResolvedValue({ syncedNotes: [], discardedOperations: [], syncedSettings: false, leftBehind: 0 }),
+  drainQueue: jest.fn().mockResolvedValue({
+    syncedNotes: [], discardedOperations: [], syncedSettings: false, leftBehind: 0,
+    stoppedOnConnectivity: false, stoppedOnFailures: false, nextAttemptAt: null,
+  }),
   getPendingCount: jest.fn().mockResolvedValue(0),
   getDeadLetterCount: jest.fn().mockResolvedValue(0),
+  getOldestFailingSince: jest.fn().mockResolvedValue(null),
+  clearQueuedWriteWaits: jest.fn().mockResolvedValue(undefined),
   subscribeToEnqueue: jest.fn((listener: () => void) => {
     enqueueListener = listener;
     return () => {
@@ -40,6 +45,24 @@ jest.mock('../src/store/AuthContext', () => ({
 // real module — its default state already reports isSyncDrainPaused() === false.
 
 const mockDrainQueue = drainQueue as jest.MockedFunction<typeof drainQueue>;
+
+/** A drain pass's result: one that sends everything, unless overridden. */
+function drainResult(overrides: Partial<DrainResult> = {}): DrainResult {
+  return {
+    syncedNotes: [], discardedOperations: [], syncedSettings: false, leftBehind: 0,
+    stoppedOnConnectivity: false, stoppedOnFailures: false, nextAttemptAt: null,
+    ...overrides,
+  };
+}
+
+/**
+ * A pass that leaves behind what the pending count reports, as before #1284;
+ * leaving anything behind models a connectivity stop.
+ */
+async function pendingCountDrain(overrides: Partial<DrainResult> = {}): Promise<DrainResult> {
+  const leftBehind = await mockGetPendingCount(globalThis.testDb);
+  return drainResult({ leftBehind, stoppedOnConnectivity: leftBehind > 0, ...overrides });
+}
 const mockGetPendingCount = getPendingCount as jest.MockedFunction<typeof getPendingCount>;
 
 // Captures the latest syncError value exposed through the context.
@@ -99,7 +122,7 @@ describe('OfflineProvider queue draining', () => {
     lastIsConnected = true;
     mockRevalidate.mockResolvedValue(true);
     // What a pass leaves behind is what the pending count reports, as before #1284.
-    mockDrainQueue.mockImplementation(async () => ({ syncedNotes: [], discardedOperations: [], syncedSettings: false, leftBehind: await mockGetPendingCount(globalThis.testDb) }));
+    mockDrainQueue.mockImplementation(() => pendingCountDrain());
     mockGetPendingCount.mockResolvedValue(0);
     jest.spyOn(AppState, 'addEventListener');
     // The provider logs each stalled drain, the give-up and the recovery; the
@@ -175,7 +198,7 @@ describe('OfflineProvider queue draining', () => {
   it('revalidates the session after a settings drain even with an unrelated image upload backlog', async () => {
     // Only image uploads are left in the queue — that backlog must not hold the
     // settings revalidation hostage; it has nothing to do with the settings write.
-    mockDrainQueue.mockResolvedValue({ syncedNotes: [], discardedOperations: [], syncedSettings: true, leftBehind: 2 });
+    mockDrainQueue.mockResolvedValue(drainResult({ syncedSettings: true, leftBehind: 2 }));
     mockGetPendingCount.mockImplementation(async (_db, options) => (options?.excludeUploads ? 0 : 2));
     await renderProvider();
     await flush();
@@ -194,7 +217,7 @@ describe('OfflineProvider queue draining', () => {
 
   it('does not revalidate the session after a settings drain while the note queue itself is still pending', async () => {
     // What a pass leaves behind is what the pending count reports, as before #1284.
-    mockDrainQueue.mockImplementation(async () => ({ syncedNotes: [], discardedOperations: [], syncedSettings: true, leftBehind: await mockGetPendingCount(globalThis.testDb) }));
+    mockDrainQueue.mockImplementation(() => pendingCountDrain({ syncedSettings: true }));
     mockGetPendingCount.mockResolvedValue(1);
     await renderProvider();
     await flush();
@@ -231,7 +254,7 @@ describe('OfflineProvider queue draining', () => {
     mockDrainQueue.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
-          resolveFirst = () => resolve({ syncedNotes: [], discardedOperations: [], syncedSettings: false, leftBehind: 0 });
+          resolveFirst = () => resolve(drainResult());
         }),
     );
 
@@ -511,7 +534,7 @@ describe('OfflineProvider queue draining', () => {
 
     // A slow drain is in flight and a write queued during it requests a rerun.
     mockDrainQueue.mockImplementationOnce(() => new Promise((resolve) => {
-      setTimeout(() => resolve({ syncedNotes: [], discardedOperations: [], syncedSettings: false, leftBehind: 0 }), 5000);
+      setTimeout(() => resolve(drainResult()), 5000);
     }));
     await act(() => {
       enqueueListener?.();
@@ -600,7 +623,7 @@ describe('OfflineProvider queue draining', () => {
     const drainsAfterMount = mockDrainQueue.mock.calls.length;
 
     mockDrainQueue.mockImplementationOnce(() => new Promise((resolve) => {
-      setTimeout(() => resolve({ syncedNotes: [], discardedOperations: [], syncedSettings: false, leftBehind: 0 }), 5000);
+      setTimeout(() => resolve(drainResult()), 5000);
     }));
     await act(() => {
       enqueueListener?.();
@@ -634,12 +657,119 @@ describe('OfflineProvider queue draining', () => {
     // An autosave lands while the pass runs: it is still queued afterwards, but
     // the pass left nothing behind of what it loaded (#1284).
     mockGetPendingCount.mockResolvedValue(1);
-    mockDrainQueue.mockResolvedValue({ syncedNotes: [], discardedOperations: [], syncedSettings: false, leftBehind: 0 });
+    mockDrainQueue.mockResolvedValue(drainResult());
     await renderProvider();
     await flush();
 
     expect(lastConsecutiveFailureCount).toBe(0);
     expect(lastSyncError).toBe(false);
+  });
+
+  describe('a write that keeps failing over HTTP (#1301)', () => {
+    const mockOldestFailingSince = getOldestFailingSince as jest.MockedFunction<typeof getOldestFailingSince>;
+
+    beforeEach(() => {
+      mockOldestFailingSince.mockResolvedValue(null);
+    });
+
+    async function advance(ms: number) {
+      await act(async () => {
+        jest.advanceTimersByTime(ms);
+      });
+      await flush();
+    }
+
+    it('keeps retrying other ops, scheduling each pass for the earliest due op, without pausing or a banner', async () => {
+      // Every pass leaves a failing op waiting 60 s; the rest of the queue syncs.
+      mockDrainQueue.mockImplementation(async () =>
+        drainResult({ leftBehind: 1, nextAttemptAt: Date.now() + 60000 }));
+      await renderProvider();
+      await flush();
+      expect(mockDrainQueue).toHaveBeenCalledTimes(1);
+
+      // Not before the op is due...
+      await advance(59999);
+      expect(mockDrainQueue).toHaveBeenCalledTimes(1);
+      // ...but as soon as it is, and on and on past the old cap of 6 passes.
+      await advance(1);
+      expect(mockDrainQueue).toHaveBeenCalledTimes(2);
+      for (let i = 0; i < 10; i++) await advance(60000);
+      expect(mockDrainQueue).toHaveBeenCalledTimes(12);
+      expect(lastConsecutiveFailureCount).toBe(0);
+      expect(lastSyncError).toBe(false);
+    });
+
+    it('shows the sync-error banner only once a write has been failing for more than 5 minutes', async () => {
+      const failingSince = Date.now();
+      mockOldestFailingSince.mockImplementation(async () => failingSince);
+      mockDrainQueue.mockImplementation(async () =>
+        drainResult({ leftBehind: 1, nextAttemptAt: Date.now() + 60000 }));
+      await renderProvider();
+      await flush();
+
+      for (let i = 0; i < 5; i++) await advance(60000);
+      expect(lastSyncError).toBe(false);
+
+      await advance(60000);
+      expect(lastSyncError).toBe(true);
+
+      // It clears once the write gets through.
+      mockOldestFailingSince.mockResolvedValue(null);
+      mockDrainQueue.mockImplementation(async () => drainResult());
+      await advance(60000);
+      expect(lastSyncError).toBe(false);
+    });
+
+    it('backs off whole passes that stop on failed sends, without a cap', async () => {
+      mockDrainQueue.mockImplementation(async () =>
+        drainResult({ leftBehind: 10, stoppedOnFailures: true, nextAttemptAt: Date.now() + 1000 }));
+      await renderProvider();
+      await flush();
+      expect(mockDrainQueue).toHaveBeenCalledTimes(1);
+
+      // 1 s, then 2 s, then 4 s: not a pass per second.
+      await advance(1000);
+      expect(mockDrainQueue).toHaveBeenCalledTimes(2);
+      await advance(1999);
+      expect(mockDrainQueue).toHaveBeenCalledTimes(2);
+      await advance(1);
+      expect(mockDrainQueue).toHaveBeenCalledTimes(3);
+      await advance(3999);
+      expect(mockDrainQueue).toHaveBeenCalledTimes(3);
+      await advance(1);
+      expect(mockDrainQueue).toHaveBeenCalledTimes(4);
+      expect(lastSyncError).toBe(false);
+    });
+
+    it('brings a waiting pass forward for a new write', async () => {
+      mockDrainQueue.mockImplementationOnce(async () =>
+        drainResult({ leftBehind: 1, nextAttemptAt: Date.now() + 60000 }));
+      await renderProvider();
+      await flush();
+      expect(mockDrainQueue).toHaveBeenCalledTimes(1);
+
+      await act(() => {
+        enqueueListener?.();
+      });
+      await advance(300);
+
+      expect(mockDrainQueue).toHaveBeenCalledTimes(2);
+    });
+
+    it('clears every wait on reconnect or foreground before draining', async () => {
+      await renderProvider();
+      await flush();
+      (clearQueuedWriteWaits as jest.Mock).mockClear();
+
+      await act(async () => {
+        getAppStateHandler()('active');
+      });
+      await flush();
+
+      expect(clearQueuedWriteWaits).toHaveBeenCalledTimes(1);
+      expect((clearQueuedWriteWaits as jest.Mock).mock.invocationCallOrder[0])
+        .toBeLessThan(mockDrainQueue.mock.invocationCallOrder.at(-1)!);
+    });
   });
 
   it('leaves a scheduled backoff retry alone when a write is enqueued during it', async () => {

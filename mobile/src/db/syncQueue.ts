@@ -82,18 +82,53 @@ interface QueueEntry {
   attempts?: number;
   /** How many of `attempts` were non-HTTP processing errors: capped by {@link MAX_ENTRY_DRAIN_ATTEMPTS} (#1283). */
   processing_errors?: number;
+  /** Device-clock epoch ms before which the drain does not resend the entry (#1301). */
+  next_attempt_at?: number | null;
+  /** Device-clock epoch ms of the first failure in the entry's current run of failures (#1301). */
+  first_failed_at?: number | null;
 }
 
 /**
  * How many times processing a queue entry may throw a non-HTTP error (a
  * corrupted body, a local DB error) before it is dead-lettered (issue #714).
  * Such an error happens on the device, so retrying it later is unlikely to
- * help. An HTTP failure is not capped (#1283): the server never rejected the
- * op, so it stays queued and only the ops that share a key with it wait (see
- * {@link drainQueue}). A best-effort op (markViewed, removeImage) is dropped
- * at the cap whatever failed, so it never holds back its note's edits.
+ * help. An HTTP failure is given up on only under {@link GIVE_UP_AFTER_ATTEMPTS}
+ * and {@link GIVE_UP_AFTER_MS} (#1301): a server outage must not turn queued
+ * changes into failed ones (#1283). A best-effort op (markViewed, removeImage)
+ * is dropped at the cap whatever failed, so it never holds back its note's edits.
  */
 export const MAX_ENTRY_DRAIN_ATTEMPTS = 5;
+
+/**
+ * Wait before resending an entry after its first entry-specific failure; it
+ * doubles with each further failure, up to {@link RETRY_WAIT_MAX_MS} (#1301,
+ * Sync Loop Safety). A pass skips an entry still waiting.
+ */
+export const RETRY_WAIT_BASE_MS = 1000;
+export const RETRY_WAIT_MAX_MS = 60000;
+
+/**
+ * A pass stops after this many failed sends in a row with no success between
+ * them, whatever each entry's history (#1301): a server that fails every write
+ * costs at most this many requests per pass.
+ */
+export const MAX_CONSECUTIVE_SEND_FAILURES = 3;
+
+/**
+ * An entry that keeps failing over HTTP is dead-lettered once it has failed at
+ * least {@link GIVE_UP_AFTER_ATTEMPTS} times *and* for at least
+ * {@link GIVE_UP_AFTER_MS} without a break (#1301). Time alone would give up on
+ * a write that failed once before the app sat closed for days; attempts alone
+ * would turn a short outage into failed changes (#1283). The local→server
+ * upgrade, where the user waits on the screen, uses the attempts alone.
+ */
+export const GIVE_UP_AFTER_ATTEMPTS = 5;
+export const GIVE_UP_AFTER_MS = 24 * 60 * 60 * 1000;
+
+/** How long an entry waits after its `attempts`-th failure (#1301). */
+export function retryWaitMs(attempts: number): number {
+  return Math.min(RETRY_WAIT_BASE_MS * 2 ** Math.max(attempts - 1, 0), RETRY_WAIT_MAX_MS);
+}
 
 /** dead_letter.status sentinel for a non-HTTP local processing error (issue #714). */
 export const PROCESSING_ERROR_STATUS = 0;
@@ -568,25 +603,53 @@ async function claimQueueEntry(db: SQLiteDatabase, entryId: number): Promise<Cla
 }
 
 /**
- * Charge an entry's failed drain attempt to its counters (issue #714) and say
- * whether it has reached the cap. `attempts` counts every entry-specific
- * failure, for diagnostics and backoff; only a non-HTTP processing error is
- * capped, on its own count, since `attempts` keeps growing through a server
- * outage (#1283).
+ * Charge an entry's failed drain attempt to its counters (issue #714), start
+ * its wait before the next send and, on its first failure, its failure run
+ * (#1301). `capped` says whether a non-HTTP processing error has reached
+ * {@link MAX_ENTRY_DRAIN_ATTEMPTS} on its own count; whether an HTTP failure is
+ * given up on is the caller's call, from `attempts` and `firstFailedAt`.
  */
 async function chargeEntryFailure(
   db: SQLiteDatabase,
-  entry: { id: number; attempts?: number; processing_errors?: number },
+  entry: QueueEntry,
   err: unknown,
-): Promise<{ attempts: number; processingErrors: number; capped: boolean }> {
+  now: number,
+): Promise<{ attempts: number; processingErrors: number; capped: boolean; nextAttemptAt: number; firstFailedAt: number }> {
   const attempts = (entry.attempts ?? 0) + 1;
   const processingError = !axios.isAxiosError(err);
   const processingErrors = (entry.processing_errors ?? 0) + (processingError ? 1 : 0);
+  const nextAttemptAt = now + retryWaitMs(attempts);
+  const firstFailedAt = entry.first_failed_at ?? now;
   await db.runAsync(
-    'UPDATE sync_queue SET attempts = ?, processing_errors = ? WHERE id = ?',
-    [attempts, processingErrors, entry.id],
+    'UPDATE sync_queue SET attempts = ?, processing_errors = ?, next_attempt_at = ?, first_failed_at = ? WHERE id = ?',
+    [attempts, processingErrors, nextAttemptAt, firstFailedAt, entry.id],
   );
-  return { attempts, processingErrors, capped: processingError && processingErrors >= MAX_ENTRY_DRAIN_ATTEMPTS };
+  return {
+    attempts,
+    processingErrors,
+    capped: processingError && processingErrors >= MAX_ENTRY_DRAIN_ATTEMPTS,
+    nextAttemptAt,
+    firstFailedAt,
+  };
+}
+
+/**
+ * Let every queued entry be sent on the next pass, whatever its wait (#1301).
+ * A reconnect or foreground calls this, so the queue recovers at once after an
+ * outage rather than when the longest wait runs out. Failure runs are kept.
+ */
+export async function clearQueuedWriteWaits(db: SQLiteDatabase): Promise<void> {
+  await db.runAsync('UPDATE sync_queue SET next_attempt_at = NULL WHERE next_attempt_at IS NOT NULL');
+}
+
+/**
+ * Device-clock epoch ms since which the longest-failing queued entry has been
+ * failing, or null when no entry is in a failure run (#1301). Drives the
+ * sync-error banner.
+ */
+export async function getOldestFailingSince(db: SQLiteDatabase): Promise<number | null> {
+  const row = await db.getFirstAsync<{ since: number | null }>('SELECT MIN(first_failed_at) AS since FROM sync_queue');
+  return row?.since ?? null;
 }
 
 /**
@@ -899,9 +962,9 @@ export interface DiscardedOperation {
   /**
    * The status that caused the discard: a permanent (non-transient 4xx) HTTP
    * status, or PROCESSING_ERROR_STATUS (0) for a non-HTTP local processing
-   * error that recurred MAX_ENTRY_DRAIN_ATTEMPTS times (issue #714). Dead
-   * letters written before #1283 may also hold a 5xx, or 0 for a client
-   * timeout, from when transient HTTP failures were capped too.
+   * error that recurred MAX_ENTRY_DRAIN_ATTEMPTS times (issue #714). A write
+   * given up on after failing over HTTP for too long (#1301) holds its last
+   * status: a 5xx, or 0 for a client timeout.
    */
   status: number;
 }
@@ -922,11 +985,39 @@ export interface DrainResult {
    */
   syncedSettings: boolean;
   /**
-   * Entries this pass loaded that are still queued: held back, failed
-   * transiently, or not reached after a connectivity stop. Rows queued while
-   * the pass ran are not counted; they are new work, not a stall (#1284).
+   * Entries this pass loaded that are still queued: waiting, held back, failed
+   * transiently, or not reached after a stop. Rows queued while the pass ran
+   * are not counted; they are new work (#1284).
    */
   leftBehind: number;
+  /**
+   * The pass stopped on a connectivity failure, which charges no entry: the
+   * server is down or unreachable, or wants re-auth or less traffic. The
+   * caller backs off the whole queue.
+   */
+  stoppedOnConnectivity: boolean;
+  /**
+   * The pass stopped after {@link MAX_CONSECUTIVE_SEND_FAILURES} failed sends
+   * in a row (#1301): entries behind them were not reached.
+   */
+  stoppedOnFailures: boolean;
+  /**
+   * Device-clock epoch ms at which the earliest entry this pass waited on or
+   * charged may be sent again, or null when none is waiting (#1301). Entries
+   * held back behind another are left out: they wait for it, not for a time.
+   */
+  nextAttemptAt: number | null;
+}
+
+/** How a drain pass runs. */
+export interface DrainOptions {
+  /**
+   * The local→server upgrade's drain (#1301): every entry is sent whatever its
+   * wait, since the upgrade screen paces its own passes, and a write that keeps
+   * failing over HTTP is given up on after {@link GIVE_UP_AFTER_ATTEMPTS}
+   * failures with no time condition, since the user is waiting on that screen.
+   */
+  upgrade?: boolean;
 }
 
 /** A dead-lettered op as stored in the `dead_letter` table (see issue #492). */
@@ -1038,12 +1129,18 @@ async function recordDeadLetter(
  *     *blocked set*, and the pass goes on (#1283). A later op that shares a key
  *     with the blocked set is skipped without being sent, and its own keys join
  *     the set too, so a chain of dependent ops stays in order while unrelated
- *     notes drain. The entry is retried on later passes, under OfflineContext's
- *     backoff and its cap on passes that leave work behind. Only a non-HTTP
- *     processing error is dead-lettered, once it has recurred
- *     MAX_ENTRY_DRAIN_ATTEMPTS times: the server never rejected an op that
- *     failed over HTTP, so a long outage no longer turns queued changes into
- *     failed ones.
+ *     notes drain. The entry then waits its own retry delay
+ *     ({@link retryWaitMs}, #1301): a pass skips it until it is due, holding
+ *     back its dependents the same way, and OfflineContext schedules the next
+ *     pass for the earliest entry due ({@link DrainResult.nextAttemptAt}). A
+ *     non-HTTP processing error is dead-lettered once it has recurred
+ *     MAX_ENTRY_DRAIN_ATTEMPTS times; an HTTP failure only once it has gone on
+ *     for {@link GIVE_UP_AFTER_MS} over at least {@link GIVE_UP_AFTER_ATTEMPTS}
+ *     attempts, so an outage does not turn queued changes into failed ones.
+ *
+ * A pass stops after {@link MAX_CONSECUTIVE_SEND_FAILURES} failed sends in a
+ * row, so a server that fails every write costs a bounded number of requests
+ * per pass (#1301).
  *
  * An `uploadImage` row is sent as multipart rather than JSON, and waits while
  * its note is not confirmed on the server. A permanent rejection flags it for
@@ -1059,7 +1156,7 @@ async function recordDeadLetter(
  * Returns the canonical notes of the creates that succeeded, so callers can
  * update their caches.
  */
-export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
+export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {}): Promise<DrainResult> {
   // Only the ids: each row and its keys are read when the pass reaches it (see
   // claimQueueEntry), since a merge at enqueue or a label-id rewrite may have
   // changed them since this load.
@@ -1088,6 +1185,13 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
   // Set when the drain stops on a connectivity failure: the post-drain pull
   // would only time out against the same unreachable server.
   let stoppedOnConnectivity = false;
+  // Failed sends since the last one that got through (#1301).
+  let consecutiveSendFailures = 0;
+  let stoppedOnFailures = false;
+  let nextAttemptAt: number | null = null;
+  const noteWait = (at: number): void => {
+    nextAttemptAt = nextAttemptAt === null ? at : Math.min(nextAttemptAt, at);
+  };
   let syncedSettings = false;
 
   for (const entryId of entryIds) {
@@ -1155,6 +1259,15 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         continue;
       }
 
+      // Still waiting after an earlier failure (#1301): not sent, not charged,
+      // and the ops that depend on it keep waiting behind it.
+      const waitUntil = entry.next_attempt_at ?? null;
+      if (!options.upgrade && waitUntil !== null && waitUntil > Date.now()) {
+        for (const key of keys) blockedKeys.add(key);
+        noteWait(waitUntil);
+        continue;
+      }
+
       if (entry.body) {
         body = JSON.parse(entry.body) as Record<string, unknown>;
       }
@@ -1205,6 +1318,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // Ops it followed withheld their responses while it was queued; the
         // pull catches the note up once nothing is left queued for it.
         pullNoteIds.add(uploadNoteId);
+        consecutiveSendFailures = 0;
         continue;
       }
 
@@ -1225,6 +1339,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         response = await api.delete(endpoint, REPLAY_REQUEST_CONFIG);
       }
       requestLanded = true;
+      consecutiveSendFailures = 0;
       const data = response?.data;
       const responseNote = hasStringId(data) ? data as Note : null;
 
@@ -1346,6 +1461,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // reconciled by the next server fetch / SSE event. Attempt counting is
         // reserved for failures *before* the request lands (issue #714).
         console.warn(`Queue entry id=${entry.id} landed server-side; post-response reconciliation failed:`, err);
+        consecutiveSendFailures = 0;
         if (entry.operation === 'removeImage') recordWriteLanded(writtenNoteIds);
         // The landing transaction rolled back, rebase and create bookkeeping
         // included: the edits queued at this write's base would otherwise replay
@@ -1375,7 +1491,9 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
       if (status !== undefined && !isTransientHttpStatus(status)) {
         // Permanent client error (e.g. 400/403/404/409/422) — replaying will
         // never succeed, so discard the entry and continue rather than letting one
-        // bad operation wedge the whole queue indefinitely.
+        // bad operation wedge the whole queue indefinitely. The server
+        // answered it, so it is not a failed send (#1301).
+        consecutiveSendFailures = 0;
         discardedOperations.push({ operation: entry.operation, endpoint, status });
 
         if (uploadNoteId !== undefined) {
@@ -1527,7 +1645,13 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // Entry-specific transient failure: a 5xx tied to this op's payload (a
         // gateway status or a client timeout only when the server answered the
         // probe), or a non-HTTP error thrown while processing this entry.
-        const { attempts, processingErrors, capped } = await chargeEntryFailure(db, entry, err);
+        const now = Date.now();
+        const charged = await chargeEntryFailure(db, entry, err, now);
+        const { attempts, processingErrors, capped } = charged;
+        const httpFailure = axios.isAxiosError(err);
+        // A failed send counts toward stopping the pass; a local error sent nothing.
+        if (httpFailure) consecutiveSendFailures += 1;
+        const stopPass = consecutiveSendFailures >= MAX_CONSECUTIVE_SEND_FAILURES;
 
         if (attempts >= MAX_ENTRY_DRAIN_ATTEMPTS && BEST_EFFORT_OPERATIONS.has(entry.operation)) {
           // Best-effort (see the permanent-failure branch above): the next
@@ -1537,46 +1661,71 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
             `Dropping queued operation id=${entry.id} ${entry.operation} ${endpoint} after ${attempts} failed attempts`,
           );
           await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
+          if (stopPass) {
+            stoppedOnFailures = true;
+            break;
+          }
           continue;
         }
 
-        if (!capped) {
-          // Not rejected by the server: stays queued, holds back its dependents (#1283).
+        // An HTTP failure that has gone on long enough: the server never
+        // rejected the op, but it is not going to take it either (#1301).
+        const givenUp = httpFailure
+          && attempts >= GIVE_UP_AFTER_ATTEMPTS
+          && (options.upgrade === true || now - charged.firstFailedAt >= GIVE_UP_AFTER_MS);
+
+        if (!capped && !givenUp) {
+          // Not rejected by the server: stays queued, waits, and holds back its
+          // dependents (#1283, #1301).
           console.warn(
             `Queue entry id=${entry.id} ${entry.operation} failed (attempt ${attempts}); `
               + `holding back the ops that depend on it: ${errorSummary(err)}`,
           );
           for (const key of keys) blockedKeys.add(key);
+          noteWait(charged.nextAttemptAt);
+          if (stopPass) {
+            stoppedOnFailures = true;
+            break;
+          }
           continue;
         }
 
-        // A non-HTTP processing error at the cap: dead-letter it with
-        // PROCESSING_ERROR_STATUS (0) and the endpoint/body actually sent.
+        // A non-HTTP processing error at the cap is dead-lettered with
+        // PROCESSING_ERROR_STATUS (0); an HTTP failure given up on keeps its
+        // status (0 for a client timeout). Either way with the endpoint/body
+        // actually sent.
+        const deadStatus = capped
+          ? PROCESSING_ERROR_STATUS
+          : (httpFailure ? err.response?.status : undefined) ?? PROCESSING_ERROR_STATUS;
         const errorMessage = errorSummary(err);
+        const why = capped
+          ? `${processingErrors} processing errors`
+          : `failing for ${Math.round((now - charged.firstFailedAt) / 60000)} min over ${attempts} attempts`;
+        discardedOperations.push({ operation: entry.operation, endpoint, status: deadStatus });
         if (uploadNoteId !== undefined) {
-          console.warn(`Flagging image upload id=${entry.id} as failed after ${processingErrors} processing errors: ${errorMessage}`);
-          discardedOperations.push({ operation: entry.operation, endpoint, status: PROCESSING_ERROR_STATUS });
+          console.warn(`Flagging image upload id=${entry.id} as failed after ${why}: ${errorMessage}`);
           const upload = parseImageUploadBody(body);
           if (upload) await flagImageUploadFailed(db, entry, uploadNoteId, upload, errorMessage, { attempts, processingErrors });
           else await discardImageUpload(db, entry, null);
-          continue;
+        } else {
+          console.warn(`Dead-lettering queued operation id=${entry.id} after ${why}: ${errorMessage}`);
+          const noteIds = writtenNoteIds;
+          await recordDeadLetter(db, entry, endpoint, body, deadStatus, noteIds.length === 1 ? noteIds[0]! : null, {
+            attempts,
+            errorMessage,
+          });
+          for (const noteId of noteIds) {
+            await markNoteSyncFailed(db, noteId);
+          }
+          if (entry.operation === 'create' || entry.operation === 'duplicate') {
+            for (const noteId of noteIds) abandonedCreateNoteIds.add(noteId);
+          }
+          await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
         }
-        console.warn(
-          `Dead-lettering queued operation id=${entry.id} after ${processingErrors} processing errors: ${errorMessage}`,
-        );
-        const noteIds = writtenNoteIds;
-        discardedOperations.push({ operation: entry.operation, endpoint, status: PROCESSING_ERROR_STATUS });
-        await recordDeadLetter(db, entry, endpoint, body, PROCESSING_ERROR_STATUS, noteIds.length === 1 ? noteIds[0]! : null, {
-          attempts,
-          errorMessage,
-        });
-        for (const noteId of noteIds) {
-          await markNoteSyncFailed(db, noteId);
+        if (stopPass) {
+          stoppedOnFailures = true;
+          break;
         }
-        if (entry.operation === 'create' || entry.operation === 'duplicate') {
-          for (const noteId of noteIds) abandonedCreateNoteIds.add(noteId);
-        }
-        await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
       }
     }
   }
@@ -1596,7 +1745,18 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
     'SELECT COUNT(*) AS count FROM sync_queue WHERE id <= ?',
     [lastLoadedId],
   );
-  return { syncedNotes, discardedOperations, syncedSettings, leftBehind: leftRow?.count ?? 0 };
+  if (stoppedOnFailures) {
+    console.info(`Queue drain stopped after ${MAX_CONSECUTIVE_SEND_FAILURES} failed sends in a row`);
+  }
+  return {
+    syncedNotes,
+    discardedOperations,
+    syncedSettings,
+    leftBehind: leftRow?.count ?? 0,
+    stoppedOnConnectivity,
+    stoppedOnFailures,
+    nextAttemptAt,
+  };
 }
 
 /**

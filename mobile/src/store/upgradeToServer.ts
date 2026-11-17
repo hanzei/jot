@@ -473,7 +473,10 @@ export async function runMigrationDrainPass(
   db: SQLiteDatabase,
   total: number,
 ): Promise<MigrationDrainPassResult> {
-  await drainQueue(db);
+  // Every entry is sent each pass, and one that keeps failing over HTTP is
+  // given up on by attempts alone, so the screen reaches its dead-letter step
+  // instead of a generic failure (#1301).
+  await drainQueue(db, { upgrade: true });
   const remaining = await getPendingCount(db);
   const deadLetterCount = await getDeadLetterCount(db);
   const processed = total - remaining;

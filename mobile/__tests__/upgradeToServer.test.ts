@@ -875,7 +875,10 @@ describe('configureMigrationApiClient', () => {
 // runMigrationDrainPass
 // ------------------------------------------------------------------
 
-const DRAIN_RESULT_EMPTY = { syncedNotes: [], discardedOperations: [], syncedSettings: false, leftBehind: 0 };
+const DRAIN_RESULT_EMPTY = {
+  syncedNotes: [], discardedOperations: [], syncedSettings: false, leftBehind: 0,
+  stoppedOnConnectivity: false, stoppedOnFailures: false, nextAttemptAt: null,
+};
 
 describe('runMigrationDrainPass', () => {
   beforeEach(() => {
@@ -893,7 +896,7 @@ describe('runMigrationDrainPass', () => {
     expect(result.processed).toBe(10);
     expect(result.remaining).toBe(0);
     expect(result.deadLetterCount).toBe(0);
-    expect(mockDrainQueue).toHaveBeenCalledWith(mockDb);
+    expect(mockDrainQueue).toHaveBeenCalledWith(mockDb, { upgrade: true });
   });
 
   it('returns dead_letter status when dead-letter count is non-zero', async () => {

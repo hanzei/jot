@@ -7,7 +7,7 @@
  */
 
 import { generateClientNoteId, isUnsyncedNoteId, markNoteSyncFailed, removeLocalNotesNotIn, getLocalLabelCounts, saveNote, saveNoteInTx, addLabelToLocalNote, removeLabelFromLocalNote, getLocalNotes, upsertLabel, getStoredLabels } from '../src/db/noteQueries';
-import { drainQueue, getSyncQueueStats, isTransientHttpStatus, getDeadLetteredOperations, MAX_ENTRY_DRAIN_ATTEMPTS, PROCESSING_ERROR_STATUS, QUEUED_WRITE_TIMEOUT_MS } from '../src/db/syncQueue';
+import { clearQueuedWriteWaits, drainQueue, getOldestFailingSince, getSyncQueueStats, isTransientHttpStatus, getDeadLetteredOperations, GIVE_UP_AFTER_ATTEMPTS, GIVE_UP_AFTER_MS, MAX_CONSECUTIVE_SEND_FAILURES, MAX_ENTRY_DRAIN_ATTEMPTS, PROCESSING_ERROR_STATUS, QUEUED_WRITE_TIMEOUT_MS, RETRY_WAIT_BASE_MS, RETRY_WAIT_MAX_MS, retryWaitMs } from '../src/db/syncQueue';
 import api from '../src/api/client';
 import { makeLabel, makeListNote, makeNoteItem, makeTextNote, remainingQueueIds, seedQueueEntry } from './helpers/fixtures';
 import type { NoteItem } from '@jot/shared';
@@ -613,6 +613,15 @@ describe('drainQueue', () => {
     const update = (noteId: string) =>
       seedQueueEntry(db, { operation: 'update', endpoint: `/notes/${noteId}`, method: 'PATCH', body: { title: noteId } });
     const sentPatches = () => mockApi.patch.mock.calls.map(([url]) => url);
+    // The device clock, moved past a failed op's wait between passes (#1301).
+    let clock = 0;
+    beforeEach(() => {
+      clock = Date.parse('2026-06-01T00:00:00Z');
+      jest.spyOn(Date, 'now').mockImplementation(() => clock);
+    });
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
 
     it('sends note B\'s ops, holds back note A\'s later ones, and keeps A\'s failing op queued across passes', async () => {
       const failing = await update('A');
@@ -628,9 +637,13 @@ describe('drainQueue', () => {
       expect(await remainingQueueIds(db)).toEqual([failing, laterA]);
 
       const passes = MAX_ENTRY_DRAIN_ATTEMPTS + 2;
-      for (let pass = 1; pass < passes; pass++) await drainQueue(db);
+      for (let pass = 1; pass < passes; pass++) {
+        clock += RETRY_WAIT_MAX_MS;
+        await drainQueue(db);
+      }
 
-      // Each pass tries the failing op once and never sends the one behind it.
+      // Each pass tries the failing op once and never sends the one behind it,
+      // and an op failing for minutes is not given up on (#1301).
       expect(sentPatches().filter((url) => url === '/notes/A')).toHaveLength(passes);
       expect(await remainingQueueIds(db)).toEqual([failing, laterA]);
       expect(await attemptsFor(failing)).toBe(passes);
@@ -648,6 +661,7 @@ describe('drainQueue', () => {
       expect(mockApi.patch).toHaveBeenCalledTimes(1);
 
       mockApi.patch.mockResolvedValue({ data: {} } as never);
+      clock += RETRY_WAIT_BASE_MS;
       await drainQueue(db);
 
       expect(mockApi.patch).toHaveBeenCalledTimes(3);
@@ -726,6 +740,167 @@ describe('drainQueue', () => {
       await drainQueue(db);
 
       expect(mockApi.patch).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('retry pacing and giving up (#1301)', () => {
+    const START = Date.parse('2026-06-01T00:00:00Z');
+    let clock = START;
+    beforeEach(() => {
+      clock = START;
+      jest.spyOn(Date, 'now').mockImplementation(() => clock);
+      silenceConsole('info', /^Queue drain stopped after \d+ failed sends/);
+    });
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    const update = (noteId: string, extra: { attempts?: number } = {}) =>
+      seedQueueEntry(db, { operation: 'update', endpoint: `/notes/${noteId}`, method: 'PATCH', body: { title: noteId }, ...extra });
+    const sentPatches = () => mockApi.patch.mock.calls.map(([url]) => url);
+    const setFailureRun = (id: number, firstFailedAt: number, nextAttemptAt: number | null = null) =>
+      db.runAsync('UPDATE sync_queue SET first_failed_at = ?, next_attempt_at = ? WHERE id = ?', [firstFailedAt, nextAttemptAt, id]);
+    const failA = ((url: string) =>
+      url === '/notes/A' ? Promise.reject(makeAxiosError(500)) : Promise.resolve({ data: {} })) as never;
+
+    it('waits exponentially from 1 s, capped at 60 s', () => {
+      expect([1, 2, 3, 4, 6, 7, 20].map(retryWaitMs)).toEqual([1000, 2000, 4000, 8000, 32000, 60000, 60000]);
+    });
+
+    it('does not resend a failed op inside its wait, holds back its dependents, and resends it once due', async () => {
+      const failing = await update('A');
+      const laterA = await update('A');
+      mockApi.patch.mockImplementation(failA);
+
+      const first = await drainQueue(db);
+      expect(first.nextAttemptAt).toBe(START + RETRY_WAIT_BASE_MS);
+      expect(await db.getFirstAsync('SELECT next_attempt_at, first_failed_at FROM sync_queue WHERE id = ?', [failing]))
+        .toEqual({ next_attempt_at: START + RETRY_WAIT_BASE_MS, first_failed_at: START });
+
+      // Inside the wait: nothing is sent, nothing is charged, and the pass is not stopped.
+      await update('B');
+      clock += RETRY_WAIT_BASE_MS - 1;
+      const waiting = await drainQueue(db);
+      expect(sentPatches()).toEqual(['/notes/A', '/notes/B']);
+      expect(waiting).toMatchObject({ stoppedOnFailures: false, stoppedOnConnectivity: false, nextAttemptAt: START + RETRY_WAIT_BASE_MS });
+      expect(await attemptsFor(failing)).toBe(1);
+      expect(await remainingQueueIds(db)).toEqual([failing, laterA]);
+
+      // Once due, it is resent, and its dependent follows when it gets through.
+      mockApi.patch.mockResolvedValue({ data: {} } as never);
+      clock += 1;
+      const due = await drainQueue(db);
+      expect(sentPatches()).toEqual(['/notes/A', '/notes/B', '/notes/A', '/notes/A']);
+      expect(await remainingQueueIds(db)).toEqual([]);
+      expect(due.nextAttemptAt).toBeNull();
+    });
+
+    it('sends at most three requests per pass when every write fails and every op has failed before', async () => {
+      const ids: number[] = [];
+      for (const note of ['n1', 'n2', 'n3', 'n4', 'n5', 'n6']) {
+        const id = await update(note, { attempts: 1 });
+        await setFailureRun(id, START - 60_000, START - 1);
+        ids.push(id);
+      }
+      mockApi.patch.mockRejectedValue(makeAxiosError(500));
+
+      const result = await drainQueue(db);
+
+      expect(mockApi.patch).toHaveBeenCalledTimes(MAX_CONSECUTIVE_SEND_FAILURES);
+      expect(result).toMatchObject({ stoppedOnFailures: true, stoppedOnConnectivity: false });
+      expect(await remainingQueueIds(db)).toEqual(ids);
+      // The next pass skips the three now waiting and reaches the ones behind them.
+      mockApi.patch.mockClear();
+      await drainQueue(db);
+      expect(sentPatches()).toEqual(['/notes/n4', '/notes/n5', '/notes/n6']);
+    });
+
+    it('does not stop a pass on failures that a success separates', async () => {
+      for (const note of ['A', 'A2', 'ok', 'A3', 'A4']) await update(note);
+      mockApi.patch.mockImplementation(((url: string) =>
+        url === '/notes/ok' ? Promise.resolve({ data: {} }) : Promise.reject(makeAxiosError(500))) as never);
+
+      const result = await drainQueue(db);
+
+      expect(mockApi.patch).toHaveBeenCalledTimes(5);
+      expect(result.stoppedOnFailures).toBe(false);
+    });
+
+    it('keeps a failing op queued until it has failed for 24 h and at least 5 times, then dead-letters it', async () => {
+      await saveNote(db, makeTextNote({ id: 'A' }));
+      const id = await update('A', { attempts: GIVE_UP_AFTER_ATTEMPTS - 2 });
+      await setFailureRun(id, START - GIVE_UP_AFTER_MS - 1);
+      mockApi.patch.mockImplementation(failA);
+
+      // Past 24 h but one attempt short.
+      await drainQueue(db);
+      expect(await remainingQueueIds(db)).toEqual([id]);
+      expect(await deadLetterRows()).toEqual([]);
+
+      clock += RETRY_WAIT_MAX_MS;
+      const { discardedOperations } = await drainQueue(db);
+
+      expect(await remainingQueueIds(db)).toEqual([]);
+      expect(discardedOperations).toEqual([{ operation: 'update', endpoint: '/notes/A', status: 500 }]);
+      expect(await deadLetterRows()).toMatchObject([
+        { operation: 'update', endpoint: '/notes/A', status: 500, note_id: 'A', attempts: GIVE_UP_AFTER_ATTEMPTS },
+      ]);
+      const row = await db.getFirstAsync<{ sync_state: string }>('SELECT sync_state FROM notes WHERE id = ?', ['A']);
+      expect(row?.sync_state).toBe('failed');
+    });
+
+    it('keeps a failing op queued at 5 attempts until it has failed for 24 h', async () => {
+      const id = await update('A', { attempts: GIVE_UP_AFTER_ATTEMPTS + 3 });
+      await setFailureRun(id, START - GIVE_UP_AFTER_MS + 60_000);
+      mockApi.patch.mockImplementation(failA);
+
+      await drainQueue(db);
+
+      expect(await remainingQueueIds(db)).toEqual([id]);
+      expect(await deadLetterRows()).toEqual([]);
+    });
+
+    it('does not give up on an op that failed once and then sat unsent for over 24 h', async () => {
+      const id = await update('A', { attempts: 1 });
+      await setFailureRun(id, START - 3 * GIVE_UP_AFTER_MS, START - 3 * GIVE_UP_AFTER_MS + RETRY_WAIT_BASE_MS);
+      mockApi.patch.mockImplementation(failA);
+
+      await drainQueue(db);
+
+      expect(await attemptsFor(id)).toBe(2);
+      expect(await deadLetterRows()).toEqual([]);
+    });
+
+    it('in the upgrade, ignores waits and dead-letters after 5 attempts with no time condition', async () => {
+      const id = await update('A');
+      mockApi.patch.mockImplementation(failA);
+
+      for (let pass = 1; pass < GIVE_UP_AFTER_ATTEMPTS; pass++) {
+        await drainQueue(db, { upgrade: true });
+        expect(await attemptsFor(id)).toBe(pass);
+      }
+      expect(await deadLetterRows()).toEqual([]);
+
+      await drainQueue(db, { upgrade: true });
+
+      expect(await remainingQueueIds(db)).toEqual([]);
+      expect(await deadLetterRows()).toMatchObject([{ endpoint: '/notes/A', status: 500 }]);
+    });
+
+    it('clears every wait on demand and reports the oldest failure run', async () => {
+      const a = await update('A');
+      const b = await update('B');
+      expect(await getOldestFailingSince(db)).toBeNull();
+      await setFailureRun(a, START - 10, START + RETRY_WAIT_MAX_MS);
+      await setFailureRun(b, START - 20, START + RETRY_WAIT_MAX_MS);
+
+      await clearQueuedWriteWaits(db);
+
+      expect(await getOldestFailingSince(db)).toBe(START - 20);
+      expect(await db.getAllAsync('SELECT next_attempt_at FROM sync_queue')).toEqual([
+        { next_attempt_at: null },
+        { next_attempt_at: null },
+      ]);
     });
   });
 

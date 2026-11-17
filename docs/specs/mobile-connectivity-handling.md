@@ -118,13 +118,13 @@ parks: its backoff chain ends there. A flip from `false` to `true` resumes a
 parked drain, and does nothing when no drain parked. Anything that schedules or
 runs a drain itself clears the park, so the flip never shortcuts a pending
 backoff timer and never drains past the failure cap. The flip also keeps the
-failure count, so a write that keeps failing still reaches the cap. So does a
-new write: every save enqueues whatever the connectivity (§4.1), so it says
-nothing about the server coming back. It leaves a pending debounce or backoff
-timer alone, and resets the count only once retries have paused at the cap.
-Only a row the pass loaded and left queued makes it a stall (`leftBehind`): a
-save queued while the pass ran is new work, drained by the rerun without
-charging the count. A
+failure count, so a server that keeps failing to answer still reaches the cap.
+So does a new write: every save enqueues whatever the connectivity (§4.1), so
+it says nothing about the server coming back. It leaves a pending debounce or
+backoff timer alone, and resets the count only once retries have paused at the
+cap; a timer that only waits for a failed write to come due (§7) is brought
+forward to the debounce instead. Only a pass that stops on connectivity charges
+the count: a write that fails while the server answers waits on its own (§7). A
 write queued while a drain runs requests a rerun, so the finishing drain cannot
 strand it by clearing that write's pending timer.
 
@@ -356,8 +356,9 @@ Rules of thumb:
   never a tight loop.
 - **Re-entrancy**: a sync already in progress is skipped, not queued a second
   time.
-- **Cap**: consecutive failures are capped before surfacing an error, so a
-  persistently failing server doesn't busy-loop.
+- **Cap**: consecutive connectivity failures are capped before surfacing an
+  error, so an unreachable server doesn't busy-loop. A write the server keeps
+  failing is paced and bounded on its own (below), not by this cap.
 - **Queue liveness: FIFO per key**: order matters only between ops that touch
   the same thing, so a write that keeps failing holds back only the writes that
   depend on it (#1283). Each queued op records the keys it touches — `note:<id>`,
@@ -385,11 +386,31 @@ Rules of thumb:
     otherwise it is global. A plain network error is global without a probe.
     Each ambiguous failure is probed, so a server that goes down mid-pass stops
     the pass at the next one.
-  - An op the server never rejected is **never dead-lettered**: it stays queued
-    and is retried on later passes, under the backoff and the cap on
-    consecutive passes that leave work behind (above; `syncError` surfaces it).
-    Only a permanent rejection (non-transient 4xx) dead-letters, and so does a
-    non-HTTP processing error once it has recurred `MAX_ENTRY_DRAIN_ATTEMPTS`
+  - **An op that fails gets its own wait** (#1301): exponential from its
+    failure count, within the backoff bounds above (`sync_queue.next_attempt_at`).
+    A pass does not send an op still waiting, but puts its keys in the blocked
+    set, so its dependents keep waiting and order holds; skipping it is neither
+    a failure nor a stop. The app schedules the next pass for the earliest op
+    due, and a reconnect or foreground clears every wait, so the queue recovers
+    at once after an outage. One failing write therefore does not hold back
+    unrelated ones, and does not pause automatic retries: the pass-level
+    backoff and its cap are for connectivity failures only, which charge no op.
+  - **A broken server costs a bounded number of requests per pass**: a pass
+    stops after a few failed sends in a row with no success between them,
+    whatever each op's history, and such passes back off as a whole. A few ops
+    that always fail cannot block the queue: after their first failure they are
+    waiting, and the next pass sends the ops behind them.
+  - **A write the server keeps failing reaches the failed-changes review after
+    a bounded time** (#1301): an op is dead-lettered, with its last status,
+    once it has failed without a break for a day *and* a handful of times
+    (`sync_queue.first_failed_at`, on the device clock). Both are needed: time
+    alone would give up on an op that failed once before the app sat closed
+    for days; attempts alone would turn a short outage into failed changes
+    (#1283). The local→server upgrade uses the attempts alone, since the user
+    is waiting on its screen. While any write has been failing for more than a
+    few minutes, the `syncError` banner shows; its retries go on.
+    Short of that, a permanent rejection (non-transient 4xx) dead-letters, and
+    so does a non-HTTP processing error once it has recurred `MAX_ENTRY_DRAIN_ATTEMPTS`
     times (counted on its own in `processing_errors`, since `attempts` also
     grows through an outage; status `PROCESSING_ERROR_STATUS`, 0): it happens
     on the device, so a
@@ -399,8 +420,9 @@ Rules of thumb:
     dropped at the same count, as a permanent rejection of one is: the next
     sync reconciles it, and it never holds back its note's edits.
   - A queued image upload (`uploadImage`) follows the same rules, except that
-    a non-HTTP error at the cap flags it for a manual retry in the gallery
-    instead of dead-lettering it (§4.4).
+    a non-HTTP error at the cap, or giving up on one the server keeps failing,
+    flags it for a manual retry in the gallery instead of dead-lettering it
+    (§4.4).
 
   Dead letters written before #1283 may hold a 5xx, or status 0 for a timeout,
   from when the drain capped every entry-specific failure. They stay for the

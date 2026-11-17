@@ -32,6 +32,8 @@ import {
   getDeadLetterCount,
   getProtectedNoteIds,
   subscribeToEnqueue,
+  GIVE_UP_AFTER_ATTEMPTS,
+  GIVE_UP_AFTER_MS,
   MAX_ENTRY_DRAIN_ATTEMPTS,
 } from '../src/db/syncQueue';
 import { makeListNote, makeNoteItem, makeTextNote, seedImageUpload, seedQueueEntry } from './helpers/fixtures';
@@ -478,6 +480,24 @@ describe('draining queued uploads', () => {
     expect(mockUploadNoteImage).toHaveBeenCalledTimes(2);
     expect(await uploadRow('up-ok')).toBeNull();
     expect(result.discardedOperations).toEqual([{ operation: 'uploadImage', endpoint: '/notes/n1/images', status: 0 }]);
+  });
+
+  it('flags an upload that has kept failing over HTTP for 24 h and 5 attempts as an error tile, not a failed change (#1301)', async () => {
+    await saveNote(db, makeTextNote({ id: 'n1' }));
+    await seedUpload({ id: 'up-broken', note_id: 'n1', attempts: GIVE_UP_AFTER_ATTEMPTS - 1 });
+    const now = Date.now();
+    await db.runAsync('UPDATE sync_queue SET first_failed_at = ?', [now - GIVE_UP_AFTER_MS - 1]);
+    mockUploadNoteImage.mockRejectedValueOnce(
+      Object.assign(new Error('Server Error'), { isAxiosError: true, response: { status: 500 } }),
+    );
+
+    const result = await drainQueue(db);
+
+    expect(await uploadRow('up-broken')).toEqual({ status: 'error', error_message: 'Server Error', attempts: GIVE_UP_AFTER_ATTEMPTS });
+    expect(fs.files.has(UPLOAD_PATH)).toBe(true);
+    expect(await getDeadLetterCount(db)).toBe(0);
+    expect(await getFailedNoteIds(db)).toEqual(new Set());
+    expect(result.discardedOperations).toEqual([{ operation: 'uploadImage', endpoint: '/notes/n1/images', status: 500 }]);
   });
 
   it('flags a permanently-rejected upload as errored instead of discarding it silently', async () => {
