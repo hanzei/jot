@@ -945,6 +945,16 @@ describe('drainQueue', () => {
       expect(await deadLetterRows()).toMatchObject([{ endpoint: '/notes/A', status: 500 }]);
     });
 
+    it('in the upgrade, sends three failing ops on every pass, so they are given up on within the screen\'s passes', async () => {
+      for (const note of ['A', 'B', 'C', 'D']) await update(note);
+      mockApi.patch.mockImplementation(((url: string) =>
+        url === '/notes/D' ? Promise.resolve({ data: {} }) : Promise.reject(makeAxiosError(500))) as never);
+
+      for (let pass = 0; pass < GIVE_UP_AFTER_ATTEMPTS; pass++) await drainQueue(db, { upgrade: true });
+
+      expect((await deadLetterRows()).map((row) => row.endpoint)).toEqual(['/notes/A', '/notes/B', '/notes/C']);
+    });
+
     it('clears every wait on demand and reports the oldest failure run', async () => {
       const a = await update('A');
       const b = await update('B');

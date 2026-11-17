@@ -1045,7 +1045,8 @@ export interface DrainResult {
 export interface DrainOptions {
   /**
    * The local→server upgrade's drain (#1301): every entry is sent whatever its
-   * wait, since the upgrade screen paces its own passes, and a write that keeps
+   * wait or where the last pass stopped, since the upgrade screen paces its own
+   * passes, and a write that keeps
    * failing over HTTP is given up on after {@link GIVE_UP_AFTER_ATTEMPTS}
    * attempts, spaced or not, with no time condition, since the user is waiting
    * on that screen.
@@ -1228,7 +1229,9 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
   };
   let syncedSettings = false;
 
-  const resumeAfter = resumeAfterByDb.get(db) ?? 0;
+  // The upgrade sends every entry on every pass, as it ignores waits: its
+  // screen paces the passes and needs each failing entry charged each time.
+  const resumeAfter = options.upgrade ? 0 : resumeAfterByDb.get(db) ?? 0;
   // The last entry this pass reached: where the next one resumes if this one
   // stops on failed sends.
   let lastVisitedId = 0;
@@ -1769,8 +1772,10 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
     }
   }
   const stoppedOnFailures = consecutiveSendFailures >= MAX_CONSECUTIVE_SEND_FAILURES;
-  if (stoppedOnFailures) resumeAfterByDb.set(db, lastVisitedId);
-  else resumeAfterByDb.delete(db);
+  if (!options.upgrade) {
+    if (stoppedOnFailures) resumeAfterByDb.set(db, lastVisitedId);
+    else resumeAfterByDb.delete(db);
+  }
 
   // Merges into the last row are open again. A pass that throws leaves its
   // row recorded until the next claim, which only means an append instead.
