@@ -220,11 +220,14 @@ export async function dismissImageUpload(db: SQLiteDatabase, id: string): Promis
       await db.runAsync('DELETE FROM pending_image_uploads WHERE id = ?', [id]);
       paths.push(failed.local_path);
     }
-    for (const row of await getQueuedUploadRows(db)) {
-      const upload = parseImageUploadBody(parseJsonObject(row.body));
-      if (upload?.id !== id) continue;
+    const queued = await db.getAllAsync<{ id: number; local_path: string | null }>(
+      `SELECT id, json_extract(body, '$.local_path') AS local_path FROM sync_queue
+       WHERE operation = 'uploadImage' AND json_extract(body, '$.id') = ?`,
+      [id],
+    );
+    for (const row of queued) {
       await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [row.id]);
-      paths.push(upload.local_path);
+      if (row.local_path !== null) paths.push(row.local_path);
     }
   });
   for (const path of paths) deleteFileIfExists(path);

@@ -830,10 +830,7 @@ async function flagImageUploadFailed(
   noteId: string,
   upload: ImageUploadBody,
   message: string,
-  counts: { attempts: number; processingErrors: number } = {
-    attempts: entry.attempts ?? 0,
-    processingErrors: entry.processing_errors ?? 0,
-  },
+  counts: { attempts: number; processingErrors: number },
 ): Promise<void> {
   let flagged = false;
   await withSerializedTransaction(db, async () => {
@@ -1349,7 +1346,10 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
             await discardImageUpload(db, entry, upload);
           } else {
             console.warn(`Image upload id=${entry.id} was rejected (HTTP ${status}); flagging it for retry or dismiss`);
-            await flagImageUploadFailed(db, entry, uploadNoteId, upload, axios.isAxiosError(err) ? err.message : 'Upload failed');
+            await flagImageUploadFailed(db, entry, uploadNoteId, upload, axios.isAxiosError(err) ? err.message : 'Upload failed', {
+              attempts: entry.attempts ?? 0,
+              processingErrors: entry.processing_errors ?? 0,
+            });
           }
           continue;
         }
@@ -1529,7 +1529,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         if (uploadNoteId !== undefined) {
           console.warn(`Flagging image upload id=${entry.id} as failed after ${processingErrors} processing errors: ${errorMessage}`);
           discardedOperations.push({ operation: entry.operation, endpoint, status: PROCESSING_ERROR_STATUS });
-          const upload = parseImageUploadBody(body ?? parseJsonObject(entry.body));
+          const upload = parseImageUploadBody(body);
           if (upload) await flagImageUploadFailed(db, entry, uploadNoteId, upload, errorMessage, { attempts, processingErrors });
           else await discardImageUpload(db, entry, null);
           continue;

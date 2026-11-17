@@ -647,8 +647,9 @@ export async function permanentDeleteLocalNoteRows(db: SQLiteDatabase, id: strin
     'SELECT local_path FROM pending_image_uploads WHERE note_id = ?',
     [id],
   );
-  const queued = await db.getAllAsync<{ id: number; body: string | null }>(
-    `SELECT q.id, q.body FROM sync_queue q JOIN sync_queue_keys k ON k.entry_id = q.id
+  const queued = await db.getAllAsync<{ id: number; local_path: string | null }>(
+    `SELECT q.id, json_extract(q.body, '$.local_path') AS local_path
+     FROM sync_queue q JOIN sync_queue_keys k ON k.entry_id = q.id
      WHERE q.operation = 'uploadImage' AND k.key = ? AND k.read_only = 0`,
     [noteKey(id)],
   );
@@ -656,10 +657,7 @@ export async function permanentDeleteLocalNoteRows(db: SQLiteDatabase, id: strin
   await db.runAsync('DELETE FROM notes WHERE id = ?', [id]);
   return [
     ...failed.map((row) => row.local_path),
-    ...queued.flatMap((row) => {
-      const path = parseJsonObject(row.body)?.local_path;
-      return typeof path === 'string' ? [path] : [];
-    }),
+    ...queued.flatMap((row) => (row.local_path === null ? [] : [row.local_path])),
   ];
 }
 
