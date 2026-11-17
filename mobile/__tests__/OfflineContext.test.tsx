@@ -105,6 +105,11 @@ async function flush() {
   });
 }
 
+/** The listener the provider registered with NetInfo. */
+function getNetInfoListener<S>(): (state: S) => void {
+  return (NetInfo.addEventListener as jest.Mock).mock.calls[0][0] as (state: S) => void;
+}
+
 function getAppStateHandler(): (state: AppStateStatus) => void {
   const spy = AppState.addEventListener as jest.Mock;
   const call = spy.mock.calls.find((c) => c[0] === 'change');
@@ -907,8 +912,6 @@ describe('OfflineProvider queue draining', () => {
   });
   describe('a reconnect whose session check gets no answer (#1309)', () => {
     type NetState = { isConnected: boolean; isInternetReachable: boolean | null };
-    const getNetInfoListener = () =>
-      (NetInfo.addEventListener as jest.Mock).mock.calls[0][0] as (state: NetState) => void;
     // What the interceptor does when GET /users/me gets no response;
     // revalidateSession keeps the session.
     const noAnswer = async () => {
@@ -921,12 +924,12 @@ describe('OfflineProvider queue draining', () => {
       await renderProvider();
       await flush();
       await act(async () => {
-        getNetInfoListener()({ isConnected: false, isInternetReachable: false });
+        getNetInfoListener<NetState>()({ isConnected: false, isInternetReachable: false });
       });
       mockRevalidate.mockClear();
       const drains = mockDrainQueue.mock.calls.length;
       await act(async () => {
-        getNetInfoListener()({ isConnected: true, isInternetReachable: null });
+        getNetInfoListener<NetState>()({ isConnected: true, isInternetReachable: null });
       });
       await flush();
       return drains;
@@ -982,7 +985,7 @@ describe('OfflineProvider queue draining', () => {
       mockRevalidate.mockImplementation(noAnswer);
       await reconnectAfterOutage();
       await act(async () => {
-        getNetInfoListener()({ isConnected: false, isInternetReachable: false });
+        getNetInfoListener<NetState>()({ isConnected: false, isInternetReachable: false });
       });
 
       await act(async () => {
@@ -1050,10 +1053,10 @@ describe('OfflineProvider queue draining', () => {
       const view = await renderProvider();
       await flush();
       await act(async () => {
-        getNetInfoListener()({ isConnected: false, isInternetReachable: false });
+        getNetInfoListener<NetState>()({ isConnected: false, isInternetReachable: false });
       });
       await act(async () => {
-        getNetInfoListener()({ isConnected: true, isInternetReachable: null });
+        getNetInfoListener<NetState>()({ isConnected: true, isInternetReachable: null });
       });
       await view.unmount();
 
@@ -1098,8 +1101,6 @@ describe('OfflineProvider queue draining', () => {
       type: string;
       details: { ipAddress?: string; strength?: number } | null;
     };
-    const getNetInfoListener = () =>
-      (NetInfo.addEventListener as jest.Mock).mock.calls[0][0] as (state: NetState) => void;
     const wifi = (overrides: Partial<NetState> = {}): NetState => ({
       isConnected: true,
       isInternetReachable: true,
@@ -1131,7 +1132,7 @@ describe('OfflineProvider queue draining', () => {
       await flush();
 
       await act(async () => {
-        getNetInfoListener()(wifi({ isInternetReachable: false }));
+        getNetInfoListener<NetState>()(wifi({ isInternetReachable: false }));
       });
 
       expect(lastIsConnected).toBe(true);
@@ -1151,7 +1152,7 @@ describe('OfflineProvider queue draining', () => {
       expect(resync).not.toHaveBeenCalled();
 
       await act(async () => {
-        getNetInfoListener()(after);
+        getNetInfoListener<NetState>()(after);
       });
       await flush();
 
@@ -1168,10 +1169,10 @@ describe('OfflineProvider queue draining', () => {
       await flush();
 
       await act(async () => {
-        getNetInfoListener()({ isConnected: false, isInternetReachable: false, type: 'none', details: null });
+        getNetInfoListener<NetState>()({ isConnected: false, isInternetReachable: false, type: 'none', details: null });
       });
       await act(async () => {
-        getNetInfoListener()(wifi());
+        getNetInfoListener<NetState>()(wifi());
       });
       await flush();
 
@@ -1191,7 +1192,7 @@ describe('OfflineProvider queue draining', () => {
       expect(mockRevalidate).toHaveBeenCalledTimes(1);
 
       await act(async () => {
-        getNetInfoListener()(after);
+        getNetInfoListener<NetState>()(after);
       });
       await flush();
 

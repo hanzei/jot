@@ -191,9 +191,7 @@ export class SSEConnectionManager {
     const delay = this.reconnectDelay;
     this.reconnectDelay = Math.min(this.reconnectDelay * 2, MAX_RECONNECT_DELAY_MS);
     this.reconnectTimer = setTimeout(() => {
-      this.openConnection().catch(() => {
-        // Handled inside openConnection; this catch prevents unhandled rejection
-      });
+      this.openInBackground();
     }, delay);
   }
 
@@ -208,6 +206,10 @@ export class SSEConnectionManager {
     if (this.closed || this.reconnectTimer === null) return;
     this.clearReconnectTimer();
     this.reconnectDelay = BASE_RECONNECT_DELAY_MS;
+    this.openInBackground();
+  }
+
+  private openInBackground(): void {
     this.openConnection().catch(() => {
       // Handled inside openConnection; this catch prevents unhandled rejection
     });
