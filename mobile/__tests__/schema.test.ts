@@ -571,6 +571,23 @@ describe('migrateDatabase', () => {
     });
   });
 
+  describe('send attempts (#1268)', () => {
+    it('counts every row queued before the column as sent', async () => {
+      const db = createTestDb();
+      for (let i = 0; i < 16; i++) {
+        await MIGRATIONS[i]!(db);
+        await db.runAsync(`PRAGMA user_version = ${i + 1}`);
+      }
+      await db.runAsync("INSERT INTO sync_queue (operation, endpoint, method, created_at) VALUES ('create', '/notes', 'POST', '2026-01-01T00:00:00Z')");
+
+      await migrateDatabase(db);
+
+      expect(await db.getAllAsync('SELECT send_attempted FROM sync_queue')).toEqual([{ send_attempted: 1 }]);
+      await db.runAsync("INSERT INTO sync_queue (operation, endpoint, method, created_at) VALUES ('create', '/notes', 'POST', '2026-01-02T00:00:00Z')");
+      expect(await db.getAllAsync('SELECT send_attempted FROM sync_queue ORDER BY id')).toEqual([{ send_attempted: 1 }, { send_attempted: 0 }]);
+    });
+  });
+
   describe('pre-versioned install', () => {
     it('converges on the fresh-install schema', async () => {
       const db = await preVersionedInstall();

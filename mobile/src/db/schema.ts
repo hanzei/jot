@@ -63,7 +63,10 @@ const migration1 = async (db: SQLiteDatabase): Promise<void> => {
       attempts INTEGER NOT NULL DEFAULT 0,
       -- How many of those failures were non-HTTP processing errors: at
       -- MAX_ENTRY_DRAIN_ATTEMPTS the entry is dead-lettered (#1283).
-      processing_errors INTEGER NOT NULL DEFAULT 0
+      processing_errors INTEGER NOT NULL DEFAULT 0,
+      -- 1 once the drain has sent the entry: the server may hold it even if
+      -- no response came back, so nothing is folded into it (#1268).
+      send_attempted INTEGER NOT NULL DEFAULT 0
     );
 
     -- Dead-lettered sync operations: writes the server permanently rejected
@@ -506,7 +509,17 @@ const migration16 = async (db: SQLiteDatabase): Promise<void> => {
   });
 };
 
-export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13, migration14, migration15, migration16];
+// Migration 17 (#1268): an edit is folded into a queued create only while the
+// create has never been sent. A create whose response was lost may already be
+// on the server, and its replay then resolves as already applied (409) without
+// sending the folded fields. Whether an existing row was ever sent is unknown,
+// so every one counts as sent: it only stops folding into those creates.
+const migration17 = async (db: SQLiteDatabase): Promise<void> => {
+  await addColumnIfMissing(db, 'sync_queue', 'send_attempted', 'send_attempted INTEGER NOT NULL DEFAULT 0');
+  await db.runAsync('UPDATE sync_queue SET send_attempted = 1');
+};
+
+export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13, migration14, migration15, migration16, migration17];
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   // Run PRAGMAs separately: sqlite3_exec (used by execAsync) stops on the
