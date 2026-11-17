@@ -139,9 +139,10 @@ What the device may believe after a sync (spec §8).
 - Exponential backoff on every retry (start ≥ 1 s, cap 60 s); never a tight loop.
 - Skip a sync that starts while one is in progress rather than queueing it.
 - Cap consecutive connectivity failures, then surface an error.
-- A failing write holds back only the writes that touch the same note, label or
-  settings, and a short server outage never turns a good edit into a failed
-  change (spec §7).
+- A write that fails on its own holds back only the writes that touch the same
+  note, label or settings; a failure every write would hit (no response, 401,
+  408, 429) stops the whole pass instead. A short server outage never turns a
+  good edit into a failed change (spec §7).
 - Idempotent writes: `INSERT … ON CONFLICT(id) DO UPDATE`, **never
   `INSERT OR REPLACE`** — with `foreign_keys = ON`, REPLACE's delete fires
   `ON DELETE CASCADE` and silently wipes child rows (it once deleted queued image

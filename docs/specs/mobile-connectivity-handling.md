@@ -268,7 +268,14 @@ edits the server has not confirmed yet.
   may take that version while it keeps its newer local edits. That proof is
   either a guarded edit the server accepted at `base_version` and answered with
   `base_version` or one more, or the response to this device's own create or
-  duplicate, which nobody else can have edited yet.
+  duplicate: a new note starts at version 1 on both sides, so taking it changes
+  nothing.
+- **Accepted exception: an offline duplicate.** The server copies the source as
+  it holds it when the duplicate lands, which can include a collaborator's
+  change the device's copy lacks, at the same version 1. An edit to the copy
+  queued before then is accepted and replaces that text in the copy. Nothing is
+  lost: the collaborator's change stays in the source, and the copy ends up as
+  what the user duplicated and edited.
 - **`base_version` means "the version of the text the user was looking at".**
   That is the only reading under which a 409 is a real conflict.
 

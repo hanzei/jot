@@ -1428,8 +1428,10 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
           case 'duplicate': {
             // The server keeps the client-supplied `id`, so the id is stable —
             // adopt the canonical note (server item ids etc.) and clear the
-            // pending-create marker. Nobody else can have
-            // edited a note the server only just created, so its version is ours.
+            // pending-create marker. A note the server only just created is at
+            // version 1, as the local row already is, so taking its version
+            // changes nothing. A duplicate's content is the server's copy of
+            // its source, which may differ from the device's (spec §8.1).
             const clientId = body?.id as string | undefined;
             if (clientId && responseNote) {
               syncedNote = await applyResponse(true);
