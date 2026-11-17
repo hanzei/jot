@@ -232,6 +232,8 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   // Set while handleReconnect itself re-arms reachability, so that flip is not
   // mistaken for the server answering (which ends the retries).
   const isRearmingRef = useRef(false);
+  // Set on unmount, so a reconnect still in flight then schedules no retry.
+  const isUnmountedRef = useRef(false);
   // Holds the latest handleReconnect so the retry timer calls the current closure.
   const handleReconnectRef = useRef<(isRetry?: boolean) => Promise<void>>(async () => {});
 
@@ -455,6 +457,10 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     } finally {
       isRearmingRef.current = false;
     }
+    // Whether the last session check got no answer (the interceptor marked
+    // the server unreachable). A drain that stalls after an answered check is
+    // the drain's own backoff to handle, not a reason to reconnect again.
+    let sessionCheckUnanswered = false;
     try {
       do {
         reconnectRerunRequestedRef.current = false;
@@ -462,6 +468,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
         // and refreshes user/settings for all returning-online users).
         const stillAuthenticated = await revalidateSession();
         if (!stillAuthenticated) return;
+        sessionCheckUnanswered = !isServerReachable();
         // A fresh connectivity/foreground signal: give the queue a clean budget of
         // retries even if a prior streak of failures had paused auto-retrying,
         // and let every waiting write go now, so the queue recovers at once
@@ -481,12 +488,18 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       // reconnect again shortly rather than wait for the SSE stream's backoff
       // to re-arm reachability (#1309). Bounded: once the retries are spent,
       // the stream's own retries remain the fallback.
-      if (!isServerReachable() && isConnectedRef.current) {
+      if (sessionCheckUnanswered && !isServerReachable() && isConnectedRef.current && !isUnmountedRef.current) {
         if (reconnectRetryCountRef.current < MAX_RECONNECT_RETRIES) {
           reconnectRetryCountRef.current += 1;
           const attempt = reconnectRetryCountRef.current;
           console.info(`Reconnect got no answer from the server; retrying (attempt ${attempt}/${MAX_RECONNECT_RETRIES}).`);
           reconnectRetryTimerRef.current = setTimeout(() => {
+            // isConnectedRef follows renders, so an offline event that landed
+            // just before this retry was scheduled is caught here.
+            if (!isConnectedRef.current) {
+              cancelReconnectRetry();
+              return;
+            }
             handleReconnectRef.current(true).catch(() => {});
           }, backoffDelayMs(attempt));
         }
@@ -638,9 +651,13 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   }, [refreshWriteFailing]);
 
   // Cancel any pending drain on unmount.
-  useEffect(() => () => {
-    clearDrainTimer();
-    cancelReconnectRetry();
+  useEffect(() => {
+    isUnmountedRef.current = false;
+    return () => {
+      isUnmountedRef.current = true;
+      clearDrainTimer();
+      cancelReconnectRetry();
+    };
   }, [clearDrainTimer, cancelReconnectRetry]);
 
   const value = useMemo<OfflineContextValue>(

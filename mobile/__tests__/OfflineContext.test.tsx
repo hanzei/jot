@@ -12,6 +12,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { OfflineProvider, useOfflineContext } from '../src/store/OfflineContext';
 import { clearQueuedWriteWaits, drainQueue, getOldestFailingSince, getPendingCount, type DrainResult } from '../src/db/syncQueue';
 import { setLocalModeActive } from '../src/store/localMode';
+import { abortServerSwitchLifecycle, beginServerSwitchLifecycle } from '../src/store/serverSwitchLifecycle';
 import * as serverReachability from '../src/api/serverReachability';
 import { silenceConsole } from './helpers/consoleGuard';
 import { subscribeToReconnectResync } from '../src/store/resyncEvents';
@@ -1005,6 +1006,64 @@ describe('OfflineProvider queue draining', () => {
       await flush();
       expect(mockRevalidate).toHaveBeenCalledTimes(1);
       expect(mockDrainQueue).toHaveBeenCalledTimes(drains + 1);
+    });
+
+    it('does not retry the reconnect when the session check answered and the drain stalled', async () => {
+      // /users/me answers; the queued write then times out.
+      mockGetPendingCount.mockResolvedValue(1);
+      mockDrainQueue.mockImplementation(async () => {
+        serverReachability.markServerUnreachable();
+        return drainResult({ leftBehind: 1, stoppedOnConnectivity: true });
+      });
+      await reconnectAfterOutage();
+      expect(mockRevalidate).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        jest.advanceTimersByTime(120000);
+      });
+      await flush();
+      expect(mockRevalidate).toHaveBeenCalledTimes(1);
+    });
+
+    it('cancels the retries on a server switch', async () => {
+      mockRevalidate.mockImplementation(noAnswer);
+      await reconnectAfterOutage();
+      await act(() => {
+        beginServerSwitchLifecycle();
+      });
+      await act(() => {
+        abortServerSwitchLifecycle();
+      });
+
+      await act(async () => {
+        jest.advanceTimersByTime(120000);
+      });
+      await flush();
+      expect(mockRevalidate).toHaveBeenCalledTimes(1);
+    });
+
+    it('schedules no retry for a reconnect that finishes after unmount', async () => {
+      let answer: (value: boolean) => void = () => {};
+      mockRevalidate.mockImplementationOnce(() => Promise.resolve(true)).mockImplementationOnce(() => new Promise<boolean>((resolve) => {
+        answer = resolve;
+      }));
+      const view = await renderProvider();
+      await flush();
+      await act(async () => {
+        getNetInfoListener()({ isConnected: false, isInternetReachable: false });
+      });
+      await act(async () => {
+        getNetInfoListener()({ isConnected: true, isInternetReachable: null });
+      });
+      await view.unmount();
+
+      serverReachability.markServerUnreachable();
+      answer(true);
+      await flush();
+      mockRevalidate.mockClear();
+      jest.advanceTimersByTime(120000);
+      await flush();
+      expect(mockRevalidate).not.toHaveBeenCalled();
     });
 
     it('restarts the retry budget on a fresh trigger', async () => {
