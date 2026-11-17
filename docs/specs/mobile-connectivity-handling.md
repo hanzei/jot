@@ -398,8 +398,11 @@ Rules of thumb:
   - **A broken server costs a bounded number of requests per pass**: a pass
     stops after a few failed sends in a row with no success between them,
     whatever each op's history, and such passes back off as a whole. A few ops
-    that always fail cannot block the queue: after their first failure they are
-    waiting, and the next pass sends the ops behind them.
+    that always fail cannot block the queue: the next pass resumes after where
+    the stopped one ended, leaving the ops before that point (and what depends
+    on them, so order holds) for the pass after. Otherwise the same failing ops
+    would come due together on every pass and stop it before anything behind
+    them.
   - **A write the server keeps failing reaches the failed-changes review after
     a bounded time** (#1301): an op is dead-lettered, with its last status,
     once its first failure is a day old (`sync_queue.first_failed_at`, on the

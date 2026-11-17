@@ -818,6 +818,21 @@ describe('drainQueue', () => {
       expect(sentPatches()).toEqual(['/notes/n4', '/notes/n5', '/notes/n6']);
     });
 
+    it('reaches the writes behind three that always fail, when the next pass runs as they come due again', async () => {
+      for (const note of ['A', 'B', 'C', 'D']) await update(note);
+      mockApi.patch.mockImplementation(((url: string) =>
+        url === '/notes/D' ? Promise.resolve({ data: {} }) : Promise.reject(makeAxiosError(500))) as never);
+
+      // OfflineContext runs the next pass no earlier than the failed ops are
+      // due again, so they are due on every pass.
+      for (let pass = 0; pass < 4 && !sentPatches().includes('/notes/D'); pass++) {
+        const { nextAttemptAt } = await drainQueue(db);
+        clock = Math.max(clock, nextAttemptAt ?? clock);
+      }
+
+      expect(sentPatches()).toContain('/notes/D');
+    });
+
     it('does not stop a pass on failures that a success separates', async () => {
       for (const note of ['A', 'A2', 'ok', 'A3', 'A4']) await update(note);
       mockApi.patch.mockImplementation(((url: string) =>
@@ -851,6 +866,20 @@ describe('drainQueue', () => {
       ]);
       const row = await db.getFirstAsync<{ sync_state: string }>('SELECT sync_state FROM notes WHERE id = ?', ['A']);
       expect(row?.sync_state).toBe('failed');
+    });
+
+    it('has the caller re-read settings when it gives up on a settings change', async () => {
+      const id = await seedQueueEntry(db, {
+        operation: 'updateSettings', endpoint: '/users/me', method: 'PATCH', body: { theme: 'dark' }, keys: ['settings'],
+      });
+      await setFailureRun(id, START - GIVE_UP_AFTER_MS - 1);
+      await setSpacedFailures(id, GIVE_UP_AFTER_ATTEMPTS - 1, GIVE_UP_FAILURE_SPACING_MS);
+      mockApi.patch.mockRejectedValue(makeAxiosError(500));
+
+      const { syncedSettings } = await drainQueue(db);
+
+      expect(await deadLetterRows()).toMatchObject([{ operation: 'updateSettings', status: 500 }]);
+      expect(syncedSettings).toBe(true);
     });
 
     it('keeps a failing op queued at 5 spaced failures until it has failed for 24 h', async () => {

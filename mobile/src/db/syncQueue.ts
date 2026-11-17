@@ -578,6 +578,15 @@ interface ClaimedEntry {
 const sendingEntryByDb = new WeakMap<SQLiteDatabase, number>();
 
 /**
+ * Where the last pass stopped after too many failed sends, per database
+ * (#1301). The next pass leaves the entries up to it for the pass after,
+ * so the writes past them get their turn: without this, the same few failing
+ * entries come due together on every pass and stop it before it reaches
+ * anything behind them.
+ */
+const resumeAfterByDb = new WeakMap<SQLiteDatabase, number>();
+
+/**
  * Read queue row `entryId` as it is now, with its keys, and record it as the
  * row being sent, in one serialized transaction: a merge at enqueue (spec
  * §8.5) committed before this is sent with the row, and one after it appends a
@@ -1219,6 +1228,11 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
   };
   let syncedSettings = false;
 
+  const resumeAfter = resumeAfterByDb.get(db) ?? 0;
+  // The last entry this pass reached: where the next one resumes if this one
+  // stops on failed sends.
+  let lastVisitedId = 0;
+
   for (const entryId of entryIds) {
     if (consecutiveSendFailures >= MAX_CONSECUTIVE_SEND_FAILURES) break;
     settledThisEntry = new Set<string>();
@@ -1227,6 +1241,7 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
     const claimed = await claimQueueEntry(db, entryId);
     if (claimed === null) continue;
     const { entry, keys, writtenNoteIds } = claimed;
+    lastVisitedId = entry.id;
     // Declared outside the try so the catch can dead-letter using the endpoint
     // and body that were actually sent to the server.
     let endpoint = entry.endpoint;
@@ -1255,6 +1270,16 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
       if (!options.upgrade && waitUntil > Date.now()) {
         for (const key of keys) blockedKeys.add(key);
         noteWait(waitUntil);
+        continue;
+      }
+
+      // Up to where the last pass stopped on failed sends: left for the next
+      // pass, which starts from the front again, so the writes past them are
+      // reached first. Their keys hold back what depends on them, so order
+      // holds.
+      if (entry.id <= resumeAfter) {
+        for (const key of keys) blockedKeys.add(key);
+        noteWait(Date.now());
         continue;
       }
 
@@ -1717,6 +1742,9 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
           ? `${processingErrors} processing errors`
           : `failing for ${Math.round((now - firstFailedAt) / 60000)} min over ${attempts} attempts`;
         discardedOperations.push({ operation: entry.operation, endpoint, status: deadStatus });
+        // As for a rejection: the app shows settings the server never took,
+        // so the caller re-reads them.
+        if (entry.operation === 'updateSettings') syncedSettings = true;
         if (uploadNoteId !== undefined) {
           console.warn(`Flagging image upload id=${entry.id} as failed after ${why}: ${errorMessage}`);
           const upload = parseImageUploadBody(body);
@@ -1741,6 +1769,8 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
     }
   }
   const stoppedOnFailures = consecutiveSendFailures >= MAX_CONSECUTIVE_SEND_FAILURES;
+  if (stoppedOnFailures) resumeAfterByDb.set(db, lastVisitedId);
+  else resumeAfterByDb.delete(db);
 
   // Merges into the last row are open again. A pass that throws leaves its
   // row recorded until the next claim, which only means an append instead.
