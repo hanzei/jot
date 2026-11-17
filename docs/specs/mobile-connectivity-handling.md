@@ -77,7 +77,7 @@ answers. It starts `true`, and is not per server: a server switch resets it.
   Otherwise one wrong `false` stops all syncing for good.
 - **The flag recovers on its own.** With the stream open, within one keepalive
   interval (30 s). With the stream down, through the stream's own reconnects.
-  After a reconnect, queued changes should start syncing within a few seconds
+  After a reconnect, queued changes start syncing within a few seconds
   of the network becoming usable (#1309): a reconnect whose session check gets
   no answer retries on a short, bounded backoff, and a stream waiting to retry
   opens as soon as the flag recovers. The stream's backoff is the fallback,
@@ -426,5 +426,3 @@ send its edit times, so merging (§8.5) loses nothing history would keep.
 - **A late SSE event can roll a note back** (#1273). An event built before this
   device's write landed, but received after it, replaces the newer row until
   the next pull.
-- **Syncing starts about 10 s after Wi-Fi reconnects** when the first request
-  hits a network that is not ready yet (#1309).
