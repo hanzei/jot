@@ -2,9 +2,8 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import axios from 'axios';
 import api from '../api/client';
 import { jot } from '../api/jot';
-import { apiPaths, completedCascadeScope, type GetNotesParams, type Note, type NoteItem, type UpdateMeRequest } from '@jot/shared';
+import { apiPaths, type GetNotesParams, type Note, type NoteItem, type UpdateMeRequest } from '@jot/shared';
 import {
-  getLocalNote,
   markLocalNoteDeleted,
   permanentDeleteLocalNote,
   saveNoteInTx,
@@ -27,7 +26,6 @@ import {
   keyKindCondition,
   noteIdOfKey,
   noteKey,
-  parseJsonObject,
   SETTINGS_KEY,
   type QueueKey,
 } from './queueKeys';
@@ -732,47 +730,6 @@ export async function saveServerNote(db: SQLiteDatabase, note: Note, since: Snap
 }
 
 /**
- * Items of `noteId` whose completed flag a queued, not-yet-replayed
- * `setItemsCompleted` op will still set: the item-level
- * counterpart of {@link getProtectedNoteIds} for writers that must apply the
- * rest of a server snapshot. Until the op replays, the server's copy of these
- * items predates it, so a snapshot's completed value for them is stale — keep
- * the local one. Read from the queue itself, so it holds across restarts.
- * `exceptEntryId` leaves out the entry whose own response is being applied.
- */
-async function getQueuedCompletedItemIds(
-  db: SQLiteDatabase,
-  noteId: string,
-  exceptEntryId?: number,
-): Promise<Set<string>> {
-  const entries = await db.getAllAsync<Pick<QueueEntry, 'body'>>(
-    `SELECT q.body FROM sync_queue q JOIN sync_queue_keys k ON k.entry_id = q.id
-     WHERE q.operation = 'setItemsCompleted' AND k.key = ? AND q.id IS NOT ?`,
-    [noteKey(noteId), exceptEntryId ?? null],
-  );
-  const ids = new Set<string>();
-  let localItems: NoteItem[] | null = null;
-  for (const entry of entries) {
-    const body = parseJsonObject(entry.body);
-    const itemIds = body?.item_ids;
-    if (!Array.isArray(itemIds)) continue;
-    // The op names only the tapped items; each one's cascade is recovered from
-    // the local note, whose rows the op already wrote.
-    if (localItems === null) {
-      const note = await getLocalNote(db, noteId);
-      localItems = note?.note_type === 'list' ? note.items ?? [] : [];
-    }
-    const scopeItems = localItems.map((i) => ({ id: i.id, parentId: i.parent_id }));
-    for (const itemId of itemIds) {
-      if (typeof itemId !== 'string') continue;
-      ids.add(itemId);
-      for (const id of completedCascadeScope(scopeItems, itemId, body?.completed === true)) ids.add(id);
-    }
-  }
-  return ids;
-}
-
-/**
  * Batch counterpart of {@link saveServerNote}. The skip set is read once,
  * inside the write's transaction.
  */
@@ -781,28 +738,32 @@ export async function saveServerNotes(db: SQLiteDatabase, notes: Note[], since: 
 }
 
 /**
- * Labels with an unsynced offline `createLabel` op still queued: their client id
- * *is* the server id (#546), but the create hasn't reached the server yet, so a
- * canonical GET /labels won't list them. They must be protected from pruning
- * when reconciling the label store (see {@link saveServerLabels}).
+ * Labels with a queued `createLabel`, `renameLabel` or `deleteLabel` op: the
+ * label-store counterpart of {@link getProtectedNoteIds}. Until the op drains,
+ * a canonical GET /labels predates it: it lacks a label created offline (its
+ * client id *is* the server id, #546), still has the old name of one renamed,
+ * and still lists one deleted. So {@link saveServerLabels} neither upserts nor
+ * prunes them.
  */
 export async function getPendingLabelIds(db: SQLiteDatabase): Promise<Set<string>> {
   const rows = await db.getAllAsync<{ id: string }>(
     `SELECT DISTINCT ${keyIdExpression('k.key', 'label')} AS id FROM sync_queue_keys k
        JOIN sync_queue q ON q.id = k.entry_id
-     WHERE q.operation = 'createLabel' AND ${keyKindCondition('k.key', 'label')}`,
+     WHERE q.operation IN ('createLabel', 'renameLabel', 'deleteLabel') AND ${keyKindCondition('k.key', 'label')}`,
   );
   return new Set(rows.map((row) => row.id));
 }
 
 /**
  * Persist a canonical server label list into the store (background sync), pruning
- * any local label the server no longer has while leaving unsynced offline-created
- * labels untouched (see {@link getPendingLabelIds}). This is what makes an empty
- * label created/deleted on another device converge locally (issue #691).
+ * any local label the server no longer has while leaving labels with a queued
+ * create, rename or delete untouched (see {@link getPendingLabelIds}). The
+ * protected set is read inside the write's transaction, so an op queued while
+ * the list was in flight still counts. This is what makes an empty label
+ * created/deleted on another device converge locally (issue #691).
  */
 export async function saveServerLabels(db: SQLiteDatabase, labels: Label[]): Promise<void> {
-  await saveLabels(db, labels, { skipLabelIds: await getPendingLabelIds(db) });
+  await saveLabels(db, labels, { readSkipLabelIds: () => getPendingLabelIds(db) });
 }
 
 /**
@@ -1162,7 +1123,10 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
             // not just patch `completed` on the rows present — otherwise a
             // stale local row (e.g. leftover parent_id/position from an earlier
             // partial sync, or one deleted by another session while this
-            // device was offline) never gets corrected.
+            // device was offline) never gets corrected. Taken only under the
+            // rule saveServerResponseNote applies: with another op queued, or
+            // a failed change unresolved, the list predates the local rows
+            // (spec §8.3), so they stay and the note is pulled.
             await reconcileItemsFromResponseInTx(db, endpoint.split('/')[2]!, data, entry.id);
             break;
           case 'share':
@@ -1513,8 +1477,9 @@ async function hasUnresolvedFailure(
  * without this a row that fell behind stays behind until an unrelated sync
  * runs. Protected notes (queued op, unresolved failure) are skipped. Fetched one at a time: a batch would hold early
  * results while a newer snapshot lands, and its slowest timeout would finish
- * last and mark the server unreachable. Best effort: a failed fetch leaves the
- * note for the next background sync.
+ * last and mark the server unreachable. A note the server reports gone
+ * (404/410) is tombstoned through {@link applyServerRemoval}. Best effort: any
+ * other failed fetch leaves the note for the next background sync.
  */
 async function pullTouchedNotes(db: SQLiteDatabase, noteIds: Set<string>): Promise<void> {
   const protectedIds = await getProtectedNoteIds(db);
@@ -1525,11 +1490,23 @@ async function pullTouchedNotes(db: SQLiteDatabase, noteIds: Set<string>): Promi
     );
   }
   for (const noteId of toPull.slice(0, MAX_POST_DRAIN_NOTE_PULLS)) {
+    const since = snapshotMark();
     try {
-      const since = snapshotMark();
       const note = await jot.notes.getById(noteId);
       await saveServerNote(db, note, since);
     } catch (err) {
+      const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+      if (status === 404 || status === 410) {
+        // Gone on the server: a change the server rejected on it must not stay
+        // behind as local state nothing protects. Same rule as useOfflineNote's
+        // refresh: tombstoned unless it is protected or written since `since`.
+        try {
+          await applyServerRemoval(db, noteId, since, 'tombstone');
+        } catch (removeErr) {
+          console.warn(`Failed to tombstone note id=${noteId} after the queue drain: ${errorSummary(removeErr)}`);
+        }
+        continue;
+      }
       console.warn(`Failed to pull note id=${noteId} after the queue drain: ${errorSummary(err)}`);
     }
   }
@@ -1602,16 +1579,17 @@ async function saveServerResponseNoteInTx(
 /**
  * Reconciles a note's local rows against a drain response's full item list
  * (see reconcileLocalItemsInTx), inside the transaction that deletes its queue
- * entry, keeping the completed value of every item a queued completed op other
- * than `entryId` still has to replay (see {@link getQueuedCompletedItemIds}).
- * `items` is `unknown` since it's a raw response body; anything other than an
- * array (e.g. a malformed/legacy response) is skipped rather than wiping the
- * note's items.
+ * entry `entryId`. Like {@link saveServerResponseNoteInTx}, it takes nothing
+ * while another op is queued for the note or a failed change is unresolved:
+ * the list predates those local edits (spec §8.3). `items` is `unknown` since
+ * it's a raw response body; anything other than an array (e.g. a
+ * malformed/legacy response) is skipped rather than wiping the note's items.
  */
 async function reconcileItemsFromResponseInTx(db: SQLiteDatabase, noteId: string, items: unknown, entryId: number): Promise<void> {
   if (!Array.isArray(items)) return;
-  const queued = await getQueuedCompletedItemIds(db, noteId, entryId);
-  await reconcileLocalItemsInTx(db, noteId, items as NoteItem[], queued);
+  if (await hasUnresolvedFailure(db, noteId, undefined)) return;
+  if (await hasOtherQueuedOpForNote(db, noteId, entryId)) return;
+  await reconcileLocalItemsInTx(db, noteId, items as NoteItem[]);
 }
 
 /**

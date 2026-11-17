@@ -4,6 +4,8 @@ import { useOfflineNote } from './useOfflineNotes';
 import { apiPaths, DEFAULT_NOTE_COLOR, generateId, textToListNote, listToText, checkConvertToListCaps, applyCompletedValues, completedCascadeScope, patchTouchesSharedContent } from '@jot/shared';
 import type {
   Note,
+  TextNote,
+  ListNote,
   NoteItem,
   NoteShare,
   UserInfo,
@@ -30,7 +32,8 @@ import {
   markLocalNoteDeleted,
   markLocalNoteRestored,
   clearLocalNoteUnread,
-  permanentDeleteLocalNote,
+  permanentDeleteLocalNoteRows,
+  deleteUploadFiles,
   updateLocalNote,
   generateClientNoteId,
   markNotePendingCreate,
@@ -438,7 +441,18 @@ function buildConvertNoteTypeRequest(note: Note): ConvertNoteTypeRequest {
  */
 function applyConvertedNoteLocally(note: Note, data: ConvertNoteTypeRequest, now: string): Note {
   if (data.note_type === 'text') {
-    return { ...note, note_type: 'text', content: data.content ?? '', updated_at: now };
+    // A text note has no title, items or collapsed flag: drop the list's, so
+    // the cached note matches what SQLite stored.
+    const converted: TextNote & Partial<Pick<ListNote, 'title' | 'items' | 'checked_items_collapsed'>> = {
+      ...note,
+      note_type: 'text',
+      content: data.content ?? '',
+      updated_at: now,
+    };
+    delete converted.title;
+    delete converted.items;
+    delete converted.checked_items_collapsed;
+    return converted;
   }
   // Mirrors the server's buildItems (server/internal/notesvc): an item sent with indent_level 1
   // hangs off the nearest preceding top-level item, and off nothing when there is
@@ -794,8 +808,10 @@ export function usePermanentDeleteNote() {
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
       assertSwitchWriteAllowed();
-      await enqueueWrite(db, {
-        localApply: () => permanentDeleteLocalNote(db, id),
+      // The queued-upload files go only once the transaction has committed:
+      // a rollback restores the rows that point at them.
+      const uploadFiles = await enqueueWrite(db, {
+        localApply: () => permanentDeleteLocalNoteRows(db, id),
         op: () => ({
           operation: 'permanentDelete',
           endpoint: apiPaths.notePermanentDelete(id),
@@ -803,6 +819,7 @@ export function usePermanentDeleteNote() {
           keys: [noteKey(id)],
         }),
       });
+      deleteUploadFiles(uploadFiles);
     },
     onSuccess: (_data, id) => {
       queryClient.removeQueries({ queryKey: noteLocalQueryKey(id) });
@@ -1021,10 +1038,10 @@ export function useLeaveNote() {
       // returning 403 for a note the user no longer has access to. A rejection
       // has nothing local to attach to, so the drain resolves it by pulling the
       // note, which brings it back if the server kept the share (#1285).
-      await enqueueWrite(db, {
+      const uploadFiles = await enqueueWrite(db, {
         localApply: async () => {
           await requireLocalNote(db, noteId);
-          await permanentDeleteLocalNote(db, noteId);
+          return permanentDeleteLocalNoteRows(db, noteId);
         },
         op: () => ({
           operation: 'unshare',
@@ -1033,6 +1050,8 @@ export function useLeaveNote() {
           keys: [noteKey(noteId)],
         }),
       });
+      // Only once committed, as in usePermanentDeleteNote.
+      deleteUploadFiles(uploadFiles);
     },
     onSuccess: (_data, { noteId }) => {
       queryClient.removeQueries({ queryKey: noteLocalQueryKey(noteId) });
@@ -1056,17 +1075,21 @@ export function useToggleNoteItemCompleted() {
           : note,
       );
     },
-    mutationFn: async ({ noteId, itemId, completed }: { noteId: string; itemId: string; completed: boolean }): Promise<void> => {
+    // Resolves to every id SQLite now holds at `completed`: the cascade as
+    // the stored hierarchy scopes it, which can lag the editor's own (an
+    // indent not yet saved), so the editor marks only these ids as saved.
+    mutationFn: async ({ noteId, itemId, completed }: { noteId: string; itemId: string; completed: boolean }): Promise<string[]> => {
       assertSwitchWriteAllowed();
-      await enqueueWrite(db, {
+      return enqueueWrite(db, {
         localApply: async () => {
           const note = await getLocalNote(db, noteId);
+          const items = note?.note_type === 'list' && note.items ? note.items : [];
           // Every changed id is one whose value actually flips, so the whole
           // set moves in one grouped write — no window where a re-read can
           // catch a parent checked but its children not. The op names only the
           // tapped item; the server applies the same cascade.
-          const changedIds = note?.note_type === 'list' && note.items ? collectToggleCascade(note.items, itemId, completed) : [];
-          await setLocalItemsCompleted(db, noteId, changedIds, completed);
+          await setLocalItemsCompleted(db, noteId, collectToggleCascade(items, itemId, completed), completed);
+          return completedCascadeScope(items.map((i) => ({ id: i.id, parentId: i.parent_id })), itemId, completed);
         },
         op: () => ({
           operation: 'setItemsCompleted',
@@ -1101,11 +1124,15 @@ export function useUncheckAllItems() {
           : note,
       );
     },
-    mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<void> => {
+    // Resolves to the ids it unchecked, as the toggle does.
+    mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<string[]> => {
       assertSwitchWriteAllowed();
-      if (itemIds.length === 0) return;
-      await enqueueWrite(db, {
-        localApply: () => setLocalItemsCompleted(db, noteId, itemIds, false),
+      if (itemIds.length === 0) return [];
+      return enqueueWrite(db, {
+        localApply: async () => {
+          await setLocalItemsCompleted(db, noteId, itemIds, false);
+          return itemIds;
+        },
         // Carries the exact ids captured at click time.
         op: () => ({
           operation: 'setItemsCompleted',

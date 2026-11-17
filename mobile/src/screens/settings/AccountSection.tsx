@@ -19,7 +19,6 @@ export default function AccountSection() {
   const [firstName, setFirstName] = useState(user?.first_name ?? '');
   const [lastName, setLastName] = useState(user?.last_name ?? '');
   const [username, setUsername] = useState(user?.username ?? '');
-  const [profileSaving, setProfileSaving] = useState(false);
   // Both hold a translation key (or, for errors, a server message that isn't
   // one) and are translated at render, so switching language re-renders them in
   // the new language instead of leaving a stale string on screen.
@@ -43,7 +42,6 @@ export default function AccountSection() {
       setProfileError(USERNAME_ERROR_KEYS[usernameError]);
       return;
     }
-    setProfileSaving(true);
     const profileUpdate = { username, first_name: firstName, last_name: lastName } satisfies UpdateMeRequest;
 
     const previousUser = user;
@@ -61,7 +59,6 @@ export default function AccountSection() {
     // round-trip (and the offline-queue fallback, which never drains in local mode).
     if (isLocalMode) {
       setProfileSuccess('settings.profileUpdated');
-      setProfileSaving(false);
       return;
     }
 
@@ -79,8 +76,6 @@ export default function AccountSection() {
         if (settings) void cacheAuthProfile({ user: previousUser, settings });
       }
       setProfileError(extractApiError(err) ?? 'settings.failedUpdateProfile');
-    } finally {
-      setProfileSaving(false);
     }
   }, [firstName, lastName, setUser, username, user, settings, db, isLocalMode]);
 
@@ -128,16 +123,13 @@ export default function AccountSection() {
         <Text style={[styles.successText, { color: colors.success }]}>{displayMessage(t, profileSuccess)}</Text>
       )}
       <TouchableOpacity
-        style={[styles.primaryButton, { backgroundColor: colors.primary }, profileSaving && styles.buttonDisabled]}
+        style={[styles.primaryButton, { backgroundColor: colors.primary }]}
         onPress={handleSaveProfile}
-        disabled={profileSaving}
         testID="settings-save-profile"
         accessibilityLabel={t('settings.saveChanges')}
         accessibilityRole="button"
       >
-        <Text style={styles.primaryButtonText}>
-          {profileSaving ? t('settings.saving') : t('settings.saveChanges')}
-        </Text>
+        <Text style={styles.primaryButtonText}>{t('settings.saveChanges')}</Text>
       </TouchableOpacity>
     </View>
   );

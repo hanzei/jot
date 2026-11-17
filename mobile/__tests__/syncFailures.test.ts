@@ -12,7 +12,7 @@ import {
   keepThenDiscard,
 } from '../src/hooks/useSyncFailures';
 import { getDeadLetteredOperations, type DeadLetteredOperation } from '../src/db/syncQueue';
-import { saveNote } from '../src/db/noteQueries';
+import { getStoredLabels, saveNote, upsertLabel } from '../src/db/noteQueries';
 import { insertKeys } from '../src/db/queueKeys';
 import type { Note } from '@jot/shared';
 import { jot } from '../src/api/jot';
@@ -22,10 +22,14 @@ jest.mock('../src/api/jot', () => ({
     notes: {
       getById: jest.fn(),
     },
+    labels: {
+      getAll: jest.fn(),
+    },
   },
 }));
 
 const mockGetNote = jest.mocked(jot.notes.getById);
+const mockGetLabels = jest.mocked(jot.labels.getAll);
 
 function makeTextNote(id: string, content = 'hello'): Note {
   return {
@@ -262,6 +266,70 @@ describe('reconcileDiscard', () => {
       db.runAsync.mock.calls.findIndex((c) => String(c[0]).startsWith(sqlPrefix));
     // The dead-letter delete is the last write — it follows clearing the failed flag.
     expect(order('DELETE FROM dead_letter')).toBeGreaterThan(order(`UPDATE notes SET sync_state = 'synced'`));
+  });
+});
+
+describe('reconcileDiscard of a label write', () => {
+  const serverLabel = (id: string, name: string) => ({ id, name, user_id: 'u1', created_at: '', updated_at: '', note_count: 0 });
+  const storedNames = async () => (await getStoredLabels(globalThis.testDb)).map((l) => `${l.id}:${l.name}`);
+
+  /** Records a dead letter for a label op, with its `label:` key, in the real test DB. */
+  async function deadLetterFor(operation: string, labelId: string): Promise<DeadLetteredOperation> {
+    const db = globalThis.testDb;
+    const { lastInsertRowId } = await db.runAsync(
+      `INSERT INTO dead_letter (operation, endpoint, method, body, status, note_id, created_at, failed_at)
+       VALUES (?, ?, 'POST', NULL, 400, NULL, '', '')`,
+      [operation, `/labels/${labelId}`],
+    );
+    await insertKeys(db, 'dead_letter_keys', lastInsertRowId, { keys: [`label:${labelId}`] });
+    const [row] = await getDeadLetteredOperations(db);
+    return row!;
+  }
+
+  it.each<[string, string[], string[]]>([
+    // The rejected rename's name goes back to the server's.
+    ['renameLabel', ['l1:Mine'], ['l1:Theirs']],
+    // The label a rejected delete hid comes back.
+    ['deleteLabel', [], ['l1:Theirs']],
+  ])('restores the server\'s label after a rejected %s', async (operation, before, after) => {
+    const db = globalThis.testDb;
+    for (const entry of before) {
+      const [id, name] = entry.split(':') as [string, string];
+      await upsertLabel(db, { id, name, user_id: 'u1', created_at: '', updated_at: '' });
+    }
+    mockGetLabels.mockResolvedValueOnce([serverLabel('l1', 'Theirs')]);
+
+    await reconcileDiscard(db, await deadLetterFor(operation, 'l1'));
+
+    expect(await storedNames()).toEqual(after);
+    expect(await getDeadLetteredOperations(db)).toEqual([]);
+  });
+
+  it('drops a label whose rejected create the server never had', async () => {
+    const db = globalThis.testDb;
+    await upsertLabel(db, { id: 'l1', name: 'Mine', user_id: 'u1', created_at: '', updated_at: '' });
+    mockGetLabels.mockResolvedValueOnce([]);
+
+    await reconcileDiscard(db, await deadLetterFor('createLabel', 'l1'));
+
+    expect(await storedNames()).toEqual([]);
+  });
+
+  it('still resolves the failure when the label list cannot be fetched', async () => {
+    const db = globalThis.testDb;
+    await upsertLabel(db, { id: 'l1', name: 'Mine', user_id: 'u1', created_at: '', updated_at: '' });
+    mockGetLabels.mockRejectedValueOnce(new Error('Network Error'));
+
+    await reconcileDiscard(db, await deadLetterFor('renameLabel', 'l1'));
+
+    expect(await storedNames()).toEqual(['l1:Mine']);
+    expect(await getDeadLetteredOperations(db)).toEqual([]);
+  });
+
+  it('does not re-read labels for any other op', async () => {
+    await reconcileDiscard(makeDb(null) as never, dl({ id: 10, operation: 'updateSettings', note_id: null }));
+
+    expect(mockGetLabels).not.toHaveBeenCalled();
   });
 });
 

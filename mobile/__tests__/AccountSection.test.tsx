@@ -91,6 +91,29 @@ describe('AccountSection', () => {
     expect(mockCacheAuthProfile).toHaveBeenCalled();
   });
 
+  it('shows no pending state while the save is being queued', async () => {
+    mockAuth(false);
+    let finishEnqueue!: () => void;
+    mockEnqueueSettingsUpdate.mockReturnValueOnce(new Promise<void>((resolve) => { finishEnqueue = resolve; }));
+
+    const { getByTestId, getByText, queryByText } = await render(<AccountSection />);
+    await fireEvent.changeText(getByTestId('settings-first-name'), 'Renamed');
+    // Not awaited: the press resolves only once the enqueue does.
+    let pressed!: Promise<unknown>;
+    await act(async () => { pressed = fireEvent.press(getByTestId('settings-save-profile')); });
+
+    // A write never shows a pending state (mobile/CLAUDE.md).
+    expect(getByTestId('settings-save-profile')).not.toBeDisabled();
+    expect(getByText(i18n.t('settings.saveChanges'))).toBeTruthy();
+    expect(queryByText(i18n.t('settings.saving'))).toBeNull();
+
+    await act(async () => {
+      finishEnqueue();
+      await pressed;
+    });
+    expect(getByText(i18n.t('settings.profileUpdated'))).toBeTruthy();
+  });
+
   it('does not touch the server or sync queue in local mode', async () => {
     mockAuth(true);
 
@@ -112,7 +135,7 @@ describe('AccountSection', () => {
     expect(mockCacheAuthProfile).not.toHaveBeenCalled();
   });
 
-  it('rolls back and re-enables the save button when the local enqueue itself fails', async () => {
+  it('rolls back when the local enqueue itself fails', async () => {
     mockAuth(false);
     mockEnqueueSettingsUpdate.mockRejectedValueOnce(new Error('sqlite write failed'));
 
@@ -120,7 +143,6 @@ describe('AccountSection', () => {
     await fireEvent.changeText(getByTestId('settings-first-name'), 'Renamed');
     await fireEvent.press(getByTestId('settings-save-profile'));
 
-    // The button must not stay stuck on "Saving…" forever.
     await waitFor(() => {
       expect(getByText(i18n.t('settings.failedUpdateProfile'))).toBeTruthy();
     });

@@ -210,13 +210,14 @@ export function useListItemEditing({
 
   // Persists a completed-flag change already applied to the editor. `priorById`
   // holds the value each changed item had before it; `request` commits the
-  // change to SQLite with its queue row (the drain sends it, #1285). Runs
-  // inside the item-write in-flight window, so until the baseline is advanced
-  // no note re-read is applied over it. Resolves false only when the local
-  // write failed and the flags were reverted.
+  // change to SQLite with its queue row (the drain sends it, #1285) and
+  // resolves to the ids it committed to the new value. Runs inside the
+  // item-write in-flight window, so until the baseline is advanced no note
+  // re-read is applied over it. Resolves false only when the local write
+  // failed and the flags were reverted.
   const persistCompletedWrite = useCallback(async (
     priorById: ReadonlyMap<string, boolean>,
-    request: () => Promise<void>,
+    request: () => Promise<readonly string[]>,
   ): Promise<boolean> => {
     const applyItems = (completedById: ReadonlyMap<string, boolean>) => {
       const next = applyCompletedValues(itemsRef.current, completedById);
@@ -233,12 +234,14 @@ export function useListItemEditing({
     };
     const write = completedWrites.begin(priorById);
     try {
-      await request();
-      // The local DB now holds the change; advance the baseline for the items
-      // no later write has taken over.
+      const committed = new Set(await request());
+      // Advance the baseline for the items the local DB now holds at the new
+      // value and no later write has taken over. The write scopes its cascade
+      // by the stored hierarchy, which can lag the editor's (an indent not yet
+      // saved): an item outside it stays for the next save to send.
       const decided = new Map<string, boolean>();
       for (const entry of priorById) {
-        if (completedWrites.decides(write, entry[0])) decided.set(entry[0], !entry[1]);
+        if (committed.has(entry[0]) && completedWrites.decides(write, entry[0])) decided.set(entry[0], !entry[1]);
       }
       syncBaseline(decided);
       return true;

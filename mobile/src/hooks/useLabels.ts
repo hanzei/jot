@@ -127,11 +127,15 @@ export function useLabels() {
     const [labels, counts] = await Promise.all([getStoredLabels(db), getLocalLabelCounts(db)]);
     return labels.map((label) => ({ ...label, note_count: counts[label.id] ?? 0 }));
   }, [db]);
+  // Returns the store as reconciled, not the raw server list: a label with a
+  // queued create, rename or delete keeps its local state (saveServerLabels),
+  // and the list shows what was saved.
   const serverFn = useCallback(async (): Promise<LabelWithCount[]> => {
     const labels = await jot.labels.getAll();
     await saveServerLabels(db, labels);
-    return labels;
-  }, [db]);
+    const serverCounts = new Map(labels.map((label) => [label.id, label.note_count]));
+    return (await localFn()).map((label) => ({ ...label, note_count: serverCounts.get(label.id) ?? label.note_count }));
+  }, [db, localFn]);
   return useBackgroundSyncQuery(labelsQueryKey, localFn, serverFn);
 }
 

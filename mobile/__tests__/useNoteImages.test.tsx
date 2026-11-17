@@ -1,5 +1,5 @@
 import React from 'react';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import axios from 'axios';
 import { useUploadNoteImage, useDeleteNoteImage } from '../src/hooks/useNoteImages';
@@ -434,7 +434,9 @@ describe('useNoteImages hooks', () => {
       mockClientModule.isServerSwitchInProgress.mockReturnValue(true);
       const { result } = await renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
 
-      await expect(result.current.mutateAsync({ noteId: 'note-1', imageId: 'img-1' })).rejects.toThrow('Server switch in progress');
+      await act(async () => {
+        await expect(result.current.mutateAsync({ noteId: 'note-1', imageId: 'img-1' })).rejects.toThrow('Server switch in progress');
+      });
 
       expect(await imagesOf('note-1')).toEqual([makeImage({ id: 'img-1' })]);
       expect(await queuedOps(db)).toEqual([]);
@@ -445,7 +447,9 @@ describe('useNoteImages hooks', () => {
       await saveNote(db, makeTextNote({ id: 'note-1', images: [makeImage({ id: 'img-1' })] }));
       const { result } = await renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
 
-      await result.current.mutateAsync({ noteId: 'note-1', imageId: 'img-1' });
+      await act(async () => {
+        await result.current.mutateAsync({ noteId: 'note-1', imageId: 'img-1' });
+      });
 
       expect(await imagesOf('note-1')).toEqual([]);
       expect(await queuedOps(db)).toEqual([]);

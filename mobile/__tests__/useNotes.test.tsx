@@ -35,7 +35,7 @@ import { recordOwnVersionStep } from '../src/db/ownVersions';
 import { setLocalModeActive } from '../src/store/localMode';
 import * as clientModule from '../src/api/client';
 import { jot } from '../src/api/jot';
-import { makeLabel, makeListNote, makeNoteItem, makeTextNote, queuedOps } from './helpers/fixtures';
+import { makeLabel, makeListNote, makeNoteItem, makeTextNote, queuedOps, seedImageUpload } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
 
 jest.mock('../src/api/jot');
@@ -359,10 +359,14 @@ describe('useNotes write hooks (outbox)', () => {
     it('converts a list to text locally and queues the precomputed content', async () => {
       const convert = await mountMutation(() => useConvertNoteType());
 
-      await convert({ id: LIST_ID });
+      const converted = await convert({ id: LIST_ID });
 
       const local = await getLocalNote(db, LIST_ID);
       expect(local?.note_type).toBe('text');
+      // The returned (and cached) note is a text note, as SQLite stored it.
+      expect(converted).toEqual(local);
+      expect(converted).not.toHaveProperty('title');
+      expect(converted).not.toHaveProperty('items');
       expect((await queuedOps(db))[0]!.body).toEqual({
         note_type: 'text',
         content: local?.note_type === 'text' ? local.content : null,
@@ -470,8 +474,9 @@ describe('useNotes write hooks (outbox)', () => {
       queryClient.setQueryData(noteLocalQueryKey(LIST_ID), await getLocalNote(db, LIST_ID));
       const toggle = await mountMutation(() => useToggleNoteItemCompleted(), wrapper);
 
-      await toggle({ noteId: LIST_ID, itemId: 'ParentItem000000000000', completed: true });
+      const committed = await toggle({ noteId: LIST_ID, itemId: 'ParentItem000000000000', completed: true });
 
+      expect(committed).toEqual(['ParentItem000000000000', 'ChildItem0000000000000']);
       // Checking a parent checks its children, in SQLite as in the cache; the
       // server applies the same cascade to the one id it is sent.
       const expected = { ParentItem000000000000: true, ChildItem0000000000000: true, OtherItem0000000000000: false };
@@ -485,6 +490,19 @@ describe('useNotes write hooks (outbox)', () => {
         keys: [`note:${LIST_ID}`],
         readKeys: [],
       }]);
+    });
+
+    it('useToggleNoteItemCompleted resolves to the cascade as SQLite scopes it, not the editor', async () => {
+      // The editor indented "Bread" under "Fruit", but that is not saved yet.
+      const toggle = await mountMutation(() => useToggleNoteItemCompleted());
+      await toggle({ noteId: LIST_ID, itemId: 'ChildItem0000000000000', completed: true });
+
+      const committed = await toggle({ noteId: LIST_ID, itemId: 'ParentItem000000000000', completed: true });
+
+      // The child already held the value, so it counts; "Bread" is not in the
+      // stored cascade and stays for the editor's next save.
+      expect(committed).toEqual(['ParentItem000000000000', 'ChildItem0000000000000']);
+      expect(completedById(await getLocalNote(db, LIST_ID))).toMatchObject({ OtherItem0000000000000: false });
     });
 
     it('useToggleNoteItemCompleted un-completes a completed parent when a child is unchecked', async () => {
@@ -510,8 +528,9 @@ describe('useNotes write hooks (outbox)', () => {
       await db.runAsync('DELETE FROM sync_queue');
       const uncheckAll = await mountMutation(() => useUncheckAllItems());
 
-      await uncheckAll({ noteId: LIST_ID, itemIds: ['ParentItem000000000000', 'ChildItem0000000000000'] });
+      const committed = await uncheckAll({ noteId: LIST_ID, itemIds: ['ParentItem000000000000', 'ChildItem0000000000000'] });
 
+      expect(committed).toEqual(['ParentItem000000000000', 'ChildItem0000000000000']);
       expect(completedById(await getLocalNote(db, LIST_ID))).toEqual({
         ParentItem000000000000: false,
         ChildItem0000000000000: false,
@@ -664,6 +683,40 @@ describe('useNotes write hooks (outbox)', () => {
         method: 'DELETE',
         keys: [`note:${TEXT_ID}`],
       })]);
+    });
+  });
+
+  describe('the queued image uploads of a note deleted for good', () => {
+    const uploadRows = () => db.getAllAsync('SELECT id FROM pending_image_uploads');
+    // Makes the outbox's queue insert fail, so the write's transaction rolls back.
+    const failQueueInserts = () => db.execAsync(
+      `CREATE TRIGGER fail_queue BEFORE INSERT ON sync_queue BEGIN SELECT RAISE(ABORT, 'queue insert failed'); END`,
+    );
+
+    it.each<[string, (vars: string) => Promise<unknown>]>([
+      ['usePermanentDeleteNote', async (id) => (await mountMutation(() => usePermanentDeleteNote()))(id)],
+      ['useLeaveNote', async (noteId) => (await mountMutation(() => useLeaveNote()))({ noteId })],
+    ])('%s removes their files once the write has committed', async (_name, run) => {
+      const upload = await seedImageUpload(db, { note_id: TEXT_ID });
+
+      await run(TEXT_ID);
+
+      expect(await uploadRows()).toEqual([]);
+      expect(globalThis.mockFileSystem.files.has(upload.local_path)).toBe(false);
+    });
+
+    it.each<[string, (vars: string) => Promise<unknown>]>([
+      ['usePermanentDeleteNote', async (id) => (await mountMutation(() => usePermanentDeleteNote()))(id)],
+      ['useLeaveNote', async (noteId) => (await mountMutation(() => useLeaveNote()))({ noteId })],
+    ])('%s keeps them, files included, when the write rolls back', async (_name, run) => {
+      const upload = await seedImageUpload(db, { note_id: TEXT_ID });
+      await failQueueInserts();
+
+      await expect(run(TEXT_ID)).rejects.toThrow('queue insert failed');
+
+      expect(await getLocalNote(db, TEXT_ID)).not.toBeNull();
+      expect(await uploadRows()).toEqual([{ id: upload.id }]);
+      expect(globalThis.mockFileSystem.files.has(upload.local_path)).toBe(true);
     });
   });
 });

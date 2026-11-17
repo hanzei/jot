@@ -395,3 +395,31 @@ describe('useLabels note_count', () => {
     await waitFor(() => expect(online.result.current.data?.[0]?.note_count).toBe(5));
   });
 });
+
+describe('useLabels server sync', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    db = globalThis.testDb;
+    mockUseNetworkStatus.mockReturnValue({ isConnected: true });
+  });
+
+  it('shows the store as reconciled, keeping queued label writes over the older server list', async () => {
+    const renamed = makeLabel({ id: 'l1', name: 'Old name' });
+    const deleted = makeLabel({ id: 'l2', name: 'Deleted' });
+    await noteQueriesModule.upsertLabel(db, renamed);
+    await noteQueriesModule.upsertLabel(db, deleted);
+    const rename = await mountMutation(() => useRenameLabel());
+    await rename({ labelId: 'l1', name: 'New name' });
+    const remove = await mountMutation(() => useDeleteLabel());
+    await remove({ labelId: 'l2' });
+    // The list was built before either write reached the server.
+    mockJot.labels.getAll.mockResolvedValue([{ ...renamed, note_count: 3 }, { ...deleted, note_count: 0 }]);
+
+    const { result } = await renderHook(() => useLabels(), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(mockJot.labels.getAll).toHaveBeenCalled());
+    await waitFor(() => expect(result.current.data?.[0]?.note_count).toBe(3));
+    expect(result.current.data).toEqual([expect.objectContaining({ id: 'l1', name: 'New name', note_count: 3 })]);
+    expect((await storedLabels()).map((l) => l.name)).toEqual(['New name']);
+  });
+});

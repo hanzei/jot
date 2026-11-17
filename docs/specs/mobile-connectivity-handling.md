@@ -527,7 +527,9 @@ SSE event) and the response to this device's own write.
   failed change**, apply the response in full: content and version together.
 - When **other ops are still queued**, take neither content nor version. The
   local row already holds the later edits, and adopting only the version breaks
-  §8.1.
+  §8.1. The same goes for the item list a check-off or bulk delete returns
+  (`setItemsCompleted`, `deleteCompletedItems`): it is applied only under these
+  rules, and otherwise the note is pulled once it is no longer protected.
 - When the note has an **unresolved failed change**, take neither content nor
   version; per-user fields may be applied (§8.4).
 - The check and the write happen in **one transaction**, as for snapshots. A
@@ -542,6 +544,15 @@ SSE event) and the response to this device's own write.
 **Convergence.** After a drain that sent anything, pull the notes it touched.
 The device does not receive the SSE echo of its own writes, so without the pull
 a row that fell behind stays behind until some unrelated sync happens to run.
+A pull the server answers with 404/410 tombstones the note through
+`applyServerRemoval`, under the snapshot rules above, so a rejected change on a
+note gone from the server does not linger as local state.
+
+**Labels.** A label list sync follows the snapshot rule per label: a label with
+a queued `createLabel`, `renameLabel` or `deleteLabel` is neither updated nor
+pruned, nor brought back after its delete (`getPendingLabelIds`, read in the
+write's transaction by `saveServerLabels`). The list the app shows afterwards
+is the reconciled store, not the server's raw list.
 
 ### 8.4 Failed changes
 
@@ -563,7 +574,7 @@ note's content:
 | A permanent rejection of | Becomes |
 |---|---|
 | Content: `create`, `duplicate`, `convertNoteType`, an `update` with `title` or `content`, `createItem`, an `updateItem` with `text` | A failed change: dead-lettered, the note badged and protected (above). |
-| Label entities: `createLabel`, `renameLabel`, `deleteLabel` | A failed change. |
+| Label entities: `createLabel`, `renameLabel`, `deleteLabel` | A failed change. Resolving it re-reads the server's label list, so the label store drops the rejected name, deletion or create (a failed fetch leaves that to the next label sync). |
 | `updateSettings` | A failed change. Once the queue is empty, the session is re-read so the app shows the server's values again (`syncedSettings`). |
 | Per-user state: an `update` without `title`/`content` (pin, colour, archive, collapse), `delete`, `restore`, `permanentDelete`, `reorder` | Dropped, and the notes it names pulled: the local change is undone silently. |
 | Item structure and completed flags: `deleteItem`, `reorderItems`, `setItemsCompleted`, `deleteCompletedItems`, an `updateItem` without `text` | Dropped and pulled. |

@@ -52,9 +52,8 @@ beforeEach(() => {
   silenceConsole('warn', /^Discarding queued operation/, /^Dead-lettering queued operation/);
   silenceConsole('info', /^Dropping queued operation/);
   // A drain pulls the notes its landed writes touched (#1262); here that pull
-  // gets a 404, which is logged and ignored.
+  // gets a 404, which tombstones a note nothing protects.
   mockApi.get.mockRejectedValue(makeAxiosError(404));
-  silenceConsole('warn', /^Failed to pull note id=\S+ after the queue drain: Request failed with status code 404$/);
 });
 
 /** Seed a local note at a known optimistic-concurrency version. */
@@ -582,6 +581,32 @@ describe('drainQueue rejection policy', () => {
 
     expect(await deadLetters()).toEqual([]);
     expect(await getLocalNote(db, 'n1')).toMatchObject({ content: 'server' });
+  });
+
+  it('tombstones a note whose rejected op is pulled and the server reports gone', async () => {
+    // A rejected pin on a note another device has since deleted for good: the
+    // pull is a 404, so the local change must not stay behind unprotected.
+    await saveNote(db, buildTextNote({ id: 'n1', content: 'local', pinned: true }));
+    await seedQueueEntry(db, n1({ operation: 'update', endpoint: '/notes/n1', method: 'PATCH', body: { pinned: true } }));
+    mockApi.patch.mockRejectedValueOnce(makeAxiosError(404));
+    mockApi.get.mockRejectedValue(makeAxiosError(410));
+
+    await drainQueue(db);
+
+    expect(await remainingQueueIds(db)).toEqual([]);
+    expect((await getLocalNote(db, 'n1'))?.deleted_at).toEqual(expect.any(String));
+  });
+
+  it('keeps a note whose post-drain pull fails for any other reason', async () => {
+    silenceConsole('warn', /^Failed to pull note id=n1 after the queue drain/);
+    await saveNote(db, buildTextNote({ id: 'n1', content: 'local', pinned: true }));
+    await seedQueueEntry(db, n1({ operation: 'update', endpoint: '/notes/n1', method: 'PATCH', body: { pinned: true } }));
+    mockApi.patch.mockRejectedValueOnce(makeAxiosError(403));
+    mockApi.get.mockRejectedValue(makeAxiosError(403));
+
+    await drainQueue(db);
+
+    expect((await getLocalNote(db, 'n1'))?.deleted_at).toBeNull();
   });
 
   // Content the user typed, and label and settings changes: a failed change.

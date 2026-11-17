@@ -646,6 +646,27 @@ export async function permanentDeleteLocalNote(db: SQLiteDatabase, id: string): 
   await db.runAsync('DELETE FROM notes WHERE id = ?', [id]);
 }
 
+/**
+ * {@link permanentDeleteLocalNote} for a caller inside a transaction that may
+ * still roll back (an outbox write): deletes the note, its queued upload rows
+ * cascading with it, but leaves their files, whose paths it returns. A rollback
+ * restores those rows, so the caller passes the paths to
+ * {@link deleteUploadFiles} only once the transaction has committed.
+ */
+export async function permanentDeleteLocalNoteRows(db: SQLiteDatabase, id: string): Promise<string[]> {
+  const rows = await db.getAllAsync<{ local_path: string }>(
+    'SELECT local_path FROM pending_image_uploads WHERE note_id = ?',
+    [id],
+  );
+  await db.runAsync('DELETE FROM notes WHERE id = ?', [id]);
+  return rows.map((row) => row.local_path);
+}
+
+/** Best-effort removal of queued-upload files returned by {@link permanentDeleteLocalNoteRows}. */
+export function deleteUploadFiles(paths: readonly string[]): void {
+  for (const path of paths) deleteFileIfExists(path);
+}
+
 export interface LocalNoteChanges {
   title?: string;
   content?: string;
@@ -934,17 +955,18 @@ export async function deleteStoredLabel(db: SQLiteDatabase, labelId: string): Pr
 
 /**
  * Reconcile the store against a canonical server label list: upsert every server
- * label and drop any local row the server no longer has. `skipLabelIds` protects
- * labels with an unsynced offline create (their `createLabel` op hasn't drained,
- * so the server doesn't know them yet) from being pruned (see saveServerLabels).
+ * label and drop any local row the server no longer has. The ids
+ * `readSkipLabelIds` returns, read inside the transaction, are neither upserted
+ * nor pruned: labels with a queued create, rename or delete, whose local state
+ * the server list predates (see saveServerLabels).
  */
 export async function saveLabels(
   db: SQLiteDatabase,
   labels: Label[],
-  options?: { skipLabelIds?: ReadonlySet<string> },
+  options?: { readSkipLabelIds?: () => Promise<ReadonlySet<string>> },
 ): Promise<void> {
-  const skip = options?.skipLabelIds;
   await withSerializedTransaction(db, async () => {
+    const skip = await options?.readSkipLabelIds?.();
     const serverIds = new Set(labels.map((l) => l.id));
     const existing = await db.getAllAsync<Pick<LabelRow, 'id'>>('SELECT id FROM labels');
     for (const row of existing) {
@@ -953,7 +975,7 @@ export async function saveLabels(
       }
     }
     for (const label of labels) {
-      await upsertLabel(db, label);
+      if (!skip?.has(label.id)) await upsertLabel(db, label);
     }
   });
 }
@@ -1271,17 +1293,14 @@ export async function reconcileLocalItemsInTx(
   db: SQLiteDatabase,
   noteId: string,
   items: ServerItemInput[],
-  keepLocalCompletedIds?: ReadonlySet<string>,
 ): Promise<void> {
   const now = new Date().toISOString();
-  // `keepLocalCompletedIds` keeps the local completed value of items a queued
-  // op has yet to replay. Every other field is taken as reported.
   for (const item of items) {
-    const completed = completedBinding(item, keepLocalCompletedIds);
+    const completed = item.completed ? 1 : 0;
     await db.runAsync(
-      `UPDATE note_items SET text = ?, completed = CASE WHEN ? THEN completed ELSE ? END, position = ?, parent_id = ?, assigned_to = ?, updated_at = ?
+      `UPDATE note_items SET text = ?, completed = ?, position = ?, parent_id = ?, assigned_to = ?, updated_at = ?
        WHERE id = ? AND note_id = ?`,
-      [item.text, completed.keepLocal, completed.value, item.position, item.parent_id, item.assigned_to, now, item.id, noteId],
+      [item.text, completed, item.position, item.parent_id, item.assigned_to, now, item.id, noteId],
     );
     // No-ops (via INSERT OR IGNORE) unless the UPDATE above matched zero rows,
     // i.e. this item doesn't exist locally yet (e.g. created on another
@@ -1289,7 +1308,7 @@ export async function reconcileLocalItemsInTx(
     await db.runAsync(
       `INSERT OR IGNORE INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [item.id, noteId, item.text, completed.value, item.position, item.parent_id, item.assigned_to, now, now],
+      [item.id, noteId, item.text, completed, item.position, item.parent_id, item.assigned_to, now, now],
     );
   }
   await pruneLocalItems(db, noteId, items, true);
