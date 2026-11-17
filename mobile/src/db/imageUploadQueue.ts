@@ -114,7 +114,9 @@ export async function getPendingImageUploads(db: SQLiteDatabase, noteId: string)
     'SELECT * FROM pending_image_uploads WHERE note_id = ? ORDER BY created_at ASC',
     [noteId],
   );
-  return [...queued, ...failed];
+  // The drain may flag an upload between the two reads: its failed row wins.
+  const failedIds = new Set(failed.map((row) => row.id));
+  return [...queued.filter((row) => !failedIds.has(row.id)), ...failed];
 }
 
 /** Image-upload diagnostics, the counterpart of {@link SyncQueueStats} (issue #1085). */

@@ -822,7 +822,8 @@ export function parseImageUploadBody(body: Record<string, unknown> | null | unde
 /**
  * Move a rejected upload to `pending_image_uploads` as an error tile (Retry /
  * Dismiss) instead of dead-lettering it. If the note is gone locally, the file
- * is deleted instead.
+ * is deleted instead. If the row is already gone (dismissed or moved to another
+ * note while the request was in flight), nothing changes.
  */
 async function flagImageUploadFailed(
   db: SQLiteDatabase,
@@ -832,8 +833,11 @@ async function flagImageUploadFailed(
   message: string,
   counts: { attempts: number; processingErrors: number },
 ): Promise<void> {
+  let owned = false;
   let flagged = false;
   await withSerializedTransaction(db, async () => {
+    owned = (await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id])).changes > 0;
+    if (!owned) return;
     const result = await db.runAsync(
       `INSERT INTO pending_image_uploads
          (id, note_id, local_path, filename, mime_type, size_bytes, status, error_message, created_at, attempts, processing_errors)
@@ -853,15 +857,17 @@ async function flagImageUploadFailed(
       ],
     );
     flagged = result.changes > 0;
-    await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
   });
-  if (!flagged) deleteFileIfExists(upload.local_path);
+  if (owned && !flagged) deleteFileIfExists(upload.local_path);
 }
 
-/** Drop a queued upload for good: its row and its file. */
+/**
+ * Drop a queued upload for good: its row and its file. The file goes only if
+ * this removed the row: one moved to another note meanwhile shares the file.
+ */
 async function discardImageUpload(db: SQLiteDatabase, entry: QueueEntry, upload: ImageUploadBody | null): Promise<void> {
-  await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
-  if (upload) deleteFileIfExists(upload.local_path);
+  const result = await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
+  if (upload && result.changes > 0) deleteFileIfExists(upload.local_path);
 }
 
 export interface DiscardedOperation {
@@ -1174,6 +1180,9 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           await removeLandedEntry();
         });
         deleteFileIfExists(upload.local_path);
+        // Ops it followed withheld their responses while it was queued; the
+        // pull catches the note up once nothing is left queued for it.
+        pullNoteIds.add(uploadNoteId);
         continue;
       }
 
