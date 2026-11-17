@@ -35,12 +35,17 @@ const ACCOUNT_DATA_TABLES = [
  * transaction. Returns the copied upload files to delete once it commits.
  */
 async function wipeRows(db: SQLiteDatabase, owner: string): Promise<string[]> {
-  const uploads = await db.getAllAsync<{ local_path: string }>('SELECT local_path FROM pending_image_uploads');
+  // Failed uploads keep their file in their row; queued ones in their queue body (#1288).
+  const uploads = await db.getAllAsync<{ local_path: string | null }>(
+    `SELECT local_path FROM pending_image_uploads
+     UNION ALL
+     SELECT json_extract(body, '$.local_path') FROM sync_queue WHERE operation = 'uploadImage'`,
+  );
   for (const table of ACCOUNT_DATA_TABLES) {
     await db.runAsync(`DELETE FROM ${table}`);
   }
   await setOwner(db, owner);
-  return uploads.map((row) => row.local_path);
+  return uploads.flatMap((row) => (row.local_path === null ? [] : [row.local_path]));
 }
 
 async function setOwner(db: SQLiteDatabase, owner: string): Promise<void> {

@@ -1,51 +1,74 @@
 /**
- * Tests for the offline image-upload queue (issue #618): enqueueing copies the
- * picked file to a stable path, and the drain uploads queued entries on
- * reconnect, respecting the same transient/permanent split as syncQueue's
- * drainQueue.
+ * Tests for offline image uploads (issue #618): enqueueing copies the picked
+ * file to a stable path and queues an `uploadImage` row in the sync queue
+ * (#1288), and the main drain sends it, respecting its transient/permanent
+ * split. A permanently rejected upload becomes an error tile in
+ * `pending_image_uploads` rather than a dead letter.
  */
 
 import {
   enqueueImageUpload,
   getPendingImageUploads,
-  getQueuedImageUploadCount,
   getImageUploadQueueStats,
   retryImageUpload,
   dismissImageUpload,
-  drainImageUploadQueue,
   reassignPendingImageUploads,
   type PendingImageUploadEntry,
 } from '../src/db/imageUploadQueue';
 import { uploadNoteImage } from '../src/api/images';
 import { jot } from '../src/api/jot';
-import { getLocalNote, getPendingCreateNoteIds, markNotePendingCreate, markNoteSyncFailed, patchLocalNoteImages, saveNote } from '../src/db/noteQueries';
-import { subscribeToEnqueue, MAX_ENTRY_DRAIN_ATTEMPTS } from '../src/db/syncQueue';
-import { makeListNote, makeNoteItem, makeTextNote, seedImageUpload } from './helpers/fixtures';
+import {
+  getFailedNoteIds,
+  getLocalNote,
+  getPendingCreateNoteIds,
+  markNotePendingCreate,
+  markNoteSyncFailed,
+  patchLocalNoteImagesInTx,
+  permanentDeleteLocalNote,
+  saveNote,
+} from '../src/db/noteQueries';
+import {
+  drainQueue,
+  getDeadLetterCount,
+  getProtectedNoteIds,
+  subscribeToEnqueue,
+  MAX_ENTRY_DRAIN_ATTEMPTS,
+} from '../src/db/syncQueue';
+import { makeListNote, makeNoteItem, makeTextNote, seedImageUpload, seedQueueEntry } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
 import { silenceConsole } from './helpers/consoleGuard';
+import api from '../src/api/client';
 
 jest.mock('../src/api/images', () => ({
   uploadNoteImage: jest.fn(),
 }));
 
+jest.mock('../src/api/client', () => ({
+  __esModule: true,
+  default: { get: jest.fn(), post: jest.fn(), patch: jest.fn(), delete: jest.fn() },
+}));
+
 // The drain probes the server with `jot.about.get` when an upload gets a
-// gateway status (502/503/504).
+// gateway status (502/503/504), and pulls a note with `jot.notes.getById` when
+// a landed write could not be applied locally.
 jest.mock('../src/api/jot', () => ({
-  jot: { about: { get: jest.fn() } },
+  jot: { about: { get: jest.fn() }, notes: { getById: jest.fn() } },
 }));
 
 // The note queries run for real against the test database; only
-// patchLocalNoteImages stays a spy so one case can make it throw.
+// patchLocalNoteImagesInTx stays a spy so one case can make it throw.
 jest.mock('../src/db/noteQueries', () => {
   const actual = jest.requireActual('../src/db/noteQueries');
-  return { ...actual, patchLocalNoteImages: jest.fn(actual.patchLocalNoteImages) };
+  return { ...actual, patchLocalNoteImagesInTx: jest.fn(actual.patchLocalNoteImagesInTx) };
 });
 
 const fs = globalThis.mockFileSystem;
 
 const mockUploadNoteImage = uploadNoteImage as jest.Mock;
 const mockProbe = jot.about.get as jest.Mock;
-const mockPatchLocalNoteImages = patchLocalNoteImages as jest.Mock;
+const mockGetNote = jot.notes.getById as jest.Mock;
+const mockPatchLocalNoteImages = patchLocalNoteImagesInTx as jest.Mock;
+const mockApi = api as jest.Mocked<typeof api>;
 
 const UPLOAD_PATH = 'file:///docs/pending-image-uploads/upload-1';
 
@@ -55,11 +78,18 @@ let db: TestDatabase;
 const seedUpload = (overrides: Partial<PendingImageUploadEntry> = {}) =>
   seedImageUpload(db, { local_path: UPLOAD_PATH, ...overrides });
 
-const uploadRow = (id: string) =>
-  db.getFirstAsync<{ status: string; error_message: string | null; attempts: number }>(
+/** An upload's state: queued in the sync queue, failed in `pending_image_uploads`, or null when gone. */
+async function uploadRow(id: string): Promise<{ status: string; error_message: string | null; attempts: number } | null> {
+  const queued = await db.getFirstAsync<{ attempts: number }>(
+    `SELECT attempts FROM sync_queue WHERE operation = 'uploadImage' AND json_extract(body, '$.id') = ?`,
+    [id],
+  );
+  if (queued) return { status: 'queued', error_message: null, attempts: queued.attempts };
+  return db.getFirstAsync<{ status: string; error_message: string | null; attempts: number }>(
     'SELECT status, error_message, attempts FROM pending_image_uploads WHERE id = ?',
     [id],
   );
+}
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -67,15 +97,20 @@ beforeEach(() => {
   db = globalThis.testDb;
   // The picked source file that enqueueImageUpload copies from.
   fs.files.set('file:///cache/photo.png', 'png-bytes');
+  // A landed upload pulls its note afterwards; unless a test says otherwise,
+  // that pull fails and leaves the local note as it is.
+  mockGetNote.mockRejectedValue(new Error('pull not stubbed'));
   // The drain logs each stop, give-up and failed local patch; the drain suites
   // below drive exactly those paths.
   silenceConsole(
     'warn',
     /^Flagging image upload/,
-    /^Failed to patch local images/,
-    /^Image upload id=\S+ failed \(attempt \d+\); holding back/,
+    /^Image upload id=\S+ was rejected/,
+    /^Queue entry id=\d+ uploadImage failed \(attempt \d+\); holding back/,
+    /^Queue entry id=\d+ landed server-side/,
+    /^Failed to pull note/,
   );
-  silenceConsole('info', /^Image upload queue drain stopped at entry/);
+  silenceConsole('info', /^Queue drain stopped at entry/, /^Dropping queued image upload/);
 });
 
 describe('enqueueImageUpload', () => {
@@ -132,26 +167,26 @@ describe('enqueueImageUpload', () => {
   });
 });
 
-describe('getPendingImageUploads / getQueuedImageUploadCount', () => {
-  it('reads uploads for a note ordered by created_at', async () => {
-    await seedUpload({ id: 'later', created_at: '2024-01-02T00:00:00Z' });
-    await seedUpload({ id: 'earlier', created_at: '2024-01-01T00:00:00Z' });
+describe('getPendingImageUploads', () => {
+  it('reads a note\'s queued uploads in queue order, then its failed ones', async () => {
+    await seedUpload({ id: 'failed', status: 'error', error_message: 'too big' });
+    await seedUpload({ id: 'first', created_at: '2024-01-02T00:00:00Z' });
+    await seedUpload({ id: 'second', created_at: '2024-01-01T00:00:00Z' });
     await seedUpload({ id: 'other-note', note_id: 'note-2' });
 
-    expect((await getPendingImageUploads(db, 'note-1')).map((e) => e.id)).toEqual(['earlier', 'later']);
+    expect((await getPendingImageUploads(db, 'note-1')).map((e) => [e.id, e.status])).toEqual([
+      ['first', 'queued'],
+      ['second', 'queued'],
+      ['failed', 'error'],
+    ]);
   });
 
-  it('counts only queued (not errored) uploads', async () => {
-    await seedUpload({ id: 'q1' });
-    await seedUpload({ id: 'q2' });
-    await seedUpload({ id: 'q3' });
-    await seedUpload({ id: 'failed', status: 'error', error_message: 'too big' });
+  it('protects a note while it has a queued or a failed upload (#1279)', async () => {
+    await seedUpload({ id: 'queued', note_id: 'note-1' });
+    await seedUpload({ id: 'failed', note_id: 'note-2', status: 'error', error_message: 'too big' });
+    await saveNote(db, makeTextNote({ id: 'note-3' }));
 
-    expect(await getQueuedImageUploadCount(db)).toBe(3);
-  });
-
-  it('counts zero when nothing is queued', async () => {
-    expect(await getQueuedImageUploadCount(db)).toBe(0);
+    expect(await getProtectedNoteIds(db)).toEqual(new Set(['note-1', 'note-2']));
   });
 });
 
@@ -161,9 +196,9 @@ describe('getImageUploadQueueStats', () => {
   });
 
   it('counts queued and errored uploads separately and reports the oldest queued entry', async () => {
+    await seedUpload({ id: 'oldest', created_at: '2024-01-02T00:00:00Z', attempts: 2 });
     // Newer, but the one actually failing: maxAttempts surfaces it.
     await seedUpload({ id: 'newer', created_at: '2024-01-03T00:00:00Z', attempts: 4 });
-    await seedUpload({ id: 'oldest', created_at: '2024-01-02T00:00:00Z', attempts: 2 });
     // Older still, but errored: it waits on the user, not the drain.
     await seedUpload({ id: 'failed', created_at: '2024-01-01T00:00:00Z', status: 'error', error_message: 'too big', attempts: 3 });
 
@@ -183,7 +218,7 @@ describe('getImageUploadQueueStats', () => {
 });
 
 describe('retryImageUpload / dismissImageUpload', () => {
-  it('resets an errored upload to queued and notifies listeners', async () => {
+  it('queues a failed upload again with a fresh attempt budget and notifies listeners', async () => {
     await seedUpload({ status: 'error', error_message: 'boom', attempts: MAX_ENTRY_DRAIN_ATTEMPTS });
     const listener = jest.fn();
     const unsubscribe = subscribeToEnqueue(listener);
@@ -192,12 +227,21 @@ describe('retryImageUpload / dismissImageUpload', () => {
 
     // The manual retry gets a fresh attempt budget (#714).
     expect(await uploadRow('upload-1')).toEqual({ status: 'queued', error_message: null, attempts: 0 });
-    expect(listener).toHaveBeenCalledTimes(1);
+    expect(await db.getAllAsync('SELECT id FROM pending_image_uploads')).toEqual([]);
+    expect(listener).toHaveBeenCalledWith('uploadImage');
     unsubscribe();
   });
 
-  it('deletes the row and its stable file copy', async () => {
+  it('does nothing when retrying an id that is not a failed upload', async () => {
     await seedUpload();
+
+    await retryImageUpload(db, 'upload-1');
+
+    expect(await db.getAllAsync(`SELECT id FROM sync_queue WHERE operation = 'uploadImage'`)).toHaveLength(1);
+  });
+
+  it.each(['queued', 'error'] as const)('deletes a %s upload and its stable file copy', async (status) => {
+    await seedUpload({ status });
 
     await dismissImageUpload(db, 'upload-1');
 
@@ -205,7 +249,7 @@ describe('retryImageUpload / dismissImageUpload', () => {
     expect(fs.files.has(UPLOAD_PATH)).toBe(false);
   });
 
-  it('is a no-op (beyond the delete statement) when the id is unknown', async () => {
+  it('is a no-op when the id is unknown', async () => {
     await seedUpload();
 
     await dismissImageUpload(db, 'missing');
@@ -215,7 +259,7 @@ describe('retryImageUpload / dismissImageUpload', () => {
   });
 });
 
-describe('drainImageUploadQueue', () => {
+describe('draining queued uploads', () => {
   const image = {
     id: 'img-1', filename: 'photo.png', content_type: 'image/png',
     width: 10, height: 10, created_at: '2026-06-01T12:00:00.123456Z',
@@ -225,7 +269,7 @@ describe('drainImageUploadQueue', () => {
     const entry = await seedUpload();
     mockUploadNoteImage.mockResolvedValueOnce(image);
 
-    const result = await drainImageUploadQueue(db);
+    const result = await drainQueue(db);
 
     expect(mockUploadNoteImage).toHaveBeenCalledWith('note-1', {
       uri: entry.local_path,
@@ -241,30 +285,32 @@ describe('drainImageUploadQueue', () => {
     });
     expect(await uploadRow(entry.id)).toBeNull();
     expect(fs.files.has(entry.local_path)).toBe(false);
-    expect(result).toEqual({ uploadedNoteIds: ['note-1'], discardedCount: 0 });
+    expect(result.discardedOperations).toHaveLength(0);
   });
 
   it('discards the entry even when the local-cache patch fails, so a retry cannot re-upload and duplicate the image', async () => {
     const entry = await seedUpload();
     mockUploadNoteImage.mockResolvedValueOnce(image);
     mockPatchLocalNoteImages.mockRejectedValueOnce(new Error('database is locked'));
+    // The note the upload could not be applied to is pulled instead.
+    mockGetNote.mockResolvedValueOnce(makeTextNote({ id: 'note-1', images: [image] }));
 
-    const result = await drainImageUploadQueue(db);
+    const result = await drainQueue(db);
 
     expect(await uploadRow(entry.id)).toBeNull();
     expect(fs.files.has(entry.local_path)).toBe(false);
-    expect(result).toEqual({ uploadedNoteIds: ['note-1'], discardedCount: 0 });
+    expect(result.discardedOperations).toHaveLength(0);
   });
 
   it('skips a note whose offline create has not drained yet, retrying it later', async () => {
     const entry = await seedUpload();
     await markNotePendingCreate(db, 'note-1');
 
-    const result = await drainImageUploadQueue(db);
+    const result = await drainQueue(db);
 
     expect(mockUploadNoteImage).not.toHaveBeenCalled();
     expect(await uploadRow(entry.id)).toMatchObject({ status: 'queued' });
-    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
+    expect(result.discardedOperations).toHaveLength(0);
   });
 
   it('stops draining on a transient failure so the entry is retried next time', async () => {
@@ -273,12 +319,12 @@ describe('drainImageUploadQueue', () => {
     const transientError = Object.assign(new Error('Network Error'), { isAxiosError: true, response: undefined });
     mockUploadNoteImage.mockRejectedValueOnce(transientError);
 
-    const result = await drainImageUploadQueue(db);
+    const result = await drainQueue(db);
 
     expect(mockUploadNoteImage).toHaveBeenCalledTimes(1);
     // A connectivity failure charges no attempt against the head entry (#714).
     expect(await uploadRow('upload-1')).toEqual({ status: 'queued', error_message: null, attempts: 0 });
-    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
+    expect(result.discardedOperations).toHaveLength(0);
   });
 
   it('charges the attempt counter and keeps the upload queued on a 5xx (#714)', async () => {
@@ -286,10 +332,10 @@ describe('drainImageUploadQueue', () => {
     const err = Object.assign(new Error('Server Error'), { isAxiosError: true, response: { status: 500 } });
     mockUploadNoteImage.mockRejectedValueOnce(err);
 
-    const result = await drainImageUploadQueue(db);
+    const result = await drainQueue(db);
 
     expect(await uploadRow('up-5xx')).toEqual({ status: 'queued', error_message: null, attempts: 1 });
-    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
+    expect(result.discardedOperations).toHaveLength(0);
   });
 
   it('charges a 500 without probing the server', async () => {
@@ -299,7 +345,7 @@ describe('drainImageUploadQueue', () => {
       Object.assign(new Error('Server Error'), { isAxiosError: true, response: { status: 500 } }),
     );
 
-    await drainImageUploadQueue(db);
+    await drainQueue(db);
 
     expect(mockProbe).not.toHaveBeenCalled();
     expect(await uploadRow('up-500')).toEqual({ status: 'queued', error_message: null, attempts: 1 });
@@ -314,12 +360,12 @@ describe('drainImageUploadQueue', () => {
     );
     mockProbe.mockRejectedValueOnce(Object.assign(new Error('Bad Gateway'), { isAxiosError: true, response: { status: 502 } }));
 
-    const result = await drainImageUploadQueue(db);
+    const result = await drainQueue(db);
 
     expect(mockProbe).toHaveBeenCalledTimes(1);
     expect(mockUploadNoteImage).toHaveBeenCalledTimes(1);
     expect(await uploadRow('up-gw')).toEqual({ status: 'queued', error_message: null, attempts: 0 });
-    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
+    expect(result.discardedOperations).toHaveLength(0);
   });
 
   it('keeps an upload that keeps timing out at the proxy queued while the server answers (#1283)', async () => {
@@ -330,10 +376,10 @@ describe('drainImageUploadQueue', () => {
     );
     mockProbe.mockResolvedValueOnce({});
 
-    const result = await drainImageUploadQueue(db);
+    const result = await drainQueue(db);
 
     expect(await uploadRow('up-slow')).toEqual({ status: 'queued', error_message: null, attempts: 1 });
-    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
+    expect(result.discardedOperations).toHaveLength(0);
   });
 
   it('keeps an upload that keeps timing out client-side queued while the server answers (#1211, #1283)', async () => {
@@ -344,11 +390,11 @@ describe('drainImageUploadQueue', () => {
     );
     mockProbe.mockResolvedValueOnce({});
 
-    const result = await drainImageUploadQueue(db);
+    const result = await drainQueue(db);
 
     expect(mockProbe).toHaveBeenCalledTimes(1);
     expect(await uploadRow('up-timeout')).toEqual({ status: 'queued', error_message: null, attempts: 1 });
-    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
+    expect(result.discardedOperations).toHaveLength(0);
   });
 
   it('stops without charging on a client-side timeout while the server does not answer (#1211)', async () => {
@@ -358,11 +404,11 @@ describe('drainImageUploadQueue', () => {
     mockUploadNoteImage.mockRejectedValueOnce(timeout());
     mockProbe.mockRejectedValueOnce(timeout());
 
-    const result = await drainImageUploadQueue(db);
+    const result = await drainQueue(db);
 
     expect(mockProbe).toHaveBeenCalledTimes(1);
     expect(await uploadRow('up-timeout')).toEqual({ status: 'queued', error_message: null, attempts: 0 });
-    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
+    expect(result.discardedOperations).toHaveLength(0);
   });
 
   it('holds back the failing upload\'s note and uploads the other notes\' images past it (#1283)', async () => {
@@ -384,7 +430,7 @@ describe('drainImageUploadQueue', () => {
     mockUploadNoteImage.mockRejectedValueOnce(err); // up-stuck fails again, past the old cap
     mockUploadNoteImage.mockResolvedValueOnce(image); // up-ok uploads fine
 
-    const result = await drainImageUploadQueue(db);
+    const result = await drainQueue(db);
 
     // An HTTP failure is never capped: the upload stays queued, and so does
     // the one behind it on the same note.
@@ -392,7 +438,7 @@ describe('drainImageUploadQueue', () => {
     expect(await uploadRow('up-behind')).toEqual({ status: 'queued', error_message: null, attempts: 0 });
     expect(mockUploadNoteImage).toHaveBeenCalledTimes(2);
     expect(await uploadRow('up-ok')).toBeNull();
-    expect(result).toEqual({ uploadedNoteIds: ['n2'], discardedCount: 0 });
+    expect(result.discardedOperations).toHaveLength(0);
   });
 
   it('does not flag an upload on its first non-HTTP error after many HTTP failures (#1283)', async () => {
@@ -400,10 +446,10 @@ describe('drainImageUploadQueue', () => {
     await seedUpload({ id: 'up-outage', note_id: 'n1', attempts: MAX_ENTRY_DRAIN_ATTEMPTS + 3 });
     mockUploadNoteImage.mockRejectedValueOnce(new Error('file unreadable'));
 
-    const result = await drainImageUploadQueue(db);
+    const result = await drainQueue(db);
 
     expect(await uploadRow('up-outage')).toEqual({ status: 'queued', error_message: null, attempts: MAX_ENTRY_DRAIN_ATTEMPTS + 4 });
-    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
+    expect(result.discardedOperations).toHaveLength(0);
   });
 
   it('flags an upload whose processing keeps throwing a non-HTTP error at the cap and continues past it (#714)', async () => {
@@ -421,7 +467,7 @@ describe('drainImageUploadQueue', () => {
     mockUploadNoteImage.mockRejectedValueOnce(new Error('file unreadable')); // up-stuck hits the cap
     mockUploadNoteImage.mockResolvedValueOnce(image); // up-ok uploads fine
 
-    const result = await drainImageUploadQueue(db);
+    const result = await drainQueue(db);
 
     expect(await uploadRow('up-stuck')).toEqual({
       status: 'error',
@@ -431,8 +477,7 @@ describe('drainImageUploadQueue', () => {
     // The drain continued past the flagged entry to the next upload.
     expect(mockUploadNoteImage).toHaveBeenCalledTimes(2);
     expect(await uploadRow('up-ok')).toBeNull();
-    expect(result.uploadedNoteIds).toEqual(['n2']);
-    expect(result.discardedCount).toBe(1);
+    expect(result.discardedOperations).toEqual([{ operation: 'uploadImage', endpoint: '/notes/n1/images', status: 0 }]);
   });
 
   it('flags a permanently-rejected upload as errored instead of discarding it silently', async () => {
@@ -443,7 +488,7 @@ describe('drainImageUploadQueue', () => {
     });
     mockUploadNoteImage.mockRejectedValueOnce(permanentError);
 
-    const result = await drainImageUploadQueue(db);
+    const result = await drainQueue(db);
 
     expect(await uploadRow(entry.id)).toMatchObject({
       status: 'error',
@@ -451,7 +496,10 @@ describe('drainImageUploadQueue', () => {
     });
     // The file survives so the user can retry from the gallery.
     expect(fs.files.has(UPLOAD_PATH)).toBe(true);
-    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 1 });
+    // A gallery tile, not a failed change: no dead letter, the note not flagged.
+    expect(await getDeadLetterCount(db)).toBe(0);
+    expect(await getFailedNoteIds(db)).toEqual(new Set());
+    expect(result.discardedOperations).toHaveLength(1);
   });
 
   it('drops the upload silently when the parent note is gone server-side (404)', async () => {
@@ -459,20 +507,20 @@ describe('drainImageUploadQueue', () => {
     const notFoundError = Object.assign(new Error('Not Found'), { isAxiosError: true, response: { status: 404 } });
     mockUploadNoteImage.mockRejectedValueOnce(notFoundError);
 
-    const result = await drainImageUploadQueue(db);
+    const result = await drainQueue(db);
 
     expect(await uploadRow(entry.id)).toBeNull();
     expect(fs.files.has(entry.local_path)).toBe(false);
-    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 1 });
+    expect(result.discardedOperations).toHaveLength(1);
   });
 
   it('leaves errored rows out of the drain until they are retried', async () => {
     await seedUpload({ id: 'already-failed', status: 'error', error_message: 'too big' });
 
-    const result = await drainImageUploadQueue(db);
+    const result = await drainQueue(db);
 
     expect(mockUploadNoteImage).not.toHaveBeenCalled();
-    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
+    expect(result.discardedOperations).toHaveLength(0);
   });
 
   // Regression coverage for a reported bug (#834): capturing a photo offline
@@ -487,16 +535,169 @@ describe('drainImageUploadQueue', () => {
     const entry = await seedUpload();
     await markNoteSyncFailed(db, 'note-1');
 
-    const result = await drainImageUploadQueue(db);
+    const result = await drainQueue(db);
 
     expect(mockUploadNoteImage).not.toHaveBeenCalled();
     expect(await uploadRow(entry.id)).toMatchObject({ status: 'queued' });
     expect(fs.files.has(entry.local_path)).toBe(true);
-    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
+    expect(result.discardedOperations).toHaveLength(0);
+  });
+});
+
+describe('draining uploads with the rest of the queue (#1288)', () => {
+  const image = {
+    id: 'img-1', filename: 'photo.png', content_type: 'image/png',
+    width: 10, height: 10, created_at: '2026-06-01T12:00:00.123456Z',
+  };
+
+  it('sends an upload right after its note\'s queued create, in the same pass', async () => {
+    await saveNote(db, makeTextNote({ id: 'note-1' }));
+    await markNotePendingCreate(db, 'note-1');
+    await seedQueueEntry(db, { operation: 'create', endpoint: '/notes', method: 'POST', body: { id: 'note-1' }, keys: ['note:note-1'] });
+    const entry = await seedUpload();
+    mockApi.post.mockResolvedValueOnce({ data: makeTextNote({ id: 'note-1' }) });
+    mockUploadNoteImage.mockResolvedValueOnce(image);
+    // The create's response waited on the upload queued behind it, so the note is pulled.
+    mockGetNote.mockResolvedValueOnce(makeTextNote({ id: 'note-1', images: [image] }));
+
+    const result = await drainQueue(db);
+
+    expect(mockApi.post).toHaveBeenCalledTimes(1);
+    expect(mockUploadNoteImage).toHaveBeenCalledWith('note-1', expect.objectContaining({ uri: entry.local_path }), undefined, undefined, entry.id);
+    expect(await uploadRow(entry.id)).toBeNull();
+    expect(result.leftBehind).toBe(0);
+  });
+
+  it('waits behind its note\'s create while the create fails transiently', async () => {
+    await saveNote(db, makeTextNote({ id: 'note-1' }));
+    await markNotePendingCreate(db, 'note-1');
+    await seedQueueEntry(db, { operation: 'create', endpoint: '/notes', method: 'POST', body: { id: 'note-1' }, keys: ['note:note-1'] });
+    const entry = await seedUpload();
+    mockApi.post.mockRejectedValueOnce(Object.assign(new Error('Server Error'), { isAxiosError: true, response: { status: 500 } }));
+    silenceConsole('warn', /^Queue entry id=\d+ create failed/);
+
+    const result = await drainQueue(db);
+
+    expect(mockUploadNoteImage).not.toHaveBeenCalled();
+    expect(await uploadRow(entry.id)).toMatchObject({ status: 'queued' });
+    expect(result.leftBehind).toBe(2);
+  });
+
+  it('holds an upload for a note with an unreviewed failure without holding back the note\'s other ops', async () => {
+    const entry = await seedUpload();
+    await markNoteSyncFailed(db, 'note-1');
+    await seedQueueEntry(db, { operation: 'update', endpoint: '/notes/note-1', method: 'PATCH', body: { pinned: true }, keys: ['note:note-1'] });
+    mockApi.patch.mockResolvedValueOnce({ data: makeTextNote({ id: 'note-1', pinned: true }) });
+
+    const result = await drainQueue(db);
+
+    expect(mockUploadNoteImage).not.toHaveBeenCalled();
+    expect(mockApi.patch).toHaveBeenCalledTimes(1);
+    expect(await uploadRow(entry.id)).toMatchObject({ status: 'queued' });
+    expect(result.leftBehind).toBe(1);
+  });
+
+  it('pulls the note once its upload lands, for the responses withheld while it was queued', async () => {
+    await seedUpload();
+    mockUploadNoteImage.mockResolvedValueOnce(image);
+
+    await drainQueue(db);
+
+    expect(mockGetNote).toHaveBeenCalledWith('note-1');
+  });
+
+  it('keeps the file of an upload moved to another note while the drain ran', async () => {
+    await saveNote(db, makeTextNote({ id: 'note-0' }));
+    await saveNote(db, makeTextNote({ id: 'note-2' }));
+    await seedQueueEntry(db, { operation: 'update', endpoint: '/notes/note-0', method: 'PATCH', body: { pinned: true }, keys: ['note:note-0'] });
+    const entry = await seedUpload();
+    // While the pass waits on the op ahead, "Keep my version" moves the upload
+    // to its fork and deletes the original note.
+    mockApi.patch.mockImplementationOnce(async () => {
+      await reassignPendingImageUploads(db, 'note-1', 'note-2');
+      await db.runAsync('DELETE FROM notes WHERE id = ?', ['note-1']);
+      return { data: makeTextNote({ id: 'note-0', pinned: true }) };
+    });
+
+    await drainQueue(db);
+
+    expect(fs.files.has(entry.local_path)).toBe(true);
+    expect(await getPendingImageUploads(db, 'note-2')).toMatchObject([{ id: entry.id, local_path: entry.local_path }]);
+  });
+
+  it('does not bring back an upload dismissed while its request was in flight', async () => {
+    const entry = await seedUpload();
+    mockUploadNoteImage.mockImplementationOnce(async () => {
+      await dismissImageUpload(db, entry.id);
+      throw Object.assign(new Error('Payload Too Large'), { isAxiosError: true, response: { status: 413 } });
+    });
+
+    await drainQueue(db);
+
+    expect(await uploadRow(entry.id)).toBeNull();
+    expect(await getPendingImageUploads(db, 'note-1')).toEqual([]);
+  });
+
+  it('lists an upload once when it is both queued and flagged failed', async () => {
+    await seedUpload();
+    await db.runAsync(
+      `INSERT INTO pending_image_uploads (id, note_id, local_path, filename, mime_type, status, error_message, created_at)
+       VALUES ('upload-1', 'note-1', ?, 'photo.png', 'image/png', 'error', 'too big', '2024-01-01T00:00:00Z')`,
+      [UPLOAD_PATH],
+    );
+
+    expect((await getPendingImageUploads(db, 'note-1')).map((e) => [e.id, e.status])).toEqual([['upload-1', 'error']]);
+  });
+
+  it('drops a leftover upload whose note is gone locally', async () => {
+    const entry = await seedUpload();
+    await db.runAsync('DELETE FROM notes WHERE id = ?', ['note-1']);
+
+    await drainQueue(db);
+
+    expect(mockUploadNoteImage).not.toHaveBeenCalled();
+    expect(await uploadRow(entry.id)).toBeNull();
+    expect(fs.files.has(entry.local_path)).toBe(false);
+  });
+
+  it('deletes a note\'s queued and failed uploads, and their files, with the note', async () => {
+    const queued = await seedUpload({ id: 'queued', local_path: 'file:///docs/pending-image-uploads/queued' });
+    const failed = await seedUpload({ id: 'failed', local_path: 'file:///docs/pending-image-uploads/failed', status: 'error' });
+    const other = await seedUpload({ id: 'other', note_id: 'note-2', local_path: 'file:///docs/pending-image-uploads/other' });
+
+    await permanentDeleteLocalNote(db, 'note-1');
+
+    expect(await uploadRow(queued.id)).toBeNull();
+    expect(await uploadRow(failed.id)).toBeNull();
+    expect(fs.files.has(queued.local_path)).toBe(false);
+    expect(fs.files.has(failed.local_path)).toBe(false);
+    expect(await uploadRow(other.id)).toMatchObject({ status: 'queued' });
+    expect(fs.files.has(other.local_path)).toBe(true);
   });
 });
 
 describe('reassignPendingImageUploads', () => {
+  it('queues the moved uploads behind the fork\'s create', async () => {
+    await saveNote(db, makeTextNote({ id: 'note-2' }));
+    const entry = await seedUpload();
+    // "Keep my version" queues the fork's create before moving the uploads.
+    await seedQueueEntry(db, { operation: 'create', endpoint: '/notes', method: 'POST', body: { id: 'note-2' }, keys: ['note:note-2'] });
+    const listener = jest.fn();
+    const unsubscribe = subscribeToEnqueue(listener);
+
+    await reassignPendingImageUploads(db, 'note-1', 'note-2');
+
+    expect(await db.getAllAsync(
+      `SELECT q.operation, q.endpoint, k.key FROM sync_queue q JOIN sync_queue_keys k ON k.entry_id = q.id ORDER BY q.id`,
+    )).toEqual([
+      { operation: 'create', endpoint: '/notes', key: 'note:note-2' },
+      { operation: 'uploadImage', endpoint: '/notes/note-2/images', key: 'note:note-2' },
+    ]);
+    expect(await getPendingImageUploads(db, 'note-2')).toMatchObject([{ id: entry.id, local_path: entry.local_path }]);
+    expect(listener).toHaveBeenCalledWith('uploadImage');
+    unsubscribe();
+  });
+
   it('moves queued/errored rows from one note to another', async () => {
     await saveNote(db, makeTextNote({ id: 'note-2' }));
     const queued = await seedUpload({ id: 'upload-queued' });
@@ -568,10 +769,10 @@ describe('pending uploads survive a re-save of their note', () => {
 
     // The reconnect's background note fetch lands first, then the drain runs.
     await saveNote(db, makeTextNote({ id: 'note-1' }));
-    const result = await drainImageUploadQueue(db);
+    const result = await drainQueue(db);
 
     expect(mockUploadNoteImage).toHaveBeenCalledWith('note-1', expect.objectContaining({ uri: entry.local_path }), undefined, undefined, entry.id);
-    expect(result).toEqual({ uploadedNoteIds: ['note-1'], discardedCount: 0 });
+    expect(result.discardedOperations).toHaveLength(0);
     expect(await getPendingImageUploads(db, 'note-1')).toEqual([]);
   });
 
@@ -586,10 +787,10 @@ describe('pending uploads survive a re-save of their note', () => {
     await saveNote(db, makeTextNote({ id: 'note-1', content: 'still offline' }));
 
     expect(await getPendingCreateNoteIds(db)).toEqual(new Set(['note-1']));
-    const result = await drainImageUploadQueue(db);
+    const result = await drainQueue(db);
     expect(mockUploadNoteImage).not.toHaveBeenCalled();
     expect(await uploadRow(entry.id)).toMatchObject({ status: 'queued' });
-    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
+    expect(result.discardedOperations).toHaveLength(0);
   });
 
   it('drops leftover items when a list note is re-saved as a text note', async () => {

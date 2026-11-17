@@ -1,8 +1,8 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { DEFAULT_NOTE_COLOR } from '@jot/shared';
+import { apiPaths, DEFAULT_NOTE_COLOR } from '@jot/shared';
 import { generateClientId } from './clientId';
 import { rewriteLabelId } from './labelIdRewrite';
-import { insertKeys, legacyQueueKeys, loadLabelIdsByName, parseJsonObject } from './queueKeys';
+import { insertKeys, legacyQueueKeys, loadLabelIdsByName, noteKey, parseJsonObject } from './queueKeys';
 
 // Migration 1: creates initial schema; idempotent via IF NOT EXISTS and column probing.
 const migration1 = async (db: SQLiteDatabase): Promise<void> => {
@@ -462,7 +462,51 @@ const migration15 = async (db: SQLiteDatabase): Promise<void> => {
   await db.runAsync(`UPDATE notes SET version = 1 WHERE sync_state = 'pending'`);
 };
 
-export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13, migration14, migration15];
+// Migration 16 (#1288): an offline image upload is a `sync_queue` row
+// (operation `uploadImage`, key `note:<id>`) instead of a `pending_image_uploads`
+// row with a drain of its own. Move the queued ones, oldest first, behind every
+// op already queued: the old drain ran after the main one, so they keep their
+// place. Failed (`error`) rows stay: that table now holds only uploads waiting
+// for Retry or Dismiss. Their files stay where they are. All-or-nothing, so an
+// interrupted run is redone without queueing an upload twice.
+const migration16 = async (db: SQLiteDatabase): Promise<void> => {
+  await db.withTransactionAsync(async () => {
+    const rows = await db.getAllAsync<{
+      id: string;
+      note_id: string;
+      local_path: string;
+      filename: string;
+      mime_type: string;
+      size_bytes: number | null;
+      created_at: string;
+      attempts: number | null;
+      processing_errors: number | null;
+    }>(`SELECT * FROM pending_image_uploads WHERE status = 'queued' ORDER BY created_at ASC, id ASC`);
+    for (const row of rows) {
+      const result = await db.runAsync(
+        `INSERT INTO sync_queue (operation, endpoint, method, body, created_at, attempts, processing_errors)
+         VALUES ('uploadImage', ?, 'POST', ?, ?, ?, ?)`,
+        [
+          apiPaths.noteImages(row.note_id),
+          JSON.stringify({
+            id: row.id,
+            local_path: row.local_path,
+            filename: row.filename,
+            mime_type: row.mime_type,
+            size_bytes: row.size_bytes,
+          }),
+          row.created_at,
+          row.attempts ?? 0,
+          row.processing_errors ?? 0,
+        ],
+      );
+      await insertKeys(db, 'sync_queue_keys', result.lastInsertRowId, { keys: [noteKey(row.note_id)] });
+    }
+    await db.runAsync(`DELETE FROM pending_image_uploads WHERE status = 'queued'`);
+  });
+};
+
+export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13, migration14, migration15, migration16];
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   // Run PRAGMAs separately: sqlite3_exec (used by execAsync) stops on the

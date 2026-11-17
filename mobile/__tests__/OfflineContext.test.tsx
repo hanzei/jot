@@ -11,7 +11,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import NetInfo from '@react-native-community/netinfo';
 import { OfflineProvider, useOfflineContext } from '../src/store/OfflineContext';
 import { drainQueue, getPendingCount } from '../src/db/syncQueue';
-import { getQueuedImageUploadCount } from '../src/db/imageUploadQueue';
 import { setLocalModeActive } from '../src/store/localMode';
 import * as serverReachability from '../src/api/serverReachability';
 import { silenceConsole } from './helpers/consoleGuard';
@@ -32,11 +31,6 @@ jest.mock('../src/db/syncQueue', () => ({
   }),
 }));
 
-jest.mock('../src/db/imageUploadQueue', () => ({
-  drainImageUploadQueue: jest.fn().mockResolvedValue({ uploadedNoteIds: [], discardedCount: 0 }),
-  getQueuedImageUploadCount: jest.fn().mockResolvedValue(0),
-}));
-
 const mockRevalidate = jest.fn().mockResolvedValue(true);
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: () => ({ revalidateSession: mockRevalidate }),
@@ -47,7 +41,6 @@ jest.mock('../src/store/AuthContext', () => ({
 
 const mockDrainQueue = drainQueue as jest.MockedFunction<typeof drainQueue>;
 const mockGetPendingCount = getPendingCount as jest.MockedFunction<typeof getPendingCount>;
-const mockGetQueuedImageUploadCount = getQueuedImageUploadCount as jest.MockedFunction<typeof getQueuedImageUploadCount>;
 
 // Captures the latest syncError value exposed through the context.
 let lastSyncError = false;
@@ -108,7 +101,6 @@ describe('OfflineProvider queue draining', () => {
     // What a pass leaves behind is what the pending count reports, as before #1284.
     mockDrainQueue.mockImplementation(async () => ({ syncedNotes: [], discardedOperations: [], syncedSettings: false, leftBehind: await mockGetPendingCount(globalThis.testDb) }));
     mockGetPendingCount.mockResolvedValue(0);
-    mockGetQueuedImageUploadCount.mockResolvedValue(0);
     jest.spyOn(AppState, 'addEventListener');
     // The provider logs each stalled drain, the give-up and the recovery; the
     // backoff and failure-cap tests drive exactly those paths.
@@ -181,13 +173,10 @@ describe('OfflineProvider queue draining', () => {
   });
 
   it('revalidates the session after a settings drain even with an unrelated image upload backlog', async () => {
-    // The note/settings queue (sync_queue) is empty, but an independent image
-    // upload is still queued — that backlog must not hold the settings
-    // revalidation hostage; it has nothing to do with the settings write.
-    // What a pass leaves behind is what the pending count reports, as before #1284.
-    mockDrainQueue.mockImplementation(async () => ({ syncedNotes: [], discardedOperations: [], syncedSettings: true, leftBehind: await mockGetPendingCount(globalThis.testDb) }));
-    mockGetPendingCount.mockResolvedValue(0);
-    mockGetQueuedImageUploadCount.mockResolvedValue(2);
+    // Only image uploads are left in the queue — that backlog must not hold the
+    // settings revalidation hostage; it has nothing to do with the settings write.
+    mockDrainQueue.mockResolvedValue({ syncedNotes: [], discardedOperations: [], syncedSettings: true, leftBehind: 2 });
+    mockGetPendingCount.mockImplementation(async (_db, options) => (options?.excludeUploads ? 0 : 2));
     await renderProvider();
     await flush();
     mockRevalidate.mockClear();
@@ -207,7 +196,6 @@ describe('OfflineProvider queue draining', () => {
     // What a pass leaves behind is what the pending count reports, as before #1284.
     mockDrainQueue.mockImplementation(async () => ({ syncedNotes: [], discardedOperations: [], syncedSettings: true, leftBehind: await mockGetPendingCount(globalThis.testDb) }));
     mockGetPendingCount.mockResolvedValue(1);
-    mockGetQueuedImageUploadCount.mockResolvedValue(0);
     await renderProvider();
     await flush();
     mockRevalidate.mockClear();

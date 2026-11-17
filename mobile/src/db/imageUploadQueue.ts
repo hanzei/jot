@@ -1,15 +1,27 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
-import axios from 'axios';
-import type { NoteImage } from '@jot/shared';
-import { uploadNoteImage, type ImageUploadFile } from '../api/images';
-import { patchLocalNoteImages, getPendingCreateNoteIds, getFailedNoteIds } from './noteQueries';
-import { chargeEntryFailure, errorSummary, isTransientHttpStatus, isGlobalDrainFailureProbed, notifyEnqueueListeners } from './syncQueue';
+import { apiPaths } from '@jot/shared';
+import type { ImageUploadFile } from '../api/images';
+import {
+  enqueueOperation,
+  insertQueueEntry,
+  notifyEnqueueListeners,
+  parseImageUploadBody,
+  type EnqueueParams,
+  type ImageUploadBody,
+} from './syncQueue';
+import { keyIdExpression, keyKindCondition, noteKey, parseJsonObject } from './queueKeys';
+import { withSerializedTransaction } from './transaction';
 import { copyFile, deleteFileIfExists, documentPath, ensureDirExists } from '../utils/fs';
+
+// Queued uploads are `uploadImage` rows in `sync_queue`, keyed `note:<id>`
+// (#1288). `pending_image_uploads` holds only rejected ones awaiting Retry or
+// Dismiss.
 
 const PENDING_UPLOADS_DIR = documentPath('pending-image-uploads');
 
 export type PendingImageUploadStatus = 'queued' | 'error';
 
+/** A queued or failed upload, as the gallery shows it. */
 export interface PendingImageUploadEntry {
   id: string;
   note_id: string;
@@ -20,14 +32,42 @@ export interface PendingImageUploadEntry {
   status: PendingImageUploadStatus;
   error_message: string | null;
   created_at: string;
-  /**
-   * Count of transient upload failures for this entry (issue #714), for
-   * diagnostics. Defaults to 0 for rows written before migration 6. An HTTP
-   * failure leaves the upload queued (#1283).
-   */
+  /** Count of transient upload failures for this entry (issue #714), for diagnostics. */
   attempts?: number;
-  /** How many of `attempts` were non-HTTP errors; see `chargeEntryFailure` (#1283). */
+  /** How many of `attempts` were non-HTTP errors (#1283). */
   processing_errors?: number;
+}
+
+/** The queue row that uploads `upload` to `noteId`. */
+function uploadOp(noteId: string, upload: ImageUploadBody): EnqueueParams {
+  return {
+    operation: 'uploadImage',
+    endpoint: apiPaths.noteImages(noteId),
+    method: 'POST',
+    body: { ...upload },
+    keys: [noteKey(noteId)],
+  };
+}
+
+interface QueuedUploadRow {
+  id: number;
+  body: string | null;
+  created_at: string;
+  attempts: number | null;
+  processing_errors: number | null;
+  note_id: string;
+}
+
+/** Every queued upload, or those for one note, in queue order. */
+async function getQueuedUploadRows(db: SQLiteDatabase, noteId?: string): Promise<QueuedUploadRow[]> {
+  return db.getAllAsync<QueuedUploadRow>(
+    `SELECT q.id, q.body, q.created_at, q.attempts, q.processing_errors, ${keyIdExpression('k.key', 'note')} AS note_id
+     FROM sync_queue q JOIN sync_queue_keys k ON k.entry_id = q.id
+     WHERE q.operation = 'uploadImage' AND k.read_only = 0 AND ${keyKindCondition('k.key', 'note')}
+       ${noteId === undefined ? '' : 'AND k.key = ?'}
+     ORDER BY q.id ASC`,
+    noteId === undefined ? [] : [noteKey(noteId)],
+  );
 }
 
 /**
@@ -35,8 +75,7 @@ export interface PendingImageUploadEntry {
  * survives an app restart until the upload can be replayed. The picker/camera
  * URI can point into an OS-managed cache directory that may be purged before
  * connectivity returns, so the bytes are copied into a stable app-owned path
- * up front (issue #618) — mirroring why syncQueue's JSON operations don't need
- * this (their "payload" is already durable, plain data).
+ * up front (issue #618).
  */
 export async function enqueueImageUpload(
   db: SQLiteDatabase,
@@ -46,47 +85,50 @@ export async function enqueueImageUpload(
   const localPath = `${PENDING_UPLOADS_DIR}/${params.id}`;
   await copyFile(params.file.uri, localPath);
 
-  await db.runAsync(
-    `INSERT INTO pending_image_uploads (id, note_id, local_path, filename, mime_type, size_bytes, status, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, 'queued', ?)`,
-    [
-      params.id,
-      params.noteId,
-      localPath,
-      params.file.name,
-      params.file.mimeType,
-      params.file.sizeBytes ?? null,
-      new Date().toISOString(),
-    ],
-  );
-  notifyEnqueueListeners();
+  await enqueueOperation(db, uploadOp(params.noteId, {
+    id: params.id,
+    local_path: localPath,
+    filename: params.file.name,
+    mime_type: params.file.mimeType,
+    size_bytes: params.file.sizeBytes ?? null,
+  }));
 }
 
+/** A note's queued uploads, then its failed ones, each oldest first. */
 export async function getPendingImageUploads(db: SQLiteDatabase, noteId: string): Promise<PendingImageUploadEntry[]> {
-  return db.getAllAsync<PendingImageUploadEntry>(
+  const queued: PendingImageUploadEntry[] = [];
+  for (const row of await getQueuedUploadRows(db, noteId)) {
+    const upload = parseImageUploadBody(parseJsonObject(row.body));
+    if (!upload) continue;
+    queued.push({
+      ...upload,
+      note_id: row.note_id,
+      status: 'queued',
+      error_message: null,
+      created_at: row.created_at,
+      attempts: row.attempts ?? 0,
+      processing_errors: row.processing_errors ?? 0,
+    });
+  }
+  const failed = await db.getAllAsync<PendingImageUploadEntry>(
     'SELECT * FROM pending_image_uploads WHERE note_id = ? ORDER BY created_at ASC',
     [noteId],
   );
+  // The drain may flag an upload between the two reads: its failed row wins.
+  const failedIds = new Set(failed.map((row) => row.id));
+  return [...queued.filter((row) => !failedIds.has(row.id)), ...failed];
 }
 
-/** Count of uploads still waiting for their turn (excludes permanently-failed rows, which need a manual retry). */
-export async function getQueuedImageUploadCount(db: SQLiteDatabase): Promise<number> {
-  const row = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM pending_image_uploads WHERE status = 'queued'`,
-  );
-  return row?.count ?? 0;
-}
-
-/** Image-upload queue diagnostics, the counterpart of {@link SyncQueueStats} (issue #1085). */
+/** Image-upload diagnostics, the counterpart of {@link SyncQueueStats} (issue #1085). */
 export interface ImageUploadQueueStats {
-  /** Uploads still waiting for a drain. */
+  /** Uploads still waiting in the sync queue. */
   queuedCount: number;
-  /** Uploads flagged `error`: they wait on a manual retry or dismiss in the gallery. */
+  /** Uploads the server rejected: they wait on a manual retry or dismiss in the gallery. */
   errorCount: number;
   /**
    * The oldest queued upload, or null when none are queued. Not necessarily the
-   * one the drain is stuck on: the drain skips uploads whose note still awaits
-   * its create or is dead-lettered, so see `maxAttempts` for a wedged entry.
+   * one that is stuck: an upload waits while its note awaits its create or a
+   * failed change's review, so see `maxAttempts` for a wedged entry.
    * `attempts` counts its transient failures.
    * Metadata only: no path, filename, or note id.
    */
@@ -102,198 +144,93 @@ export const EMPTY_IMAGE_UPLOAD_QUEUE_STATS: ImageUploadQueueStats = {
   maxAttempts: 0,
 };
 
-/**
- * Summarize the image-upload queue for the Diagnostics screen, so "my image never
- * appeared" can be told apart as still queued, stuck retrying, or failed.
- */
+/** Image-upload stats for the Diagnostics screen. */
 export async function getImageUploadQueueStats(db: SQLiteDatabase): Promise<ImageUploadQueueStats> {
-  const [counts, oldest] = await Promise.all([
-    db.getFirstAsync<{ queued: number | null; errored: number | null; max_attempts: number | null }>(
-      `SELECT SUM(status = 'queued') as queued,
-              SUM(status = 'error') as errored,
-              MAX(CASE WHEN status = 'queued' THEN attempts END) as max_attempts
-       FROM pending_image_uploads`,
+  const [queued, errored, oldest] = await Promise.all([
+    db.getFirstAsync<{ count: number; max_attempts: number | null }>(
+      `SELECT COUNT(*) AS count, MAX(attempts) AS max_attempts FROM sync_queue WHERE operation = 'uploadImage'`,
     ),
+    db.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM pending_image_uploads'),
     db.getFirstAsync<{ created_at: string; attempts: number | null }>(
-      `SELECT created_at, attempts FROM pending_image_uploads WHERE status = 'queued' ORDER BY created_at ASC LIMIT 1`,
+      `SELECT created_at, attempts FROM sync_queue WHERE operation = 'uploadImage' ORDER BY id ASC LIMIT 1`,
     ),
   ]);
   return {
-    queuedCount: counts?.queued ?? 0,
-    errorCount: counts?.errored ?? 0,
+    queuedCount: queued?.count ?? 0,
+    errorCount: errored?.count ?? 0,
     oldest: oldest ? { created_at: oldest.created_at, attempts: oldest.attempts ?? 0 } : null,
-    maxAttempts: counts?.max_attempts ?? 0,
+    maxAttempts: queued?.max_attempts ?? 0,
   };
 }
 
-/** Drop a queue entry for good: its row and its stable file copy. Shared by the upload-success and note-gone-404/403 paths of {@link drainImageUploadQueue}. */
-async function discardEntry(db: SQLiteDatabase, entry: Pick<PendingImageUploadEntry, 'id' | 'local_path'>): Promise<void> {
-  await db.runAsync('DELETE FROM pending_image_uploads WHERE id = ?', [entry.id]);
-  deleteFileIfExists(entry.local_path);
-}
-
 /**
- * Move queued/errored uploads from one note to another. Used when "Keep my
- * version" forks a dead-lettered create's content into a brand-new note
- * (`useSyncFailures.ts`): the original note is about to be deleted, and its
- * `pending_image_uploads` rows would otherwise cascade-delete right along
- * with it — silently dropping a photo the user just explicitly chose to
- * keep. No-op if there are no matching rows.
+ * Move a note's uploads to another note, for "Keep my version" forking a
+ * dead-lettered create (`useSyncFailures.ts`). Queued ones are re-queued so
+ * they land behind the fork's create.
  */
 export async function reassignPendingImageUploads(
   db: SQLiteDatabase,
   fromNoteId: string,
   toNoteId: string,
 ): Promise<void> {
-  await db.runAsync('UPDATE pending_image_uploads SET note_id = ? WHERE note_id = ?', [toNoteId, fromNoteId]);
-}
-
-/** Re-queue a permanently-failed upload (e.g. after the user fixes something) so the next drain retries it. Resets the attempt counter so the manual retry gets a fresh budget (#714). */
-export async function retryImageUpload(db: SQLiteDatabase, id: string): Promise<void> {
-  await db.runAsync(
-    `UPDATE pending_image_uploads SET status = 'queued', error_message = NULL, attempts = 0, processing_errors = 0 WHERE id = ?`,
-    [id],
-  );
-  notifyEnqueueListeners();
-}
-
-/** Give up on a queued/failed upload: delete its row and the stable file copy. No-op if the id is unknown. */
-export async function dismissImageUpload(db: SQLiteDatabase, id: string): Promise<void> {
-  const row = await db.getFirstAsync<Pick<PendingImageUploadEntry, 'local_path'>>(
-    'SELECT local_path FROM pending_image_uploads WHERE id = ?',
-    [id],
-  );
-  await db.runAsync('DELETE FROM pending_image_uploads WHERE id = ?', [id]);
-  if (row) deleteFileIfExists(row.local_path);
-}
-
-export interface ImageUploadDrainResult {
-  /** note_ids touched by a successful upload — callers invalidate their local caches. */
-  uploadedNoteIds: string[];
-  /** Uploads that were dropped or flagged `error` because of a permanent failure. */
-  discardedCount: number;
+  let moved = false;
+  await withSerializedTransaction(db, async () => {
+    await db.runAsync('UPDATE pending_image_uploads SET note_id = ? WHERE note_id = ?', [toNoteId, fromNoteId]);
+    for (const row of await getQueuedUploadRows(db, fromNoteId)) {
+      await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [row.id]);
+      const upload = parseImageUploadBody(parseJsonObject(row.body));
+      if (!upload) continue;
+      await insertQueueEntry(db, uploadOp(toNoteId, upload));
+      moved = true;
+    }
+  });
+  if (moved) notifyEnqueueListeners('uploadImage');
 }
 
 /**
- * Drain the offline image-upload queue in FIFO order per note, mirroring
- * drainQueue's transient/permanent split (see syncQueue.ts): a global
- * transient failure (no response, 401/408/429, or a timeout or gateway status
- * while the server does not answer the probe) stops the pass so the rest
- * retry on the next one; an entry-specific one (a 5xx, a timeout or gateway
- * status while the server answers) leaves the upload queued and holds back
- * that note's later uploads for this pass, while other notes' uploads go on
- * (#1283); a permanent failure flags the row `error` (surfaced with
- * retry/dismiss in the gallery) rather than looping forever. A note whose own server-side existence
- * isn't confirmed — its offline `create` is still queued (`sync_state =
- * 'pending'`), *or* that create was dead-lettered (`sync_state = 'failed'`) —
- * is skipped for this pass rather than attempted: either way an upload would
- * 404, and treating a dead-lettered create the same as a note gone for good
- * would silently discard an image that was never sent anywhere (issue #834).
- * It's retried once that note's state resolves (the create lands, or the user
- * resolves the failure — see `useSyncFailures.ts`, which reassigns any
- * still-queued uploads to a "Keep my version" fork before the abandoned
- * original is deleted). A note that's *actually* gone for good (404/403 on a
- * note this check didn't skip — i.e. one that was previously confirmed synced
- * and has since been deleted/unshared server-side while offline, per issue
- * #618's "reconcile … gracefully") is dropped silently: there is no note left
- * to attach the image (or an error badge) to.
+ * Queue a failed upload again (e.g. after the user fixes something) so the
+ * next drain retries it, with a fresh attempt budget (#714). No-op if the id
+ * is not a failed upload.
  */
-export async function drainImageUploadQueue(db: SQLiteDatabase): Promise<ImageUploadDrainResult> {
-  const [pendingCreateNoteIds, failedNoteIds] = await Promise.all([
-    getPendingCreateNoteIds(db),
-    getFailedNoteIds(db),
-  ]);
-  const entries = await db.getAllAsync<PendingImageUploadEntry>(
-    `SELECT * FROM pending_image_uploads WHERE status = 'queued' ORDER BY created_at ASC`,
-  );
+export async function retryImageUpload(db: SQLiteDatabase, id: string): Promise<void> {
+  let queued = false;
+  await withSerializedTransaction(db, async () => {
+    const row = await db.getFirstAsync<PendingImageUploadEntry>('SELECT * FROM pending_image_uploads WHERE id = ?', [id]);
+    if (!row) return;
+    await db.runAsync('DELETE FROM pending_image_uploads WHERE id = ?', [id]);
+    await insertQueueEntry(db, uploadOp(row.note_id, {
+      id: row.id,
+      local_path: row.local_path,
+      filename: row.filename,
+      mime_type: row.mime_type,
+      size_bytes: row.size_bytes,
+    }));
+    queued = true;
+  });
+  if (queued) notifyEnqueueListeners('uploadImage');
+}
 
-  const uploadedNoteIds: string[] = [];
-  let discardedCount = 0;
-  // Notes whose uploads wait this pass: not yet confirmed on the server (see
-  // above), or with an upload that failed transiently this pass, so a note's
-  // images still land in the order they were added (#1283).
-  const skippedNoteIds = new Set([...pendingCreateNoteIds, ...failedNoteIds]);
-
-  for (const entry of entries) {
-    if (skippedNoteIds.has(entry.note_id)) continue;
-
-    let image: NoteImage;
-    try {
-      image = await uploadNoteImage(entry.note_id, {
-        uri: entry.local_path,
-        name: entry.filename,
-        mimeType: entry.mime_type,
-        sizeBytes: entry.size_bytes ?? undefined,
-      }, undefined, undefined, entry.id);
-    } catch (err) {
-      const status = axios.isAxiosError(err) ? err.response?.status : undefined;
-      if (status !== undefined && !isTransientHttpStatus(status)) {
-        discardedCount += 1;
-        if (status === 404 || status === 403) {
-          // Parent note is gone (deleted/unshared server-side) — nothing to attach to.
-          await discardEntry(db, entry);
-        } else {
-          const message = axios.isAxiosError(err) ? err.message : 'Upload failed';
-          await db.runAsync(
-            `UPDATE pending_image_uploads SET status = 'error', error_message = ? WHERE id = ?`,
-            [message, entry.id],
-          );
-        }
-        continue;
-      }
-      if (await isGlobalDrainFailureProbed(err)) {
-        // Connectivity failure (network error/401/408/429, or a timeout or
-        // 502/503/504 while the server does not answer) — every entry would fail the same
-        // way, so stop the pass without charging this entry and retry on the
-        // next one (issue #714).
-        console.info(`Image upload queue drain stopped at entry id=${entry.id} (connectivity): ${errorSummary(err)}`);
-        break;
-      }
-      // Entry-specific transient failure (a 5xx tied to this upload, a timeout
-      // while the server answers the probe, or a non-HTTP throw). Below the
-      // cap it stays queued and holds back only its note's later uploads (#1283).
-      const { attempts, processingErrors, capped } = await chargeEntryFailure(db, 'pending_image_uploads', entry, err);
-      if (!capped) {
-        console.warn(
-          `Image upload id=${entry.id} failed (attempt ${attempts}); holding back its note's later uploads: ${errorSummary(err)}`,
-        );
-        skippedNoteIds.add(entry.note_id);
-        continue;
-      }
-      // A non-HTTP error at the cap (the stable file copy is unreadable, say):
-      // retrying is unlikely to help, so flag the row `error` (surfaced with
-      // retry/dismiss in the gallery) and go on.
-      discardedCount += 1;
-      const message = errorSummary(err);
-      console.warn(`Flagging image upload id=${entry.id} as failed after ${processingErrors} processing errors:`, err);
-      await db.runAsync(
-        `UPDATE pending_image_uploads SET status = 'error', error_message = ? WHERE id = ?`,
-        [message, entry.id],
-      );
-      continue;
+/** Give up on a queued or failed upload: delete its row and the stable file copy. No-op if the id is unknown. */
+export async function dismissImageUpload(db: SQLiteDatabase, id: string): Promise<void> {
+  const paths: string[] = [];
+  await withSerializedTransaction(db, async () => {
+    const failed = await db.getFirstAsync<{ local_path: string }>(
+      'SELECT local_path FROM pending_image_uploads WHERE id = ?',
+      [id],
+    );
+    if (failed) {
+      await db.runAsync('DELETE FROM pending_image_uploads WHERE id = ?', [id]);
+      paths.push(failed.local_path);
     }
-
-    // The upload itself has already landed server-side at this point, so the
-    // queue entry is done regardless of what happens next — a local-cache
-    // patch failure below (e.g. a transient SQLite lock) must not leave the
-    // entry `queued`, or the next drain would upload the same file again and
-    // upload the same file again (harmless: the entry id is the image's client ID, so the server returns the existing image).
-    await discardEntry(db, entry);
-    uploadedNoteIds.push(entry.note_id);
-    try {
-      // The server bumped the note's updated_at to the image's created_at.
-      await patchLocalNoteImages(
-        db,
-        entry.note_id,
-        (images) => images.some((img) => img.id === image.id) ? images : [...images, image],
-        image.created_at,
-      );
-    } catch (err) {
-      // The note's local images_json will be reconciled by the next server
-      // fetch or SSE event; the upload itself is not lost.
-      console.warn(`Failed to patch local images for note id=${entry.note_id} after upload:`, err);
+    const queued = await db.getAllAsync<{ id: number; local_path: string | null }>(
+      `SELECT id, json_extract(body, '$.local_path') AS local_path FROM sync_queue
+       WHERE operation = 'uploadImage' AND json_extract(body, '$.id') = ?`,
+      [id],
+    );
+    for (const row of queued) {
+      await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [row.id]);
+      if (row.local_path !== null) paths.push(row.local_path);
     }
-  }
-
-  return { uploadedNoteIds, discardedCount };
+  });
+  for (const path of paths) deleteFileIfExists(path);
 }

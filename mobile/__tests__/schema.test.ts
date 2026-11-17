@@ -472,10 +472,13 @@ describe('migrateDatabase', () => {
 
       await migrateDatabase(db);
 
-      expect(await db.getAllAsync('SELECT attempts FROM sync_queue')).toEqual([{ attempts: 0 }]);
+      // The queued upload has since moved into the sync queue (#1288).
+      expect(await db.getAllAsync('SELECT operation, attempts FROM sync_queue ORDER BY id')).toEqual([
+        { operation: 'update', attempts: 0 },
+        { operation: 'uploadImage', attempts: 0 },
+      ]);
       expect(await db.getAllAsync('SELECT id, attempts FROM pending_image_uploads ORDER BY id')).toEqual([
         { id: 'errored-up', attempts: 5 },
-        { id: 'queued-up', attempts: 0 },
       ]);
       expect(await db.getAllAsync('SELECT attempts FROM dead_letter')).toEqual([{ attempts: 5 }]);
     });
@@ -497,10 +500,9 @@ describe('migrateDatabase', () => {
 
       await migrateDatabase(db);
 
-      expect(await db.getAllAsync('SELECT attempts, processing_errors FROM sync_queue'))
-        .toEqual([{ attempts: 4, processing_errors: 0 }]);
-      expect(await db.getAllAsync('SELECT attempts, processing_errors FROM pending_image_uploads'))
-        .toEqual([{ attempts: 3, processing_errors: 0 }]);
+      // The queued upload has since moved into the sync queue (#1288).
+      expect(await db.getAllAsync('SELECT attempts, processing_errors FROM sync_queue ORDER BY id'))
+        .toEqual([{ attempts: 4, processing_errors: 0 }, { attempts: 3, processing_errors: 0 }]);
     });
   });
 
@@ -522,6 +524,50 @@ describe('migrateDatabase', () => {
 
       expect(await db.getAllAsync('SELECT id, version FROM notes ORDER BY id'))
         .toEqual([{ id: 'dup', version: 1 }, { id: 'src', version: 7 }]);
+    });
+  });
+
+  describe('image uploads into the sync queue (#1288)', () => {
+    it('moves queued uploads behind the queued ops, oldest first, and keeps failed ones', async () => {
+      const db = createTestDb();
+      for (let i = 0; i < 15; i++) {
+        await MIGRATIONS[i]!(db);
+        await db.runAsync(`PRAGMA user_version = ${i + 1}`);
+      }
+      await db.runAsync("INSERT INTO notes (id, user_id, created_at, updated_at) VALUES ('n1', 'u1', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')");
+      const update = await db.runAsync("INSERT INTO sync_queue (operation, endpoint, method, created_at) VALUES ('update', '/notes/n1', 'PATCH', '2026-01-03T00:00:00Z')");
+      await db.runAsync("INSERT INTO sync_queue_keys (entry_id, key) VALUES (?, 'note:n1')", [update.lastInsertRowId]);
+      for (const [id, status, createdAt] of [
+        ['later', 'queued', '2026-01-02T00:00:00Z'],
+        ['earlier', 'queued', '2026-01-01T00:00:00Z'],
+        ['failed', 'error', '2026-01-01T00:00:00Z'],
+      ] as const) {
+        await db.runAsync(
+          `INSERT INTO pending_image_uploads (id, note_id, local_path, filename, mime_type, size_bytes, status, error_message, created_at, attempts, processing_errors)
+           VALUES (?, 'n1', ?, 'x.png', 'image/png', 10, ?, NULL, ?, 2, 1)`,
+          [id, `file:///${id}`, status, createdAt],
+        );
+      }
+
+      await migrateDatabase(db);
+
+      expect(await db.getAllAsync(
+        `SELECT q.operation, q.endpoint, q.method, q.body, q.created_at, q.attempts, q.processing_errors, k.key
+         FROM sync_queue q JOIN sync_queue_keys k ON k.entry_id = q.id ORDER BY q.id`,
+      )).toEqual([
+        { operation: 'update', endpoint: '/notes/n1', method: 'PATCH', body: null, created_at: '2026-01-03T00:00:00Z', attempts: 0, processing_errors: 0, key: 'note:n1' },
+        ...['earlier', 'later'].map((id) => ({
+          operation: 'uploadImage',
+          endpoint: '/notes/n1/images',
+          method: 'POST',
+          body: JSON.stringify({ id, local_path: `file:///${id}`, filename: 'x.png', mime_type: 'image/png', size_bytes: 10 }),
+          created_at: id === 'earlier' ? '2026-01-01T00:00:00Z' : '2026-01-02T00:00:00Z',
+          attempts: 2,
+          processing_errors: 1,
+          key: 'note:n1',
+        })),
+      ]);
+      expect(await db.getAllAsync('SELECT id, status FROM pending_image_uploads')).toEqual([{ id: 'failed', status: 'error' }]);
     });
   });
 

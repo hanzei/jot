@@ -103,7 +103,7 @@ truth, and the network is a background reconciler. Rationale and code map:
   `SERVER_STATE_ON_REJECTION_OPERATIONS`). Validate locally what you can before
   queueing. Settings go through `enqueueSettingsUpdate`. No write hook reads
   `isOnlineWriteAllowed()`; it gates one-shot actions and note-image uploads,
-  which still go online first and fall back to their own upload queue (#1288).
+  which still go online first and fall back to the sync queue (spec §4.4).
 - **Reads serve the local cache immediately** and refresh in the background with
   bounded, backed-off retries (`retrySync`) that respect `isServerReachable()`.
 - **Auth and one-shot ops** (login, logout, PAT) may hit the network on the

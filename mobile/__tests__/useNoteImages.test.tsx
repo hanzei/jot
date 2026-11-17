@@ -280,8 +280,8 @@ describe('useNoteImages hooks', () => {
         expect.anything(),
         { id: 'upload-1', noteId: 'note-1', file },
       );
-      // A real row in the upload queue, with the picked file copied to a stable path.
-      expect(await db.getAllAsync('SELECT id, note_id, status FROM pending_image_uploads')).toEqual([
+      // A real row in the sync queue (#1288), with the picked file copied to a stable path.
+      expect(await imageUploadQueueModule.getPendingImageUploads(db, 'note-1')).toMatchObject([
         { id: 'upload-1', note_id: 'note-1', status: 'queued' },
       ]);
       expect(fs.files.has('file:///docs/pending-image-uploads/upload-1')).toBe(true);
@@ -290,8 +290,8 @@ describe('useNoteImages hooks', () => {
     it('queues the upload for a pending-create note instead of 404ing while online (#475)', async () => {
       // note-1's offline create hasn't drained yet — the server doesn't know the
       // note, so a direct upload would 404 and the picked file would be dropped
-      // rather than queued. The upload must take the offline queue, which waits
-      // for the create to drain (drainImageUploadQueue) before retrying.
+      // rather than queued. The upload must take the sync queue, where it waits
+      // behind the create (#1288).
       await db.runAsync(`UPDATE notes SET sync_state = 'pending' WHERE id = ?`, ['note-1']);
       const { result } = await renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
       const file = { uri: 'file:///photo.png', name: 'photo.png', mimeType: 'image/png' };

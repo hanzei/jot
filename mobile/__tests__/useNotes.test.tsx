@@ -36,6 +36,7 @@ import { setLocalModeActive } from '../src/store/localMode';
 import * as clientModule from '../src/api/client';
 import { jot } from '../src/api/jot';
 import { makeLabel, makeListNote, makeNoteItem, makeTextNote, queuedOps, seedImageUpload } from './helpers/fixtures';
+import { getPendingImageUploads } from '../src/db/imageUploadQueue';
 import type { TestDatabase } from './helpers/testDb';
 
 jest.mock('../src/api/jot');
@@ -687,7 +688,8 @@ describe('useNotes write hooks (outbox)', () => {
   });
 
   describe('the queued image uploads of a note deleted for good', () => {
-    const uploadRows = () => db.getAllAsync('SELECT id FROM pending_image_uploads');
+    // Queued uploads are sync_queue rows (#1288); failed ones pending_image_uploads rows.
+    const uploadRows = async () => (await getPendingImageUploads(db, TEXT_ID)).map(({ id }) => ({ id }));
     // Makes the outbox's queue insert fail, so the write's transaction rolls back.
     const failQueueInserts = () => db.execAsync(
       `CREATE TRIGGER fail_queue BEFORE INSERT ON sync_queue BEGIN SELECT RAISE(ABORT, 'queue insert failed'); END`,

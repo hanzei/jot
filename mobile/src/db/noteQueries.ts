@@ -632,34 +632,33 @@ export async function markLocalNoteRestored(db: SQLiteDatabase, id: string): Pro
   );
 }
 
-/**
- * Permanently delete a note. `ON DELETE CASCADE` (migration4, issue #618)
- * removes the note's `pending_image_uploads` rows automatically, but not
- * their stable file copies under `pending-image-uploads/` (imageUploadQueue.ts) —
- * clean those up first, best-effort, so a note deleted while an offline image
- * upload is still queued for it doesn't leak the copied file forever. Reads
- * the table directly rather than importing imageUploadQueue.ts to avoid a
- * circular import (that module already imports from this one).
- */
+/** Permanently delete a note with its queued and failed image uploads and their files. */
 export async function permanentDeleteLocalNote(db: SQLiteDatabase, id: string): Promise<void> {
-  await deleteUploadFilesWhere(db, 'note_id = ?', [id]);
-  await db.runAsync('DELETE FROM notes WHERE id = ?', [id]);
+  deleteUploadFiles(await permanentDeleteLocalNoteRows(db, id));
 }
 
 /**
- * {@link permanentDeleteLocalNote} for a caller inside a transaction that may
- * still roll back (an outbox write): deletes the note, its queued upload rows
- * cascading with it, but leaves their files, whose paths it returns. A rollback
- * restores those rows, so the caller passes the paths to
- * {@link deleteUploadFiles} only once the transaction has committed.
+ * {@link permanentDeleteLocalNote} inside a transaction that may roll back:
+ * deletes the rows and returns the upload file paths, for the caller to pass to
+ * {@link deleteUploadFiles} once the transaction commits.
  */
 export async function permanentDeleteLocalNoteRows(db: SQLiteDatabase, id: string): Promise<string[]> {
-  const rows = await db.getAllAsync<{ local_path: string }>(
+  const failed = await db.getAllAsync<{ local_path: string }>(
     'SELECT local_path FROM pending_image_uploads WHERE note_id = ?',
     [id],
   );
+  const queued = await db.getAllAsync<{ id: number; local_path: string | null }>(
+    `SELECT q.id, json_extract(q.body, '$.local_path') AS local_path
+     FROM sync_queue q JOIN sync_queue_keys k ON k.entry_id = q.id
+     WHERE q.operation = 'uploadImage' AND k.key = ? AND k.read_only = 0`,
+    [noteKey(id)],
+  );
+  for (const row of queued) await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [row.id]);
   await db.runAsync('DELETE FROM notes WHERE id = ?', [id]);
-  return rows.map((row) => row.local_path);
+  return [
+    ...failed.map((row) => row.local_path),
+    ...queued.flatMap((row) => (row.local_path === null ? [] : [row.local_path])),
+  ];
 }
 
 /** Best-effort removal of queued-upload files returned by {@link permanentDeleteLocalNoteRows}. */
