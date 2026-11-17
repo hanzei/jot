@@ -1,3 +1,14 @@
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+
+/**
+ * Whether a keystroke belongs to an active IME composition (confirming or
+ * cancelling a candidate), so it must not drive the app. Chrome and Firefox flag
+ * it with isComposing; Safari delivers the confirming keystroke after
+ * compositionend, so only keyCode 229 gives it away.
+ */
+export const isImeComposing = (event: ReactKeyboardEvent) =>
+  event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229;
+
 export const isEditableElementFocused = (activeElement: Element | null = document.activeElement) => {
   if (!activeElement) return false;
 

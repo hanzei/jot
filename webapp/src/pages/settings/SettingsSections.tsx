@@ -277,6 +277,7 @@ export const IdentitySecurityColumn = ({
               <input
                 id="current-password"
                 type="password"
+                autoComplete="current-password"
                 required
                 value={currentPassword}
                 onChange={(e) => onCurrentPasswordChange(e.target.value)}
@@ -296,6 +297,7 @@ export const IdentitySecurityColumn = ({
             <input
               id="new-password"
               type="password"
+              autoComplete="new-password"
               required
               value={newPassword}
               onChange={(e) => onNewPasswordChange(e.target.value)}
@@ -311,6 +313,7 @@ export const IdentitySecurityColumn = ({
             <input
               id="confirm-password"
               type="password"
+              autoComplete="new-password"
               required
               value={confirmPassword}
               onChange={(e) => onConfirmPasswordChange(e.target.value)}

@@ -45,6 +45,26 @@
   }
 }
 
+/* Until applyTheme (utils/theme.ts) runs, the page follows the OS. After that it
+   sets a `light` or `dark` class on the root, pinning color-scheme to the user's
+   preference, so the body background and native UI (scrollbars, form controls,
+   autofill) match the in-app theme rather than the OS — keying them off
+   prefers-color-scheme showed a dark body behind a light app, and vice versa.
+   The classes must stay in CSS rather than an inline style: Lightning CSS
+   compiles light-dark() to variables that only color-scheme declarations in a
+   stylesheet update. */
+:root {
+  color-scheme: light dark;
+}
+
+:root.light {
+  color-scheme: light;
+}
+
+:root.dark {
+  color-scheme: dark;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -52,13 +72,7 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #fafafa;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    background-color: #0f172a;
-  }
+  background-color: light-dark(#fafafa, #0f172a);
 }
 
 @layer utilities {

@@ -9,6 +9,7 @@ import { indentOf, itemTextareaId, type ListItem } from '@/utils/noteItems';
 import { renderInlineItem } from '@/utils/markdown';
 import { sourceOffsetAtPoint } from '@/utils/inlineCaret';
 import { canAnimate } from '@/utils/motion';
+import { isImeComposing } from '@/utils/keyboardShortcuts';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
@@ -396,7 +397,7 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
                 : undefined
             }
             onKeyDown={readOnly ? undefined : (e) => {
-              if (suggestionsVisible && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) {
+              if (suggestionsVisible && !isImeComposing(e)) {
                 if (e.key === 'ArrowDown') {
                   e.preventDefault();
                   setSelectedSuggestionIndex(prev => Math.min(prev + 1, suggestions.length - 1));
