@@ -362,7 +362,6 @@ export default function NoteEditorScreen() {
     return () => cancelAnimationFrame(raf);
   }, [closeTick, zoom]);
 
-
   const sync = useNoteEditorSync({
     doc: editor.handle,
     noteId,

@@ -358,7 +358,7 @@ export function subscribeToEnqueue(listener: EnqueueListener): () => void {
 }
 
 /**
- * Notify enqueue listeners directly, bypassing `enqueueOperation`. Used by
+ * Notify enqueue listeners directly, bypassing `enqueueWrite`. Used by
  * imageUploadQueue.ts, whose offline upload queue is a separate table (a
  * multipart file upload doesn't fit the JSON `sync_queue` row shape) but
  * still wants to trigger OfflineContext's debounced drain like any other
@@ -454,8 +454,7 @@ export async function enqueueWrite<T>(db: SQLiteDatabase, write: OutboxWrite<T>)
   await withSerializedTransaction(db, async () => {
     applied = await write.localApply();
     if (!queue) return;
-    const ops = write.op(applied);
-    for (const op of Array.isArray(ops) ? ops as readonly EnqueueParams[] : [ops as EnqueueParams]) {
+    for (const op of [write.op(applied)].flat()) {
       await insertQueueEntry(db, op);
       operations.push(op.operation);
     }

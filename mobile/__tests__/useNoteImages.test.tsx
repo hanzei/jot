@@ -12,7 +12,7 @@ import * as noteImageCacheModule from '../src/utils/noteImageCache';
 import { useNetworkStatus } from '../src/hooks/useNetworkStatus';
 import { isLocalModeActive } from '../src/store/localMode';
 import { saveNote } from '../src/db/noteQueries';
-import { makeTextNote } from './helpers/fixtures';
+import { makeTextNote, queuedOps } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
 import type { NoteImage } from '@jot/shared';
 import { jot } from '../src/api/jot';
@@ -134,11 +134,6 @@ describe('useNoteImages hooks', () => {
     );
     return row?.updated_at;
   };
-
-  const queuedOps = () =>
-    db.getAllAsync<{ operation: string; endpoint: string; body: string | null }>(
-      'SELECT operation, endpoint, body FROM sync_queue ORDER BY id',
-    );
 
   // The other tests here fix connectivity before mounting, so they only cover
   // the value a hook was born with. These cover it flipping while the hook stays
@@ -397,11 +392,15 @@ describe('useNoteImages hooks', () => {
       expect(mockJot.images.delete).not.toHaveBeenCalled();
       expect(await imagesOf('note-1')).toEqual([makeImage({ id: 'img-2' })]);
       expect(mockDeleteCachedNoteImage).toHaveBeenCalledWith('img-1');
-      expect(await queuedOps()).toEqual([
-        { operation: 'removeImage', endpoint: '/images/img-1', body: null },
-      ]);
       // The endpoint names no note, so the key does.
-      expect(await db.getAllAsync('SELECT key FROM sync_queue_keys')).toEqual([{ key: 'note:note-1' }]);
+      expect(await queuedOps(db)).toEqual([{
+        operation: 'removeImage',
+        endpoint: '/images/img-1',
+        method: 'DELETE',
+        body: null,
+        keys: ['note:note-1'],
+        readKeys: [],
+      }]);
     });
 
     it('invalidates the note and notes-list caches on success', async () => {
@@ -438,7 +437,7 @@ describe('useNoteImages hooks', () => {
       await expect(result.current.mutateAsync({ noteId: 'note-1', imageId: 'img-1' })).rejects.toThrow('Server switch in progress');
 
       expect(await imagesOf('note-1')).toEqual([makeImage({ id: 'img-1' })]);
-      expect(await queuedOps()).toEqual([]);
+      expect(await queuedOps(db)).toEqual([]);
     });
 
     it('hides the image but queues nothing in local mode', async () => {
@@ -449,7 +448,7 @@ describe('useNoteImages hooks', () => {
       await result.current.mutateAsync({ noteId: 'note-1', imageId: 'img-1' });
 
       expect(await imagesOf('note-1')).toEqual([]);
-      expect(await queuedOps()).toEqual([]);
+      expect(await queuedOps(db)).toEqual([]);
     });
   });
 });

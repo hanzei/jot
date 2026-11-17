@@ -22,7 +22,7 @@ import { probeServerReachability } from '../api/client';
 import { DEFAULT_SERVER_CONFIG, probeServerConfig } from '../api/config';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { getUsernameValidationError, isPasswordTooShort, type ServerConfig } from '@jot/shared';
-import { displayMessage } from '../i18n/utils';
+import { displayMessage, USERNAME_ERROR_KEYS } from '../i18n/utils';
 import {
   registerOnServer,
   runPreflightChecks,
@@ -266,13 +266,7 @@ export default function ConnectToServerScreen() {
     if (!trimmedUsername) return t('auth.usernameRequired');
     const usernameError = getUsernameValidationError(trimmedUsername);
     if (usernameError) {
-      const usernameErrorTranslations = {
-        min: t('auth.usernameMin'),
-        max: t('auth.usernameMax'),
-        chars: t('auth.usernameChars'),
-        edge: t('auth.usernameEdge'),
-      } as const;
-      return usernameErrorTranslations[usernameError];
+      return t(USERNAME_ERROR_KEYS[usernameError]);
     }
     if (!password.trim()) return t('auth.passwordRequired');
     if (isPasswordTooShort(password, registerServerConfig.password_min_length)) {

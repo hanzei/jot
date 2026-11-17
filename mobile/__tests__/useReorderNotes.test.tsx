@@ -5,7 +5,7 @@ import { useReorderNotes } from '../src/hooks/useNotes';
 import { saveNotes, markNotePendingCreate } from '../src/db/noteQueries';
 import { notesLocalQueryKey } from '../src/hooks/queryKeys';
 import { getDefaultTestDb, type TestDatabase } from './helpers/testDb';
-import { makeTextNote } from './helpers/fixtures';
+import { makeTextNote, queuedOps } from './helpers/fixtures';
 import { jot } from '../src/api/jot';
 import type { Note } from '@jot/shared';
 
@@ -59,12 +59,14 @@ describe('useReorderNotes', () => {
     expect(mockJot.notes.reorder).not.toHaveBeenCalled();
     // SQLite holds the new order, so any re-read shows it (#945, #947).
     expect(await positions(db)).toEqual({ a: 1, b: 0 });
-    const queued = await db.getAllAsync<{ operation: string; endpoint: string; body: string }>(
-      'SELECT operation, endpoint, body FROM sync_queue',
-    );
-    expect(queued).toEqual([expect.objectContaining({ operation: 'reorder', endpoint: '/notes/reorder' })]);
-    expect(JSON.parse(queued[0]!.body)).toEqual({ note_ids: ['b', 'a'] });
-    expect(await db.getAllAsync('SELECT key FROM sync_queue_keys ORDER BY key')).toEqual([{ key: 'note:a' }, { key: 'note:b' }]);
+    expect(await queuedOps(db)).toEqual([{
+      operation: 'reorder',
+      endpoint: '/notes/reorder',
+      method: 'POST',
+      body: { note_ids: ['b', 'a'] },
+      keys: ['note:b', 'note:a'],
+      readKeys: [],
+    }]);
   });
 
   // The server rejects a reorder naming a note it does not know yet (#956);

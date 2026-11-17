@@ -6,17 +6,9 @@ import { useAuth } from '../../store/AuthContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { cacheAuthProfile } from '../../api/client';
 import { enqueueSettingsUpdate } from '../../db/syncQueue';
-import { displayMessage, extractApiError } from '../../i18n/utils';
+import { displayMessage, extractApiError, USERNAME_ERROR_KEYS } from '../../i18n/utils';
 import { styles } from './styles';
-import { getUsernameValidationError, type UpdateMeRequest, type UsernameValidationErrorCode } from '@jot/shared';
-
-/** The message key for each client-side username check, shared with registration. */
-const USERNAME_ERROR_KEYS: Record<UsernameValidationErrorCode, string> = {
-  min: 'auth.usernameMin',
-  max: 'auth.usernameMax',
-  chars: 'auth.usernameChars',
-  edge: 'auth.usernameEdge',
-};
+import { getUsernameValidationError, type UpdateMeRequest } from '@jot/shared';
 
 export default function AccountSection() {
   const { user, settings, setUser, isLocalMode } = useAuth();
