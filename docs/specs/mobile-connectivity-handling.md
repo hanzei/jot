@@ -81,6 +81,8 @@ answers. It starts `true`, and is not per server: a server switch resets it.
   of the network becoming usable (#1309).
 - **When it recovers, a drain that stopped on it resumes**, without skipping a
   pending backoff or resetting the failure count.
+- **A write queued while a drain runs is never stranded**: a pass follows to
+  send it, even when the running drain finishes and clears its timers.
 - **A reconnect revalidates the session before the queue drains.**
 - **A stream from before a server switch says nothing** about the new server.
 
@@ -262,9 +264,11 @@ edits the server has not confirmed yet.
   user never saw.
 - **It is not older than this device's own landed edits either**, or the next
   edit conflicts with the device's own earlier write. So when the drain can
-  prove a response's version holds nothing but this device's write (the server
-  accepted it at `base_version` and returned `base_version` or one more), the
-  row may take that version while it keeps its newer local edits.
+  prove a response's version holds nothing but this device's write, the row
+  may take that version while it keeps its newer local edits. That proof is
+  either a guarded edit the server accepted at `base_version` and answered with
+  `base_version` or one more, or the response to this device's own create or
+  duplicate, which nobody else can have edited yet.
 - **`base_version` means "the version of the text the user was looking at".**
   That is the only reading under which a 409 is a real conflict.
 
@@ -299,6 +303,10 @@ Server state arrives as a **snapshot** (a fetch or an SSE event) or as the
 - **Do not compare `updated_at`**, which mixes device and server clocks, and do
   not refuse a lower `version`, which would freeze every note after an operator
   restores a server backup.
+- **`updated_at` is for ordering only.** Image uploads and removals bump it on
+  the server, and this device gets no SSE echo of its own, so it stamps the
+  local row itself: the image's `created_at` after an upload, its own clock
+  after a removal. Neither moves it backward.
 
 **Responses to our own writes:**
 
@@ -324,6 +332,10 @@ can recover it.
   the dead letter lifts that; a later successful op does not.
 - **Nothing replaces the preserved content**: not a snapshot, not the response
   to a later write (per-user fields from it may apply), not a replay.
+- **A dead letter is never put back in the queue.** The drain has already sent
+  the note's later ops past it, so replaying it could overwrite a newer edit
+  with an older one. That includes dead letters from before #1283, when a 5xx
+  was capped too.
 
 **Which permanent rejections become failed changes.** A rejection is only worth a
 "Keep my version" prompt when the local value is the user's work:
@@ -335,7 +347,7 @@ can recover it.
 | Settings | A failed change; the session is re-read once the queue is empty. |
 | Per-user state (pin, colour, archive, collapse), trash, restore, delete, reorder | Dropped, and the notes it names are pulled: undone silently. |
 | Item structure and check-offs, label membership, share and unshare | Dropped and pulled. |
-| Best effort: mark viewed, image removal | Dropped; the next sync reconciles them. |
+| Best effort: mark viewed, image removal | Dropped; the next sync reconciles them. Also dropped after repeated transient failures, so they never hold back their note's edits. |
 
 Some statuses mean the op was already applied, and are successes, not
 rejections: a 404 or 410 for something being removed, a 409 replay of a create,
@@ -354,7 +366,9 @@ row at enqueue.
   field a queued create takes is folded into the create.
 - **Never change the order** relative to other ops on the same note, label or
   settings: merge only into the last queued op sharing a key with the new one.
-- **Never merge into the row being sent.**
+- **Never merge into the row being sent, and send every row as it stands when
+  the drain reaches it**, not as it was when the pass started: an edit merged
+  into a row the pass loaded but has not sent yet must go out with it.
 - **Never lose a move:** a later reorder replaces an earlier one only if it names
   everything the earlier one did, since the server positions only the ids it is
   sent.

@@ -101,6 +101,8 @@ wording.
   local edit and its queue row commit in one transaction, and the hook returns.
   Only the drain sends. A permanent rejection arrives later as a failed change
   or a silent undo (spec §8.4), so check locally what you can before queueing.
+  Settings live in the session, not SQLite: queue them with
+  `enqueueSettingsUpdate`.
 - **Reads serve SQLite at once** and refresh in the background with bounded,
   backed-off retries that stop while the server does not answer.
 - **One-shot actions** (login, PATs, public links, export) may use the network
