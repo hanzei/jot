@@ -247,6 +247,33 @@ describe('edits to a note whose create is queued', () => {
     ]);
   });
 
+  it('does not fold into a create that was sent without a response', async () => {
+    // The server committed the create, but the response was lost: the row stays
+    // queued, and its replay resolves as already applied (409).
+    await enqueueAll(createText(NEW_ID));
+    mockApi.post
+      .mockRejectedValueOnce(Object.assign(new Error('Network Error'), { isAxiosError: true }))
+      .mockRejectedValueOnce(Object.assign(new Error('Request failed with status code 409'), {
+        isAxiosError: true,
+        response: { status: 409 },
+      }));
+    silenceConsole('info', /^Queue drain stopped at entry|no replay needed/);
+    await drainQueue(db);
+
+    await enqueueAll(update({ content: 'Later', base_version: 1 }, NEW_ID));
+    expect(await rows()).toEqual([
+      ['create', { id: NEW_ID, note_type: 'text', content: 'First' }],
+      ['update', { content: 'Later', base_version: 1 }],
+    ]);
+
+    mockApi.patch.mockResolvedValueOnce({ data: makeTextNote({ id: NEW_ID, content: 'Later', version: 2 }) } as never);
+    await drainQueue(db);
+
+    expect(mockApi.patch.mock.calls.map((call) => [call[0], call[1]])).toEqual([
+      [`/notes/${NEW_ID}`, { content: 'Later', base_version: 1 }],
+    ]);
+  });
+
   it('does not fold over a conversion or a duplicate of the note', async () => {
     await enqueueAll(createText(NEW_ID), {
       operation: 'duplicate',

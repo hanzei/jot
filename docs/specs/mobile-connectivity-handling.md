@@ -619,6 +619,9 @@ change.
   and label ops behind it, so the server receives one create with the final
   content. Not when an `update` or a conversion is queued after the create, or
   a duplicate of the note: those would see the folded value change under them.
+  Not into a create the drain has ever sent (`sync_queue.send_attempted`): one
+  whose response was lost may already be on the server, and its replay then
+  resolves as already applied (409) without the folded fields.
   A field the create does not take (archive, collapse) stays an `update`.
 - **Never merge into a row the drain is sending.** The drain re-reads each
   row and marks it in flight in one serialized transaction just before it

@@ -155,9 +155,11 @@ const CREATE_FIELDS: ReadonlySet<string> = new Set(['title', 'content', 'color',
 
 /**
  * Fold an `update` into its note's queued `create`, so the server receives one
- * create with the final fields (#1262). Only the fields a create takes (its
- * text, colour, pin) and only while nothing queued after the create could see
- * them change: a later `update` (one appended while the create was in flight)
+ * create with the final fields (#1262). Only into a create the drain has never
+ * sent: one whose response was lost may already be on the server, and its
+ * replay resolves as already applied (409) without the folded fields. Only the
+ * fields a create takes (its text, colour, pin), and only while nothing queued
+ * after the create could see them change: a later `update` (one appended while the create was in flight)
  * would replay an older value over the folded one, a conversion is computed
  * from the text, and a duplicate copies the note.
  */
@@ -175,7 +177,7 @@ async function foldIntoCreate(
   const create = await db.getFirstAsync<QueuedRow>(
     `SELECT q.id, q.operation, q.endpoint, q.body FROM sync_queue q
        JOIN sync_queue_keys k ON k.entry_id = q.id
-     WHERE k.key = ? AND k.read_only = 0 AND q.operation = 'create'
+     WHERE k.key = ? AND k.read_only = 0 AND q.operation = 'create' AND q.send_attempted = 0
      ORDER BY q.id DESC LIMIT 1`,
     [key],
   );

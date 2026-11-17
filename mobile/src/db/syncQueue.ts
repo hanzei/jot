@@ -1208,6 +1208,14 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         continue;
       }
 
+      // From here the server may hold the create even if no response comes
+      // back, so no later edit is folded into it (queueMerge.ts). Recorded
+      // durably: the row can outlive the process.
+      if (entry.operation === 'create') {
+        await withSerializedTransaction(db, async () => {
+          await db.runAsync('UPDATE sync_queue SET send_attempted = 1 WHERE id = ?', [entry.id]);
+        });
+      }
       let response: { data?: unknown } | undefined;
       if (entry.method === 'POST') {
         response = await api.post(endpoint, body, REPLAY_REQUEST_CONFIG);
