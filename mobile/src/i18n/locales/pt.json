@@ -419,7 +419,8 @@
     "deleteError": "Falha ao excluir a etiqueta",
     "deleteConfirmTitle": "Excluir etiqueta",
     "deleteConfirmMessage": "Excluir a etiqueta \"{{name}}\"? Ela será removida de todas as notas que a utilizam.",
-    "nameRequired": "O nome da etiqueta não pode ficar vazio."
+    "nameRequired": "O nome da etiqueta não pode ficar vazio.",
+    "nameTaken": "Já existe uma etiqueta com este nome."
   },
   "share": {
     "searchUsersPlaceholder": "Pesquisar usuários por nome...",

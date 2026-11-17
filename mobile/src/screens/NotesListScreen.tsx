@@ -24,12 +24,11 @@ import { useConfirm } from '../hooks/useConfirm';
 import { useTheme } from '../theme/ThemeContext';
 import SkeletonNoteList from '../components/SkeletonNoteList';
 import NoteCard from '../components/NoteCard';
-import { apiPaths, normalizeNoteSort, sortNotesForDisplay, type Note, type NoteSort, type UpdateMeRequest } from '@jot/shared';
+import { normalizeNoteSort, sortNotesForDisplay, type Note, type NoteSort } from '@jot/shared';
 import type { RootStackParamList, LayoutRect } from '../navigation/RootNavigator';
 import { isSortWarningDismissed, dismissSortWarning } from '../utils/sortWarningDismissed';
 import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
-import { enqueueOperation, isQueueableError } from '../db/syncQueue';
-import { SETTINGS_KEY } from '../db/queueKeys';
+import { enqueueSettingsUpdate } from '../db/syncQueue';
 import { recordWriteLanded } from '../db/snapshotGate';
 import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
@@ -181,25 +180,13 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
       return;
     }
 
-    // The enqueue itself is a local SQLite write and can still fail; swallow
-    // that here (reporting success/failure via the return) rather than let it
-    // escape as an unhandled rejection out of the void-invoked caller.
-    const enqueueSort = async (): Promise<boolean> => {
-      try {
-        await enqueueOperation(db, {
-          operation: 'updateSettings',
-          endpoint: apiPaths.usersMe,
-          method: 'PATCH',
-          keys: [SETTINGS_KEY],
-          body: { note_sort: nextSort } satisfies UpdateMeRequest,
-        });
-        return true;
-      } catch {
-        return false;
-      }
-    };
-
-    const rollback = () => {
+    // Through the outbox (#1285): the drain sends it. The enqueue is a local
+    // SQLite write and can still fail; roll back and say so rather than leave
+    // the UI showing an unsaved change, or let it escape as an unhandled
+    // rejection out of the void-invoked caller.
+    try {
+      await enqueueSettingsUpdate(db, { note_sort: nextSort });
+    } catch {
       if (requestId !== sortRequestIdRef.current) {
         return;
       }
@@ -208,39 +195,8 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
         setSettings(previousSettings);
       }
       Alert.alert(t('common.error'), t('dashboard.sortUpdateFailed'));
-    };
-
-    if (!isOnlineWriteAllowed(isConnected)) {
-      // Server known-unreachable: skip the doomed round-trip and enqueue the
-      // change for replay instead of eating the write timeout (#716). If even
-      // the local enqueue fails, fall back to the same rollback + alert as a
-      // permanent failure rather than leaving the UI showing an unsaved change.
-      if (!(await enqueueSort())) {
-        rollback();
-      }
-      return;
     }
-
-    try {
-      const response = await jot.users.updateMe({ note_sort: nextSort });
-      if (requestId !== sortRequestIdRef.current) {
-        return;
-      }
-      setSettings(response.settings);
-    } catch (err) {
-      if (requestId !== sortRequestIdRef.current) {
-        return;
-      }
-      if (isQueueableError(err)) {
-        // Transient failure: keep the optimistic sort and queue the change for
-        // replay instead of rolling back and showing a blocking dialog (#716).
-        if (await enqueueSort()) {
-          return;
-        }
-      }
-      rollback();
-    }
-  }, [setSettings, settings, sortMode, isLocalMode, isConnected, db, t]);
+  }, [setSettings, settings, sortMode, isLocalMode, db, t]);
 
   const handleSortChipPress = useCallback((nextSort: NoteSort) => {
     setIsSortControlsOpen(false);

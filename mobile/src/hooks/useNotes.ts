@@ -1,9 +1,11 @@
 import { useMutation, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
-import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
+import { useSQLiteContext } from 'expo-sqlite';
 import { useOfflineNote } from './useOfflineNotes';
 import { apiPaths, DEFAULT_NOTE_COLOR, generateId, textToListNote, listToText, checkConvertToListCaps, applyCompletedValues, completedCascadeScope, patchTouchesSharedContent } from '@jot/shared';
 import type {
   Note,
+  TextNote,
+  ListNote,
   NoteItem,
   NoteShare,
   UserInfo,
@@ -23,18 +25,18 @@ import type {
   ConvertToListCapViolation,
 } from '@jot/shared';
 import {
-  saveNote,
   saveNotes,
+  saveNoteInTx,
   getLocalNote,
+  requireLocalNote,
   markLocalNoteDeleted,
   markLocalNoteRestored,
   clearLocalNoteUnread,
-  permanentDeleteLocalNote,
+  permanentDeleteLocalNoteRows,
+  deleteUploadFiles,
   updateLocalNote,
   generateClientNoteId,
   markNotePendingCreate,
-  getPendingCreateNoteIds,
-  getLocalNotePositions,
   getNextLocalPinnedPosition,
   createLocalItem,
   patchLocalItem,
@@ -42,26 +44,10 @@ import {
   reorderLocalItems,
   setLocalItemsCompleted,
   deleteLocalItems,
-  reconcileLocalItems,
-  upsertLabel,
 } from '../db/noteQueries';
-import { localCompletedWrites } from '../db/localCompletedWrites';
 import { resolveOwnBaseVersion } from '../db/ownVersions';
 import { labelKey, noteKey } from '../db/queueKeys';
-import {
-  enqueueOperation,
-  enqueueWrite,
-  getPendingNoteIds,
-  getQueuedCompletedItemIds,
-  hasQueuedWriteForNote,
-  isQueueableError,
-  reconcileServerItems,
-  rethrowIfNotQueueable,
-  saveServerResponseNote,
-  type EnqueueParams,
-} from '../db/syncQueue';
-import { isOnlineWriteAllowed } from '../api/serverReachability';
-import { useNetworkStatus } from './useNetworkStatus';
+import { enqueueWrite, type EnqueueParams } from '../db/syncQueue';
 import { useAuth } from '../store/AuthContext';
 import { assertSwitchWriteAllowed, isServerSwitchInProgress } from '../api/client';
 import { resolveLocalLabel } from './useLabels';
@@ -70,7 +56,6 @@ import {
   noteLocalQueryKey,
   notesLocalQueryScopeKey,
 } from './queryKeys';
-import { jot } from '../api/jot';
 
 /**
  * The item ids a completed-toggle changes: the shared `completedCascadeScope`
@@ -89,97 +74,10 @@ function applyToggleToItems(items: NoteItem[], itemId: string, completed: boolea
   return applyCompletedValues(items, new Map(collectToggleCascade(items, itemId, completed).map((id) => [id, completed])));
 }
 
-/** Writes per-item completed values to SQLite, one grouped write per value. */
-async function setLocalCompletedValues(
-  db: SQLiteDatabase,
-  noteId: string,
-  completedById: ReadonlyMap<string, boolean>,
-): Promise<void> {
-  for (const value of [true, false]) {
-    const ids: string[] = [];
-    for (const entry of completedById) {
-      if (entry[1] === value) ids.push(entry[0]);
-    }
-    if (ids.length > 0) await setLocalItemsCompleted(db, noteId, ids, value);
-  }
-}
-
 /** Invalidates a note's SQLite-backed reads, detail and lists. */
 function invalidateNoteReads(queryClient: QueryClient, noteId: string): void {
   queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
   queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-}
-
-interface LocalCompletedWrite {
-  /** For every item the write changes, the value it replaces. */
-  priorById: ReadonlyMap<string, boolean>;
-  /** Applies the change to SQLite. */
-  writeLocal: () => Promise<void>;
-  /** Sends the change, resolving to the note's full item list. */
-  send: () => Promise<NoteItem[]>;
-  /**
-   * Writes the response to SQLite, gated as answering `write`, and leaving the
-   * `queued` items — ones a queued op has yet to replay — at their local value.
-   */
-  persist: (write: number, serverItems: NoteItem[], queued: ReadonlySet<string>) => Promise<void>;
-  /** The replay op to queue when offline or after a transient failure. */
-  queued: EnqueueParams;
-}
-
-/**
- * The shared body of the completed-flag mutations. The change is claimed in
- * localCompletedWrites and written to SQLite *before* the request goes out:
- * both note reads are SQLite-backed, so while a row still holds its old value
- * any re-read in that window (the queue drain's invalidation, a background note
- * sync, a sibling write's onSettled) resolves to the pre-write note and
- * overwrites the optimistic cache. Writing first makes the local rows agree
- * with the cache for the whole flight, so a re-read is a no-op.
- *
- * Online, the response is the note's full item list as of this write — it
- * still reports any row tapped after this one with its old value — so it is
- * written back through the gate. A permanent failure reverts the rows no later
- * write has taken over, in SQLite and the cache alike; rolling the cache back to
- * its pre-write snapshot instead would undo every later write's optimistic
- * state. Offline, or after a transient failure, the change is queued for replay.
- * Resolves to the response — minus any item an earlier queued op still has to
- * replay, whose server value predates it — or [] when queued.
- */
-async function runLocalCompletedWrite(
-  db: SQLiteDatabase,
-  queryClient: QueryClient,
-  noteId: string,
-  isConnected: boolean,
-  op: LocalCompletedWrite,
-): Promise<NoteItem[]> {
-  const write = localCompletedWrites.begin(op.priorById);
-  try {
-    await op.writeLocal();
-    // Queue behind any queued write to the note, its create included (#475): a
-    // direct call would 404 or overtake an earlier edit (spec §8.2).
-    if (isOnlineWriteAllowed(isConnected) && !(await hasQueuedWriteForNote(db, noteId))) {
-      try {
-        const serverItems = await op.send();
-        const queued = await getQueuedCompletedItemIds(db, noteId);
-        await op.persist(write, serverItems, queued);
-        return queued.size === 0 ? serverItems : serverItems.filter((item) => !queued.has(item.id));
-      } catch (err) {
-        if (!isQueueableError(err)) {
-          const revert = localCompletedWrites.fail(write);
-          await setLocalCompletedValues(db, noteId, revert);
-          if (revert.size > 0) {
-            applyOptimisticNote(queryClient, noteId, (note) =>
-              note.note_type === 'list' && note.items ? { ...note, items: applyCompletedValues(note.items, revert) } : note,
-            );
-          }
-          throw err;
-        }
-      }
-    }
-    await enqueueOperation(db, op.queued);
-    return [];
-  } finally {
-    localCompletedWrites.end(write);
-  }
 }
 
 /**
@@ -217,9 +115,8 @@ interface OptimisticNoteSnapshot {
 /**
  * Optimistically applies `transform` to a note in both the single-note cache
  * and every cached notes-list, returning a snapshot for rollback. Reflecting
- * the change in the cache up front lets a slow/half-open connection feel as
- * snappy as a fully-offline write while the network reconcile runs in the
- * background; pair with `rollbackOptimisticNote` in the mutation's `onError`.
+ * the change in the cache up front shows it before the SQLite re-read lands;
+ * pair with `rollbackOptimisticNote` in the mutation's `onError`.
  */
 function applyOptimisticNote(
   queryClient: QueryClient,
@@ -277,16 +174,15 @@ function invalidateLabelList(queryClient: QueryClient): void {
 export function useCreateNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
-  const { isConnected } = useNetworkStatus();
   const { user } = useAuth();
 
   return useMutation({
     mutationFn: async (data: CreateNoteRequest): Promise<Note> => {
       assertSwitchWriteAllowed();
-      // Pick the note's ID (and its item IDs) before the online attempt and send
-      // them on it too. A write that times out client-side may still have
-      // committed; the queued replay below reuses these IDs, so it gets a 409
-      // (already applied) instead of creating a second note (#1278).
+      // The note gets a server-valid ID up front and is sent under it, so the
+      // queued create is idempotent (issue #475): a replay of a create the
+      // server already committed gets a 409 (already applied) rather than
+      // creating a second note (#1278).
       const clientId = generateClientNoteId();
       // Pre-assign a permanent, server-format ID to every list item so the *same*
       // ID backs the local row and is sent in the create body. The server honors
@@ -299,109 +195,96 @@ export function useCreateNote() {
         data.note_type === 'list'
           ? (data.items ?? []).map((item) => ({ ...item, id: item.id ?? generateId() }))
           : undefined;
-      if (isOnlineWriteAllowed(isConnected)) {
-        try {
-          const note = await jot.notes.create({
-            ...data,
-            ...(itemsWithIds ? { items: itemsWithIds } : {}),
-            id: clientId,
-          });
-          await saveServerResponseNote(db, note);
-          // Labels sent by name may have been minted by the create; store them so
-          // the drawer shows them right away (#691).
-          for (const label of note.labels ?? []) await upsertLabel(db, label);
-          return note;
-        } catch (err) {
-          // Transient failure: fall through to the offline path so the new note
-          // is persisted locally and queued for replay instead of being lost.
-          rethrowIfNotQueueable(err);
-        }
-      }
-
-      // Offline (or a transient online failure): create locally and queue the
-      // server operation. The note gets a server-valid ID up front so it is sent
-      // as the note's primary key on replay, making the queued create idempotent
-      // (issue #475) — no server-side ID reconciliation needed.
       const now = new Date().toISOString();
-      // Attach the labels the create names (a new note labelled before it
-      // existed, or a sync-failure fork) to the local row too. A label not known
-      // locally gets its own create queued ahead of this note's, so the server
-      // resolves the name to that same id on replay.
-      const labels: Label[] = [];
-      for (const name of data.labels ?? []) {
-        const label = await resolveLocalLabel(db, name, user?.id ?? '');
-        if (!labels.some((l) => l.id === label.id)) labels.push(label);
-      }
-      const shared_with: NoteShare[] = [];
 
-      const baseLocalNote = {
-        id: clientId,
-        user_id: user?.id ?? '',
-        // A brand-new note starts at version 1, matching the server's default;
-        // the first successful sync replaces it with the canonical server note.
-        version: 1,
-        color: data.color ?? DEFAULT_NOTE_COLOR,
-        pinned: data.pinned ?? false,
-        archived: false,
-        position: data.pinned ? await getNextLocalPinnedPosition(db) : 0,
-        is_shared: false,
-        unread: null,
-        deleted_at: null as string | null,
-        created_at: now,
-        updated_at: now,
-        labels,
-        shared_with,
-      };
-      const localNote: Note = data.note_type === 'list'
-        ? {
-            ...baseLocalNote,
-            note_type: 'list',
-            title: data.title,
-            checked_items_collapsed: false,
-            items: (() => {
-              let lastTopLevelId: string | null = null;
-              return (itemsWithIds ?? []).map((item, i) => {
-                const isChild = (item.indent_level ?? 0) === 1;
-                const parentId = isChild ? lastTopLevelId : null;
-                if (!isChild) lastTopLevelId = item.id;
-                return {
-                  id: item.id,
-                  note_id: clientId,
-                  text: item.text,
-                  completed: item.completed ?? false,
-                  position: i,
-                  parent_id: parentId,
-                  assigned_to: '',
-                  created_at: now,
-                  updated_at: now,
-                };
-              });
-            })(),
+      // Through the outbox (#1285): the note and its queue rows commit together.
+      const { note } = await enqueueWrite(db, {
+        localApply: async () => {
+          // Attach the labels the create names (a new note labelled before it
+          // existed, or a sync-failure fork) to the local row too. A label not
+          // known locally gets its own create queued ahead of this note's, so
+          // the server resolves the name to that same id.
+          const labels: Label[] = [];
+          const labelCreates: EnqueueParams[] = [];
+          for (const name of data.labels ?? []) {
+            const { label, create } = await resolveLocalLabel(db, name, user?.id ?? '');
+            if (create) labelCreates.push(create);
+            if (!labels.some((l) => l.id === label.id)) labels.push(label);
           }
-        : {
-            ...baseLocalNote,
-            note_type: 'text',
-            content: data.content,
+          const baseLocalNote = {
+            id: clientId,
+            user_id: user?.id ?? '',
+            // A brand-new note starts at version 1, matching the server's default;
+            // the drained create replaces it with the canonical server note.
+            version: 1,
+            color: data.color ?? DEFAULT_NOTE_COLOR,
+            pinned: data.pinned ?? false,
+            archived: false,
+            position: data.pinned ? await getNextLocalPinnedPosition(db) : 0,
+            is_shared: false,
+            unread: null,
+            deleted_at: null as string | null,
+            created_at: now,
+            updated_at: now,
+            labels,
+            shared_with: [] as NoteShare[],
           };
-      await saveNote(db, localNote);
-      // Flag it unsynced until the queued create drains, so the UI gates actions
-      // that need a server-side note (sharing, labels) in the meantime.
-      await markNotePendingCreate(db, clientId);
-      await enqueueOperation(db, {
-        operation: 'create',
-        endpoint: apiPaths.notes,
-        method: 'POST',
-        keys: [noteKey(clientId), ...labels.map((l) => labelKey(l.id))],
-        // Carry the pre-assigned item IDs so the server keeps them (no
-        // reconciliation) and the local rows stay valid for any per-item edit
-        // queued behind this create (#513).
-        body: {
-          ...data,
-          ...(itemsWithIds ? { items: itemsWithIds } : {}),
-          id: clientId,
-        } as Record<string, unknown>,
+          const localNote: Note = data.note_type === 'list'
+            ? {
+                ...baseLocalNote,
+                note_type: 'list',
+                title: data.title,
+                checked_items_collapsed: false,
+                items: (() => {
+                  let lastTopLevelId: string | null = null;
+                  return (itemsWithIds ?? []).map((item, i) => {
+                    const isChild = (item.indent_level ?? 0) === 1;
+                    const parentId = isChild ? lastTopLevelId : null;
+                    if (!isChild) lastTopLevelId = item.id;
+                    return {
+                      id: item.id,
+                      note_id: clientId,
+                      text: item.text,
+                      completed: item.completed ?? false,
+                      position: i,
+                      parent_id: parentId,
+                      assigned_to: '',
+                      created_at: now,
+                      updated_at: now,
+                    };
+                  });
+                })(),
+              }
+            : {
+                ...baseLocalNote,
+                note_type: 'text',
+                content: data.content,
+              };
+          await saveNoteInTx(db, localNote);
+          // Flag it unsynced until the queued create drains, so the UI gates
+          // actions that need a server-side note (public links) meanwhile.
+          await markNotePendingCreate(db, clientId);
+          return { note: localNote, labelCreates };
+        },
+        op: ({ note: localNote, labelCreates }) => [
+          ...labelCreates,
+          {
+            operation: 'create',
+            endpoint: apiPaths.notes,
+            method: 'POST',
+            keys: [noteKey(clientId), ...localNote.labels.map((l) => labelKey(l.id))],
+            // Carry the pre-assigned item IDs so the server keeps them (no
+            // reconciliation) and the local rows stay valid for any per-item
+            // edit queued behind this create (#513).
+            body: {
+              ...data,
+              ...(itemsWithIds ? { items: itemsWithIds } : {}),
+              id: clientId,
+            } as Record<string, unknown>,
+          },
+        ],
       });
-      return localNote;
+      return note;
     },
     onSuccess: (_note, data) => {
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
@@ -444,10 +327,7 @@ export function useUpdateNote() {
       // and the drain sends it. A rejection surfaces later as a failed change.
       return enqueueWrite(db, {
         localApply: async () => {
-          const existing = await getLocalNote(db, id);
-          if (!existing) {
-            throw new Error(`Note ${id} not found in local DB`);
-          }
+          const existing = await requireLocalNote(db, id);
           await updateLocalNote(db, id, data);
           // The version the edit was made against: the one the editor's text is
           // based on (`baseVersion`), since the row may already hold a
@@ -495,26 +375,11 @@ export function useUpdateNote() {
 }
 
 /**
- * Computes the precomputed `content`/`title`/`items` for converting `note` to
- * the opposite type, via the same shared transform
- * (`textToListNote`/`listToText`) the webapp uses — the server only validates
- * and persists whatever is sent (issue #676). Converting to a list promotes a
- * leading heading in the content into the list's title, the inverse of the
- * `# Title` line `listToText` writes in the other direction. Item ids are
- * generated here (rather than left for the server)
- * so they stay stable across a chain of offline edits: a per-item mutation
- * queued right after an offline convert, but before it drains, can then target
- * the same id the eventual server row will have (mirrors useDuplicateNote's
- * client-supplied item ids). Deliberately excludes `base_version`: the online
- * path stamps the version current at call time, while the offline/replay path
- * resolves it fresh at drain time (see the `update` operation's handling, #489).
- */
-/**
  * Thrown by `buildConvertNoteTypeRequest` when a text→list conversion would
- * exceed an item cap the server enforces. Thrown before either the online
- * request or the offline apply/enqueue below it, so a note that would be
- * rejected never reaches the sync queue in the first place — the offline
- * replay would otherwise reject it later with no way to explain why.
+ * exceed an item cap the server enforces. Thrown inside the convert's outbox
+ * transaction, before anything is written, so a note that would be rejected
+ * never reaches the sync queue in the first place — the drain would otherwise
+ * report it later as a failed change with no way to explain why.
  */
 export class NoteConversionCapError extends Error {
   readonly kind: ConvertToListCapViolation['kind'];
@@ -528,6 +393,19 @@ export class NoteConversionCapError extends Error {
   }
 }
 
+/**
+ * Computes the precomputed `content`/`title`/`items` for converting `note` to
+ * the opposite type, via the same shared transform
+ * (`textToListNote`/`listToText`) the webapp uses — the server only validates
+ * and persists whatever is sent (issue #676). Converting to a list promotes a
+ * leading heading in the content into the list's title, the inverse of the
+ * `# Title` line `listToText` writes in the other direction. Item ids are
+ * generated here (rather than left for the server) so a per-item mutation
+ * queued right after the convert, before it drains, can target the same id
+ * the eventual server row will have (mirrors useDuplicateNote's
+ * client-supplied item ids). Excludes `base_version`, which useConvertNoteType
+ * adds.
+ */
 function buildConvertNoteTypeRequest(note: Note): ConvertNoteTypeRequest {
   if (note.note_type === 'list') {
     return {
@@ -549,7 +427,7 @@ function buildConvertNoteTypeRequest(note: Note): ConvertNoteTypeRequest {
       position: index,
       completed: item.completed,
       // The server rebuilds parent_id from this; applyConvertedNoteLocally
-      // mirrors that reconstruction so the offline result matches.
+      // mirrors that reconstruction so the local result matches.
       indent_level: item.indentLevel,
     })),
   };
@@ -563,7 +441,18 @@ function buildConvertNoteTypeRequest(note: Note): ConvertNoteTypeRequest {
  */
 function applyConvertedNoteLocally(note: Note, data: ConvertNoteTypeRequest, now: string): Note {
   if (data.note_type === 'text') {
-    return { ...note, note_type: 'text', content: data.content ?? '', updated_at: now };
+    // A text note has no title, items or collapsed flag: drop the list's, so
+    // the cached note matches what SQLite stored.
+    const converted: TextNote & Partial<Pick<ListNote, 'title' | 'items' | 'checked_items_collapsed'>> = {
+      ...note,
+      note_type: 'text',
+      content: data.content ?? '',
+      updated_at: now,
+    };
+    delete converted.title;
+    delete converted.items;
+    delete converted.checked_items_collapsed;
+    return converted;
   }
   // Mirrors the server's buildItems (server/internal/notesvc): an item sent with indent_level 1
   // hangs off the nearest preceding top-level item, and off nothing when there is
@@ -594,50 +483,34 @@ function applyConvertedNoteLocally(note: Note, data: ConvertNoteTypeRequest, now
 export function useConvertNoteType() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
-  const { isConnected } = useNetworkStatus();
 
   return useMutation({
     mutationFn: async ({ id, baseVersion }: { id: string; baseVersion?: number | undefined }): Promise<Note> => {
       assertSwitchWriteAllowed();
-
-      const existing = await getLocalNote(db, id);
-      if (!existing) {
-        throw new Error(`Note ${id} not found in local DB`);
-      }
-      const data = buildConvertNoteTypeRequest(existing);
-
-      // Queue behind any queued write to the note, its create included (#475): a
-      // direct call would 404 or overtake an earlier edit (spec §8.2).
-      const queuedBehind = await hasQueuedWriteForNote(db, id);
-      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
-        try {
-          // The editor's baseline may predate its own saves that the drain has
-          // landed since; advance it past them (ownVersions.ts).
-          const guardVersion = resolveOwnBaseVersion(db, id, baseVersion ?? existing.version);
-          const convertedNote = await jot.notes.convert(id, { ...data, base_version: guardVersion });
-          await saveServerResponseNote(db, convertedNote);
-          return convertedNote;
-        } catch (err) {
-          // Transient failure: fall through to the offline path so the
-          // conversion is applied locally and queued for replay instead of
-          // being lost.
-          rethrowIfNotQueueable(err);
-        }
-      }
-
-      // Offline (or a transient online failure): apply the same precomputed
-      // transform to local SQLite and queue the operation for replay.
       const now = new Date().toISOString();
-      const localConverted = applyConvertedNoteLocally(existing, data, now);
-      await saveNote(db, localConverted);
-      await enqueueOperation(db, {
-        operation: 'convertNoteType',
-        endpoint: apiPaths.noteConvert(id),
-        method: 'POST',
-        keys: [noteKey(id)],
-        body: data as unknown as Record<string, unknown>,
+      // Through the outbox (#1285). A cap violation throws inside the
+      // transaction, so nothing is written or queued.
+      const { note } = await enqueueWrite(db, {
+        localApply: async () => {
+          const existing = await requireLocalNote(db, id);
+          const data = buildConvertNoteTypeRequest(existing);
+          // Version-guarded like a content save: the version the editor's text
+          // is based on, advanced past this device's own edits that have landed
+          // since (ownVersions.ts); the drain rebases it like one too.
+          const guardVersion = resolveOwnBaseVersion(db, id, baseVersion ?? existing.version);
+          const converted = applyConvertedNoteLocally(existing, data, now);
+          await saveNoteInTx(db, converted);
+          return { note: converted, data, guardVersion };
+        },
+        op: ({ data, guardVersion }) => ({
+          operation: 'convertNoteType',
+          endpoint: apiPaths.noteConvert(id),
+          method: 'POST',
+          keys: [noteKey(id)],
+          body: { ...data, base_version: guardVersion } satisfies ConvertNoteTypeRequest as unknown as Record<string, unknown>,
+        }),
       });
-      return localConverted;
+      return note;
     },
     onSuccess: (convertedNote) => {
       queryClient.setQueryData(noteLocalQueryKey(convertedNote.id), convertedNote);
@@ -653,201 +526,126 @@ export function useConvertNoteType() {
 // --- Granular list-item mutations ----------------------------------------
 // Editing list items one at a time (rather than re-sending the whole note)
 // lets concurrent edits — including offline edits replayed later — merge with
-// other devices' changes instead of overwriting them.
+// other devices' changes instead of overwriting them. Each one goes through
+// the outbox (#1285): the local edit and its queue row commit together.
 
 export function useCreateNoteItem() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
-  const { isConnected } = useNetworkStatus();
 
   return useMutation({
     mutationFn: async ({ noteId, item }: { noteId: string; item: CreateNoteItemRequest }): Promise<void> => {
       assertSwitchWriteAllowed();
-      // Ensure a stable, server-format ID up front so the local row, the server
-      // request, and any queued op all reference the same item (the SQLite
-      // insert must never receive an undefined id). This id is also what makes a
-      // queued replay idempotent: if a transient failure hides a create the
-      // server actually committed, replaying it POSTs the same id, the server
-      // rejects the duplicate with 409 (ErrNoteItemExists), and drainQueue
-      // dead-letters that 409 instead of creating a second item.
-      const itemId: string = item.id ?? generateId();
-      const itemWithId: CreateNoteItemRequest = { ...item, id: itemId };
-      const local = {
-        id: itemId,
-        text: itemWithId.text,
-        completed: itemWithId.completed ?? false,
-        position: itemWithId.position,
-        parent_id: itemWithId.parent_id ?? null,
-        assigned_to: itemWithId.assigned_to ?? '',
-      };
-      // Queue behind any queued write to the note, its create included (#475): a
-      // direct call would 404 or overtake an earlier edit (spec §8.2).
-      const queuedBehind = await hasQueuedWriteForNote(db, noteId);
-      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
-        try {
-          await jot.notes.createItem(noteId, itemWithId);
-          await createLocalItem(db, noteId, local);
-          return;
-        } catch (err) {
-          rethrowIfNotQueueable(err);
-        }
-      }
-      // Offline (or a transient online failure): write locally and queue.
-      await createLocalItem(db, noteId, local);
-      await enqueueOperation(db, {
-        operation: 'createItem',
-        endpoint: apiPaths.noteItems(noteId),
-        method: 'POST',
-        keys: [noteKey(noteId)],
-        body: itemWithId as unknown as Record<string, unknown>,
+      // Ensure a stable, server-format ID up front so the local row and the
+      // queued op reference the same item (the SQLite insert must never
+      // receive an undefined id). This id is also what makes a replay
+      // idempotent: if a transient failure hides a create the server actually
+      // committed, replaying it POSTs the same id, the server rejects the
+      // duplicate with 409 (ErrNoteItemExists), and drainQueue treats that 409
+      // as already applied instead of creating a second item.
+      const itemWithId: CreateNoteItemRequest = { ...item, id: item.id ?? generateId() };
+      await enqueueWrite(db, {
+        localApply: () => createLocalItem(db, noteId, {
+          id: itemWithId.id!, // set just above
+          text: itemWithId.text,
+          completed: itemWithId.completed ?? false,
+          position: itemWithId.position,
+          parent_id: itemWithId.parent_id ?? null,
+          assigned_to: itemWithId.assigned_to ?? '',
+        }),
+        op: () => ({
+          operation: 'createItem',
+          endpoint: apiPaths.noteItems(noteId),
+          method: 'POST',
+          keys: [noteKey(noteId)],
+          body: itemWithId as unknown as Record<string, unknown>,
+        }),
       });
     },
-    onSuccess: (_data, { noteId }) => {
-      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
-      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-    },
+    onSuccess: (_data, { noteId }) => invalidateNoteReads(queryClient, noteId),
   });
 }
 
 export function useUpdateNoteItem() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
-  const { isConnected } = useNetworkStatus();
 
   return useMutation({
     mutationFn: async ({ noteId, itemId, data }: { noteId: string; itemId: string; data: PatchNoteItemRequest }): Promise<void> => {
       assertSwitchWriteAllowed();
-      // Queue behind any queued write to the note, its create included (#475): a
-      // direct call would 404 or overtake an earlier edit (spec §8.2).
-      const queuedBehind = await hasQueuedWriteForNote(db, noteId);
-      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
-        try {
-          await jot.notes.updateItem(noteId, itemId, data);
-          await patchLocalItem(db, noteId, itemId, data);
-          return;
-        } catch (err) {
-          rethrowIfNotQueueable(err);
-        }
-      }
-      // Offline (or a transient online failure): write locally and queue.
-      await patchLocalItem(db, noteId, itemId, data);
-      await enqueueOperation(db, {
-        operation: 'updateItem',
-        endpoint: apiPaths.noteItem(noteId, itemId),
-        method: 'PATCH',
-        keys: [noteKey(noteId)],
-        body: data as Record<string, unknown>,
+      await enqueueWrite(db, {
+        localApply: () => patchLocalItem(db, noteId, itemId, data),
+        op: () => ({
+          operation: 'updateItem',
+          endpoint: apiPaths.noteItem(noteId, itemId),
+          method: 'PATCH',
+          keys: [noteKey(noteId)],
+          body: data as Record<string, unknown>,
+        }),
       });
     },
-    onSuccess: (_data, { noteId }) => {
-      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
-      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-    },
+    onSuccess: (_data, { noteId }) => invalidateNoteReads(queryClient, noteId),
   });
 }
 
 export function useDeleteNoteItem() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
-  const { isConnected } = useNetworkStatus();
 
   return useMutation({
     mutationFn: async ({ noteId, itemId }: { noteId: string; itemId: string }): Promise<void> => {
       assertSwitchWriteAllowed();
-      // Queue behind any queued write to the note, its create included (#475): a
-      // direct call would 404 or overtake an earlier edit (spec §8.2).
-      const queuedBehind = await hasQueuedWriteForNote(db, noteId);
-      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
-        try {
-          await jot.notes.deleteItem(noteId, itemId);
-          await deleteLocalItem(db, noteId, itemId);
-          return;
-        } catch (err) {
-          rethrowIfNotQueueable(err);
-        }
-      }
-      // Offline (or a transient online failure): write locally and queue.
-      await deleteLocalItem(db, noteId, itemId);
-      await enqueueOperation(db, {
-        operation: 'deleteItem',
-        endpoint: apiPaths.noteItem(noteId, itemId),
-        method: 'DELETE',
-        keys: [noteKey(noteId)],
+      await enqueueWrite(db, {
+        localApply: () => deleteLocalItem(db, noteId, itemId),
+        op: () => ({
+          operation: 'deleteItem',
+          endpoint: apiPaths.noteItem(noteId, itemId),
+          method: 'DELETE',
+          keys: [noteKey(noteId)],
+        }),
       });
     },
-    onSuccess: (_data, { noteId }) => {
-      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
-      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-    },
+    onSuccess: (_data, { noteId }) => invalidateNoteReads(queryClient, noteId),
   });
 }
 
 export function useReorderNoteItems() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
-  const { isConnected } = useNetworkStatus();
 
   return useMutation({
     mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<void> => {
       assertSwitchWriteAllowed();
-      // Queue behind any queued write to the note, its create included (#475): a
-      // direct call would 404 or overtake an earlier edit (spec §8.2).
-      const queuedBehind = await hasQueuedWriteForNote(db, noteId);
-      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
-        try {
-          await jot.notes.reorderItems(noteId, itemIds);
-          await reorderLocalItems(db, noteId, itemIds);
-          return;
-        } catch (err) {
-          rethrowIfNotQueueable(err);
-        }
-      }
-      // Offline (or a transient online failure): write locally and queue.
-      await reorderLocalItems(db, noteId, itemIds);
-      await enqueueOperation(db, {
-        operation: 'reorderItems',
-        endpoint: apiPaths.noteItemsReorder(noteId),
-        method: 'POST',
-        keys: [noteKey(noteId)],
-        body: { item_ids: itemIds } satisfies ReorderNoteItemsRequest,
+      await enqueueWrite(db, {
+        localApply: () => reorderLocalItems(db, noteId, itemIds),
+        op: () => ({
+          operation: 'reorderItems',
+          endpoint: apiPaths.noteItemsReorder(noteId),
+          method: 'POST',
+          keys: [noteKey(noteId)],
+          body: { item_ids: itemIds } satisfies ReorderNoteItemsRequest,
+        }),
       });
     },
-    onSuccess: (_data, { noteId }) => {
-      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
-      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-    },
+    onSuccess: (_data, { noteId }) => invalidateNoteReads(queryClient, noteId),
   });
 }
 
 export function useDeleteNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
-  const { isConnected } = useNetworkStatus();
 
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
       assertSwitchWriteAllowed();
-      // An offline-created note (#475) drains its create FIFO before this delete,
-      // so queue rather than calling online against a note the server doesn't know
-      // yet — a direct call would 404 (permanent) and surface as an error.
-      // Any other queued write to the note orders it the same way (spec §8.2).
-      const queuedBehind = await hasQueuedWriteForNote(db, id);
-      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
-        try {
-          await jot.notes.delete(id);
-          await markLocalNoteDeleted(db, id);
-          return;
-        } catch (err) {
-          rethrowIfNotQueueable(err);
-        }
-      }
-      // Offline (or a transient online failure): write locally and queue.
-      await markLocalNoteDeleted(db, id);
-      await enqueueOperation(db, {
-        operation: 'delete',
-        endpoint: apiPaths.note(id),
-        method: 'DELETE',
-        keys: [noteKey(id)],
+      await enqueueWrite(db, {
+        localApply: () => markLocalNoteDeleted(db, id),
+        op: () => ({
+          operation: 'delete',
+          endpoint: apiPaths.note(id),
+          method: 'DELETE',
+          keys: [noteKey(id)],
+        }),
       });
     },
     onSuccess: (_data, id) => {
@@ -862,106 +660,77 @@ export function useDeleteNote() {
 export function useDuplicateNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
-  const { isConnected } = useNetworkStatus();
 
   return useMutation({
     mutationFn: async (id: string): Promise<Note> => {
       assertSwitchWriteAllowed();
-      // An offline-created note already carries a server-valid id (#475) and its
-      // queued create drains FIFO before this duplicate, so queue rather than
-      // calling online against a note the server doesn't know yet (a 404 would
-      // surface as an error instead of syncing).
-      // Any other queued write to the note orders it the same way (spec §8.2).
-      const queuedBehind = await hasQueuedWriteForNote(db, id);
-      // Pick the copy's ID and item IDs before the online attempt and send them
-      // on it too, so a request that times out after the server committed is
-      // replayed under the same IDs (a 409, already applied) instead of making a
-      // second copy (#1278). Without a local source the offline path throws below,
-      // so the online call goes without IDs as before.
-      const source = await getLocalNote(db, id);
+      // The copy gets a server-valid client ID, sent in the request body so the
+      // server keeps it — making a replay idempotent (same ID → 409, treated as
+      // already applied, no second copy; #1278).
       const clientId = generateClientNoteId();
-      const idRemap = new Map<string, string>();
-      for (const item of source?.note_type === 'list' ? (source.items ?? []) : []) {
-        idRemap.set(item.id, generateId());
-      }
-      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
-        try {
-          const duplicatedNote = await jot.notes.duplicate(
-            id,
-            source ? { id: clientId, ...(idRemap.size > 0 ? { itemIds: Object.fromEntries(idRemap) } : {}) } : {},
-          );
-          await saveServerResponseNote(db, duplicatedNote);
-          return duplicatedNote;
-        } catch (err) {
-          // Transient failure: fall through to the offline path so the duplicate
-          // is created locally and queued for replay instead of being lost.
-          rethrowIfNotQueueable(err);
-        }
-      }
-
-      // Offline (or a transient online failure): create a local copy with a
-      // server-valid client ID and queue the server operation. The client ID is
-      // sent in the request body so the server keeps it — making the replay
-      // idempotent (same ID → 409, treated as already-applied, no second copy).
-      if (!source) {
-        throw new Error(`Note ${id} not found in local DB`);
-      }
-
       const now = new Date().toISOString();
-      const resetFields = {
-        id: clientId,
-        // The server's copy starts at version 1 like any new note (spec §8.1:
-        // the row's version is the server version of its content).
-        version: 1,
-        pinned: false,
-        archived: false,
-        position: 0,
-        is_shared: false,
-        shared_with: [] as NoteShare[],
-        // A copy never inherits the source's public link (#1135).
-        public_link: null,
-        deleted_at: null as string | null,
-        created_at: now,
-        updated_at: now,
-      };
-      // idRemap (source→new item IDs, built above) is also sent to the server so
-      // it honors the same IDs; per-item edits queued after this duplicate but
-      // before it drains still target valid server item IDs.
-      const localDuplicate: Note = source.note_type === 'list'
-        ? {
-            ...source,
-            ...resetFields,
-            items: (source.items ?? []).map((item) => {
-              const newId = idRemap.get(item.id) ?? generateId();
-              return {
-                ...item,
-                id: newId,
-                note_id: clientId,
-                parent_id: item.parent_id !== null ? (idRemap.get(item.parent_id) ?? item.parent_id) : null,
-                created_at: now,
-                updated_at: now,
-              };
-            }),
+      const { note } = await enqueueWrite(db, {
+        localApply: async () => {
+          const source = await requireLocalNote(db, id);
+          // Source → copy item IDs, also sent to the server so it honors them:
+          // per-item edits queued after this duplicate but before it drains
+          // still target valid server item IDs.
+          const idRemap = new Map<string, string>();
+          for (const item of source.note_type === 'list' ? (source.items ?? []) : []) {
+            idRemap.set(item.id, generateId());
           }
-        : { ...source, ...resetFields };
-
-      // Assigned field by field, not spread: a spread key is not checked against
-      // the request type, so a renamed `item_ids` would still compile.
-      const body: DuplicateNoteRequest = { id: clientId };
-      if (idRemap.size > 0) body.item_ids = Object.fromEntries(idRemap);
-      await saveNote(db, localDuplicate);
-      await markNotePendingCreate(db, clientId);
-      await enqueueOperation(db, {
-        operation: 'duplicate',
-        endpoint: apiPaths.noteDuplicate(id),
-        method: 'POST',
-        keys: [noteKey(clientId)],
-        // The server copies the source, so its queued writes must land first;
-        // the duplicate does not write it.
-        readKeys: [noteKey(id)],
-        body: body as Record<string, unknown>,
+          const resetFields = {
+            id: clientId,
+            // The server's copy starts at version 1 like any new note (spec §8.1:
+            // the row's version is the server version of its content).
+            version: 1,
+            pinned: false,
+            archived: false,
+            position: 0,
+            is_shared: false,
+            shared_with: [] as NoteShare[],
+            // A copy never inherits the source's public link (#1135).
+            public_link: null,
+            deleted_at: null as string | null,
+            created_at: now,
+            updated_at: now,
+          };
+          const localDuplicate: Note = source.note_type === 'list'
+            ? {
+                ...source,
+                ...resetFields,
+                items: (source.items ?? []).map((item) => ({
+                  ...item,
+                  id: idRemap.get(item.id) ?? generateId(),
+                  note_id: clientId,
+                  parent_id: item.parent_id !== null ? (idRemap.get(item.parent_id) ?? item.parent_id) : null,
+                  created_at: now,
+                  updated_at: now,
+                })),
+              }
+            : { ...source, ...resetFields };
+          await saveNoteInTx(db, localDuplicate);
+          await markNotePendingCreate(db, clientId);
+          return { note: localDuplicate, idRemap };
+        },
+        op: ({ idRemap }) => {
+          // Assigned field by field, not spread: a spread key is not checked
+          // against the request type, so a renamed `item_ids` would still compile.
+          const body: DuplicateNoteRequest = { id: clientId };
+          if (idRemap.size > 0) body.item_ids = Object.fromEntries(idRemap);
+          return {
+            operation: 'duplicate',
+            endpoint: apiPaths.noteDuplicate(id),
+            method: 'POST',
+            keys: [noteKey(clientId)],
+            // The server copies the source, so its queued writes must land first;
+            // the duplicate does not write it.
+            readKeys: [noteKey(id)],
+            body: body as Record<string, unknown>,
+          };
+        },
       });
-      return localDuplicate;
+      return note;
     },
     onSuccess: (duplicatedNote) => {
       queryClient.setQueryData(noteLocalQueryKey(duplicatedNote.id), duplicatedNote);
@@ -975,32 +744,18 @@ export function useDuplicateNote() {
 export function useRestoreNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
-  const { isConnected } = useNetworkStatus();
 
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
       assertSwitchWriteAllowed();
-      // An offline-created note (#475) drains its create FIFO before this restore,
-      // so queue rather than calling online against a note the server doesn't know
-      // yet — a direct call would 404 (permanent) and surface as an error.
-      // Any other queued write to the note orders it the same way (spec §8.2).
-      const queuedBehind = await hasQueuedWriteForNote(db, id);
-      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
-        try {
-          await jot.notes.restore(id);
-          await markLocalNoteRestored(db, id);
-          return;
-        } catch (err) {
-          rethrowIfNotQueueable(err);
-        }
-      }
-      // Offline (or a transient online failure): write locally and queue.
-      await markLocalNoteRestored(db, id);
-      await enqueueOperation(db, {
-        operation: 'restore',
-        endpoint: apiPaths.noteRestore(id),
-        method: 'POST',
-        keys: [noteKey(id)],
+      await enqueueWrite(db, {
+        localApply: () => markLocalNoteRestored(db, id),
+        op: () => ({
+          operation: 'restore',
+          endpoint: apiPaths.noteRestore(id),
+          method: 'POST',
+          keys: [noteKey(id)],
+        }),
       });
     },
     onSuccess: (_data, id) => {
@@ -1014,81 +769,57 @@ export function useRestoreNote() {
 
 /**
  * Record that the user opened a note, clearing its unread badge. The local
- * clear is authoritative for this device; the server call (queued when offline)
- * clears it everywhere else. Callers only invoke this for an unread note, so an
- * ordinary open costs no write.
+ * clear is authoritative for this device; the queued ping clears it everywhere
+ * else. Callers only invoke this for an unread note, so an ordinary open costs
+ * no write.
  */
 export function useMarkNoteViewed() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
-  const { isConnected } = useNetworkStatus();
 
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
       // Best-effort: a view landing mid-switch would mark the wrong server's
       // note, and the badge it leaves behind is harmless.
       if (isServerSwitchInProgress()) return;
-      // When the user looked at the note. A queued view replays later, and the
+      // When the user looked at the note. The ping is sent later, and the
       // server must not count a collaborator's change made in between as seen.
       const viewedAt = new Date().toISOString();
-      await clearLocalNoteUnread(db, id);
-      // A note created offline is never unread, so no pending-create check.
-      if (isOnlineWriteAllowed(isConnected)) {
-        try {
-          await jot.notes.markViewed(id);
-          return;
-        } catch (err) {
-          rethrowIfNotQueueable(err);
-        }
-      }
-      await enqueueOperation(db, {
-        operation: 'markViewed',
-        endpoint: apiPaths.noteViewed(id),
-        method: 'POST',
-        keys: [noteKey(id)],
-        body: { viewed_at: viewedAt } satisfies MarkNoteViewedRequest,
+      await enqueueWrite(db, {
+        localApply: () => clearLocalNoteUnread(db, id),
+        op: () => ({
+          operation: 'markViewed',
+          endpoint: apiPaths.noteViewed(id),
+          method: 'POST',
+          keys: [noteKey(id)],
+          body: { viewed_at: viewedAt } satisfies MarkNoteViewedRequest,
+        }),
       });
     },
-    // Settled, not success: the local clear has already landed when a
-    // permanent rejection throws, and the SQLite-backed queries never refetch
-    // on their own, so the badge would otherwise linger on screen.
-    onSettled: (_data, _error, id) => {
-      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(id) });
-      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-    },
+    // The SQLite-backed queries never refetch on their own.
+    onSettled: (_data, _error, id) => invalidateNoteReads(queryClient, id),
   });
 }
 
 export function usePermanentDeleteNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
-  const { isConnected } = useNetworkStatus();
 
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
       assertSwitchWriteAllowed();
-      // An offline-created note (#475) drains its create FIFO before this delete,
-      // so queue rather than calling online against a note the server doesn't know
-      // yet — a direct call would 404 (permanent) and surface as an error.
-      // Any other queued write to the note orders it the same way (spec §8.2).
-      const queuedBehind = await hasQueuedWriteForNote(db, id);
-      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
-        try {
-          await jot.notes.delete(id, { permanent: true });
-          await permanentDeleteLocalNote(db, id);
-          return;
-        } catch (err) {
-          rethrowIfNotQueueable(err);
-        }
-      }
-      // Offline (or a transient online failure): write locally and queue.
-      await permanentDeleteLocalNote(db, id);
-      await enqueueOperation(db, {
-        operation: 'permanentDelete',
-        endpoint: apiPaths.notePermanentDelete(id),
-        method: 'DELETE',
-        keys: [noteKey(id)],
+      // The queued-upload files go only once the transaction has committed:
+      // a rollback restores the rows that point at them.
+      const uploadFiles = await enqueueWrite(db, {
+        localApply: () => permanentDeleteLocalNoteRows(db, id),
+        op: () => ({
+          operation: 'permanentDelete',
+          endpoint: apiPaths.notePermanentDelete(id),
+          method: 'DELETE',
+          keys: [noteKey(id)],
+        }),
       });
+      deleteUploadFiles(uploadFiles);
     },
     onSuccess: (_data, id) => {
       queryClient.removeQueries({ queryKey: noteLocalQueryKey(id) });
@@ -1142,101 +873,45 @@ function rollbackOptimisticReorder(queryClient: QueryClient, snapshot: Optimisti
 export function useReorderNotes() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
-  const { isConnected } = useNetworkStatus();
 
   return useMutation({
     mutationFn: async (noteIds: string[]): Promise<void> => {
       assertSwitchWriteAllowed();
-
-      // Queue instead of calling online when *any* note in the batch is still
-      // pending-create (#475): the server reorders in one transaction and a
-      // pending note has no note_user_state row yet, so it rejects the whole
-      // request with 403 (permanent) and rolls back — dropping every note's
-      // position, not just the pending one's (#956). The queued reorder drains
-      // FIFO after the create lands, and the create carries the note's position,
-      // so the brief gap before the reorder replays is harmless.
-      // Likewise behind any queued op for a note in the batch, so the note's
-      // writes stay in order (spec §8.2).
-      const [pendingIds, queuedIds] = await Promise.all([getPendingCreateNoteIds(db), getPendingNoteIds(db)]);
-      for (const id of queuedIds) pendingIds.add(id);
-      const batchHasPending = noteIds.some((id) => pendingIds.has(id));
-
-      // Snapshot the current positions before touching them, so a permanently
-      // rejected reorder can put them back (the new positions are the array
-      // indices below, but the old ones are whatever they were).
-      const previousPositions = await getLocalNotePositions(db, noteIds);
-
-      // Restore the pre-drag positions in SQLite. Every terminal-failure path
-      // below calls this before throwing, mirroring the cache rollback in
-      // onError — otherwise the pre-flight write below would outlive the failed
-      // reorder, and onSettled's invalidation would refetch that phantom order
-      // straight back out of SQLite. This runs before the throw, so the local
-      // rows are already restored by the time onError/onSettled fire.
-      const restorePositions = async (): Promise<void> => {
-        for (const [noteId, position] of previousPositions) {
-          await updateLocalNote(db, noteId, { position });
-        }
-      };
-
-      // Write the new positions to SQLite up front, before the request goes out
-      // (same reasoning as useToggleNoteItemCompleted / #945): the list query is
-      // SQLite-backed with staleTime: Infinity, so while the rows still hold the
-      // pre-drag positions any invalidation in the request window (the queue
-      // drain, an unrelated note's SSE update, the background sync) refetches
-      // them and snaps the cards back to the old order for a round trip. Writing
-      // first keeps the local rows in step with the optimistic order for the
-      // whole flight, so a re-read is a no-op.
-      for (const [i, noteId] of noteIds.entries()) {
-        await updateLocalNote(db, noteId, { position: i });
-      }
-
-      if (isOnlineWriteAllowed(isConnected) && !batchHasPending) {
-        try {
-          await jot.notes.reorder(noteIds);
-          return;
-        } catch (err) {
-          // Transient failure: fall through to the offline path so the reorder
-          // is queued for replay instead of being lost. A permanent one restores
-          // the pre-drag positions.
-          try {
-            rethrowIfNotQueueable(err);
-          } catch (permanent) {
-            await restorePositions();
-            throw permanent;
+      // The new positions commit with the queued reorder (#1285). The list
+      // query is SQLite-backed, so any invalidation after this point (the
+      // queue drain, an unrelated SSE update) re-reads the new order, not the
+      // pre-drag one (#945). The reorder is keyed by every note it names, so it
+      // waits behind their queued writes, a pending create included (#956):
+      // the server rejects a reorder naming a note it does not know yet.
+      await enqueueWrite(db, {
+        localApply: async () => {
+          for (const [i, noteId] of noteIds.entries()) {
+            await updateLocalNote(db, noteId, { position: i });
           }
-        }
-      }
-      // Offline (or a transient online failure): the new positions are already
-      // written, so only the replay op is left to enqueue. If enqueueing fails
-      // the reorder can never be replayed, so restore the pre-drag positions too
-      // rather than leave the local rows holding an order that will never sync.
-      try {
-        await enqueueOperation(db, {
+        },
+        op: () => ({
           operation: 'reorder',
           endpoint: apiPaths.notesReorder,
           method: 'POST',
           keys: noteIds.map(noteKey),
           body: { note_ids: noteIds } satisfies ReorderNotesRequest,
-        });
-      } catch (err) {
-        await restorePositions();
-        throw err;
-      }
+        }),
+      });
     },
     onMutate: async (noteIds: string[]) => {
       // Cancel in-flight list reads before re-sorting the cache, so a refetch
-      // already on the wire can't resolve over the optimistic order (the same
-      // snap-back a re-read *during* the request causes, from the other direction).
+      // already on the wire can't resolve over the optimistic order.
       await queryClient.cancelQueries({ queryKey: notesLocalQueryScopeKey() });
       return applyOptimisticReorder(queryClient, noteIds);
     },
+    // Only a local failure reaches here: the transaction rolled back, so the
+    // rows still hold the pre-drag order.
     onError: (_err, _noteIds, snapshot) => {
       if (snapshot) rollbackOptimisticReorder(queryClient, snapshot);
     },
-    // Reconcile with the real local DB after either outcome, not just success:
-    // a rollback restores the pre-drag snapshot captured at onMutate time, which
-    // can itself be stale if another mutation touched the same cache while this
-    // one was in flight. Invalidating here re-pulls the true order either way.
+    // Reconcile with the real local DB after either outcome: a rollback
+    // restores the snapshot captured at onMutate time, which another mutation
+    // may have overtaken since.
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
     },
@@ -1261,65 +936,46 @@ export function useNoteShares(noteId: string | null) {
 export function useShareNote() {
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
-  const { isConnected } = useNetworkStatus();
   const { user: currentUser } = useAuth();
 
   return useMutation({
     mutationFn: async ({ noteId, user }: { noteId: string; user: UserInfo }) => {
       assertSwitchWriteAllowed();
-      // An offline-created note already carries a server-valid id (#475) and its
-      // queued create drains FIFO before this share, so queue the share rather than
-      // attempting it online — the server doesn't know the note yet, so a direct
-      // call would 404 (permanent) and surface as an error instead of syncing.
-      // Any other queued write to the note orders it the same way (spec §8.2).
-      const queuedBehind = await hasQueuedWriteForNote(db, noteId);
-
-      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
-        try {
-          await jot.notes.share(noteId, { user_id: user.id });
-          // Fetch updated note so shared_with_json in SQLite reflects server state
-          try {
-            const updated = await jot.notes.getById(noteId);
-            await saveServerResponseNote(db, updated);
-          } catch { /* share succeeded; note will sync on next background refresh */ }
-          return;
-        } catch (err) {
-          rethrowIfNotQueueable(err);
-          // Transient failure — fall through to offline queue
-        }
-      }
-
-      // Offline path: optimistic local update + enqueue
-      const note = await getLocalNote(db, noteId);
-      if (!note) throw new Error(`Note ${noteId} not found in local cache`);
-      const existing = note.shared_with ?? [];
-      if (!existing.some((s) => s.shared_with_user_id === user.id)) {
-        const optimisticShare: NoteShare = {
-          id: `optimistic_${user.id}`,
-          note_id: noteId,
-          shared_with_user_id: user.id,
-          shared_by_user_id: currentUser?.id ?? '',
-          username: user.username,
-          first_name: user.first_name,
-          last_name: user.last_name,
-          has_profile_icon: user.has_profile_icon,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        await saveNote(db, { ...note, is_shared: true, shared_with: [...existing, optimisticShare] });
-      }
-      await enqueueOperation(db, {
-        operation: 'share',
-        endpoint: apiPaths.noteShare(noteId),
-        method: 'POST',
-        keys: [noteKey(noteId)],
-        body: { user_id: user.id } satisfies ShareNoteRequest,
+      // An optimistic share row until the drain lands the share and re-reads
+      // the note's shares (the endpoint returns 204), which brings the
+      // server-assigned share id.
+      await enqueueWrite(db, {
+        localApply: async () => {
+          const note = await requireLocalNote(db, noteId);
+          const existing = note.shared_with ?? [];
+          if (existing.some((s) => s.shared_with_user_id === user.id)) return;
+          const now = new Date().toISOString();
+          const optimisticShare: NoteShare = {
+            id: `optimistic_${user.id}`,
+            note_id: noteId,
+            shared_with_user_id: user.id,
+            shared_by_user_id: currentUser?.id ?? '',
+            username: user.username,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            has_profile_icon: user.has_profile_icon,
+            created_at: now,
+            updated_at: now,
+          };
+          await saveNoteInTx(db, { ...note, is_shared: true, shared_with: [...existing, optimisticShare] });
+        },
+        op: () => ({
+          operation: 'share',
+          endpoint: apiPaths.noteShare(noteId),
+          method: 'POST',
+          keys: [noteKey(noteId)],
+          body: { user_id: user.id } satisfies ShareNoteRequest,
+        }),
       });
     },
     onSuccess: (_data, { noteId }) => {
-      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
-      // Refresh the notes list so dashboard cards re-render collaborator avatars.
-      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      // Invalidating the notes list too re-renders dashboard collaborator avatars.
+      invalidateNoteReads(queryClient, noteId);
     },
   });
 }
@@ -1327,47 +983,27 @@ export function useShareNote() {
 export function useUnshareNote() {
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
-  const { isConnected } = useNetworkStatus();
 
   return useMutation({
     mutationFn: async ({ noteId, userId }: { noteId: string; userId: string }) => {
       assertSwitchWriteAllowed();
-      // An offline-created note (#475) drains its create FIFO before this unshare,
-      // so queue rather than calling online against a note the server doesn't know yet.
-      // Any other queued write to the note orders it the same way (spec §8.2).
-      const queuedBehind = await hasQueuedWriteForNote(db, noteId);
-
-      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
-        try {
-          await jot.notes.unshare(noteId, userId);
-          try {
-            const updated = await jot.notes.getById(noteId);
-            await saveServerResponseNote(db, updated);
-          } catch { /* unshare succeeded; note will sync on next background refresh */ }
-          return;
-        } catch (err) {
-          rethrowIfNotQueueable(err);
-        }
-      }
-
-      // Offline path: optimistic local update + enqueue
-      const note = await getLocalNote(db, noteId);
-      if (!note) throw new Error(`Note ${noteId} not found in local cache`);
-      const updatedShares = (note.shared_with ?? []).filter(
-        (s) => s.shared_with_user_id !== userId,
-      );
-      await saveNote(db, { ...note, is_shared: updatedShares.length > 0, shared_with: updatedShares });
-      await enqueueOperation(db, {
-        operation: 'unshare',
-        endpoint: apiPaths.noteShareUser(noteId, userId),
-        method: 'DELETE',
-        keys: [noteKey(noteId)],
+      await enqueueWrite(db, {
+        localApply: async () => {
+          const note = await requireLocalNote(db, noteId);
+          const remaining = (note.shared_with ?? []).filter((s) => s.shared_with_user_id !== userId);
+          await saveNoteInTx(db, { ...note, is_shared: remaining.length > 0, shared_with: remaining });
+        },
+        op: () => ({
+          operation: 'unshare',
+          endpoint: apiPaths.noteShareUser(noteId, userId),
+          method: 'DELETE',
+          keys: [noteKey(noteId)],
+        }),
       });
     },
     onSuccess: (_data, { noteId }) => {
-      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
-      // Refresh the notes list so dashboard cards re-render collaborator avatars.
-      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      // Invalidating the notes list too re-renders dashboard collaborator avatars.
+      invalidateNoteReads(queryClient, noteId);
     },
   });
 }
@@ -1387,7 +1023,6 @@ export function useUnshareNote() {
 export function useLeaveNote() {
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
-  const { isConnected } = useNetworkStatus();
   const { user: currentUser } = useAuth();
 
   return useMutation({
@@ -1396,36 +1031,27 @@ export function useLeaveNote() {
       const userId = currentUser?.id;
       if (!userId) throw new Error('Cannot leave a note without a signed-in user');
 
-      // A note shared *with* the user is always a note its owner already created
-      // on the server, so there is no pending-create case to guard against as
-      // there is for the owner-side writes above.
-      if (isOnlineWriteAllowed(isConnected)) {
-        try {
-          await jot.notes.unshare(noteId, userId);
-          // Access is gone now, so there is nothing to re-fetch (a GET would
-          // 403/404) — drop the local copy so the note leaves the user's list.
-          await permanentDeleteLocalNote(db, noteId);
-          return;
-        } catch (err) {
-          rethrowIfNotQueueable(err);
-        }
-      }
-
-      // Offline (or a transient online failure): remove the note locally and
-      // queue the self-removal for replay. The queued op reuses `unshare` — the
-      // endpoint and method are identical, it is already treated as idempotent
-      // when the target is gone (GONE_IDEMPOTENT_OPERATIONS), and its drain
-      // tolerates the follow-up reconcile GET returning 403 for a note the user
-      // no longer has access to.
-      const note = await getLocalNote(db, noteId);
-      if (!note) throw new Error(`Note ${noteId} not found in local cache`);
-      await permanentDeleteLocalNote(db, noteId);
-      await enqueueOperation(db, {
-        operation: 'unshare',
-        endpoint: apiPaths.noteShareUser(noteId, userId),
-        method: 'DELETE',
-        keys: [noteKey(noteId)],
+      // Remove the note locally and queue the self-removal. The queued op
+      // reuses `unshare` — the endpoint and method are identical, it is
+      // treated as idempotent when the target is gone
+      // (GONE_IDEMPOTENT_OPERATIONS), and its drain tolerates the follow-up GET
+      // returning 403 for a note the user no longer has access to. A rejection
+      // has nothing local to attach to, so the drain resolves it by pulling the
+      // note, which brings it back if the server kept the share (#1285).
+      const uploadFiles = await enqueueWrite(db, {
+        localApply: async () => {
+          await requireLocalNote(db, noteId);
+          return permanentDeleteLocalNoteRows(db, noteId);
+        },
+        op: () => ({
+          operation: 'unshare',
+          endpoint: apiPaths.noteShareUser(noteId, userId),
+          method: 'DELETE',
+          keys: [noteKey(noteId)],
+        }),
       });
+      // Only once committed, as in usePermanentDeleteNote.
+      deleteUploadFiles(uploadFiles);
     },
     onSuccess: (_data, { noteId }) => {
       queryClient.removeQueries({ queryKey: noteLocalQueryKey(noteId) });
@@ -1439,7 +1065,6 @@ export function useLeaveNote() {
 export function useToggleNoteItemCompleted() {
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
-  const { isConnected } = useNetworkStatus();
 
   return useMutation({
     onMutate: async ({ noteId, itemId, completed }: { noteId: string; itemId: string; completed: boolean }) => {
@@ -1450,45 +1075,45 @@ export function useToggleNoteItemCompleted() {
           : note,
       );
     },
-    mutationFn: async ({ noteId, itemId, completed }: { noteId: string; itemId: string; completed: boolean }): Promise<NoteItem[]> => {
+    // Resolves to every id SQLite now holds at `completed`: the cascade as
+    // the stored hierarchy scopes it, which can lag the editor's own (an
+    // indent not yet saved), so the editor marks only these ids as saved.
+    mutationFn: async ({ noteId, itemId, completed }: { noteId: string; itemId: string; completed: boolean }): Promise<string[]> => {
       assertSwitchWriteAllowed();
-      const note = await getLocalNote(db, noteId);
-      // Every changed id is one whose value actually flips, so the whole set
-      // moves in one grouped write — no window where a re-read can catch a
-      // parent checked but its children not.
-      const changedIds = note?.note_type === 'list' && note.items ? collectToggleCascade(note.items, itemId, completed) : [];
-      return runLocalCompletedWrite(db, queryClient, noteId, isConnected, {
-        priorById: new Map(changedIds.map((id) => [id, !completed])),
-        writeLocal: () => setLocalItemsCompleted(db, noteId, changedIds, completed),
-        send: () => jot.notes.setItemsCompleted(noteId, [itemId], completed),
-        persist: (write, serverItems, queued) => {
-          const completedById = localCompletedWrites.accept(write, serverItems);
-          for (const id of queued) completedById.delete(id);
-          return setLocalCompletedValues(db, noteId, completedById);
+      return enqueueWrite(db, {
+        localApply: async () => {
+          const note = await getLocalNote(db, noteId);
+          const items = note?.note_type === 'list' && note.items ? note.items : [];
+          // Every changed id is one whose value actually flips, so the whole
+          // set moves in one grouped write — no window where a re-read can
+          // catch a parent checked but its children not. The op names only the
+          // tapped item; the server applies the same cascade.
+          await setLocalItemsCompleted(db, noteId, collectToggleCascade(items, itemId, completed), completed);
+          return completedCascadeScope(items.map((i) => ({ id: i.id, parentId: i.parent_id })), itemId, completed);
         },
-        queued: {
+        op: () => ({
           operation: 'setItemsCompleted',
           endpoint: apiPaths.noteItemsSetCompleted(noteId),
           method: 'POST',
           keys: [noteKey(noteId)],
           body: { item_ids: [itemId], completed } satisfies SetNoteItemsCompletedRequest,
-        },
+        }),
       });
     },
+    // Re-read either way: after a local failure the rolled-back rows replace
+    // the optimistic cache.
     onSettled: (_data, _err, { noteId }) => invalidateNoteReads(queryClient, noteId),
   });
 }
 
 /**
  * Bulk-uncheck a caller-supplied set of item ids (the note's currently
- * completed items, captured at action time). The same runLocalCompletedWrite
- * as useToggleNoteItemCompleted, over a set of ids instead of a single item with
- * cascade.
+ * completed items, captured at action time): useToggleNoteItemCompleted over a
+ * set of ids instead of a single item with cascade.
  */
 export function useUncheckAllItems() {
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
-  const { isConnected } = useNetworkStatus();
 
   return useMutation({
     onMutate: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }) => {
@@ -1499,26 +1124,23 @@ export function useUncheckAllItems() {
           : note,
       );
     },
-    mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<NoteItem[]> => {
+    // Resolves to the ids it unchecked, as the toggle does.
+    mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<string[]> => {
       assertSwitchWriteAllowed();
       if (itemIds.length === 0) return [];
-
-      return runLocalCompletedWrite(db, queryClient, noteId, isConnected, {
-        priorById: new Map(itemIds.map((id) => [id, true])),
-        writeLocal: () => setLocalItemsCompleted(db, noteId, itemIds, false),
-        send: () => jot.notes.setItemsCompleted(noteId, itemIds, false),
-        // The server returns the note's full, authoritative item list, so
-        // reconcile every field (and prune any local row it no longer contains)
-        // rather than just patching `completed`.
-        persist: (write, serverItems, queued) => reconcileLocalItems(db, noteId, serverItems, write, queued),
+      return enqueueWrite(db, {
+        localApply: async () => {
+          await setLocalItemsCompleted(db, noteId, itemIds, false);
+          return itemIds;
+        },
         // Carries the exact ids captured at click time.
-        queued: {
+        op: () => ({
           operation: 'setItemsCompleted',
           endpoint: apiPaths.noteItemsSetCompleted(noteId),
           method: 'POST',
           keys: [noteKey(noteId)],
           body: { item_ids: itemIds, completed: false } satisfies SetNoteItemsCompletedRequest,
-        },
+        }),
       });
     },
     onSettled: (_data, _err, { noteId }) => invalidateNoteReads(queryClient, noteId),
@@ -1527,9 +1149,8 @@ export function useUncheckAllItems() {
 
 /**
  * Bulk-delete a caller-supplied set of item ids (the note's currently
- * completed items, captured at action time). Mirrors useToggleNoteItemCompleted's
- * online-try / offline-queue / optimistic-rollback structure. Deleting exactly
- * the completed set never orphans a child: the completed-cascade invariant
+ * completed items, captured at action time). Deleting exactly the completed
+ * set never orphans a child: the completed-cascade invariant
  * (applyCompletedCascade / collectToggleCascade) guarantees a completed
  * parent's children are completed too, so they are always included in the
  * same delete.
@@ -1537,15 +1158,9 @@ export function useUncheckAllItems() {
 export function useDeleteCompletedItems() {
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
-  const { isConnected } = useNetworkStatus();
 
   return useMutation({
-    // Unlike the two completed-flag mutations above, the local rows are *not*
-    // deleted before the request: restoring them after a permanent failure means
-    // re-inserting rows rather than flipping a column back, and a delete that is
-    // briefly undone on screen is far less likely than the checked-item flicker
-    // (nothing re-reads a note between the confirm dialog and the response).
-    // Cancelling in-flight reads still keeps a refetch already on the wire from
+    // Cancelling in-flight reads keeps a refetch already on the wire from
     // resolving over the optimistic removal.
     onMutate: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }) => {
       await cancelNoteReads(queryClient, noteId);
@@ -1555,45 +1170,24 @@ export function useDeleteCompletedItems() {
         return { ...note, items: note.items.filter((item) => !ids.has(item.id)) };
       });
     },
-    mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<NoteItem[]> => {
+    mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (itemIds.length === 0) return [];
-      // Queue behind any queued write to the note, its create included (#475): a
-      // direct call would 404 or overtake an earlier edit (spec §8.2).
-      const queuedBehind = await hasQueuedWriteForNote(db, noteId);
-      if (isOnlineWriteAllowed(isConnected) && !queuedBehind) {
-        try {
-          const serverItems = await jot.notes.deleteItems(noteId, itemIds);
-          // The server returns the note's full, authoritative remaining item
-          // list; reconciling against it (rather than deleting exactly
-          // `itemIds`) prunes precisely what the server actually removed.
-          await reconcileServerItems(db, noteId, serverItems);
-          return serverItems;
-        } catch (err) {
-          // Transient failure: fall through to the offline path so the delete is
-          // applied locally and queued for replay instead of being lost.
-          rethrowIfNotQueueable(err);
-        }
-      }
-
-      // Offline (or a transient online failure): delete locally, enqueue a
-      // single bulk op carrying the exact ids captured at click time.
-      await deleteLocalItems(db, noteId, itemIds);
-      await enqueueOperation(db, {
-        operation: 'deleteCompletedItems',
-        endpoint: apiPaths.noteItemsDelete(noteId),
-        method: 'POST',
-        keys: [noteKey(noteId)],
-        body: { item_ids: itemIds } satisfies DeleteNoteItemsRequest,
+      if (itemIds.length === 0) return;
+      // One bulk op carrying the exact ids captured at click time.
+      await enqueueWrite(db, {
+        localApply: () => deleteLocalItems(db, noteId, itemIds),
+        op: () => ({
+          operation: 'deleteCompletedItems',
+          endpoint: apiPaths.noteItemsDelete(noteId),
+          method: 'POST',
+          keys: [noteKey(noteId)],
+          body: { item_ids: itemIds } satisfies DeleteNoteItemsRequest,
+        }),
       });
-      return [];
     },
-    // Revert the optimistic delete if the write ultimately fails.
+    // Only a local failure reaches here; the transaction rolled back.
     onError: (_err, { noteId }, context) => rollbackOptimisticNote(queryClient, noteId, context),
-    onSuccess: (_data, { noteId }) => {
-      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
-      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-    },
+    onSuccess: (_data, { noteId }) => invalidateNoteReads(queryClient, noteId),
   });
 }
 

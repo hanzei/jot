@@ -7,6 +7,7 @@ import {
   parseApiError,
   type ApiErrorCode,
   type DateStyle,
+  type UsernameValidationErrorCode,
 } from '@jot/shared';
 import i18n from './index';
 
@@ -23,6 +24,14 @@ export function displayMessage(t: TFunction, message: string): string {
 export function formatDate(value: string, style: DateStyle): string {
   return formatDateInLocale(value, dateLocale(i18n.resolvedLanguage || i18n.language, getLocales()[0]?.regionCode), style);
 }
+
+/** The message key for each client-side username check (`getUsernameValidationError`). */
+export const USERNAME_ERROR_KEYS: Record<UsernameValidationErrorCode, string> = {
+  min: 'auth.usernameMin',
+  max: 'auth.usernameMax',
+  chars: 'auth.usernameChars',
+  edge: 'auth.usernameEdge',
+};
 
 /**
  * Error codes the app shows its own translated message for. Any other code

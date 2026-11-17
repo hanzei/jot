@@ -5,11 +5,11 @@
  */
 
 import { getLocalNote, getLocalNoteVersion, markNotePendingCreate, saveNote, updateLocalNote } from '../src/db/noteQueries';
-import { drainQueue, enqueueWrite, subscribeToEnqueue, type EnqueueParams } from '../src/db/syncQueue';
+import { drainQueue, enqueueSettingsUpdate, enqueueWrite, subscribeToEnqueue, type EnqueueParams } from '../src/db/syncQueue';
 import { recordOwnVersionStep, resolveOwnBaseVersion } from '../src/db/ownVersions';
 import { setLocalModeActive } from '../src/store/localMode';
 import api from '../src/api/client';
-import { makeTextNote, remainingQueueIds, seedQueueEntry } from './helpers/fixtures';
+import { makeTextNote, queuedOps, remainingQueueIds, seedQueueEntry } from './helpers/fixtures';
 import { createTestDb, type TestDatabase } from './helpers/testDb';
 import { silenceConsole } from './helpers/consoleGuard';
 
@@ -99,6 +99,46 @@ describe('enqueueWrite', () => {
     expect(await remainingQueueIds(db)).toEqual([]);
   });
 
+  it('inserts several rows in the order given, each with its own keys', async () => {
+    const createLabel: EnqueueParams = {
+      operation: 'createLabel', endpoint: '/labels', method: 'POST', keys: ['label:L1'], body: { id: 'L1', name: 'Errands' },
+    };
+    const addLabel: EnqueueParams = {
+      operation: 'addLabelToNote', endpoint: `/notes/${NOTE_ID}/labels`, method: 'POST', keys: [`note:${NOTE_ID}`, 'label:L1'], body: { name: 'Errands' },
+    };
+    const listener = jest.fn();
+    const unsubscribe = subscribeToEnqueue(listener);
+
+    await enqueueWrite(db, { localApply: async () => undefined, op: () => [createLabel, addLabel] });
+    unsubscribe();
+
+    expect((await queuedOps(db)).map((op) => [op.operation, op.keys])).toEqual([
+      ['createLabel', ['label:L1']],
+      ['addLabelToNote', [`note:${NOTE_ID}`, 'label:L1']],
+    ]);
+    expect(listener.mock.calls).toEqual([['createLabel'], ['addLabelToNote']]);
+  });
+
+  it('rolls back every row and the local edit together when one row fails', async () => {
+    const listener = jest.fn();
+    const unsubscribe = subscribeToEnqueue(listener);
+
+    await expect(enqueueWrite(db, {
+      localApply: () => updateLocalNote(db, NOTE_ID, { content: 'New' }),
+      op: () => [
+        updateOp({ content: 'New' }),
+        // NOT NULL endpoint: the second insert fails after the first succeeded.
+        { ...updateOp({ content: 'New' }), endpoint: null as unknown as string },
+      ],
+    })).rejects.toThrow();
+    unsubscribe();
+
+    expect(await getLocalNote(db, NOTE_ID)).toMatchObject({ content: 'Old' });
+    expect(await remainingQueueIds(db)).toEqual([]);
+    expect(await db.getAllAsync('SELECT key FROM sync_queue_keys')).toEqual([]);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   it('keeps the local edit but queues nothing in local mode', async () => {
     setLocalModeActive(true);
     const listener = jest.fn();
@@ -113,6 +153,21 @@ describe('enqueueWrite', () => {
     expect(await getLocalNote(db, NOTE_ID)).toMatchObject({ content: 'New' });
     expect(await remainingQueueIds(db)).toEqual([]);
     expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe('enqueueSettingsUpdate', () => {
+  it('queues a PATCH /users/me keyed by settings', async () => {
+    await enqueueSettingsUpdate(db, { theme: 'dark' });
+
+    expect(await queuedOps(db)).toEqual([{
+      operation: 'updateSettings',
+      endpoint: '/users/me',
+      method: 'PATCH',
+      body: { theme: 'dark' },
+      keys: ['settings'],
+      readKeys: [],
+    }]);
   });
 });
 

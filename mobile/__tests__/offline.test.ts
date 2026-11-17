@@ -6,7 +6,7 @@
  * the SQL text passed to a mock.
  */
 
-import { generateClientNoteId, isUnsyncedNoteId, removeLocalNotesNotIn, getLocalLabelCounts, saveNote, saveNoteInTx, addLabelToLocalNote, removeLabelFromLocalNote, getLocalNotes, upsertLabel, getStoredLabels } from '../src/db/noteQueries';
+import { generateClientNoteId, isUnsyncedNoteId, markNoteSyncFailed, removeLocalNotesNotIn, getLocalLabelCounts, saveNote, saveNoteInTx, addLabelToLocalNote, removeLabelFromLocalNote, getLocalNotes, upsertLabel, getStoredLabels } from '../src/db/noteQueries';
 import { drainQueue, getSyncQueueStats, isTransientHttpStatus, getDeadLetteredOperations, MAX_ENTRY_DRAIN_ATTEMPTS, PROCESSING_ERROR_STATUS, QUEUED_WRITE_TIMEOUT_MS } from '../src/db/syncQueue';
 import api from '../src/api/client';
 import { makeLabel, makeListNote, makeNoteItem, makeTextNote, remainingQueueIds, seedQueueEntry } from './helpers/fixtures';
@@ -65,11 +65,10 @@ beforeEach(() => {
   );
   silenceConsole('info', /^Queue drain stopped at entry/, /^Dropping queued operation/);
   // A drain pulls the notes its landed writes touched (#1262). Suites that do
-  // not care about the pull get a 404 for it (logged and ignored); the probe
-  // and other reads keep the mock's default.
+  // not care about the pull get a 404 for it (which tombstones a note nothing
+  // protects); the probe and other reads keep the mock's default.
   mockApi.get.mockImplementation(((url: string) =>
     url.startsWith('/notes/') ? Promise.reject(makeAxiosError(404)) : undefined) as never);
-  silenceConsole('warn', /^Failed to pull note id=\S+ after the queue drain: Request failed with status code 404$/);
 });
 
 // ── generateClientNoteId / isUnsyncedNoteId ────────────────────────────────
@@ -1056,6 +1055,63 @@ describe('drainQueue', () => {
     expect(await remainingQueueIds(db)).toEqual([]);
   });
 
+  describe('an item-list response while the note is protected (spec §8.3)', () => {
+    const queueCheckOff = () => seedQueueEntry(db, {
+      operation: 'setItemsCompleted',
+      endpoint: '/notes/n1/items/set-completed',
+      method: 'POST',
+      body: { item_ids: ['i1'], completed: true },
+    });
+    const staleResponse = {
+      data: [{ id: 'i1', text: 'Milk', completed: true, position: 0, parent_id: null, assigned_to: '' }],
+    };
+    const localItems = () => db.getAllAsync('SELECT id, text, completed FROM note_items WHERE note_id = ?', ['n1']);
+
+    it('keeps a queued text edit behind the check-off', async () => {
+      await saveNote(db, makeListNote({
+        id: 'n1',
+        items: [makeNoteItem({ id: 'i1', note_id: 'n1', text: 'Oat milk', completed: true })],
+      }));
+      await queueCheckOff();
+      const editId = await seedQueueEntry(db, {
+        operation: 'updateItem',
+        endpoint: '/notes/n1/items/i1',
+        method: 'PATCH',
+        body: { text: 'Oat milk' },
+      });
+      mockApi.post.mockResolvedValueOnce(staleResponse as never);
+      // The edit fails transiently and stays queued, so the note stays protected.
+      mockApi.patch.mockRejectedValueOnce(makeAxiosError(500));
+
+      await drainQueue(db);
+
+      expect(await localItems()).toEqual([{ id: 'i1', text: 'Oat milk', completed: 1 }]);
+      expect(await remainingQueueIds(db)).toEqual([editId]);
+      expect(mockApi.get.mock.calls.map(([url]) => url)).not.toContain('/notes/n1');
+    });
+
+    it('keeps the local rows of a note with an unresolved failed change', async () => {
+      await saveNote(db, makeListNote({
+        id: 'n1',
+        items: [
+          makeNoteItem({ id: 'i1', note_id: 'n1', text: 'Oat milk', completed: true }),
+          makeNoteItem({ id: 'i2', note_id: 'n1', text: 'Kept for Keep my version', position: 1 }),
+        ],
+      }));
+      await markNoteSyncFailed(db, 'n1');
+      await queueCheckOff();
+      mockApi.post.mockResolvedValueOnce(staleResponse as never);
+
+      await drainQueue(db);
+
+      expect(await localItems()).toEqual([
+        { id: 'i1', text: 'Oat milk', completed: 1 },
+        { id: 'i2', text: 'Kept for Keep my version', completed: 0 },
+      ]);
+      expect(await remainingQueueIds(db)).toEqual([]);
+    });
+  });
+
   it("prunes a local item absent from a deleteCompletedItems replay's remaining-items response", async () => {
     // The endpoint's response is the note's full, authoritative remaining item
     // list post-delete — not just the requested ids' outcome — so any local
@@ -1106,14 +1162,15 @@ describe('drainQueue', () => {
     it('survives a bulk delete that replays first', async () => {
       // Offline: the user deletes the checked items, then adds a new one. The
       // delete's remaining-items list cannot contain an item the server has
-      // not been told about yet.
-      const done = makeNoteItem({ id: 'i1', note_id: 'n1', text: 'Done', completed: true, position: 0 });
+      // not been told about yet, so it is not applied while the createItem is
+      // queued (spec §8.3); the pull afterwards brings the server's list.
       const kept = makeNoteItem({ id: 'i2', note_id: 'n1', text: 'Bread', position: 1 });
       const added = makeNoteItem({ id: 'i3', note_id: 'n1', text: 'Added offline', position: 2 });
-      await saveNote(db, makeListNote({ id: 'n1', items: [done, kept, added] }));
+      await saveNote(db, makeListNote({ id: 'n1', items: [kept, added] }));
       await queueDeleteCompleted(['i1']);
       await queueCreateItem(added);
       mockApi.post.mockResolvedValueOnce({ data: [kept] } as never).mockResolvedValueOnce({ data: added } as never);
+      mockApi.get.mockResolvedValueOnce({ data: makeListNote({ id: 'n1', items: [kept, added] }) } as never);
 
       await drainQueue(db);
 
@@ -1148,16 +1205,18 @@ describe('drainQueue', () => {
       expect(mockApi.get.mock.calls.map(([url]) => url)).toEqual(['/notes/n1']);
     });
 
-    it('is re-homed when the prune removes its parent', async () => {
+    it('is re-homed by the pull when a collaborator deleted its parent', async () => {
       // Offline: the user adds a child under 'p', which a collaborator has since
-      // deleted on the server.
+      // deleted on the server. The delete's response is held back behind the
+      // createItem; the pull afterwards carries the server's hierarchy.
       const parent = makeNoteItem({ id: 'p', note_id: 'n1', text: 'Parent', position: 0 });
-      const done = makeNoteItem({ id: 'i1', note_id: 'n1', text: 'Done', completed: true, position: 1 });
       const child = makeNoteItem({ id: 'c', note_id: 'n1', text: 'Child', position: 2, parent_id: 'p' });
-      await saveNote(db, makeListNote({ id: 'n1', items: [parent, done, child] }));
+      await saveNote(db, makeListNote({ id: 'n1', items: [parent, child] }));
       await queueDeleteCompleted(['i1']);
       await queueCreateItem(child);
-      mockApi.post.mockResolvedValueOnce({ data: [] } as never).mockResolvedValueOnce({ data: { ...child, parent_id: null } } as never);
+      const rehomed = { ...child, parent_id: null };
+      mockApi.post.mockResolvedValueOnce({ data: [] } as never).mockResolvedValueOnce({ data: rehomed } as never);
+      mockApi.get.mockResolvedValueOnce({ data: makeListNote({ id: 'n1', items: [rehomed] }) } as never);
 
       await drainQueue(db);
 

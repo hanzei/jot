@@ -387,7 +387,8 @@
     "deleteError": "Label konnte nicht gelöscht werden",
     "deleteConfirmTitle": "Label löschen",
     "deleteConfirmMessage": "Label \"{{name}}\" löschen? Es wird aus allen Notizen entfernt, die es verwenden.",
-    "nameRequired": "Der Label-Name darf nicht leer sein."
+    "nameRequired": "Der Label-Name darf nicht leer sein.",
+    "nameTaken": "Es gibt bereits ein Label mit diesem Namen."
   },
   "share": {
     "searchUsersPlaceholder": "Benutzer nach Namen suchen...",

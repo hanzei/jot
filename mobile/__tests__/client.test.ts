@@ -11,7 +11,6 @@ import {
   setServerUrl,
   switchActiveServer,
   DEFAULT_REQUEST_TIMEOUT_MS,
-  WRITE_REQUEST_TIMEOUT_MS,
   probeServerReachability,
 } from '../src/api/client';
 import { getActiveServer, getServerScopedStorageKey } from '../src/store/serverAccounts';
@@ -744,7 +743,7 @@ describe('API Client', () => {
     });
   });
 
-  describe('write request timeout', () => {
+  describe('request timeout', () => {
     const getRequestInterceptor = () => {
       const requestUse = mockAxiosInstance.interceptors.request.use;
       return requestUse.mock.calls[0]?.[0] as (
@@ -752,43 +751,12 @@ describe('API Client', () => {
       ) => Promise<Record<string, unknown>>;
     };
 
-    it('shortens the timeout for data-write requests so the offline fallback engages sooner', async () => {
+    // Every write with a local representation goes through the sync queue,
+    // which sets its own timeout (#1285): a write the client makes directly
+    // is a one-shot action with no queue, so it keeps the default.
+    it.each(['get', 'post', 'patch', 'delete'])('keeps the configured timeout for a %s request', async (method) => {
       const config = await getRequestInterceptor()({
-        method: 'post', url: '/notes', headers: {}, timeout: DEFAULT_REQUEST_TIMEOUT_MS,
-      });
-      expect(config.timeout).toBe(WRITE_REQUEST_TIMEOUT_MS);
-    });
-
-    it('keeps the default (longer) timeout for reads', async () => {
-      const config = await getRequestInterceptor()({
-        method: 'get', url: '/notes', headers: {}, timeout: DEFAULT_REQUEST_TIMEOUT_MS,
-      });
-      expect(config.timeout).toBe(DEFAULT_REQUEST_TIMEOUT_MS);
-    });
-
-    it('keeps the default timeout for auth writes (no offline queue fallback)', async () => {
-      const config = await getRequestInterceptor()({
-        method: 'post', url: '/login', headers: {}, timeout: DEFAULT_REQUEST_TIMEOUT_MS,
-      });
-      expect(config.timeout).toBe(DEFAULT_REQUEST_TIMEOUT_MS);
-    });
-
-    it.each(['/auth/oidc/native/exchange', '/auth/oidc/native/link', '/auth/oidc/unlink'])(
-      'keeps the default timeout for the SSO auth request %s',
-      async (url) => {
-        const config = await getRequestInterceptor()({
-          method: 'post', url, headers: {}, timeout: DEFAULT_REQUEST_TIMEOUT_MS,
-        });
-        expect(config.timeout).toBe(DEFAULT_REQUEST_TIMEOUT_MS);
-      },
-    );
-
-    it('keeps the default timeout for multipart uploads', async () => {
-      const config = await getRequestInterceptor()({
-        method: 'post',
-        url: '/notes/import',
-        headers: { get: () => 'multipart/form-data' },
-        timeout: DEFAULT_REQUEST_TIMEOUT_MS,
+        method, url: '/notes', headers: {}, timeout: DEFAULT_REQUEST_TIMEOUT_MS,
       });
       expect(config.timeout).toBe(DEFAULT_REQUEST_TIMEOUT_MS);
     });

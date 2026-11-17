@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, Alert } from 'react-native';
 import { EllipsisVertical, Plus, Tag } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../theme/ThemeContext';
@@ -13,9 +13,6 @@ interface LabelsSectionProps {
   onOpenRenameModal: (label: Label) => void;
   onDeleteLabel: (label: Label) => void;
   onCreateLabelPress: () => void;
-  /** ids of labels currently being deleted, so each row can show a spinner
-      instead of sitting with no feedback for the ~5s write timeout (#698). */
-  deletingLabelIds: Set<string>;
 }
 
 export default function LabelsSection({
@@ -25,7 +22,6 @@ export default function LabelsSection({
   onOpenRenameModal,
   onDeleteLabel,
   onCreateLabelPress,
-  deletingLabelIds,
 }: LabelsSectionProps) {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -72,7 +68,6 @@ export default function LabelsSection({
           <View style={[styles.navDivider, { backgroundColor: colors.divider }]} />
           {labels.map((label) => {
             const isActive = activeLabelId === label.id;
-            const isDeleting = deletingLabelIds.has(label.id);
             const labelCount = label.note_count;
             const labelAccessibilityName = `${label.name}, ${labelCount}`;
             return (
@@ -85,11 +80,10 @@ export default function LabelsSection({
                   onPress={() => handleLabelPress(label.id, label.name)}
                   onLongPress={() => handleLabelLongPress(label)}
                   delayLongPress={250}
-                  disabled={isDeleting}
                   testID={`drawer-label-${label.id}`}
                   accessibilityLabel={labelAccessibilityName}
                   accessibilityRole="button"
-                  accessibilityState={{ selected: isActive, disabled: isDeleting }}
+                  accessibilityState={{ selected: isActive }}
                 >
                   <Tag
                     size={22}
@@ -109,25 +103,19 @@ export default function LabelsSection({
                 >
                   {labelCount}
                 </Text>
-                {isDeleting ? (
-                  <View style={styles.labelMenuButton} testID={`drawer-label-deleting-${label.id}`}>
-                    <ActivityIndicator size="small" color={isActive ? colors.primary : colors.icon} />
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.labelMenuButton}
-                    onPress={() => openLabelMenu(label)}
-                    hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${label.name}. ${t('labels.menuOptions', { name: label.name })}`}
-                    testID={`drawer-label-menu-${label.id}`}
-                  >
-                    <EllipsisVertical
-                      size={18}
-                      color={isActive ? colors.primary : colors.icon}
-                    />
-                  </TouchableOpacity>
-                )}
+                <TouchableOpacity
+                  style={styles.labelMenuButton}
+                  onPress={() => openLabelMenu(label)}
+                  hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${label.name}. ${t('labels.menuOptions', { name: label.name })}`}
+                  testID={`drawer-label-menu-${label.id}`}
+                >
+                  <EllipsisVertical
+                    size={18}
+                    color={isActive ? colors.primary : colors.icon}
+                  />
+                </TouchableOpacity>
               </View>
             );
           })}

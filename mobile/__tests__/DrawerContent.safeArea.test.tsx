@@ -3,7 +3,6 @@ import { Alert } from 'react-native';
 import { fireEvent, render, waitFor, act } from '@testing-library/react-native';
 import type { DrawerContentComponentProps } from '@react-navigation/drawer';
 import DrawerContent from '../src/components/DrawerContent';
-import { ConfirmContext } from '../src/hooks/useConfirm';
 import type { Label, LabelWithCount } from '@jot/shared';
 
 function deferred<T>() {
@@ -501,125 +500,6 @@ describe('DrawerContent', () => {
 
     await waitFor(() => {
       expect(queryByTestId('rename-label-submit-spinner')).toBeNull();
-    });
-  });
-
-  it('shows a pending spinner on the label row while deleting, instead of leaving it with no feedback (#698)', async () => {
-    mockLabelsData.push({
-      id: 'label-1',
-      user_id: 'user-1',
-      name: 'Work',
-      created_at: '2026-01-01T00:00:00Z',
-      updated_at: '2026-01-01T00:00:00Z',
-      note_count: 0,
-    });
-    jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
-    const { promise, resolve } = deferred<void>();
-    mockDeleteLabelMutateAsync.mockReturnValue(promise);
-    const props = makeProps();
-
-    const { getByTestId, queryByTestId } = await render(
-      <ConfirmContext.Provider value={{ confirm: async () => true }}>
-        <DrawerContent {...props} />
-      </ConfirmContext.Provider>,
-    );
-
-    await fireEvent.press(getByTestId('drawer-label-menu-label-1'));
-    const alertCall = (Alert.alert as jest.Mock).mock.calls[0];
-    const deleteButton = (alertCall?.[2] as Array<{ text?: string; onPress?: () => void }>).find(
-      (button) => button.text === 'labels.delete',
-    );
-
-    await act(async () => {
-      deleteButton?.onPress?.();
-    });
-
-    await waitFor(() => {
-      expect(getByTestId('drawer-label-deleting-label-1')).toBeTruthy();
-    });
-    expect(queryByTestId('drawer-label-menu-label-1')).toBeNull();
-    expect(getByTestId('drawer-label-label-1').props.accessibilityState).toEqual(
-      expect.objectContaining({ disabled: true }),
-    );
-
-    await act(async () => {
-      resolve();
-    });
-
-    await waitFor(() => {
-      expect(queryByTestId('drawer-label-deleting-label-1')).toBeNull();
-    });
-    expect(getByTestId('drawer-label-menu-label-1')).toBeTruthy();
-  });
-
-  it('tracks concurrent label deletions independently, so one resolving does not clear the other\'s spinner (#698)', async () => {
-    mockLabelsData.push(
-      {
-        id: 'label-1',
-        user_id: 'user-1',
-        name: 'Work',
-        created_at: '2026-01-01T00:00:00Z',
-        updated_at: '2026-01-01T00:00:00Z',
-        note_count: 0,
-      },
-      {
-        id: 'label-2',
-        user_id: 'user-1',
-        name: 'Home',
-        created_at: '2026-01-01T00:00:00Z',
-        updated_at: '2026-01-01T00:00:00Z',
-        note_count: 0,
-      },
-    );
-    jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
-    const deferredByLabel: Record<string, ReturnType<typeof deferred<void>>> = {
-      'label-1': deferred<void>(),
-      'label-2': deferred<void>(),
-    };
-    mockDeleteLabelMutateAsync.mockImplementation(({ labelId }: { labelId: string }) => deferredByLabel[labelId]!.promise);
-    const props = makeProps();
-
-    const { getByTestId, queryByTestId } = await render(
-      <ConfirmContext.Provider value={{ confirm: async () => true }}>
-        <DrawerContent {...props} />
-      </ConfirmContext.Provider>,
-    );
-
-    const startDelete = async (labelId: string) => {
-      await fireEvent.press(getByTestId(`drawer-label-menu-${labelId}`));
-      const alertCall = (Alert.alert as jest.Mock).mock.calls.at(-1);
-      const deleteButton = (alertCall?.[2] as Array<{ text?: string; onPress?: () => void }>).find(
-        (button) => button.text === 'labels.delete',
-      );
-      await act(async () => {
-        deleteButton?.onPress?.();
-      });
-    };
-
-    await startDelete('label-1');
-    await startDelete('label-2');
-
-    await waitFor(() => {
-      expect(getByTestId('drawer-label-deleting-label-1')).toBeTruthy();
-      expect(getByTestId('drawer-label-deleting-label-2')).toBeTruthy();
-    });
-
-    // Resolving label-1's delete must not clear label-2's still-in-flight spinner.
-    await act(async () => {
-      deferredByLabel['label-1']!.resolve();
-    });
-
-    await waitFor(() => {
-      expect(queryByTestId('drawer-label-deleting-label-1')).toBeNull();
-    });
-    expect(getByTestId('drawer-label-deleting-label-2')).toBeTruthy();
-
-    await act(async () => {
-      deferredByLabel['label-2']!.resolve();
-    });
-
-    await waitFor(() => {
-      expect(queryByTestId('drawer-label-deleting-label-2')).toBeNull();
     });
   });
 

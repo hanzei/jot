@@ -72,7 +72,8 @@ export class SyncCanceller {
  * Unlike that policy, a 401 is treated as permanent here: the API response
  * interceptor reacts to a 401 by clearing the session and redirecting to login,
  * so retrying a background read would only fire more doomed authenticated
- * requests while the user is being logged out (mirrors `rethrowIfNotQueueable`).
+ * requests while the user is being logged out. The note-image upload's
+ * fallback to its offline queue uses the same test.
  */
 export function isTransientError(err: unknown): boolean {
   if (!axios.isAxiosError(err)) return false;

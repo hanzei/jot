@@ -247,30 +247,13 @@ export async function probeServerReachability(url: string): Promise<ServerReacha
 export const CLIENT_ID = randomUUID();
 
 /**
- * Default request timeout, used for reads. Reads can legitimately take a while
- * on a slow link and there is no local fallback for them, so we wait longer.
+ * Timeout for a request made outside the sync queue: reads, auth and the
+ * one-shot actions with no queue (public links, empty trash, PATs). It can
+ * legitimately take a while on a slow link, and nothing faster is waiting to
+ * take over. Queued writes set their own (QUEUED_WRITE_TIMEOUT_MS in
+ * db/syncQueue.ts) and uploads theirs.
  */
 export const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
-/**
- * Shorter timeout for data-write requests (POST/PATCH/DELETE). On a degraded
- * (slow / half-open) connection a write would otherwise stall for the full read
- * timeout before the offline queue fallback engages, making weak-signal writes
- * feel broken while fully-offline writes feel instant. A tighter budget lets the
- * fallback (local persist + enqueue for replay) kick in sooner. File uploads and
- * auth requests are excluded below — they have no queue fallback and can be slow.
- */
-export const WRITE_REQUEST_TIMEOUT_MS = 5000;
-
-// Auth requests have no offline queue fallback and may be slow on a weak link,
-// so they keep the default (longer) timeout rather than the short write budget.
-const AUTH_ENDPOINT_PATHS = new Set<string>([
-  apiPaths.login,
-  apiPaths.register,
-  apiPaths.logout,
-  apiPaths.oidcNativeExchange,
-  apiPaths.oidcNativeLink,
-  apiPaths.oidcUnlink,
-]);
 
 const api = axios.create({
   baseURL: apiUrl('', currentBaseUrl),
@@ -472,19 +455,6 @@ api.interceptors.request.use(async (config) => {
   const method = (config.method || 'get').toUpperCase();
   if (isServerSwitchInProgressInternal() && method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
     throw new CanceledError('Server switch in progress; write request blocked.');
-  }
-
-  // Apply the shorter write timeout to data writes so the offline-queue fallback
-  // engages sooner on a stalled connection. We only override the default — an
-  // explicit per-request timeout (e.g. a longer one for a big operation) wins.
-  // Multipart uploads and auth requests are exempt (no queue fallback / may be slow).
-  if (
-    (method === 'POST' || method === 'PATCH' || method === 'DELETE') &&
-    config.timeout === DEFAULT_REQUEST_TIMEOUT_MS &&
-    !AUTH_ENDPOINT_PATHS.has(config.url ?? '') &&
-    !String(config.headers?.get?.('Content-Type') ?? '').includes('multipart/form-data')
-  ) {
-    config.timeout = WRITE_REQUEST_TIMEOUT_MS;
   }
 
   const switchAwareConfig = config as SwitchAwareAxiosRequestConfig;

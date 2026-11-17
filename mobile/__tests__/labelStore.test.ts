@@ -107,16 +107,35 @@ describe('saveLabels', () => {
     expect(await storedLabelIds()).toEqual(['l1', 'l2']);
   });
 
-  it('does not prune a label protected by skipLabelIds (unsynced offline create)', async () => {
+  it('neither prunes nor upserts a label readSkipLabelIds protects', async () => {
     await upsertLabel(db, label('pending-local', 'Offline'));
+    await upsertLabel(db, label('renamed', 'New name'));
 
-    await saveLabels(db, [], { skipLabelIds: new Set(['pending-local']) });
+    await saveLabels(db, [label('renamed', 'Old name')], {
+      readSkipLabelIds: async () => new Set(['pending-local', 'renamed']),
+    });
 
-    expect(await storedLabelIds()).toEqual(['pending-local']);
+    expect(await getStoredLabels(db)).toEqual([
+      expect.objectContaining({ id: 'renamed', name: 'New name' }),
+      expect.objectContaining({ id: 'pending-local', name: 'Offline' }),
+    ]);
   });
 });
 
 describe('getPendingLabelIds', () => {
+  it('collects the ids of queued createLabel, renameLabel and deleteLabel ops', async () => {
+    await seedQueueEntry(db, {
+      operation: 'renameLabel', endpoint: '/labels/r', method: 'PATCH', body: { name: 'R' }, keys: ['label:r'],
+    });
+    await seedQueueEntry(db, { operation: 'deleteLabel', endpoint: '/labels/d', method: 'DELETE', keys: ['label:d'] });
+    // Attaching a label to a note does not change the label itself.
+    await seedQueueEntry(db, {
+      operation: 'addLabelToNote', endpoint: '/notes/n1/labels', method: 'POST', body: { name: 'X' }, keys: ['note:n1', 'label:x'],
+    });
+
+    expect(await getPendingLabelIds(db)).toEqual(new Set(['r', 'd']));
+  });
+
   it('collects the ids of queued createLabel ops', async () => {
     await seedQueueEntry(db, {
       operation: 'createLabel', endpoint: '/labels', method: 'POST', body: { id: 'a', name: 'A' },
@@ -155,5 +174,18 @@ describe('saveServerLabels', () => {
 
     // 'gone' pruned; 'offline-1' protected (its create hasn't drained yet).
     expect(await storedLabelIds()).toEqual(['offline-1', 'srv-1']);
+  });
+
+  it('keeps a queued rename and does not bring back a label whose delete is queued', async () => {
+    await upsertLabel(db, label('renamed', 'New name'));
+    await seedQueueEntry(db, {
+      operation: 'renameLabel', endpoint: '/labels/renamed', method: 'PATCH', body: { name: 'New name' }, keys: ['label:renamed'],
+    });
+    await seedQueueEntry(db, { operation: 'deleteLabel', endpoint: '/labels/deleted', method: 'DELETE', keys: ['label:deleted'] });
+
+    // The list predates both ops.
+    await saveServerLabels(db, [label('renamed', 'Old name'), label('deleted', 'Deleted')]);
+
+    expect(await getStoredLabels(db)).toEqual([expect.objectContaining({ id: 'renamed', name: 'New name' })]);
   });
 });

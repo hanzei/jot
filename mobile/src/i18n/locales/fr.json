@@ -396,7 +396,8 @@
     "deleteError": "Impossible de supprimer l'étiquette",
     "deleteConfirmTitle": "Supprimer l'étiquette",
     "deleteConfirmMessage": "Supprimer l'étiquette « {{name}} » ? Elle sera retirée de toutes les notes qui l'utilisent.",
-    "nameRequired": "Le nom de l'étiquette ne peut pas être vide."
+    "nameRequired": "Le nom de l'étiquette ne peut pas être vide.",
+    "nameTaken": "Une étiquette porte déjà ce nom."
   },
   "share": {
     "searchUsersPlaceholder": "Rechercher des utilisateurs par nom...",

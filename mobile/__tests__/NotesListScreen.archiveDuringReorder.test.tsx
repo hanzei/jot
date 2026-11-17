@@ -156,14 +156,6 @@ function makeNote(id: string, position: number): Note {
   };
 }
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((res) => {
-    resolve = res;
-  });
-  return { promise, resolve };
-}
-
 // Renders alongside NotesListScreen, sharing its QueryClient, standing in for
 // the archive action that in the real app lives in NoteEditorScreen (a
 // different screen reached via navigation, so it can't be triggered directly
@@ -212,9 +204,6 @@ describe('NotesListScreen: archive during an in-flight manual reorder', () => {
       makeNote('note-F', 5),
     ]);
 
-    const reorderDeferred = deferred<void>();
-    notesApi.reorder.mockImplementation(() => reorderDeferred.promise);
-
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });
@@ -232,11 +221,14 @@ describe('NotesListScreen: archive during an in-flight manual reorder', () => {
     // Drag note-A from the front to the end (position 5 of 6).
     await fireEvent.press(screen.getByTestId('reorder-trigger-notes'));
     expect(orderedCardIds()).toEqual(['note-B', 'note-C', 'note-D', 'note-E', 'note-F', 'note-A']);
-    await waitFor(() => expect(notesApi.reorder).toHaveBeenCalledTimes(1));
+    // The reorder commits locally and queues (#1285); the drain sends it.
+    await waitFor(async () => {
+      expect(await db.getAllAsync('SELECT operation FROM sync_queue')).toEqual([{ operation: 'reorder' }]);
+    });
+    expect(notesApi.reorder).not.toHaveBeenCalled();
 
-    // While that reorder is still in flight (network promise unresolved),
-    // archive note-A — mirroring tapping Archive in the single-note editor
-    // right after the drag.
+    // Archive note-A right after the drag — mirroring tapping Archive in the
+    // single-note editor.
     await act(async () => {
       await fireEvent.press(screen.getByTestId('archive-trigger'));
       // Flush microtasks so useMutation's onMutate (the synchronous optimistic
@@ -246,21 +238,11 @@ describe('NotesListScreen: archive during an in-flight manual reorder', () => {
     });
 
     // The regression signature would be note-A reverting to the front (its
-    // pre-drag position) instead of staying at the end where the
-    // still-unconfirmed drag put it. The reorder's request is still pending
-    // here; the archive commits locally and queues (#1284), so note-A may
-    // already be gone.
+    // pre-drag position) instead of staying at the end where the drag put it.
+    // The archive commits locally and queues too, so note-A may already be gone.
     const midRaceOrder = orderedCardIds();
 
-    // Let everything settle: the reorder's request finally resolves, and the
-    // invalidateQueries refetches complete.
-    await act(async () => {
-      reorderDeferred.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    // Let the invalidateQueries refetches complete.
     await waitFor(() => {
       expect(orderedCardIds()).not.toContain('note-A');
     });

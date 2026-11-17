@@ -1,41 +1,21 @@
 import axios from 'axios';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
-import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
+import { useSQLiteContext } from 'expo-sqlite';
 import { apiPaths, type NoteImage } from '@jot/shared';
 import { uploadNoteImage, type ImageUploadFile } from '../api/images';
-import { patchLocalNoteImages, isNotePendingCreate } from '../db/noteQueries';
-import { enqueueOperation, rethrowIfNotQueueable } from '../db/syncQueue';
+import { patchLocalNoteImages, patchLocalNoteImagesInTx, isNotePendingCreate } from '../db/noteQueries';
+import { enqueueWrite } from '../db/syncQueue';
+import { isTransientError } from '../utils/retryWithBackoff';
 import { noteKey } from '../db/queueKeys';
 import { enqueueImageUpload } from '../db/imageUploadQueue';
-import { recordWriteLanded } from '../db/snapshotGate';
 import { deleteCachedNoteImage } from '../utils/noteImageCache';
 import { assertSwitchWriteAllowed } from '../api/client';
 import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from './useNetworkStatus';
 import { isLocalModeActive } from '../store/localMode';
 import { noteLocalQueryKey, notesLocalQueryScopeKey, pendingImageUploadsQueryKey } from './queryKeys';
-import { jot } from '../api/jot';
 
 export type UploadNoteImageResult = { status: 'uploaded'; image: NoteImage } | { status: 'queued' };
-
-/**
- * Remove an image from a note's local cache and drop its cached bytes. Shared
- * by useDeleteNoteImage's online-success and offline/transient-fallback
- * branches, which otherwise apply the exact same two steps so the note's
- * gallery reflects the removal (and stops holding onto now-orphaned cached
- * bytes) regardless of which path handled the delete.
- */
-async function hideImageLocally(db: SQLiteDatabase, noteId: string, imageId: string): Promise<void> {
-  // The server bumps the note's updated_at for the removal; the response is a
-  // bare 204, so touch the local row with this device's clock, as item edits do.
-  await patchLocalNoteImages(
-    db,
-    noteId,
-    (images) => images.filter((img) => img.id !== imageId),
-    new Date().toISOString(),
-  );
-  await deleteCachedNoteImage(imageId);
-}
 
 export function useUploadNoteImage() {
   const queryClient = useQueryClient();
@@ -94,8 +74,9 @@ export function useUploadNoteImage() {
           // through to the offline queue below instead of losing the picked
           // file; a permanent failure (413 too large, 400 validation, etc.)
           // rethrows so the caller shows an error tile.
-          if (isLocalModeActive()) throw err;
-          rethrowIfNotQueueable(err);
+          // Uploads keep this online-first path until they drain through the
+          // sync queue (#1288).
+          if (isLocalModeActive() || !isTransientError(err)) throw err;
         }
       }
 
@@ -131,40 +112,34 @@ export function useUploadNoteImage() {
 export function useDeleteNoteImage() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
-  const { isConnected } = useNetworkStatus();
 
   return useMutation({
     mutationFn: async ({ noteId, imageId }: { noteId: string; imageId: string }): Promise<void> => {
       assertSwitchWriteAllowed();
-
-      if (isLocalModeActive() || isOnlineWriteAllowed(isConnected)) {
-        try {
-          await jot.images.delete(imageId);
-          // DELETE /images/{id} names no note, so the API client cannot record
-          // which note this write landed on; a snapshot fetched before it would
-          // otherwise bring the image back (#1265).
-          recordWriteLanded([noteId]);
-          // Same self-echo gap as the upload above, on the removal side.
-          await hideImageLocally(db, noteId, imageId);
-          return;
-        } catch (err) {
-          // No server ever exists in local mode — same rationale as the upload above.
-          if (isLocalModeActive()) throw err;
-          rethrowIfNotQueueable(err);
-        }
-      }
-
-      // Offline, or a transient online failure above: hide the image locally
-      // now (matching the online path's effect) and queue the hard-delete for
-      // replay. `/images/{id}` has no note id of its own, so the op's key
-      // names the note.
-      await hideImageLocally(db, noteId, imageId);
-      await enqueueOperation(db, {
-        operation: 'removeImage',
-        endpoint: apiPaths.image(imageId),
-        method: 'DELETE',
-        keys: [noteKey(noteId)],
+      // Through the outbox (#1285): the image is hidden locally and its
+      // hard-delete queued in one transaction. A rejection resolves silently
+      // (removeImage is best-effort): the image reappears on the next sync.
+      await enqueueWrite(db, {
+        // The server bumps the note's updated_at for the removal; the response
+        // is a bare 204, so touch the local row with this device's clock, as
+        // item edits do.
+        localApply: () => patchLocalNoteImagesInTx(
+          db,
+          noteId,
+          (images) => images.filter((img) => img.id !== imageId),
+          new Date().toISOString(),
+        ),
+        // `/images/{id}` has no note id of its own, so the op's key names the
+        // note; the drain records the landing on it (#1265).
+        op: () => ({
+          operation: 'removeImage',
+          endpoint: apiPaths.image(imageId),
+          method: 'DELETE',
+          keys: [noteKey(noteId)],
+        }),
       });
+      // The gallery no longer shows the image, so its cached bytes are orphaned.
+      await deleteCachedNoteImage(imageId);
     },
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });

@@ -3,20 +3,18 @@
  *
  * This is deliberately distinct from NetInfo's device-level connectivity
  * (`OfflineContext.isConnected`): the device can have a perfectly good internet
- * connection while the Jot server itself is down, restarting, or unroutable. In
- * that gap a write would otherwise stall for the full request timeout (see
- * `WRITE_REQUEST_TIMEOUT_MS`) before the offline-queue fallback engages, which
- * is what makes the app feel frozen — e.g. being unable to leave a note with
- * unsaved edits until the timeout fires.
+ * connection while the Jot server itself is down, restarting, or unroutable.
+ * In that gap every request would stall for its full timeout before failing.
  *
- * Tracking server reachability lets the write path skip straight to the local
- * persist + enqueue path once the server is known-unreachable, and resume
- * hitting the network the moment it answers again. The signal is updated from
- * the axios interceptors (a response of any status means the server answered; a
- * transport failure, client timeout included, means it did not) and from SSE
- * traffic. While it is false, writes, queue drains and read syncs are parked, so
- * nothing they send can re-arm it. The full list of writers and readers, and the
- * re-arm guarantee, is docs/specs/mobile-connectivity-handling.md §3.1.
+ * Tracking server reachability lets the queue drain, read syncs and the
+ * one-shot actions with no queue skip a doomed request once the server is
+ * known-unreachable, and resume the moment it answers again. The signal is
+ * updated from the axios interceptors (a response of any status means the
+ * server answered; a transport failure, client timeout included, means it did
+ * not) and from SSE traffic. While it is false, queue drains and read syncs are
+ * parked, so nothing they send can re-arm it. The full list of writers and
+ * readers, and the re-arm guarantee, is
+ * docs/specs/mobile-connectivity-handling.md §3.1.
  *
  * Its one dependency is the leaf `localMode` flag (used by the
  * `isOnlineWriteAllowed` gate below), which imports nothing back — so this
@@ -80,11 +78,11 @@ export function markServerUnreachable(): void {
 }
 
 /**
- * Whether a write should attempt the network right now: the device is connected,
- * the server is believed reachable, and the app isn't in serverless local mode.
- * Callers pass their current connectivity (each write hook mirrors it into a
- * ref). Call sites with extra conditions compose them, e.g.
- * `isOnlineWriteAllowed(isConnectedRef.current) && !pendingCreate`.
+ * Whether a request that has no queue to fall back on — a one-shot action
+ * (public link, empty trash, export) or a note-image upload — should attempt
+ * the network right now: the device is connected, the server is believed
+ * reachable, and the app isn't in serverless local mode. Writes with a local
+ * representation never read it: they go through the outbox (spec §4.1).
  */
 export function isOnlineWriteAllowed(isConnected: boolean): boolean {
   return isConnected && isServerReachable() && !isLocalModeActive();

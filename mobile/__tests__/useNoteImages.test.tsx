@@ -1,5 +1,5 @@
 import React from 'react';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import axios from 'axios';
 import { useUploadNoteImage, useDeleteNoteImage } from '../src/hooks/useNoteImages';
@@ -7,13 +7,12 @@ import { noteLocalQueryKey } from '../src/hooks/queryKeys';
 import * as imagesApi from '../src/api/images';
 import * as noteQueriesModule from '../src/db/noteQueries';
 import * as clientModule from '../src/api/client';
-import * as syncQueueModule from '../src/db/syncQueue';
 import * as imageUploadQueueModule from '../src/db/imageUploadQueue';
 import * as noteImageCacheModule from '../src/utils/noteImageCache';
 import { useNetworkStatus } from '../src/hooks/useNetworkStatus';
 import { isLocalModeActive } from '../src/store/localMode';
 import { saveNote } from '../src/db/noteQueries';
-import { makeTextNote } from './helpers/fixtures';
+import { makeTextNote, queuedOps } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
 import type { NoteImage } from '@jot/shared';
 import { jot } from '../src/api/jot';
@@ -39,11 +38,6 @@ jest.mock('../src/api/images', () => ({
 jest.mock('../src/db/noteQueries', () => {
   const actual = jest.requireActual('../src/db/noteQueries');
   return { ...actual, patchLocalNoteImages: jest.fn(actual.patchLocalNoteImages) };
-});
-
-jest.mock('../src/db/syncQueue', () => {
-  const actual = jest.requireActual('../src/db/syncQueue');
-  return { ...actual, enqueueOperation: jest.fn(actual.enqueueOperation) };
 });
 
 jest.mock('../src/db/imageUploadQueue', () => {
@@ -81,7 +75,6 @@ const mockJot = jest.mocked(jot);
 const mockImagesApi = imagesApi as jest.Mocked<typeof imagesApi>;
 const mockNoteQueries = noteQueriesModule as jest.Mocked<typeof noteQueriesModule>;
 const mockClientModule = clientModule as jest.Mocked<typeof clientModule>;
-const mockEnqueueOperation = syncQueueModule.enqueueOperation as jest.Mock;
 const mockEnqueueImageUpload = imageUploadQueueModule.enqueueImageUpload as jest.Mock;
 const mockDeleteCachedNoteImage = noteImageCacheModule.deleteCachedNoteImage as jest.Mock;
 const mockUseNetworkStatus = useNetworkStatus as jest.Mock;
@@ -142,11 +135,6 @@ describe('useNoteImages hooks', () => {
     return row?.updated_at;
   };
 
-  const queuedOps = () =>
-    db.getAllAsync<{ operation: string; endpoint: string; body: string | null }>(
-      'SELECT operation, endpoint, body FROM sync_queue ORDER BY id',
-    );
-
   // The other tests here fix connectivity before mounting, so they only cover
   // the value a hook was born with. These cover it flipping while the hook stays
   // mounted — the case the write gate has to survive on a device.
@@ -181,22 +169,6 @@ describe('useNoteImages hooks', () => {
 
       expect(outcome).toEqual({ status: 'uploaded', image });
       expect(mockEnqueueImageUpload).not.toHaveBeenCalled();
-    });
-
-    it('queues the delete when connectivity drops after mount', async () => {
-      const image = makeImage();
-      await saveNote(db, makeTextNote({ id: 'note-1', images: [image] }));
-      mockUseNetworkStatus.mockReturnValue({ isConnected: true });
-
-      const { result, rerender } = await renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
-
-      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
-      await rerender(undefined);
-
-      await result.current.mutateAsync({ noteId: 'note-1', imageId: image.id });
-
-      expect(mockJot.images.delete).not.toHaveBeenCalled();
-      expect((await queuedOps()).map((op) => op.operation)).toContain('removeImage');
     });
   });
 
@@ -406,29 +378,32 @@ describe('useNoteImages hooks', () => {
   });
 
   describe('useDeleteNoteImage', () => {
-    it('deletes the image, removes it from the local cache, and clears the image cache', async () => {
-      mockJot.images.delete.mockResolvedValueOnce(undefined);
-
+    // Through the outbox (#1285): hidden locally and queued in one transaction,
+    // with no request; a rejection of the best-effort delete resolves silently.
+    it('hides the image locally, clears its cached bytes and queues the hard-delete, without a request', async () => {
+      await saveNote(db, makeTextNote({
+        id: 'note-1',
+        images: [makeImage({ id: 'img-1' }), makeImage({ id: 'img-2' })],
+      }));
       const { result } = await renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
+
       await result.current.mutateAsync({ noteId: 'note-1', imageId: 'img-1' });
 
-      expect(mockJot.images.delete).toHaveBeenCalledWith('img-1');
+      expect(mockJot.images.delete).not.toHaveBeenCalled();
+      expect(await imagesOf('note-1')).toEqual([makeImage({ id: 'img-2' })]);
       expect(mockDeleteCachedNoteImage).toHaveBeenCalledWith('img-1');
-      expect(mockNoteQueries.patchLocalNoteImages).toHaveBeenCalledWith(
-        expect.anything(),
-        'note-1',
-        expect.any(Function),
-        expect.any(String),
-      );
-      expect(mockEnqueueOperation).not.toHaveBeenCalled();
-
-      const updater = mockNoteQueries.patchLocalNoteImages.mock.calls[0]![2];
-      const images = [makeImage({ id: 'img-1' }), makeImage({ id: 'img-2' })];
-      expect(updater(images)).toEqual([makeImage({ id: 'img-2' })]);
+      // The endpoint names no note, so the key does.
+      expect(await queuedOps(db)).toEqual([{
+        operation: 'removeImage',
+        endpoint: '/images/img-1',
+        method: 'DELETE',
+        body: null,
+        keys: ['note:note-1'],
+        readKeys: [],
+      }]);
     });
 
     it('invalidates the note and notes-list caches on success', async () => {
-      mockJot.images.delete.mockResolvedValueOnce(undefined);
       const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
       const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
       function Wrapper({ children }: { children: React.ReactNode }) {
@@ -442,59 +417,7 @@ describe('useNoteImages hooks', () => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-1') });
     });
 
-    it('propagates a permanent delete failure without queuing it', async () => {
-      const error = new Error('Not axios, not queueable');
-      mockJot.images.delete.mockRejectedValueOnce(error);
-
-      const { result } = await renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
-      await expect(result.current.mutateAsync({ noteId: 'note-1', imageId: 'img-1' })).rejects.toBe(error);
-      expect(mockNoteQueries.patchLocalNoteImages).not.toHaveBeenCalled();
-      expect(mockEnqueueOperation).not.toHaveBeenCalled();
-    });
-
-    it('hides the image locally and queues the hard-delete for replay when offline (issue #618)', async () => {
-      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
-      const { result } = await renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
-
-      await result.current.mutateAsync({ noteId: 'note-1', imageId: 'img-1' });
-
-      expect(mockJot.images.delete).not.toHaveBeenCalled();
-      expect(mockDeleteCachedNoteImage).toHaveBeenCalledWith('img-1');
-      expect(mockNoteQueries.patchLocalNoteImages).toHaveBeenCalledWith(
-        expect.anything(),
-        'note-1',
-        expect.any(Function),
-        expect.any(String),
-      );
-      expect(mockEnqueueOperation).toHaveBeenCalledWith(expect.anything(), {
-        operation: 'removeImage',
-        endpoint: '/images/img-1',
-        method: 'DELETE',
-        keys: ['note:note-1'],
-      });
-      // The op is really in sync_queue for the drain to replay.
-      expect(await queuedOps()).toEqual([
-        { operation: 'removeImage', endpoint: '/images/img-1', body: null },
-      ]);
-      // The endpoint names no note, so the key does.
-      expect(await db.getAllAsync('SELECT key FROM sync_queue_keys')).toEqual([{ key: 'note:note-1' }]);
-    });
-
-    it('hides the image from the note locally when the delete is queued offline', async () => {
-      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
-      await saveNote(db, makeTextNote({
-        id: 'note-1',
-        images: [makeImage({ id: 'img-1' }), makeImage({ id: 'img-2' })],
-      }));
-      const { result } = await renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
-
-      await result.current.mutateAsync({ noteId: 'note-1', imageId: 'img-1' });
-
-      expect(await imagesOf('note-1')).toEqual([makeImage({ id: 'img-2' })]);
-    });
-
     it('bumps the note\'s updated_at only when the image was there to remove (#1275)', async () => {
-      mockJot.images.delete.mockResolvedValue(undefined);
       await saveNote(db, makeTextNote({ id: 'note-1', images: [makeImage({ id: 'img-1' })] }));
       const { result } = await renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
 
@@ -506,33 +429,30 @@ describe('useNoteImages hooks', () => {
       expect(await updatedAtOf('note-2')).toBe('2026-01-01T00:00:00Z');
     });
 
-    it('falls back to the offline queue after a transient delete failure while connected', async () => {
-      const error = Object.assign(new Error('Server Error'), { isAxiosError: true, response: { status: 503 } });
-      mockJot.images.delete.mockRejectedValueOnce(error);
+    it('writes nothing while a server switch is in progress', async () => {
+      await saveNote(db, makeTextNote({ id: 'note-1', images: [makeImage({ id: 'img-1' })] }));
+      mockClientModule.isServerSwitchInProgress.mockReturnValue(true);
       const { result } = await renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
 
-      await result.current.mutateAsync({ noteId: 'note-1', imageId: 'img-1' });
-
-      // The replayed delete's side effects must match the offline path exactly
-      // (same hide-locally + cache-cleanup + enqueue), or a regression here
-      // would leave the image visible or its cached bytes lingering.
-      expect(mockDeleteCachedNoteImage).toHaveBeenCalledWith('img-1');
-      expect(mockNoteQueries.patchLocalNoteImages).toHaveBeenCalledWith(
-        expect.anything(),
-        'note-1',
-        expect.any(Function),
-        expect.any(String),
-      );
-      const updater = mockNoteQueries.patchLocalNoteImages.mock.calls[0]![2];
-      const images = [makeImage({ id: 'img-1' }), makeImage({ id: 'img-2' })];
-      expect(updater(images)).toEqual([makeImage({ id: 'img-2' })]);
-
-      expect(mockEnqueueOperation).toHaveBeenCalledWith(expect.anything(), {
-        operation: 'removeImage',
-        endpoint: '/images/img-1',
-        method: 'DELETE',
-        keys: ['note:note-1'],
+      await act(async () => {
+        await expect(result.current.mutateAsync({ noteId: 'note-1', imageId: 'img-1' })).rejects.toThrow('Server switch in progress');
       });
+
+      expect(await imagesOf('note-1')).toEqual([makeImage({ id: 'img-1' })]);
+      expect(await queuedOps(db)).toEqual([]);
+    });
+
+    it('hides the image but queues nothing in local mode', async () => {
+      mockIsLocalModeActive.mockReturnValue(true);
+      await saveNote(db, makeTextNote({ id: 'note-1', images: [makeImage({ id: 'img-1' })] }));
+      const { result } = await renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
+
+      await act(async () => {
+        await result.current.mutateAsync({ noteId: 'note-1', imageId: 'img-1' });
+      });
+
+      expect(await imagesOf('note-1')).toEqual([]);
+      expect(await queuedOps(db)).toEqual([]);
     });
   });
 });

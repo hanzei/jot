@@ -16,7 +16,7 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import type { AuthStackParamList } from '../navigation/AuthStack';
 import { getUsernameValidationError, isPasswordTooShort } from '@jot/shared';
-import { displayMessage, extractApiError } from '../i18n/utils';
+import { displayMessage, extractApiError, USERNAME_ERROR_KEYS } from '../i18n/utils';
 import ServerSetupGate from '../components/ServerSetupGate';
 import FadeInView from '../components/FadeInView';
 import { useServerConfig } from '../hooks/useServerConfig';
@@ -36,19 +36,12 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const usernameErrorTranslations = {
-    min: t('auth.usernameMin'),
-    max: t('auth.usernameMax'),
-    chars: t('auth.usernameChars'),
-    edge: t('auth.usernameEdge'),
-  } as const;
-
   const validate = (): string | null => {
     const trimmedUsername = username.trim();
     if (!trimmedUsername) return t('auth.usernameRequired');
     const usernameError = getUsernameValidationError(trimmedUsername);
     if (usernameError) {
-      return usernameErrorTranslations[usernameError];
+      return t(USERNAME_ERROR_KEYS[usernameError]);
     }
     if (!password.trim()) return t('auth.passwordRequired');
     if (isPasswordTooShort(password, passwordMinLength)) return t('auth.passwordMin', { min: passwordMinLength });

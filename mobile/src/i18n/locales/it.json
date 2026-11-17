@@ -419,7 +419,8 @@
     "deleteError": "Impossibile eliminare l'etichetta",
     "deleteConfirmTitle": "Elimina etichetta",
     "deleteConfirmMessage": "Eliminare l'etichetta \"{{name}}\"? Verrà rimossa da tutte le note che la utilizzano.",
-    "nameRequired": "Il nome dell'etichetta non può essere vuoto."
+    "nameRequired": "Il nome dell'etichetta non può essere vuoto.",
+    "nameTaken": "Esiste già un'etichetta con questo nome."
   },
   "share": {
     "searchUsersPlaceholder": "Cerca utenti per nome...",

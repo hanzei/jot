@@ -1,5 +1,6 @@
 import { Alert } from 'react-native';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
+import { VALIDATION } from '@jot/shared';
 import {
   mockUseRoute,
   mockGoBack,
@@ -7,10 +8,11 @@ import {
   mockRestoreMutateAsync,
   mockPermanentDeleteMutateAsync,
   mockUseOfflineNote,
+  mockCreateMutateAsync,
+  mockDeleteMutateAsync,
 } from './helpers/noteEditorScreenTestSetup';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 import { ConfirmProvider } from '../src/components/ConfirmDialog';
-import { markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
 
 function makeTrashedNote(overrides: Record<string, unknown> = {}) {
   return {
@@ -101,100 +103,6 @@ describe('NoteEditorScreen read-only trashed note', () => {
     expect(mockGoBack).toHaveBeenCalledTimes(1);
   });
 
-  // Issue #697: these actions await a write with the menu sheet already closed.
-  // A reachable-but-slow write must show a visible pending indicator instead of
-  // a silent freeze; a known-unreachable server has nothing to wait for (the
-  // mutation resolves via the local/queue path), so no indicator is needed.
-  describe('menu-action pending indicator', () => {
-    afterEach(() => {
-      jest.useRealTimers();
-      markServerReachable();
-    });
-
-    it('shows the pending indicator once the delay elapses while restoring on a reachable server', async () => {
-      jest.useFakeTimers();
-      markServerReachable();
-      let resolveRestore!: () => void;
-      mockRestoreMutateAsync.mockReturnValue(new Promise<void>((resolve) => { resolveRestore = resolve; }));
-
-      const { getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
-      await fireEvent.press(getByTestId('toolbar-menu-btn'));
-      await act(async () => { await fireEvent.press(getByTestId('editor-menu-restore')); });
-
-      expect(queryByTestId('menu-action-pending')).toBeNull();
-      await act(async () => { jest.advanceTimersByTime(600); });
-      expect(getByTestId('menu-action-pending')).toBeTruthy();
-
-      await act(async () => { resolveRestore(); });
-      await act(async () => { jest.advanceTimersByTime(300); });
-      expect(queryByTestId('menu-action-pending')).toBeNull();
-      expect(mockGoBack).toHaveBeenCalledTimes(1);
-    });
-
-    it('does not show the pending indicator when restoring while known unreachable', async () => {
-      markServerUnreachable();
-      let resolveRestore!: () => void;
-      mockRestoreMutateAsync.mockReturnValue(new Promise<void>((resolve) => { resolveRestore = resolve; }));
-
-      const { getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
-      await fireEvent.press(getByTestId('toolbar-menu-btn'));
-      await fireEvent.press(getByTestId('editor-menu-restore'));
-
-      expect(queryByTestId('menu-action-pending')).toBeNull();
-
-      await act(async () => { resolveRestore(); });
-      await waitFor(() => { expect(mockGoBack).toHaveBeenCalledTimes(1); });
-    });
-
-    it('shows the pending indicator once the delay elapses while permanently deleting on a reachable server', async () => {
-      jest.useFakeTimers();
-      markServerReachable();
-      let resolveDelete!: () => void;
-      mockPermanentDeleteMutateAsync.mockReturnValue(new Promise<void>((resolve) => { resolveDelete = resolve; }));
-
-      const { getByTestId, queryByTestId } = await render(
-        <ConfirmProvider>
-          <NoteEditorScreen />
-        </ConfirmProvider>,
-      );
-
-      await fireEvent.press(getByTestId('toolbar-menu-btn'));
-      await act(async () => { await fireEvent.press(getByTestId('editor-menu-delete-permanently')); });
-      await act(async () => { await fireEvent.press(getByTestId('confirm-dialog-confirm')); });
-
-      expect(queryByTestId('menu-action-pending')).toBeNull();
-      await act(async () => { jest.advanceTimersByTime(600); });
-      expect(getByTestId('menu-action-pending')).toBeTruthy();
-
-      await act(async () => { resolveDelete(); });
-      await act(async () => { jest.advanceTimersByTime(300); });
-      expect(queryByTestId('menu-action-pending')).toBeNull();
-      expect(mockGoBack).toHaveBeenCalledTimes(1);
-    });
-
-    it('does not show the pending indicator when permanently deleting while known unreachable', async () => {
-      markServerUnreachable();
-      let resolveDelete!: () => void;
-      mockPermanentDeleteMutateAsync.mockReturnValue(new Promise<void>((resolve) => { resolveDelete = resolve; }));
-
-      const { getByTestId, findByTestId, queryByTestId } = await render(
-        <ConfirmProvider>
-          <NoteEditorScreen />
-        </ConfirmProvider>,
-      );
-
-      await fireEvent.press(getByTestId('toolbar-menu-btn'));
-      await fireEvent.press(getByTestId('editor-menu-delete-permanently'));
-      await findByTestId('confirm-dialog-confirm');
-      await fireEvent.press(getByTestId('confirm-dialog-confirm'));
-
-      expect(queryByTestId('menu-action-pending')).toBeNull();
-
-      await act(async () => { resolveDelete(); });
-      await waitFor(() => { expect(mockGoBack).toHaveBeenCalledTimes(1); });
-    });
-  });
-
   it('does not delete the note when the destructive dialog is cancelled', async () => {
     const { getByTestId, findByTestId, queryByTestId } = await render(
       <ConfirmProvider>
@@ -238,5 +146,63 @@ describe('NoteEditorScreen read-only trashed note', () => {
 
     // The completed-items collapse toggle is disabled.
     expect(getByTestId('toggle-checked-items').props.accessibilityState).toMatchObject({ disabled: true });
+  });
+});
+
+describe('NoteEditorScreen move to trash on a new note', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockNavigationAddListener.mockReturnValue(jest.fn());
+    mockUseRoute.mockReturnValue({ params: { noteId: null } });
+    mockUseOfflineNote.mockReturnValue({ data: null });
+    mockDeleteMutateAsync.mockResolvedValue({});
+    jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  it('just exits a blank new note, which has nothing to delete', async () => {
+    const { getByTestId } = await render(<NoteEditorScreen />);
+
+    await fireEvent.press(getByTestId('toolbar-menu-btn'));
+    await act(async () => {
+      await fireEvent.press(getByTestId('editor-menu-trash'));
+    });
+
+    expect(mockGoBack).toHaveBeenCalledTimes(1);
+    expect(mockCreateMutateAsync).not.toHaveBeenCalled();
+    expect(mockDeleteMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('waits for the first save still creating the note, then trashes the created note', async () => {
+    jest.useFakeTimers();
+    let resolveCreate!: (note: unknown) => void;
+    mockCreateMutateAsync.mockReturnValue(new Promise((res) => { resolveCreate = res; }));
+    const { getByTestId } = await render(<NoteEditorScreen />);
+
+    await act(async () => {
+      await fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
+    });
+    await act(async () => { jest.advanceTimersByTime(VALIDATION.AUTO_SAVE_TIMEOUT_MS); });
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
+
+    // Trash while the create is still in flight: the note has no id yet.
+    await act(async () => { await fireEvent.press(getByTestId('toolbar-menu-btn')); });
+    await act(async () => { await fireEvent.press(getByTestId('editor-menu-trash')); });
+    expect(mockGoBack).not.toHaveBeenCalled();
+    expect(mockDeleteMutateAsync).not.toHaveBeenCalled();
+
+    await act(async () => { resolveCreate({ id: 'note-new', note_type: 'text', content: 'Hello' }); });
+
+    await waitFor(() => {
+      expect(mockDeleteMutateAsync).toHaveBeenCalledWith('note-new');
+    });
+    await waitFor(() => {
+      expect(mockGoBack).toHaveBeenCalledTimes(1);
+    });
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
   });
 });

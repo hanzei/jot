@@ -410,7 +410,8 @@
     "deleteError": "Failed to delete label",
     "deleteConfirmTitle": "Delete label",
     "deleteConfirmMessage": "Delete label \"{{name}}\"? It will be removed from all notes that use it.",
-    "nameRequired": "Label name can't be empty."
+    "nameRequired": "Label name can't be empty.",
+    "nameTaken": "A label with this name already exists."
   },
   "share": {
     "searchUsersPlaceholder": "Search users by username...",

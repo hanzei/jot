@@ -9,8 +9,10 @@ import {
   deleteDeadLetter,
   getDeadLetterNoteIds,
   clearNoteSyncFailedIfResolved,
+  saveServerLabels,
   saveServerResponseNote,
   type DeadLetteredOperation,
+  type QueueOperation,
 } from '../db/syncQueue';
 import {
   getLocalNote,
@@ -62,6 +64,9 @@ export function buildCreateRequestFromNote(note: Note): CreateNoteRequest {
   };
 }
 
+/** Label-entity writes, whose rejection leaves the label store to re-read (see reconcileDiscard). */
+const LABEL_OPERATIONS: ReadonlySet<QueueOperation> = new Set(['createLabel', 'renameLabel', 'deleteLabel']);
+
 /** Whether a status means the original note is gone for this user (deleted/unshared). */
 function isGoneStatus(status: number | undefined): boolean {
   return status === 403 || status === 404 || status === 410;
@@ -74,7 +79,8 @@ function isGoneStatus(status: number | undefined): boolean {
  * removing the orphan local note; otherwise we clear the failed flag (lifting the
  * overwrite gate, unless another unresolved dead letter still covers the note)
  * and pull the server's version (tombstoning it locally if it's
- * gone for this user). Shared by both Discard and the tail of Keep-my-version.
+ * gone for this user). A label write re-reads the server's label list instead.
+ * Shared by both Discard and the tail of Keep-my-version.
  */
 export async function reconcileDiscard(db: SQLiteDatabase, dl: DeadLetteredOperation): Promise<void> {
   if (dl.note_id) {
@@ -104,6 +110,17 @@ export async function reconcileDiscard(db: SQLiteDatabase, dl: DeadLetteredOpera
     // list, so this is a no-op for them.
     for (const noteId of await getDeadLetterNoteIds(db, dl.id)) {
       await clearNoteSyncFailedIfResolved(db, noteId, dl.id);
+    }
+    // A rejected label write left the store holding what the server refused:
+    // a rename's name, a delete's absence, a create the server never had.
+    // Re-read the server's list, which this op no longer protects. Offline or
+    // transient: the next label sync reconciles it, so the resolution goes on.
+    if (LABEL_OPERATIONS.has(dl.operation)) {
+      try {
+        await saveServerLabels(db, await jot.labels.getAll());
+      } catch {
+        // Left for the next label sync.
+      }
     }
   }
 

@@ -24,6 +24,7 @@ jest.mock('../src/db/noteQueries', () => ({
   getLocalNote: jest.fn().mockResolvedValue(null),
   markLocalNoteDeleted: jest.fn().mockResolvedValue(undefined),
   getStoredLabels: jest.fn().mockResolvedValue([]),
+  getLocalLabelCounts: jest.fn().mockResolvedValue({}),
 }));
 
 jest.mock('../src/db/syncQueue', () => ({
@@ -230,11 +231,14 @@ describe('background read-sync retry', () => {
 
   // ── useLabels ───────────────────────────────────────────────────────────────
 
-  it('retries a transient labels sync failure and then caches server labels', async () => {
-    const serverLabels = [{ id: 'l1', user_id: 'u1', name: 'Work', created_at: '', updated_at: '' }];
+  it('retries a transient labels sync failure and then caches the reconciled labels', async () => {
+    const stored = { id: 'l1', user_id: 'u1', name: 'Work', created_at: '', updated_at: '' };
+    const serverLabels = [{ ...stored, note_count: 2 }];
     mockJot.labels.getAll
       .mockRejectedValueOnce(makeAxiosError(503))
       .mockResolvedValueOnce(serverLabels as never);
+    // What saveServerLabels left in the store.
+    mockNoteQueries.getStoredLabels.mockResolvedValue([stored]);
 
     const { result } = await renderHook(() => useLabels(), { wrapper: createWrapper() });
 
