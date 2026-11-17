@@ -109,6 +109,26 @@ describe('LabelPicker', () => {
     expect(onLocalChange).toHaveBeenCalledWith([expect.objectContaining({ name: 'Fresh' })]);
   });
 
+  it('ignores Enter and Escape while an IME composition is active', async () => {
+    const onLocalChange = vi.fn();
+    const onClose = vi.fn();
+    render(<LabelPicker selectedLabels={[]} onLocalChange={onLocalChange} onClose={onClose} />);
+    await screen.findByText('Bar');
+
+    const input = screen.getByRole('textbox');
+    fireEvent.change(input, { target: { value: 'にほん' } });
+    // Chrome/Firefox flag the confirming keystroke with isComposing; Safari
+    // delivers it after compositionend, so only keyCode 229 gives it away.
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true });
+    fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 });
+    fireEvent.keyDown(input, { key: 'Escape', isComposing: true });
+    expect(onLocalChange).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onLocalChange).toHaveBeenCalledWith([expect.objectContaining({ name: 'にほん' })]);
+  });
+
   it('creates a label via the API for an existing note', async () => {
     const note = createMockTextNote({ id: 'note1' });
     mockAddLabel.mockResolvedValue({ ...note, labels: [makeLabel('Fresh')] });

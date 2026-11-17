@@ -176,6 +176,8 @@ const SidebarLabels = ({
                     maxLength={VALIDATION.LABEL_NAME_MAX_LENGTH}
                     onClick={(event) => event.stopPropagation()}
                     onKeyDown={(event) => {
+                      // Enter/Escape confirm or cancel an IME composition; leave them to it.
+                      if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
                       if (event.key === 'Enter') {
                         event.preventDefault();
                         void submitRename(label);
@@ -287,6 +289,8 @@ const SidebarLabels = ({
                 maxLength={VALIDATION.LABEL_NAME_MAX_LENGTH}
                 onClick={(event) => event.stopPropagation()}
                 onKeyDown={(event) => {
+                  // Enter/Escape confirm or cancel an IME composition; leave them to it.
+                  if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
                   if (event.key === 'Enter') {
                     event.preventDefault();
                     void submitCreate();
