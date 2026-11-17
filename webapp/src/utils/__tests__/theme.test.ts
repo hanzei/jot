@@ -5,25 +5,25 @@ describe('applyTheme', () => {
   const root = document.documentElement;
 
   afterEach(() => {
-    root.classList.remove('dark');
-    root.style.colorScheme = '';
+    root.classList.remove('dark', 'light');
   });
 
-  // index.css derives the body background and native UI from color-scheme, so
-  // it has to follow the in-app preference, not the OS (stubbed to light here).
-  it('pins color-scheme to an explicit preference over the system one', () => {
+  // index.css derives color-scheme (and from it the body background and native
+  // UI) from these classes, so they have to follow the in-app preference, not
+  // the OS (stubbed to light here).
+  it('pins the scheme to an explicit preference over the system one', () => {
     applyTheme('dark');
     expect(root).toHaveClass('dark');
-    expect(root.style.colorScheme).toBe('dark');
+    expect(root).not.toHaveClass('light');
 
     applyTheme('light');
+    expect(root).toHaveClass('light');
     expect(root).not.toHaveClass('dark');
-    expect(root.style.colorScheme).toBe('light');
   });
 
   it('resolves the system preference to a concrete scheme', () => {
     applyTheme('system');
+    expect(root).toHaveClass('light');
     expect(root).not.toHaveClass('dark');
-    expect(root.style.colorScheme).toBe('light');
   });
 });

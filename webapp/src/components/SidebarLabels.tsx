@@ -13,6 +13,7 @@ import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, type Label, type LabelWithCount } from '@jot/shared';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import { isImeComposing } from '@/utils/keyboardShortcuts';
 
 interface SidebarLabelsProps {
   labels: LabelWithCount[];
@@ -177,7 +178,7 @@ const SidebarLabels = ({
                     onClick={(event) => event.stopPropagation()}
                     onKeyDown={(event) => {
                       // Enter/Escape confirm or cancel an IME composition; leave them to it.
-                      if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+                      if (isImeComposing(event)) return;
                       if (event.key === 'Enter') {
                         event.preventDefault();
                         void submitRename(label);
@@ -290,7 +291,7 @@ const SidebarLabels = ({
                 onClick={(event) => event.stopPropagation()}
                 onKeyDown={(event) => {
                   // Enter/Escape confirm or cancel an IME composition; leave them to it.
-                  if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+                  if (isImeComposing(event)) return;
                   if (event.key === 'Enter') {
                     event.preventDefault();
                     void submitCreate();

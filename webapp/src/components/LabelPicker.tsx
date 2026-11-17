@@ -3,6 +3,7 @@ import { LoaderCircle, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, canCreateLabelFromQuery, filterLabelsByQuery, type Label, type Note } from '@jot/shared';
 import { notes as notesApi, labels as labelsApi } from '@/utils/api';
+import { isImeComposing } from '@/utils/keyboardShortcuts';
 
 interface LabelPickerProps {
   /** When editing an existing note, pass the note to use API-based label toggling. */
@@ -260,8 +261,12 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
   };
 
   const handleInputKeyDown = (e: React.KeyboardEvent) => {
-    // Enter, Escape and the arrows drive an active IME composition; leave them to it.
-    if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+    // Enter, Escape and the arrows drive an active IME composition; leave them to
+    // it, and keep them from the note modal's Dialog, which closes on Escape.
+    if (isImeComposing(e)) {
+      e.nativeEvent.stopPropagation();
+      return;
+    }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setHighlightIndex(i => Math.max(0, Math.min(optionCount - 1, i + 1)));

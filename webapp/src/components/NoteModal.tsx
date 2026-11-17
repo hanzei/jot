@@ -24,7 +24,7 @@ import { applyTextareaEdit } from '@/utils/textareaEdit';
 import { getCaretLine, getOffsetAtLine } from '@/utils/textareaCaret';
 import { buildShareAvatars } from '@/utils/shareAvatars';
 import { buildMobileDeepLink } from '@/utils/deepLink';
-import { isEditableElementFocused } from '@/utils/keyboardShortcuts';
+import { isEditableElementFocused, isImeComposing } from '@/utils/keyboardShortcuts';
 import { canAnimate } from '@/utils/motion';
 import { findNoteCardRect, playNoteModalExit, playNoteModalOpen, stopNoteModalOpen } from '@/utils/noteZoom';
 import {
@@ -1001,7 +1001,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
 
   const handleItemKeyDown = (index: number, e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-      if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+      if (isImeComposing(e)) return;
       // Modified arrows belong to the platform: Shift extends a selection, and
       // on macOS Alt and Cmd mean "by paragraph" and "to the end of the field".
       // None of them are a request to leave this row.
@@ -1038,7 +1038,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
       return;
     }
 
-    if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+    if (isImeComposing(e)) return;
 
     // Same modifier guard as the content textarea's Ctrl/Cmd+B/I (see the
     // comment there): Shift and Alt must both be absent, since the
@@ -2098,7 +2098,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                   }
                 }}
                 onKeyDown={isReadOnly ? undefined : (e) => {
-                  if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+                  if (isImeComposing(e)) return;
                   if (e.repeat) return;
                   if (e.key === 'Enter') {
                     e.preventDefault();
@@ -2130,7 +2130,7 @@ export default function NoteModal({ note = null, onClose, onSave, onCreated, onR
                     className="w-full p-2 border-none outline-none resize-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white min-h-[6rem] rounded-md bg-gray-50 dark:bg-slate-700/40 transition-colors duration-150"
                     value={content}
                     onKeyDown={(e) => {
-                      if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+                      if (isImeComposing(e)) return;
                       if (e.key === 'Escape') {
                         e.preventDefault();
                         setIsEditingContent(false);

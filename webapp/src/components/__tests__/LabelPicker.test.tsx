@@ -121,7 +121,12 @@ describe('LabelPicker', () => {
     // delivers it after compositionend, so only keyCode 229 gives it away.
     fireEvent.keyDown(input, { key: 'Enter', isComposing: true });
     fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 });
+    // The note modal's Dialog closes on an Escape that reaches the window.
+    const windowKeyDown = vi.fn();
+    window.addEventListener('keydown', windowKeyDown);
     fireEvent.keyDown(input, { key: 'Escape', isComposing: true });
+    window.removeEventListener('keydown', windowKeyDown);
+    expect(windowKeyDown).not.toHaveBeenCalled();
     expect(onLocalChange).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
 

@@ -12,8 +12,9 @@ export const getThemePreference = (): ThemePreference => {
 export const applyTheme = (pref: ThemePreference): void => {
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   const useDark = pref === 'dark' || (pref === 'system' && prefersDark);
+  // index.css pins color-scheme from these classes.
   document.documentElement.classList.toggle('dark', useDark);
-  document.documentElement.style.colorScheme = useDark ? 'dark' : 'light';
+  document.documentElement.classList.toggle('light', !useDark);
 };
 
 /**
