@@ -32,7 +32,7 @@ import {
   type QueueKey,
 } from './queueKeys';
 import { withSerializedTransaction } from './transaction';
-import { clearEntryInFlight, markEntryInFlight, mergeQueuedOp } from './queueMerge';
+import { mergeQueuedOp } from './queueMerge';
 import { rewriteLabelId, rewriteLabelKeys } from './labelIdRewrite';
 import { notesWrittenSince, recordWriteLanded, snapshotMark, type SnapshotMark } from './snapshotGate';
 import { recordOwnVersionStep, resolveOwnBaseVersion } from './ownVersions';
@@ -458,7 +458,7 @@ export async function enqueueWrite<T>(db: SQLiteDatabase, write: OutboxWrite<T>)
     if (!queue) return;
     for (const op of [write.op(applied)].flat()) {
       // An op that supersedes an earlier queued one is written into its row (spec §8.5).
-      if (!(await mergeQueuedOp(db, op))) await insertQueueEntry(db, op);
+      if (!(await mergeQueuedOp(db, op, sendingEntryByDb.get(db)))) await insertQueueEntry(db, op);
       operations.push(op.operation);
     }
   });
@@ -529,28 +529,39 @@ interface ClaimedEntry {
 }
 
 /**
- * Read queue row `entryId` as it is now, with its keys, and mark it in flight,
- * in one serialized transaction: a merge at enqueue (spec §8.5) committed
- * before this is sent with the row, and one after it sees the mark and appends
- * a new row instead (see queueMerge.ts). Null when the row is gone.
+ * The queue row the drain is sending, per database: never merged into
+ * (spec §8.5). One drain pass runs at a time.
+ */
+const sendingEntryByDb = new WeakMap<SQLiteDatabase, number>();
+
+/**
+ * Read queue row `entryId` as it is now, with its keys, and record it as the
+ * row being sent, in one serialized transaction: a merge at enqueue (spec
+ * §8.5) committed before this is sent with the row, and one after it appends a
+ * new row instead (see queueMerge.ts). Null when the row is gone.
  */
 async function claimQueueEntry(db: SQLiteDatabase, entryId: number): Promise<ClaimedEntry | null> {
   let claimed = null as ClaimedEntry | null;
   await withSerializedTransaction(db, async () => {
-    const entry = await db.getFirstAsync<QueueEntry>('SELECT * FROM sync_queue WHERE id = ?', [entryId]);
-    if (entry === null) return;
-    const rows = await db.getAllAsync<{ key: string; read_only: number }>(
-      'SELECT key, read_only FROM sync_queue_keys WHERE entry_id = ?',
+    const rows = await db.getAllAsync<QueueEntry & { key: string | null; read_only: number | null }>(
+      `SELECT q.*, k.key, k.read_only FROM sync_queue q
+         LEFT JOIN sync_queue_keys k ON k.entry_id = q.id
+       WHERE q.id = ?`,
       [entryId],
     );
+    const [first] = rows;
+    if (first === undefined) return;
+    // The joined key columns ride along unread.
+    const entry: QueueEntry = first;
     const keys: string[] = [];
     const writtenNoteIds: string[] = [];
-    for (const row of rows) {
-      keys.push(row.key);
-      const noteId = row.read_only === 0 ? noteIdOfKey(row.key) : null;
+    for (const { key, read_only: readOnly } of rows) {
+      if (key === null) continue;
+      keys.push(key);
+      const noteId = readOnly === 0 ? noteIdOfKey(key) : null;
       if (noteId !== null) writtenNoteIds.push(noteId);
     }
-    markEntryInFlight(db, entryId);
+    sendingEntryByDb.set(db, entryId);
     claimed = { entry, keys, writtenNoteIds };
   });
   return claimed;
@@ -1049,14 +1060,6 @@ async function recordDeadLetter(
  * update their caches.
  */
 export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
-  try {
-    return await drainQueuePass(db);
-  } finally {
-    clearEntryInFlight(db);
-  }
-}
-
-async function drainQueuePass(db: SQLiteDatabase): Promise<DrainResult> {
   // Only the ids: each row and its keys are read when the pass reaches it (see
   // claimQueueEntry), since a merge at enqueue or a label-id rewrite may have
   // changed them since this load.
@@ -1105,8 +1108,6 @@ async function drainQueuePass(db: SQLiteDatabase): Promise<DrainResult> {
     // The note this replay version-guarded, and the version its response
     // reports, when that version is its own (see rebaseQueuedEdits).
     let ownVersionStep: OwnVersionStep | null = null;
-    // The notes this entry writes, and every key it touches.
-    const targets = (): readonly string[] => writtenNoteIds;
     // Deletes the landed entry and rebases the edits behind it, inside the
     // caller's transaction. A note this response settled has no other queued
     // op, so only the in-memory step is left to record.
@@ -1116,7 +1117,7 @@ async function drainQueuePass(db: SQLiteDatabase): Promise<DrainResult> {
       if (settledThisEntry.has(ownVersionStep.noteId)) recordOwnVersionStep(db, ownVersionStep.noteId, ownVersionStep.from, ownVersionStep.to);
       else await rebaseQueuedEdits(db, ownVersionStep);
     };
-    const uploadNoteId = entry.operation === 'uploadImage' ? targets()[0] : undefined;
+    const uploadNoteId = entry.operation === 'uploadImage' ? writtenNoteIds[0] : undefined;
     try {
       if (entry.operation === 'uploadImage') {
         // Wait while the note is not confirmed on the server (pending or
@@ -1137,7 +1138,7 @@ async function drainQueuePass(db: SQLiteDatabase): Promise<DrainResult> {
       // it against a note the server never got is pointless — drop it (the note
       // stays flagged failed) rather than round-tripping to a guaranteed 404.
       if (abandonedCreateNoteIds.size > 0) {
-        const touched = targets();
+        const touched = writtenNoteIds;
         if (touched.length > 0 && touched.every((id) => abandonedCreateNoteIds.has(id))) {
           console.warn(
             `Dropping queued operation id=${entry.id} (${entry.operation}): its note's create was dead-lettered.`,
@@ -1161,7 +1162,7 @@ async function drainQueuePass(db: SQLiteDatabase): Promise<DrainResult> {
       // The base_version this replay was sent with, if it was version-guarded:
       // a convert, or an update that touches content.
       let baseVersion: number | null = null;
-      const guardedNoteId = targets()[0];
+      const guardedNoteId = writtenNoteIds[0];
       if (guardedNoteId !== undefined && body !== undefined && (
         entry.operation === 'convertNoteType'
         || (entry.operation === 'update' && ('content' in body || 'title' in body)))) {
@@ -1229,7 +1230,7 @@ async function drainQueuePass(db: SQLiteDatabase): Promise<DrainResult> {
       // Share and unshare return 204: their share state needs a GET, which
       // must not run inside the landing transaction.
       const shares = entry.operation === 'share' || entry.operation === 'unshare'
-        ? await fetchNoteShares(targets()[0])
+        ? await fetchNoteShares(writtenNoteIds[0])
         : null;
 
       // Applies a replayed write's note response (see saveServerResponseNote).
@@ -1295,7 +1296,7 @@ async function drainQueuePass(db: SQLiteDatabase): Promise<DrainResult> {
             // response version may include a collaborator's edit this device has
             // not seen; adopting it would let the next content edit pass the
             // base_version check and overwrite that edit (#1262).
-            if (targets()[0] !== undefined) await applyResponse(ownVersionStep !== null);
+            if (writtenNoteIds[0] !== undefined) await applyResponse(ownVersionStep !== null);
             break;
           case 'updateSettings':
             syncedSettings = true;
@@ -1309,7 +1310,7 @@ async function drainQueuePass(db: SQLiteDatabase): Promise<DrainResult> {
         // The write landed: if this note was carrying a prior failure that no
         // dead letter still records, clear it so it resumes syncing from the
         // server normally (#492). An unresolved dead letter keeps it (#1263).
-        for (const noteId of targets()) {
+        for (const noteId of writtenNoteIds) {
           await clearNoteSyncFailedIfResolved(db, noteId);
         }
       });
@@ -1319,9 +1320,9 @@ async function drainQueuePass(db: SQLiteDatabase): Promise<DrainResult> {
       // for a removeImage replay: it sends no body, so its note id is only
       // here (#1265). Recording a landing twice would skip a snapshot fetched
       // between the two.
-      if (entry.operation === 'removeImage') recordWriteLanded(targets());
+      if (entry.operation === 'removeImage') recordWriteLanded(writtenNoteIds);
 
-      for (const noteId of targets()) {
+      for (const noteId of writtenNoteIds) {
         // A trashed or deleted note has nothing left to pull; one this
         // response settled is already current.
         const gone = entry.operation === 'delete' || entry.operation === 'permanentDelete';
@@ -1337,7 +1338,7 @@ async function drainQueuePass(db: SQLiteDatabase): Promise<DrainResult> {
         // reconciled by the next server fetch / SSE event. Attempt counting is
         // reserved for failures *before* the request lands (issue #714).
         console.warn(`Queue entry id=${entry.id} landed server-side; post-response reconciliation failed:`, err);
-        if (entry.operation === 'removeImage') recordWriteLanded(targets());
+        if (entry.operation === 'removeImage') recordWriteLanded(writtenNoteIds);
         // The landing transaction rolled back, rebase and create bookkeeping
         // included: the edits queued at this write's base would otherwise replay
         // against a version its own landing has left, and a create would stay
@@ -1346,7 +1347,7 @@ async function drainQueuePass(db: SQLiteDatabase): Promise<DrainResult> {
         await withSerializedTransaction(db, async () => {
           await removeLandedEntry();
           if (entry.operation === 'create' || entry.operation === 'duplicate') {
-            for (const noteId of targets()) await clearNotePendingCreate(db, noteId);
+            for (const noteId of writtenNoteIds) await clearNotePendingCreate(db, noteId);
           }
         });
         if (uploadNoteId !== undefined) {
@@ -1354,7 +1355,7 @@ async function drainQueuePass(db: SQLiteDatabase): Promise<DrainResult> {
           if (upload) deleteFileIfExists(upload.local_path);
         }
         if (entry.operation !== 'delete' && entry.operation !== 'permanentDelete') {
-          for (const noteId of targets()) pullNoteIds.add(noteId);
+          for (const noteId of writtenNoteIds) pullNoteIds.add(noteId);
         }
         continue;
       }
@@ -1457,12 +1458,12 @@ async function drainQueuePass(db: SQLiteDatabase): Promise<DrainResult> {
             `Dropping queued operation id=${entry.id} ${entry.operation} ${endpoint} (HTTP ${status}): taking the server's state`,
           );
           // Nothing landed, so the snapshot gate has nothing to record.
-          for (const noteId of targets()) pullNoteIds.add(noteId);
+          for (const noteId of writtenNoteIds) pullNoteIds.add(noteId);
         } else if (!idempotentConflict) {
           // The edit is lost server-side (the failed-changes banner surfaces it),
           // so this one is worth a warning.
           console.warn(`Discarding queued operation id=${entry.id} ${entry.operation} ${endpoint} (HTTP ${status})`);
-          const noteIds = targets();
+          const noteIds = writtenNoteIds;
           // Only link dead_letter.note_id when there's a single clear note (per the
           // schema contract); a multi-note op like reorder stores NULL. The note(s)
           // are still each flagged failed below regardless.
@@ -1481,7 +1482,7 @@ async function drainQueuePass(db: SQLiteDatabase): Promise<DrainResult> {
         } else if (entry.operation === 'create' || entry.operation === 'duplicate') {
           // Replaying a create/duplicate whose original already committed: the
           // note exists on the server, so clear its pending-create marker (#475).
-          for (const noteId of targets()) {
+          for (const noteId of writtenNoteIds) {
             await clearNotePendingCreate(db, noteId);
           }
         }
@@ -1497,7 +1498,7 @@ async function drainQueuePass(db: SQLiteDatabase): Promise<DrainResult> {
           // about to go: a snapshot in flight may predate it (#1265). The API
           // client records only 2xx responses, so this one is ours to record.
           // A viewed ping changes no content (see recordWriteResponse).
-          if (entry.operation !== 'markViewed') recordWriteLanded(targets());
+          if (entry.operation !== 'markViewed') recordWriteLanded(writtenNoteIds);
         }
 
         await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
@@ -1555,7 +1556,7 @@ async function drainQueuePass(db: SQLiteDatabase): Promise<DrainResult> {
         console.warn(
           `Dead-lettering queued operation id=${entry.id} after ${processingErrors} processing errors: ${errorMessage}`,
         );
-        const noteIds = targets();
+        const noteIds = writtenNoteIds;
         discardedOperations.push({ operation: entry.operation, endpoint, status: PROCESSING_ERROR_STATUS });
         await recordDeadLetter(db, entry, endpoint, body, PROCESSING_ERROR_STATUS, noteIds.length === 1 ? noteIds[0]! : null, {
           attempts,
@@ -1572,7 +1573,9 @@ async function drainQueuePass(db: SQLiteDatabase): Promise<DrainResult> {
     }
   }
 
-  clearEntryInFlight(db);
+  // Merges into the last row are open again. A pass that throws leaves its
+  // row recorded until the next claim, which only means an append instead.
+  sendingEntryByDb.delete(db);
 
   if (pullNoteIds.size > 0 && !stoppedOnConnectivity) {
     await pullTouchedNotes(db, pullNoteIds);

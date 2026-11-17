@@ -310,7 +310,7 @@ describe('note reorders', () => {
     const [op, ...rest] = await queuedOps(db);
     expect(rest).toEqual([]);
     expect(op!.body).toEqual({ note_ids: [OTHER_ID, NOTE_ID, 'Third000000000000000000'] });
-    expect(op!.keys).toEqual([`note:${OTHER_ID}`, `note:${NOTE_ID}`, 'note:Third000000000000000000']);
+    expect([...op!.keys].sort()).toEqual([`note:${NOTE_ID}`, `note:${OTHER_ID}`, 'note:Third000000000000000000']);
   });
 
   it('does not replace a reorder with one that leaves out a note it moved', async () => {
