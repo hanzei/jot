@@ -70,7 +70,9 @@ export function useTopBanners(): TopBannersState {
   if (!isConnected) status = 'offline';
   else if (revalidationFailed) status = 'revalidation';
   else if (sseReconnecting && !isLocalMode) status = 'sseReconnect';
-  else if (syncError) status = 'syncError';
+  // Local mode never drains: a failure run left in the queue by an interrupted
+  // upgrade is not retrying, whatever the banner would say (#1301).
+  else if (syncError && !isLocalMode) status = 'syncError';
 
   const shown: TopBannerSlot[] = [];
   if (status !== null) shown.push('status');

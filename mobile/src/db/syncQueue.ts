@@ -1185,9 +1185,9 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
   // Set when the drain stops on a connectivity failure: the post-drain pull
   // would only time out against the same unreachable server.
   let stoppedOnConnectivity = false;
-  // Failed sends since the last one that got through (#1301).
+  // Failed sends since the last one that got through (#1301): the pass stops
+  // once it reaches MAX_CONSECUTIVE_SEND_FAILURES.
   let consecutiveSendFailures = 0;
-  let stoppedOnFailures = false;
   let nextAttemptAt: number | null = null;
   const noteWait = (at: number): void => {
     nextAttemptAt = nextAttemptAt === null ? at : Math.min(nextAttemptAt, at);
@@ -1195,6 +1195,7 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
   let syncedSettings = false;
 
   for (const entryId of entryIds) {
+    if (consecutiveSendFailures >= MAX_CONSECUTIVE_SEND_FAILURES) break;
     settledThisEntry = new Set<string>();
     // Sent as it is now, and closed to merges until the next entry (spec §8.5).
     // A row gone since the load (an upload moved or dismissed) is skipped.
@@ -1651,7 +1652,6 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
         const httpFailure = axios.isAxiosError(err);
         // A failed send counts toward stopping the pass; a local error sent nothing.
         if (httpFailure) consecutiveSendFailures += 1;
-        const stopPass = consecutiveSendFailures >= MAX_CONSECUTIVE_SEND_FAILURES;
 
         if (attempts >= MAX_ENTRY_DRAIN_ATTEMPTS && BEST_EFFORT_OPERATIONS.has(entry.operation)) {
           // Best-effort (see the permanent-failure branch above): the next
@@ -1661,10 +1661,6 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
             `Dropping queued operation id=${entry.id} ${entry.operation} ${endpoint} after ${attempts} failed attempts`,
           );
           await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
-          if (stopPass) {
-            stoppedOnFailures = true;
-            break;
-          }
           continue;
         }
 
@@ -1683,10 +1679,6 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
           );
           for (const key of keys) blockedKeys.add(key);
           noteWait(charged.nextAttemptAt);
-          if (stopPass) {
-            stoppedOnFailures = true;
-            break;
-          }
           continue;
         }
 
@@ -1722,13 +1714,10 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
           }
           await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
         }
-        if (stopPass) {
-          stoppedOnFailures = true;
-          break;
-        }
       }
     }
   }
+  const stoppedOnFailures = consecutiveSendFailures >= MAX_CONSECUTIVE_SEND_FAILURES;
 
   // Merges into the last row are open again. A pass that throws leaves its
   // row recorded until the next claim, which only means an append instead.

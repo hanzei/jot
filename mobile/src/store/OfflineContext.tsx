@@ -336,8 +336,6 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       // Re-read settings after a settings drain once only image uploads (if
       // any) remain queued: earlier revalidation fetched pre-PATCH values, and
       // an upload backlog has nothing to do with settings.
-      // `leftBehind` excludes rows queued during the pass (#1284), so new work
-      // is not counted as a stall.
       if (syncedSettings && await getPendingCount(db, { excludeUploads: true }) === 0) {
         await revalidateSession().catch(() => {});
       }

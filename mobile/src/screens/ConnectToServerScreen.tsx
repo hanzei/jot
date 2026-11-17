@@ -34,7 +34,7 @@ import {
 } from '../store/upgradeToServer';
 import type { PreflightFailReason, UpgradeSession } from '../store/upgradeToServer';
 import { getLocalIdentity } from '../store/localMode';
-import { getDeadLetterCount } from '../db/syncQueue';
+import { getDeadLetterCount, GIVE_UP_AFTER_ATTEMPTS } from '../db/syncQueue';
 import { useAuth } from '../store/AuthContext';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { retrySync } from '../utils/retryWithBackoff';
@@ -48,7 +48,7 @@ const DRAIN_BACKOFF_MAX_MS = 60000;
  * so a seeded write the server keeps failing is dead-lettered and reaches the
  * deadLetter step rather than a generic failure (#1301).
  */
-const MAX_DRAIN_RETRIES = 6;
+const MAX_DRAIN_RETRIES = GIVE_UP_AFTER_ATTEMPTS + 1;
 
 type Step =
   | { name: 'serverUrl' }
