@@ -1922,9 +1922,9 @@ export interface ServerResponseOptions {
  * - **Another op queued for the note:** the response predates that edit, so
  *   take no content. Take the version only with `ownVersion`, so a chain of
  *   queued edits replays against the versions its own writes produced (#489):
- *   an exception to §8.3 that merging at enqueue (§8.5) does not retire, see
- *   spec §8.8. A version that may carry a collaborator's edit is never adopted
- *   without its content.
+ *   it holds nothing but this device's write, which the row already has
+ *   (spec §8.1). A version that may carry a collaborator's edit is never
+ *   adopted without its content.
  * - **Otherwise:** save it whole, which also brings in any collaborator edit
  *   made while the note was protected from snapshots.
  *

@@ -83,94 +83,63 @@ review the values yourself.
 ## Connectivity & Offline Handling
 
 The app is **local-first**: the SQLite DB plus sync queue is the UI's source of
-truth, and the network is a background reconciler. Rationale and code map:
-`docs/specs/mobile-connectivity-handling.md`. The rules:
+truth, and the network is a background reconciler. The rules below are
+outcomes; `docs/specs/mobile-connectivity-handling.md` gives the reason for
+each. Meet them any way that works. If one seems to need another special case,
+or code meets a rule's purpose but not its wording, raise it as a design
+question instead of patching around it or rewriting working code to the
+wording.
 
-- **Three connectivity states** — device offline (NetInfo `isConnected` only,
-  never `isInternetReachable`, #1266), server
-  unreachable while online (`isServerReachable()`), and slow/flaky. Device
-  online ≠ server usable.
-- **Only a response that echoes our `X-Request-Id` is the server's** (spec
-  §3.2): a captive portal answers plain HTTP with a `200`. The `api` instance
-  checks it for you; a request that bypasses it (SSE, a probe on its own axios
-  call) must use `src/api/jotResponse.ts` itself.
-- **Writes go through the outbox** (spec §4.1). A write hook calls
-  `enqueueWrite`: the local edit and its queue row commit in one transaction,
-  and the hook returns without touching the network. The drain is the only
-  sender. A permanent rejection arrives later, never as an error from the
-  action: content, label and settings changes become failed changes, the rest
-  are undone silently from server state (spec §8.4,
-  `SERVER_STATE_ON_REJECTION_OPERATIONS`). Validate locally what you can before
-  queueing. Settings go through `enqueueSettingsUpdate`. No write hook reads
-  `isOnlineWriteAllowed()`; it gates one-shot actions and note-image uploads,
-  which still go online first and fall back to the sync queue (spec §4.4).
-- **Reads serve the local cache immediately** and refresh in the background with
-  bounded, backed-off retries (`retrySync`) that respect `isServerReachable()`.
-- **Auth and one-shot ops** (login, logout, PAT) may hit the network on the
-  critical path, but only with a finite timeout and a visible pending state.
-  Be optimistic where the local outcome is authoritative (logout clears locally,
-  POSTs in the background).
-- **Timeouts are finite and tiered; never `timeout: 0`.** Queue replays use
-  `QUEUED_WRITE_TIMEOUT_MS`, the only timeout a write has; uploads
-  `NOTE_IMAGE_UPLOAD_TIMEOUT_MS`; reads/auth/one-shot `DEFAULT_REQUEST_TIMEOUT_MS`.
-- **Feedback is ambient** (banners, failed-note badge), not spinners or dialogs
-  per action; a write never shows a pending state. Distinguish transient
-  (queued) from permanent failures.
+- **Device online ≠ server usable.** Offline is NetInfo `isConnected` only,
+  never `isInternetReachable` (a LAN server answers without internet). Whether
+  the server answers is `isServerReachable()`.
+- **Only a response that echoes our `X-Request-Id` is the server's**: a captive
+  portal answers plain HTTP with a `200`. The `api` instance checks it; a
+  request that bypasses it (SSE, a standalone probe) uses
+  `src/api/jotResponse.ts`.
+- **Writes never touch the network.** A write hook calls `enqueueWrite`: the
+  local edit and its queue row commit in one transaction, and the hook returns.
+  Only the drain sends. A permanent rejection arrives later as a failed change
+  or a silent undo (spec §8.4), so check locally what you can before queueing.
+- **Reads serve SQLite at once** and refresh in the background with bounded,
+  backed-off retries that stop while the server does not answer.
+- **One-shot actions** (login, PATs, public links, export) may use the network
+  while the user waits, with a finite timeout, a visible pending state and a
+  clear error. Logout is local-first: it clears at once and POSTs in the
+  background.
+- **Never `timeout: 0`.** Every request has a finite timeout.
+- **Feedback is ambient** (banners, failed-note badge). A write never shows a
+  pending state.
 - **Recovery:** nothing that stops while the reachability flag is `false` may
-  be what re-arms it, and a flip back resumes a parked drain (spec §3.1). On SSE
-  reopen also publish the catch-up resync
-  (`src/store/resyncEvents.ts`) — a bare foreground does not flip `isConnected`,
-  so the `isConnected`-keyed refresh alone misses events.
+  be what turns it back on (spec §3.1). The SSE stream has no backfill, so
+  every reconnect of it publishes the catch-up resync
+  (`src/store/resyncEvents.ts`).
 
 ## Local Data Consistency
 
-What the device may believe after a sync (spec §8). These are the target; spec
-§8.8 lists the rules the code does not follow yet, each with its issue.
+What the device may believe after a sync (spec §8).
 
-- **`version` and content move together.** Never store a server version without
-  the content it belongs to, or the reverse.
-- **Writes to one note stay in order.** The drain is the only sender and sends
-  them FIFO per key.
-- **An op that supersedes a queued one is merged into its row** at enqueue
-  (spec §8.5, `src/db/queueMerge.ts`): only into the last op sharing a key,
-  never into the row the drain is sending, never content and per-user fields
-  together. The drain re-reads each row when it reaches it
-  (`claimQueueEntry`); never send a row from the pass's initial load.
-- **A write commits its local edit and its queue row in one transaction**
-  (`enqueueWrite`), and the drain applies the response and deletes the row in
-  one transaction.
-- **A queued content edit or conversion stores the `base_version` its editor
-  showed.** When the drain lands one as this device's own version, it rebases
-  the edits queued at the same base in that transaction (`rebaseQueuedEdits`);
-  an edit enqueued later resolves its base through `src/db/ownVersions.ts`.
-- **A protected note** (queued op or an unresolved failed change) takes no
-  server content, from a snapshot or from the response to another write. Check
-  and write in one transaction.
-- **Never apply a snapshot older than this device's own write to the note.**
-  Take a `snapshotMark()` before fetching and pass it to the `saveServerNote*`
-  writer (`src/db/snapshotGate.ts`); never compare `updated_at`, which mixes
-  device and server clocks.
-- **After a write lands,** apply the response in full only when nothing else is
-  queued for the note and it has no unresolved failed change; otherwise take
-  neither content nor version.
+- **A row's `version` never includes a change the row does not have**, and a
+  device never gets a conflict against its own landed edit.
+- **An edit and its queue row commit in one transaction**, and the drain applies
+  a response and deletes its row in one transaction.
+- **A protected note** (a queued op, or an unresolved failed change) takes no
+  server content, from a snapshot or from another write's response. Check and
+  write in one transaction.
+- **Never apply a snapshot older than this device's own write to the note**:
+  take a `snapshotMark()` before fetching and pass it to the `saveServerNote*`
+  writer. Never compare `updated_at`, which mixes device and server clocks.
 - **Local data belongs to one account.** A deliberate logout wipes it, after a
   warning when changes are unsynced; a 401 keeps it.
 
 ## Sync Loop Safety
 
 - Exponential backoff on every retry (start ≥ 1 s, cap 60 s); never a tight loop.
-- The drain is **FIFO per key**, not strict FIFO (spec §7): an op that fails
-  transiently holds back only the later ops that share a key with it
-  (`sync_queue_keys`), stays queued, and waits its own backoff before it is
-  resent (`next_attempt_at`); one failing write never holds back unrelated ones.
-- A write the server keeps failing with 5xx reaches the failed-changes review
-  after a bounded time (`first_failed_at` a day old *and* several failures
-  minutes apart, `spaced_failures`, never either alone); never dead-letter one
-  sooner, or a short outage turns good edits into failed changes.
-- A broken server costs a bounded number of requests per pass: a pass stops
-  after a few failed sends in a row.
 - Skip a sync that starts while one is in progress rather than queueing it.
 - Cap consecutive connectivity failures, then surface an error.
+- A failing write holds back only the writes that touch the same note, label or
+  settings, and a short server outage never turns a good edit into a failed
+  change (spec §7).
 - Idempotent writes: `INSERT … ON CONFLICT(id) DO UPDATE`, **never
   `INSERT OR REPLACE`** — with `foreign_keys = ON`, REPLACE's delete fires
   `ON DELETE CASCADE` and silently wipes child rows (it once deleted queued image
