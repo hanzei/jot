@@ -38,6 +38,7 @@ import { notesWrittenSince, recordWriteLanded, snapshotMark, type SnapshotMark }
 import { recordOwnVersionStep, resolveOwnBaseVersion } from './ownVersions';
 import { uploadNoteImage } from '../api/images';
 import { deleteFileIfExists } from '../utils/fs';
+import { BACKOFF_BASE_MS, BACKOFF_MAX_MS, backoffDelayMs } from '../utils/backoff';
 import type { Label, NoteShare } from '@jot/shared';
 
 export type QueueOperation =
@@ -104,8 +105,8 @@ export const MAX_ENTRY_DRAIN_ATTEMPTS = 5;
  * doubles with each further failure, up to {@link RETRY_WAIT_MAX_MS} (#1301,
  * Sync Loop Safety). A pass skips an entry still waiting.
  */
-export const RETRY_WAIT_BASE_MS = 1000;
-export const RETRY_WAIT_MAX_MS = 60000;
+export const RETRY_WAIT_BASE_MS = BACKOFF_BASE_MS;
+export const RETRY_WAIT_MAX_MS = BACKOFF_MAX_MS;
 
 /**
  * A pass stops after this many failed sends in a row with no success between
@@ -126,9 +127,7 @@ export const GIVE_UP_AFTER_ATTEMPTS = 5;
 export const GIVE_UP_AFTER_MS = 24 * 60 * 60 * 1000;
 
 /** How long an entry waits after its `attempts`-th failure (#1301). */
-export function retryWaitMs(attempts: number): number {
-  return Math.min(RETRY_WAIT_BASE_MS * 2 ** Math.max(attempts - 1, 0), RETRY_WAIT_MAX_MS);
-}
+export const retryWaitMs: (attempts: number) => number = backoffDelayMs;
 
 /** dead_letter.status sentinel for a non-HTTP local processing error (issue #714). */
 export const PROCESSING_ERROR_STATUS = 0;
@@ -1224,6 +1223,15 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
     };
     const uploadNoteId = entry.operation === 'uploadImage' ? writtenNoteIds[0] : undefined;
     try {
+      // Still waiting after an earlier failure (#1301): not sent, not charged,
+      // and the ops that depend on it keep waiting behind it.
+      const waitUntil = entry.next_attempt_at ?? 0;
+      if (!options.upgrade && waitUntil > Date.now()) {
+        for (const key of keys) blockedKeys.add(key);
+        noteWait(waitUntil);
+        continue;
+      }
+
       if (entry.operation === 'uploadImage') {
         // Wait while the note is not confirmed on the server (pending or
         // failed create), or the upload would 404 and be lost (#834). The
@@ -1257,15 +1265,6 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
       // and so does every later op that depends on this one.
       if (keys.some((key) => blockedKeys.has(key))) {
         for (const key of keys) blockedKeys.add(key);
-        continue;
-      }
-
-      // Still waiting after an earlier failure (#1301): not sent, not charged,
-      // and the ops that depend on it keep waiting behind it.
-      const waitUntil = entry.next_attempt_at ?? null;
-      if (!options.upgrade && waitUntil !== null && waitUntil > Date.now()) {
-        for (const key of keys) blockedKeys.add(key);
-        noteWait(waitUntil);
         continue;
       }
 
@@ -1462,7 +1461,6 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
         // reconciled by the next server fetch / SSE event. Attempt counting is
         // reserved for failures *before* the request lands (issue #714).
         console.warn(`Queue entry id=${entry.id} landed server-side; post-response reconciliation failed:`, err);
-        consecutiveSendFailures = 0;
         if (entry.operation === 'removeImage') recordWriteLanded(writtenNoteIds);
         // The landing transaction rolled back, rebase and create bookkeeping
         // included: the edits queued at this write's base would otherwise replay
@@ -1647,8 +1645,8 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
         // gateway status or a client timeout only when the server answered the
         // probe), or a non-HTTP error thrown while processing this entry.
         const now = Date.now();
-        const charged = await chargeEntryFailure(db, entry, err, now);
-        const { attempts, processingErrors, capped } = charged;
+        const { attempts, processingErrors, capped, nextAttemptAt: retryAt, firstFailedAt } =
+          await chargeEntryFailure(db, entry, err, now);
         const httpFailure = axios.isAxiosError(err);
         // A failed send counts toward stopping the pass; a local error sent nothing.
         if (httpFailure) consecutiveSendFailures += 1;
@@ -1668,7 +1666,7 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
         // rejected the op, but it is not going to take it either (#1301).
         const givenUp = httpFailure
           && attempts >= GIVE_UP_AFTER_ATTEMPTS
-          && (options.upgrade === true || now - charged.firstFailedAt >= GIVE_UP_AFTER_MS);
+          && (options.upgrade === true || now - firstFailedAt >= GIVE_UP_AFTER_MS);
 
         if (!capped && !givenUp) {
           // Not rejected by the server: stays queued, waits, and holds back its
@@ -1678,7 +1676,7 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
               + `holding back the ops that depend on it: ${errorSummary(err)}`,
           );
           for (const key of keys) blockedKeys.add(key);
-          noteWait(charged.nextAttemptAt);
+          noteWait(retryAt);
           continue;
         }
 
@@ -1686,13 +1684,11 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
         // PROCESSING_ERROR_STATUS (0); an HTTP failure given up on keeps its
         // status (0 for a client timeout). Either way with the endpoint/body
         // actually sent.
-        const deadStatus = capped
-          ? PROCESSING_ERROR_STATUS
-          : (httpFailure ? err.response?.status : undefined) ?? PROCESSING_ERROR_STATUS;
+        const deadStatus = httpFailure ? err.response?.status ?? PROCESSING_ERROR_STATUS : PROCESSING_ERROR_STATUS;
         const errorMessage = errorSummary(err);
         const why = capped
           ? `${processingErrors} processing errors`
-          : `failing for ${Math.round((now - charged.firstFailedAt) / 60000)} min over ${attempts} attempts`;
+          : `failing for ${Math.round((now - firstFailedAt) / 60000)} min over ${attempts} attempts`;
         discardedOperations.push({ operation: entry.operation, endpoint, status: deadStatus });
         if (uploadNoteId !== undefined) {
           console.warn(`Flagging image upload id=${entry.id} as failed after ${why}: ${errorMessage}`);

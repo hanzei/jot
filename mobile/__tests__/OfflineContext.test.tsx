@@ -720,6 +720,17 @@ describe('OfflineProvider queue draining', () => {
       expect(lastSyncError).toBe(false);
     });
 
+    it('shows no sync-error banner in local mode for a failure run left in the queue', async () => {
+      setLocalModeActive(true);
+      mockOldestFailingSince.mockResolvedValue(Date.now() - 60 * 60 * 1000);
+
+      await renderProvider();
+      await flush();
+
+      expect(mockOldestFailingSince).not.toHaveBeenCalled();
+      expect(lastSyncError).toBe(false);
+    });
+
     it('backs off whole passes that stop on failed sends, without a cap', async () => {
       mockDrainQueue.mockImplementation(async () =>
         drainResult({ leftBehind: 10, stoppedOnFailures: true, nextAttemptAt: Date.now() + 1000 }));

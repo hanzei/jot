@@ -93,11 +93,6 @@ describe('useTopBanners', () => {
     expect((await banners()).status).toBeNull();
   });
 
-  it('reports no stalled sync in local mode', async () => {
-    setup({ syncError: true, isLocalMode: true });
-    expect((await banners()).status).toBeNull();
-  });
-
   it('reports a stalled sync', async () => {
     setup({ syncError: true });
     expect((await banners()).status).toBe('syncError');

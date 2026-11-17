@@ -26,6 +26,7 @@ import { getPendingCreateNoteIds, getFailedNoteIds } from '../db/noteQueries';
 import { isClosedDatabaseError } from '../db/errors';
 import { useAuth } from './AuthContext';
 import { isLocalModeActive } from './localMode';
+import { backoffDelayMs } from '../utils/backoff';
 import { isSyncDrainPaused } from './serverSwitchLifecycle';
 import { labelsQueryKey, noteLocalQueryKey, noteLocalQueryScopeKey, notesLocalQueryScopeKey, pendingImageUploadsQueryScopeKey } from '../hooks/queryKeys';
 
@@ -90,20 +91,13 @@ const OfflineContext = createContext<OfflineContextValue>({
 
 // Sync-loop safety knobs (see mobile/CLAUDE.md → "Sync Loop Safety").
 /**
- * Base delay before the first backoff retry after a drain stopped on
- * connectivity, or on too many failed sends in a row (#1301).
- */
-const DRAIN_BACKOFF_BASE_MS = 1000;
-/** Upper bound on the exponential backoff between drain retries. */
-const DRAIN_BACKOFF_MAX_MS = 60000;
-/**
  * Consecutive drains stopped on connectivity tolerated before we stop
  * auto-retrying and surface an error. A write that fails over HTTP is paced by
  * its own wait instead and does not count (#1301).
  */
 const MAX_CONSECUTIVE_DRAIN_FAILURES = 6;
 /** How long a queued write may keep failing before the sync-error banner shows (#1301). */
-export const SYNC_ERROR_AFTER_FAILING_MS = 5 * 60 * 1000;
+const SYNC_ERROR_AFTER_FAILING_MS = 5 * 60 * 1000;
 /**
  * Debounce applied to drains triggered by a fresh enqueue, to coalesce bursts
  * of writes. Kept short: every converted write reaches the server only through
@@ -111,17 +105,6 @@ export const SYNC_ERROR_AFTER_FAILING_MS = 5 * 60 * 1000;
  */
 const ENQUEUE_DRAIN_DEBOUNCE_MS = 300;
 
-/** Exponential backoff for the `count`-th consecutive stopped drain. */
-function drainBackoffMs(count: number): number {
-  return Math.min(DRAIN_BACKOFF_BASE_MS * 2 ** (count - 1), DRAIN_BACKOFF_MAX_MS);
-}
-
-/**
- * Why a drain timer is pending. A `wait` timer only waits for the earliest
- * failed write to come due (#1301), so a new write may bring it forward; a
- * `backoff` timer protects a server that is failing, so it may not.
- */
-type DrainTimerKind = 'debounce' | 'wait' | 'backoff';
 
 /** True when two string sets hold exactly the same ids (order-independent). */
 function sameStringSet(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
@@ -184,8 +167,10 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   }, [db]);
 
   // Re-read whether a queued write has been failing for too long (#1301).
+  // Local mode never drains, so a failure run an interrupted upgrade left in
+  // the queue is not retrying and does not count.
   const refreshWriteFailing = useCallback(() => {
-    getOldestFailingSince(db).then((since) => {
+    (isLocalModeActive() ? Promise.resolve(null) : getOldestFailingSince(db)).then((since) => {
       setWriteFailing(since !== null && Date.now() - since > SYNC_ERROR_AFTER_FAILING_MS);
     }).catch(() => {});
   }, [db]);
@@ -204,8 +189,10 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const isDrainingRef = useRef(false);
   // Timer handle for a scheduled (debounced, waiting or backoff) drain.
   const drainTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // What the pending timer is for, and when it fires.
-  const drainTimerKindRef = useRef<DrainTimerKind>('debounce');
+  // Whether the pending timer only waits for the earliest failed write to come
+  // due (#1301), so a new write may bring it forward; a debounce or backoff
+  // timer may not be cut short. And when it fires.
+  const drainTimerIsWaitRef = useRef(false);
   const drainTimerDueRef = useRef(0);
   // Count of consecutive drains stopped on connectivity (or that threw), used
   // to grow the backoff and to cap retries. Reset to 0 on every drain that
@@ -238,10 +225,10 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const scheduleDrain = useCallback((delayMs: number, kind: DrainTimerKind = 'debounce') => {
+  const scheduleDrain = useCallback((delayMs: number, isWait = false) => {
     clearDrainTimer();
     drainParkedRef.current = false;
-    drainTimerKindRef.current = kind;
+    drainTimerIsWaitRef.current = isWait;
     drainTimerDueRef.current = Date.now() + delayMs;
     drainTimerRef.current = setTimeout(() => {
       drainTimerRef.current = null;
@@ -272,7 +259,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     console.info(
       `Queue drain stalled (attempt ${failureCountRef.current}/${MAX_CONSECUTIVE_DRAIN_FAILURES}); retrying with backoff.`,
     );
-    scheduleDrain(drainBackoffMs(failureCountRef.current), 'backoff');
+    scheduleDrain(backoffDelayMs(failureCountRef.current));
   }, [clearDrainTimer, scheduleDrain]);
 
   // `fromReconnect` marks handleReconnect's own drain; any other drain waits
@@ -328,7 +315,10 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       // refresh the failed-note badges and review-banner count (#492/#493).
       refreshSyncFailures();
       // A write may have started failing, or got through after failing (#1301).
-      refreshWriteFailing();
+      // With nothing left behind, no row this pass loaded is still failing,
+      // and rows queued since were never sent.
+      if (leftBehind === 0) setWriteFailing(false);
+      else refreshWriteFailing();
 
       // Refresh the gallery's queued and failed upload tiles.
       queryClient.invalidateQueries({ queryKey: pendingImageUploadsQueryScopeKey() });
@@ -363,10 +353,10 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
         if (stoppedOnFailures) {
           stalled = true;
           failureStopCountRef.current += 1;
-          scheduleDrain(Math.max(drainBackoffMs(failureStopCountRef.current), untilDue ?? 0), 'backoff');
+          scheduleDrain(Math.max(backoffDelayMs(failureStopCountRef.current), untilDue ?? 0));
         } else {
           failureStopCountRef.current = 0;
-          if (untilDue !== null) scheduleDrain(untilDue, 'wait');
+          if (untilDue !== null) scheduleDrain(untilDue, true);
           else clearDrainTimer();
         }
         if (leftBehind === 0) setLastSyncedAt(new Date().toISOString());
@@ -542,7 +532,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       // write is not held back by it, and the failed one is skipped until due
       // (#1301).
       if (drainTimerRef.current !== null && (
-        drainTimerKindRef.current !== 'wait'
+        !drainTimerIsWaitRef.current
         || drainTimerDueRef.current - Date.now() <= ENQUEUE_DRAIN_DEBOUNCE_MS)) return;
       scheduleDrain(ENQUEUE_DRAIN_DEBOUNCE_MS);
     });
