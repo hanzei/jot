@@ -7,7 +7,7 @@
  */
 
 import { generateClientNoteId, isUnsyncedNoteId, markNoteSyncFailed, removeLocalNotesNotIn, getLocalLabelCounts, saveNote, saveNoteInTx, addLabelToLocalNote, removeLabelFromLocalNote, getLocalNotes, upsertLabel, getStoredLabels } from '../src/db/noteQueries';
-import { clearQueuedWriteWaits, drainQueue, getOldestFailingSince, getSyncQueueStats, isTransientHttpStatus, getDeadLetteredOperations, GIVE_UP_AFTER_ATTEMPTS, GIVE_UP_AFTER_MS, MAX_CONSECUTIVE_SEND_FAILURES, MAX_ENTRY_DRAIN_ATTEMPTS, PROCESSING_ERROR_STATUS, QUEUED_WRITE_TIMEOUT_MS, RETRY_WAIT_BASE_MS, RETRY_WAIT_MAX_MS, retryWaitMs } from '../src/db/syncQueue';
+import { clearQueuedWriteWaits, drainQueue, getOldestFailingSince, getSyncQueueStats, isTransientHttpStatus, getDeadLetteredOperations, GIVE_UP_AFTER_ATTEMPTS, GIVE_UP_AFTER_MS, GIVE_UP_FAILURE_SPACING_MS, MAX_CONSECUTIVE_SEND_FAILURES, MAX_ENTRY_DRAIN_ATTEMPTS, PROCESSING_ERROR_STATUS, QUEUED_WRITE_TIMEOUT_MS, RETRY_WAIT_BASE_MS, RETRY_WAIT_MAX_MS, retryWaitMs } from '../src/db/syncQueue';
 import api from '../src/api/client';
 import { makeLabel, makeListNote, makeNoteItem, makeTextNote, remainingQueueIds, seedQueueEntry } from './helpers/fixtures';
 import type { NoteItem } from '@jot/shared';
@@ -760,6 +760,9 @@ describe('drainQueue', () => {
     const sentPatches = () => mockApi.patch.mock.calls.map(([url]) => url);
     const setFailureRun = (id: number, firstFailedAt: number, nextAttemptAt: number | null = null) =>
       db.runAsync('UPDATE sync_queue SET first_failed_at = ?, next_attempt_at = ? WHERE id = ?', [firstFailedAt, nextAttemptAt, id]);
+    // Failures already counted toward giving up, the last one `ago` ms back.
+    const setSpacedFailures = (id: number, count: number, ago: number) =>
+      db.runAsync('UPDATE sync_queue SET spaced_failures = ?, last_spaced_failure_at = ? WHERE id = ?', [count, START - ago, id]);
     const failA = ((url: string) =>
       url === '/notes/A' ? Promise.reject(makeAxiosError(500)) : Promise.resolve({ data: {} })) as never;
 
@@ -826,13 +829,14 @@ describe('drainQueue', () => {
       expect(result.stoppedOnFailures).toBe(false);
     });
 
-    it('keeps a failing op queued until it has failed for 24 h and at least 5 times, then dead-letters it', async () => {
+    it('keeps a failing op queued until it has failed for 24 h and 5 spaced times, then dead-letters it', async () => {
       await saveNote(db, makeTextNote({ id: 'A' }));
       const id = await update('A', { attempts: GIVE_UP_AFTER_ATTEMPTS - 2 });
       await setFailureRun(id, START - GIVE_UP_AFTER_MS - 1);
+      await setSpacedFailures(id, GIVE_UP_AFTER_ATTEMPTS - 2, GIVE_UP_FAILURE_SPACING_MS);
       mockApi.patch.mockImplementation(failA);
 
-      // Past 24 h but one attempt short.
+      // Past 24 h but one spaced failure short.
       await drainQueue(db);
       expect(await remainingQueueIds(db)).toEqual([id]);
       expect(await deadLetterRows()).toEqual([]);
@@ -849,15 +853,40 @@ describe('drainQueue', () => {
       expect(row?.sync_state).toBe('failed');
     });
 
-    it('keeps a failing op queued at 5 attempts until it has failed for 24 h', async () => {
+    it('keeps a failing op queued at 5 spaced failures until it has failed for 24 h', async () => {
       const id = await update('A', { attempts: GIVE_UP_AFTER_ATTEMPTS + 3 });
       await setFailureRun(id, START - GIVE_UP_AFTER_MS + 60_000);
+      await setSpacedFailures(id, GIVE_UP_AFTER_ATTEMPTS + 3, GIVE_UP_FAILURE_SPACING_MS);
       mockApi.patch.mockImplementation(failA);
 
       await drainQueue(db);
 
       expect(await remainingQueueIds(db)).toEqual([id]);
       expect(await deadLetterRows()).toEqual([]);
+    });
+
+    it('counts a burst of quick retries once, so a 24 h-old failure run takes minutes of failing to give up', async () => {
+      const id = await update('A', { attempts: 1 });
+      await setFailureRun(id, START - 3 * GIVE_UP_AFTER_MS);
+      await setSpacedFailures(id, 1, 3 * GIVE_UP_AFTER_MS);
+      mockApi.patch.mockImplementation(failA);
+
+      // Back after days: four quick retries within seconds count once.
+      for (let pass = 0; pass < GIVE_UP_AFTER_ATTEMPTS - 1; pass++) {
+        await drainQueue(db);
+        clock += retryWaitMs(pass + 2);
+      }
+      expect(await attemptsFor(id)).toBe(GIVE_UP_AFTER_ATTEMPTS);
+      expect(await db.getFirstAsync('SELECT spaced_failures FROM sync_queue WHERE id = ?', [id])).toEqual({ spaced_failures: 2 });
+      expect(await deadLetterRows()).toEqual([]);
+
+      // Three more, a minute apart, reach the count.
+      for (let pass = 0; pass < GIVE_UP_AFTER_ATTEMPTS - 2; pass++) {
+        clock += GIVE_UP_FAILURE_SPACING_MS;
+        await drainQueue(db);
+      }
+      expect(await remainingQueueIds(db)).toEqual([]);
+      expect(await deadLetterRows()).toMatchObject([{ endpoint: '/notes/A', status: 500 }]);
     });
 
     it('does not give up on an op that failed once and then sat unsent for over 24 h', async () => {

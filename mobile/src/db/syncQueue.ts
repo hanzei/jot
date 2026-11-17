@@ -87,6 +87,10 @@ interface QueueEntry {
   next_attempt_at?: number | null;
   /** Device-clock epoch ms of the first failure in the entry's current run of failures (#1301). */
   first_failed_at?: number | null;
+  /** HTTP failures in the run counted toward giving up, at least {@link GIVE_UP_FAILURE_SPACING_MS} apart (#1301). */
+  spaced_failures?: number;
+  /** Device-clock epoch ms of the last failure counted in `spaced_failures`. */
+  last_spaced_failure_at?: number | null;
 }
 
 /**
@@ -116,15 +120,20 @@ export const RETRY_WAIT_MAX_MS = BACKOFF_MAX_MS;
 export const MAX_CONSECUTIVE_SEND_FAILURES = 3;
 
 /**
- * An entry that keeps failing over HTTP is dead-lettered once it has failed at
- * least {@link GIVE_UP_AFTER_ATTEMPTS} times *and* for at least
- * {@link GIVE_UP_AFTER_MS} without a break (#1301). Time alone would give up on
+ * An entry that keeps failing over HTTP is dead-lettered once its failure run
+ * is at least {@link GIVE_UP_AFTER_MS} old *and* it has failed
+ * {@link GIVE_UP_AFTER_ATTEMPTS} times at least
+ * {@link GIVE_UP_FAILURE_SPACING_MS} apart (#1301). Time alone would give up on
  * a write that failed once before the app sat closed for days; attempts alone
- * would turn a short outage into failed changes (#1283). The local→server
- * upgrade, where the user waits on the screen, uses the attempts alone.
+ * would turn a short outage into failed changes (#1283). The spacing keeps the
+ * quick early retries (and the waits a foreground clears) from reaching the
+ * count in seconds: it takes minutes of failing. The local→server upgrade,
+ * where the user waits on the screen, counts every attempt and has no time
+ * condition.
  */
 export const GIVE_UP_AFTER_ATTEMPTS = 5;
 export const GIVE_UP_AFTER_MS = 24 * 60 * 60 * 1000;
+export const GIVE_UP_FAILURE_SPACING_MS = RETRY_WAIT_MAX_MS;
 
 /** How long an entry waits after its `attempts`-th failure (#1301). */
 export const retryWaitMs: (attempts: number) => number = backoffDelayMs;
@@ -604,24 +613,38 @@ async function claimQueueEntry(db: SQLiteDatabase, entryId: number): Promise<Cla
 /**
  * Charge an entry's failed drain attempt to its counters (issue #714), start
  * its wait before the next send and, on its first failure, its failure run
- * (#1301). `capped` says whether a non-HTTP processing error has reached
+ * (#1301). An HTTP failure at least {@link GIVE_UP_FAILURE_SPACING_MS} after
+ * the last one counted also counts toward giving up (`spacedFailures`).
+ * `capped` says whether a non-HTTP processing error has reached
  * {@link MAX_ENTRY_DRAIN_ATTEMPTS} on its own count; whether an HTTP failure is
- * given up on is the caller's call, from `attempts` and `firstFailedAt`.
+ * given up on is the caller's call.
  */
 async function chargeEntryFailure(
   db: SQLiteDatabase,
   entry: QueueEntry,
   err: unknown,
   now: number,
-): Promise<{ attempts: number; processingErrors: number; capped: boolean; nextAttemptAt: number; firstFailedAt: number }> {
+): Promise<{
+  attempts: number;
+  processingErrors: number;
+  capped: boolean;
+  nextAttemptAt: number;
+  firstFailedAt: number;
+  spacedFailures: number;
+}> {
   const attempts = (entry.attempts ?? 0) + 1;
   const processingError = !axios.isAxiosError(err);
   const processingErrors = (entry.processing_errors ?? 0) + (processingError ? 1 : 0);
   const nextAttemptAt = now + retryWaitMs(attempts);
   const firstFailedAt = entry.first_failed_at ?? now;
+  const lastSpaced = entry.last_spaced_failure_at ?? null;
+  const spaced = !processingError && (lastSpaced === null || now - lastSpaced >= GIVE_UP_FAILURE_SPACING_MS);
+  const spacedFailures = (entry.spaced_failures ?? 0) + (spaced ? 1 : 0);
   await db.runAsync(
-    'UPDATE sync_queue SET attempts = ?, processing_errors = ?, next_attempt_at = ?, first_failed_at = ? WHERE id = ?',
-    [attempts, processingErrors, nextAttemptAt, firstFailedAt, entry.id],
+    `UPDATE sync_queue SET attempts = ?, processing_errors = ?, next_attempt_at = ?, first_failed_at = ?,
+       spaced_failures = ?, last_spaced_failure_at = ?
+     WHERE id = ?`,
+    [attempts, processingErrors, nextAttemptAt, firstFailedAt, spacedFailures, spaced ? now : lastSpaced, entry.id],
   );
   return {
     attempts,
@@ -629,6 +652,7 @@ async function chargeEntryFailure(
     capped: processingError && processingErrors >= MAX_ENTRY_DRAIN_ATTEMPTS,
     nextAttemptAt,
     firstFailedAt,
+    spacedFailures,
   };
 }
 
@@ -1014,7 +1038,8 @@ export interface DrainOptions {
    * The local→server upgrade's drain (#1301): every entry is sent whatever its
    * wait, since the upgrade screen paces its own passes, and a write that keeps
    * failing over HTTP is given up on after {@link GIVE_UP_AFTER_ATTEMPTS}
-   * failures with no time condition, since the user is waiting on that screen.
+   * attempts, spaced or not, with no time condition, since the user is waiting
+   * on that screen.
    */
   upgrade?: boolean;
 }
@@ -1133,9 +1158,10 @@ async function recordDeadLetter(
  *     back its dependents the same way, and OfflineContext schedules the next
  *     pass for the earliest entry due ({@link DrainResult.nextAttemptAt}). A
  *     non-HTTP processing error is dead-lettered once it has recurred
- *     MAX_ENTRY_DRAIN_ATTEMPTS times; an HTTP failure only once it has gone on
- *     for {@link GIVE_UP_AFTER_MS} over at least {@link GIVE_UP_AFTER_ATTEMPTS}
- *     attempts, so an outage does not turn queued changes into failed ones.
+ *     MAX_ENTRY_DRAIN_ATTEMPTS times; an HTTP failure only once its failure
+ *     run is {@link GIVE_UP_AFTER_MS} old and it has failed
+ *     {@link GIVE_UP_AFTER_ATTEMPTS} times minutes apart, so an outage does not
+ *     turn queued changes into failed ones.
  *
  * A pass stops after {@link MAX_CONSECUTIVE_SEND_FAILURES} failed sends in a
  * row, so a server that fails every write costs a bounded number of requests
@@ -1645,7 +1671,7 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
         // gateway status or a client timeout only when the server answered the
         // probe), or a non-HTTP error thrown while processing this entry.
         const now = Date.now();
-        const { attempts, processingErrors, capped, nextAttemptAt: retryAt, firstFailedAt } =
+        const { attempts, processingErrors, capped, nextAttemptAt: retryAt, firstFailedAt, spacedFailures } =
           await chargeEntryFailure(db, entry, err, now);
         const httpFailure = axios.isAxiosError(err);
         // A failed send counts toward stopping the pass; a local error sent nothing.
@@ -1665,8 +1691,9 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
         // An HTTP failure that has gone on long enough: the server never
         // rejected the op, but it is not going to take it either (#1301).
         const givenUp = httpFailure
-          && attempts >= GIVE_UP_AFTER_ATTEMPTS
-          && (options.upgrade === true || now - firstFailedAt >= GIVE_UP_AFTER_MS);
+          && (options.upgrade === true
+            ? attempts >= GIVE_UP_AFTER_ATTEMPTS
+            : spacedFailures >= GIVE_UP_AFTER_ATTEMPTS && now - firstFailedAt >= GIVE_UP_AFTER_MS);
 
         if (!capped && !givenUp) {
           // Not rejected by the server: stays queued, waits, and holds back its

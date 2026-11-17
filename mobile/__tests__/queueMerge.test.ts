@@ -112,6 +112,19 @@ describe('content saves', () => {
     ]);
   });
 
+  it('starts the failure run over for a new edit merged into a failing row, keeping its wait (#1301)', async () => {
+    await enqueueAll(update({ content: 'A', base_version: 5 }));
+    await db.runAsync(
+      'UPDATE sync_queue SET attempts = 7, first_failed_at = 1000, next_attempt_at = 9000, spaced_failures = 4, last_spaced_failure_at = 5000',
+    );
+
+    await enqueueAll(update({ content: 'AB', base_version: 5 }));
+
+    expect(await rows()).toEqual([['update', { content: 'AB', base_version: 5 }]]);
+    expect(await db.getAllAsync('SELECT attempts, first_failed_at, spaced_failures, last_spaced_failure_at, next_attempt_at FROM sync_queue'))
+      .toEqual([{ attempts: 0, first_failed_at: null, spaced_failures: 0, last_spaced_failure_at: null, next_attempt_at: 9000 }]);
+  });
+
   it('keeps content and per-user fields in separate rows', async () => {
     await enqueueAll(
       update({ content: 'A', base_version: 5 }),

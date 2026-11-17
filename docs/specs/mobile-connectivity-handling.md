@@ -402,12 +402,18 @@ Rules of thumb:
     waiting, and the next pass sends the ops behind them.
   - **A write the server keeps failing reaches the failed-changes review after
     a bounded time** (#1301): an op is dead-lettered, with its last status,
-    once it has failed without a break for a day *and* a handful of times
-    (`sync_queue.first_failed_at`, on the device clock). Both are needed: time
-    alone would give up on an op that failed once before the app sat closed
-    for days; attempts alone would turn a short outage into failed changes
-    (#1283). The local→server upgrade uses the attempts alone, since the user
-    is waiting on its screen. While any write has been failing for more than a
+    once its first failure is a day old (`sync_queue.first_failed_at`, on the
+    device clock) *and* it has failed a handful of times at least a minute
+    apart (`spaced_failures`). Both are needed: time alone would give up on an
+    op that failed once before the app sat closed for days; attempts alone
+    would turn a short outage into failed changes (#1283). The spacing keeps
+    the quick early retries, and the waits a foreground clears, from reaching
+    the count in seconds: it takes minutes of failing. The run is not reset by
+    a pause in retries, since none run while the app is in the background, so
+    a write that is broken is given up on however the app is used. A new edit
+    merged into a failing row (§8.5) starts its run over. The local→server
+    upgrade counts every attempt with no time condition, since the user is
+    waiting on its screen. While any write has been failing for more than a
     few minutes, the `syncError` banner shows; its retries go on.
     Short of that, a permanent rejection (non-transient 4xx) dead-letters, and
     so does a non-HTTP processing error once it has recurred `MAX_ENTRY_DRAIN_ATTEMPTS`

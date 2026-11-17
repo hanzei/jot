@@ -34,6 +34,7 @@ import {
   subscribeToEnqueue,
   GIVE_UP_AFTER_ATTEMPTS,
   GIVE_UP_AFTER_MS,
+  GIVE_UP_FAILURE_SPACING_MS,
   MAX_ENTRY_DRAIN_ATTEMPTS,
 } from '../src/db/syncQueue';
 import { makeListNote, makeNoteItem, makeTextNote, seedImageUpload, seedQueueEntry } from './helpers/fixtures';
@@ -482,11 +483,14 @@ describe('draining queued uploads', () => {
     expect(result.discardedOperations).toEqual([{ operation: 'uploadImage', endpoint: '/notes/n1/images', status: 0 }]);
   });
 
-  it('flags an upload that has kept failing over HTTP for 24 h and 5 attempts as an error tile, not a failed change (#1301)', async () => {
+  it('flags an upload that has kept failing over HTTP for 24 h and 5 spaced attempts as an error tile, not a failed change (#1301)', async () => {
     await saveNote(db, makeTextNote({ id: 'n1' }));
     await seedUpload({ id: 'up-broken', note_id: 'n1', attempts: GIVE_UP_AFTER_ATTEMPTS - 1 });
     const now = Date.now();
-    await db.runAsync('UPDATE sync_queue SET first_failed_at = ?', [now - GIVE_UP_AFTER_MS - 1]);
+    await db.runAsync(
+      'UPDATE sync_queue SET first_failed_at = ?, spaced_failures = ?, last_spaced_failure_at = ?',
+      [now - GIVE_UP_AFTER_MS - 1, GIVE_UP_AFTER_ATTEMPTS - 1, now - GIVE_UP_FAILURE_SPACING_MS],
+    );
     mockUploadNoteImage.mockRejectedValueOnce(
       Object.assign(new Error('Server Error'), { isAxiosError: true, response: { status: 500 } }),
     );

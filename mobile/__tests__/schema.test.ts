@@ -599,8 +599,8 @@ describe('migrateDatabase', () => {
 
       await migrateDatabase(db);
 
-      expect(await db.getAllAsync('SELECT attempts, next_attempt_at, first_failed_at FROM sync_queue'))
-        .toEqual([{ attempts: 9, next_attempt_at: null, first_failed_at: null }]);
+      expect(await db.getAllAsync('SELECT attempts, next_attempt_at, first_failed_at, spaced_failures, last_spaced_failure_at FROM sync_queue'))
+        .toEqual([{ attempts: 9, next_attempt_at: null, first_failed_at: null, spaced_failures: 0, last_spaced_failure_at: null }]);
     });
   });
 

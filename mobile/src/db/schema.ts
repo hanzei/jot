@@ -72,7 +72,12 @@ const migration1 = async (db: SQLiteDatabase): Promise<void> => {
       next_attempt_at INTEGER,
       -- Device-clock epoch ms of the first failure in the entry's current run
       -- of failures: what the give-up rule and the sync-error banner read (#1301).
-      first_failed_at INTEGER
+      first_failed_at INTEGER,
+      -- HTTP failures in that run counted toward giving up: only one at least
+      -- GIVE_UP_FAILURE_SPACING_MS after the last one counted, at the time
+      -- below, so a burst of quick retries counts once (#1301).
+      spaced_failures INTEGER NOT NULL DEFAULT 0,
+      last_spaced_failure_at INTEGER
     );
 
     -- Dead-lettered sync operations: writes the server permanently rejected
@@ -531,6 +536,8 @@ const migration17 = async (db: SQLiteDatabase): Promise<void> => {
 const migration18 = async (db: SQLiteDatabase): Promise<void> => {
   await addColumnIfMissing(db, 'sync_queue', 'next_attempt_at', 'next_attempt_at INTEGER');
   await addColumnIfMissing(db, 'sync_queue', 'first_failed_at', 'first_failed_at INTEGER');
+  await addColumnIfMissing(db, 'sync_queue', 'spaced_failures', 'spaced_failures INTEGER NOT NULL DEFAULT 0');
+  await addColumnIfMissing(db, 'sync_queue', 'last_spaced_failure_at', 'last_spaced_failure_at INTEGER');
 };
 
 export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13, migration14, migration15, migration16, migration17, migration18];

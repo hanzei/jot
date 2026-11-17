@@ -164,9 +164,9 @@ What the device may believe after a sync (spec §8). These are the target; spec
   (`sync_queue_keys`), stays queued, and waits its own backoff before it is
   resent (`next_attempt_at`); one failing write never holds back unrelated ones.
 - A write the server keeps failing with 5xx reaches the failed-changes review
-  after a bounded time (`first_failed_at`: both a long failure run and several
-  attempts, never either alone); never dead-letter one sooner, or a short
-  outage turns good edits into failed changes.
+  after a bounded time (`first_failed_at` a day old *and* several failures
+  minutes apart, `spaced_failures`, never either alone); never dead-letter one
+  sooner, or a short outage turns good edits into failed changes.
 - A broken server costs a bounded number of requests per pass: a pass stops
   after a few failed sends in a row.
 - Skip a sync that starts while one is in progress rather than queueing it.

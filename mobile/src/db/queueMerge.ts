@@ -146,8 +146,20 @@ export async function mergeQueuedOp(
   return true;
 }
 
+/**
+ * Write a merged body into a queued row. The row now carries a new edit, so
+ * the failures of the old payload are not held against it: its attempt count
+ * and failure run start over, and it is given up on only once the new payload
+ * has failed long enough on its own (#1301). Its wait stays, so editing a
+ * note whose write keeps failing does not resend it on every save.
+ */
 async function rewriteBody(db: SQLiteDatabase, entryId: number, body: Record<string, unknown>): Promise<void> {
-  await db.runAsync('UPDATE sync_queue SET body = ? WHERE id = ?', [JSON.stringify(body), entryId]);
+  await db.runAsync(
+    `UPDATE sync_queue SET body = ?, attempts = 0, first_failed_at = NULL,
+       spaced_failures = 0, last_spaced_failure_at = NULL
+     WHERE id = ?`,
+    [JSON.stringify(body), entryId],
+  );
 }
 
 /** The fields of an `update` a create can take, whichever its note type. */
