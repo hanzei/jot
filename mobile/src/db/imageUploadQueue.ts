@@ -13,11 +13,9 @@ import { keyIdExpression, keyKindCondition, noteKey, parseJsonObject } from './q
 import { withSerializedTransaction } from './transaction';
 import { copyFile, deleteFileIfExists, documentPath, ensureDirExists } from '../utils/fs';
 
-// An offline image upload is a `sync_queue` row, operation `uploadImage` with
-// key `note:<id>`, so it lands behind its note's create and is protected like
-// any other queued change (#1288). The drain sends it (syncQueue.ts).
-// `pending_image_uploads` holds only the uploads the server rejected, which
-// wait for Retry or Dismiss on their gallery tile.
+// Queued uploads are `uploadImage` rows in `sync_queue`, keyed `note:<id>`
+// (#1288). `pending_image_uploads` holds only rejected ones awaiting Retry or
+// Dismiss.
 
 const PENDING_UPLOADS_DIR = documentPath('pending-image-uploads');
 
@@ -144,10 +142,7 @@ export const EMPTY_IMAGE_UPLOAD_QUEUE_STATS: ImageUploadQueueStats = {
   maxAttempts: 0,
 };
 
-/**
- * Summarize the image uploads for the Diagnostics screen, so "my image never
- * appeared" can be told apart as still queued, stuck retrying, or failed.
- */
+/** Image-upload stats for the Diagnostics screen. */
 export async function getImageUploadQueueStats(db: SQLiteDatabase): Promise<ImageUploadQueueStats> {
   const [queued, errored, oldest] = await Promise.all([
     db.getFirstAsync<{ count: number; max_attempts: number | null }>(
@@ -167,12 +162,9 @@ export async function getImageUploadQueueStats(db: SQLiteDatabase): Promise<Imag
 }
 
 /**
- * Move queued and failed uploads from one note to another. Used when "Keep my
- * version" forks a dead-lettered create's content into a brand-new note
- * (`useSyncFailures.ts`): the original note is about to be deleted, and its
- * uploads with it, silently dropping a photo the user just explicitly chose to
- * keep. Queued uploads are queued again, behind the fork's create, which their
- * key would otherwise put them ahead of. No-op if there are none.
+ * Move a note's uploads to another note, for "Keep my version" forking a
+ * dead-lettered create (`useSyncFailures.ts`). Queued ones are re-queued so
+ * they land behind the fork's create.
  */
 export async function reassignPendingImageUploads(
   db: SQLiteDatabase,

@@ -464,7 +464,7 @@ export async function enqueueWrite<T>(db: SQLiteDatabase, write: OutboxWrite<T>)
   return applied;
 }
 
-/** Queued ops; `excludeUploads` leaves out image uploads, a backlog of their own that settles no other write. */
+/** Queued ops, optionally leaving out image uploads. */
 export async function getPendingCount(db: SQLiteDatabase, options?: { excludeUploads?: boolean }): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
     options?.excludeUploads
@@ -794,12 +794,7 @@ function hasStringId(data: unknown): data is { id: string } {
   return data !== null && typeof data === 'object' && typeof (data as { id?: unknown }).id === 'string';
 }
 
-/**
- * The body of a queued `uploadImage` row (#1288): the upload's metadata and
- * the stable copy of its file under `pending-image-uploads/`. The drain sends
- * it as multipart, not JSON. `id` is the image's client ID, so a replay whose
- * first response was lost returns the image already stored.
- */
+/** The body of a queued `uploadImage` row (#1288). `id` is the image's client ID, so a replay is idempotent. */
 export interface ImageUploadBody {
   id: string;
   local_path: string;
@@ -825,12 +820,9 @@ export function parseImageUploadBody(body: Record<string, unknown> | null | unde
 }
 
 /**
- * Settle a queued upload the server rejected for good, in place of a dead
- * letter: a failed photo gets Retry and Dismiss on its gallery tile rather than
- * the note-level failed-change flow, which forks the note's text. The upload
- * moves to `pending_image_uploads` as an `error` row; its file stays for a
- * retry. When the note is gone locally there is no tile to show, so the file
- * goes too.
+ * Move a rejected upload to `pending_image_uploads` as an error tile (Retry /
+ * Dismiss) instead of dead-lettering it. If the note is gone locally, the file
+ * is deleted instead.
  */
 async function flagImageUploadFailed(
   db: SQLiteDatabase,
@@ -1100,22 +1092,16 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
       if (settledThisEntry.has(ownVersionStep.noteId)) recordOwnVersionStep(db, ownVersionStep.noteId, ownVersionStep.from, ownVersionStep.to);
       else await rebaseQueuedEdits(db, ownVersionStep);
     };
-    // An upload's note: its only key (#1288).
     const uploadNoteId = entry.operation === 'uploadImage' ? targets()[0] : undefined;
     try {
       if (entry.operation === 'uploadImage') {
-        // A photo waits while its note is not confirmed on the server: its
-        // create is still pending, or failed and awaits the user's review. An
-        // upload would 404 and be discarded, though the photo never reached
-        // anyone (#834). "Keep my version" moves it to the fork (see
-        // reassignPendingImageUploads). It waits without holding back the
-        // note's other ops, which do not depend on it.
+        // Wait while the note is not confirmed on the server (pending or
+        // failed create), or the upload would 404 and be lost (#834). The
+        // note's other ops are not held back.
         const note = uploadNoteId === undefined
           ? null
           : await db.getFirstAsync<{ sync_state: string }>('SELECT sync_state FROM notes WHERE id = ?', [uploadNoteId]);
         if (note === null) {
-          // Deleting a note takes its queued uploads with it, so this is a
-          // leftover: there is nothing to attach the image to.
           console.info(`Dropping queued image upload id=${entry.id}: its note is gone locally`);
           await discardImageUpload(db, entry, parseImageUploadBody(parseJsonObject(entry.body)));
           continue;
@@ -1171,7 +1157,6 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         }
       }
       if (uploadNoteId !== undefined) {
-        // Multipart with the upload timeout, not a JSON replay (#1288).
         const upload = parseImageUploadBody(body);
         if (!upload) throw new Error('Malformed image upload body');
         const image = await uploadNoteImage(uploadNoteId, {
@@ -1181,8 +1166,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           sizeBytes: upload.size_bytes ?? undefined,
         }, undefined, undefined, upload.id);
         requestLanded = true;
-        // The server bumped the note's updated_at to the image's created_at,
-        // and left its version alone: images are not version-guarded.
+        // Images bump updated_at but not version.
         await withSerializedTransaction(db, async () => {
           await patchLocalNoteImagesInTx(
             db,
@@ -1361,8 +1345,6 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         if (uploadNoteId !== undefined) {
           const upload = parseImageUploadBody(body);
           if (status === 404 || status === 403 || !upload) {
-            // The note is gone server-side (deleted or unshared while this
-            // device was offline): there is nothing to attach the image to.
             console.info(`Dropping queued image upload id=${entry.id} (HTTP ${status}): its note is gone`);
             await discardImageUpload(db, entry, upload);
           } else {
@@ -1545,8 +1527,6 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // PROCESSING_ERROR_STATUS (0) and the endpoint/body actually sent.
         const errorMessage = errorSummary(err);
         if (uploadNoteId !== undefined) {
-          // An upload (its stable file copy unreadable, say) gets an error
-          // tile with Retry and Dismiss instead.
           console.warn(`Flagging image upload id=${entry.id} as failed after ${processingErrors} processing errors: ${errorMessage}`);
           discardedOperations.push({ operation: entry.operation, endpoint, status: PROCESSING_ERROR_STATUS });
           const upload = parseImageUploadBody(body ?? parseJsonObject(entry.body));

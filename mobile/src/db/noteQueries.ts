@@ -632,30 +632,21 @@ export async function markLocalNoteRestored(db: SQLiteDatabase, id: string): Pro
   );
 }
 
-/**
- * Permanently delete a note, with its queued and failed image uploads and the
- * stable copies of their files under `pending-image-uploads/`
- * (imageUploadQueue.ts), so deleting a note while an upload is still waiting
- * does not leak the file or send the upload to a note that is gone.
- */
+/** Permanently delete a note with its queued and failed image uploads and their files. */
 export async function permanentDeleteLocalNote(db: SQLiteDatabase, id: string): Promise<void> {
   deleteUploadFiles(await permanentDeleteLocalNoteRows(db, id));
 }
 
 /**
- * {@link permanentDeleteLocalNote} for a caller inside a transaction that may
- * still roll back (an outbox write): deletes the note, its failed upload rows
- * cascading with it, and its queued `uploadImage` rows, but leaves their files,
- * whose paths it returns. A rollback restores those rows, so the caller passes
- * the paths to {@link deleteUploadFiles} only once the transaction has
- * committed.
+ * {@link permanentDeleteLocalNote} inside a transaction that may roll back:
+ * deletes the rows and returns the upload file paths, for the caller to pass to
+ * {@link deleteUploadFiles} once the transaction commits.
  */
 export async function permanentDeleteLocalNoteRows(db: SQLiteDatabase, id: string): Promise<string[]> {
   const failed = await db.getAllAsync<{ local_path: string }>(
     'SELECT local_path FROM pending_image_uploads WHERE note_id = ?',
     [id],
   );
-  // The queue has no foreign key to the note, so its uploads go by key (#1288).
   const queued = await db.getAllAsync<{ id: number; body: string | null }>(
     `SELECT q.id, q.body FROM sync_queue q JOIN sync_queue_keys k ON k.entry_id = q.id
      WHERE q.operation = 'uploadImage' AND k.key = ? AND k.read_only = 0`,

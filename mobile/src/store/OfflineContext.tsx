@@ -280,24 +280,14 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       // refresh the failed-note badges and review-banner count (#492/#493).
       refreshSyncFailures();
 
-      // Queued image uploads drained with everything else (#1288): refresh
-      // their gallery tiles, queued or flagged failed.
+      // Refresh the gallery's queued and failed upload tiles.
       queryClient.invalidateQueries({ queryKey: pendingImageUploadsQueryScopeKey() });
 
-      // drainQueue resolves even when it stops early on a transient failure, so
-      // inspect what's left to decide whether a backoff retry is warranted.
-      // Uploads flagged failed (permanent failures) leave the queue for a
-      // manual retry, so they don't count here — otherwise a doomed request
-      // would retry forever. A row queued while the pass ran (an autosave,
-      // #1284) is new work, not a stall: it gets a fresh drain without
-      // charging the failure budget.
-      // Revalidate the session after a settings drain only once no write but
-      // an image upload is left in the queue. The pre-drain revalidation had
-      // fetched stale server values (before the PATCH ran), so we need a fresh
-      // GET /users/me to reflect what the drain just applied. Waiting for an
-      // empty queue avoids clobbering in-memory optimistic settings state; an
-      // image upload backlog (issue #618) has nothing to do with the settings
-      // write, so it does not hold the revalidation hostage.
+      // Re-read settings after a settings drain once only image uploads (if
+      // any) remain queued: earlier revalidation fetched pre-PATCH values, and
+      // an upload backlog has nothing to do with settings.
+      // `leftBehind` excludes rows queued during the pass (#1284), so new work
+      // is not counted as a stall.
       if (syncedSettings && await getPendingCount(db, { excludeUploads: true }) === 0) {
         await revalidateSession().catch(() => {});
       }
