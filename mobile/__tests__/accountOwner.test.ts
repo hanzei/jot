@@ -25,8 +25,11 @@ async function rowCounts(): Promise<Record<string, number>> {
   return counts;
 }
 
-/** One row in every account-data table, an upload file included. */
-async function seedAccountData(): Promise<string> {
+/**
+ * One row in every account-data table, upload files included: a queued upload
+ * (a sync queue row, #1288) and a failed one (`pending_image_uploads`).
+ */
+async function seedAccountData(): Promise<string[]> {
   await saveNote(db, makeListNote({ id: 'note-1', items: [makeNoteItem({ id: 'item-1', note_id: 'note-1' })] }));
   await saveLabels(db, [makeLabel({ id: 'label-1', name: 'Work' })]);
   await saveUsers(db, [{ id: 'user-a', username: 'alice', first_name: '', last_name: '', role: 'user', has_profile_icon: false }]);
@@ -35,8 +38,9 @@ async function seedAccountData(): Promise<string> {
     `INSERT INTO dead_letter (operation, endpoint, method, body, status, note_id, created_at, failed_at)
      VALUES ('update', '/notes/note-1', 'PATCH', '{}', 403, 'note-1', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
   );
-  const upload = await seedImageUpload(db, { note_id: 'note-1' });
-  return upload.local_path;
+  const queued = await seedImageUpload(db, { note_id: 'note-1' });
+  const failed = await seedImageUpload(db, { id: 'upload-failed', note_id: 'note-1', status: 'error' });
+  return [queued.local_path, failed.local_path];
 }
 
 beforeEach(() => {
@@ -47,13 +51,13 @@ beforeEach(() => {
 
 describe('claimLocalData', () => {
   it('stamps an install with no recorded owner without wiping it', async () => {
-    const uploadPath = await seedAccountData();
+    const uploadPaths = await seedAccountData();
 
     await expect(claimLocalData(db, 'user-a')).resolves.toBe(false);
 
     expect(await getAccountOwner(db)).toBe('user-a');
     expect(Object.values(await rowCounts()).every((count) => count > 0)).toBe(true);
-    expect(fs.files.has(uploadPath)).toBe(true);
+    expect(uploadPaths.every((path) => fs.files.has(path))).toBe(true);
   });
 
   it('keeps the data when the owner signs back in', async () => {
@@ -62,12 +66,12 @@ describe('claimLocalData', () => {
 
     await expect(claimLocalData(db, 'user-a')).resolves.toBe(false);
 
-    expect(await getUnsyncedChangeCount(db)).toBe(3);
+    expect(await getUnsyncedChangeCount(db)).toBe(4);
   });
 
   it('wipes every table and the queued upload files before another user takes over', async () => {
     await claimLocalData(db, 'user-a');
-    const uploadPath = await seedAccountData();
+    const uploadPaths = await seedAccountData();
     // Another server's queued upload shares the directory and must survive.
     fs.files.set('file:///docs/pending-image-uploads/other-server', 'png-bytes');
 
@@ -75,7 +79,7 @@ describe('claimLocalData', () => {
 
     expect(await getAccountOwner(db)).toBe('user-b');
     expect(Object.values(await rowCounts())).toEqual(TABLES.map(() => 0));
-    expect(fs.files.has(uploadPath)).toBe(false);
+    expect(uploadPaths.some((path) => fs.files.has(path))).toBe(false);
     expect(fs.files.has('file:///docs/pending-image-uploads/other-server')).toBe(true);
   });
 
@@ -94,12 +98,12 @@ describe('claimLocalData', () => {
 describe('wipeLocalData', () => {
   it('deletes all account data and leaves the database without an owner', async () => {
     await claimLocalData(db, 'user-a');
-    const uploadPath = await seedAccountData();
+    const uploadPaths = await seedAccountData();
 
     await wipeLocalData(db);
 
     expect(Object.values(await rowCounts())).toEqual(TABLES.map(() => 0));
-    expect(fs.files.has(uploadPath)).toBe(false);
+    expect(uploadPaths.some((path) => fs.files.has(path))).toBe(false);
     expect(await getAccountOwner(db)).toBe('');
   });
 });
@@ -111,6 +115,7 @@ describe('getUnsyncedChangeCount', () => {
     await seedAccountData();
     await seedImageUpload(db, { id: 'upload-2', note_id: 'note-1', status: 'error' });
 
-    expect(await getUnsyncedChangeCount(db)).toBe(4);
+    // Two queued ops (an edit, an upload), a dead letter and two failed uploads.
+    expect(await getUnsyncedChangeCount(db)).toBe(5);
   });
 });

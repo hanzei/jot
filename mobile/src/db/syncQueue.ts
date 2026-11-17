@@ -13,6 +13,7 @@ import {
   reconcileServerNotesScope,
   markNoteSyncFailed,
   clearNoteSyncFailed,
+  patchLocalNoteImagesInTx,
   clearNotePendingCreate,
   getFailedNoteIds,
   getLocalNoteVersion,
@@ -26,6 +27,7 @@ import {
   keyKindCondition,
   noteIdOfKey,
   noteKey,
+  parseJsonObject,
   SETTINGS_KEY,
   type QueueKey,
 } from './queueKeys';
@@ -33,6 +35,8 @@ import { withSerializedTransaction } from './transaction';
 import { rewriteLabelId, rewriteLabelKeys } from './labelIdRewrite';
 import { notesWrittenSince, recordWriteLanded, snapshotMark, type SnapshotMark } from './snapshotGate';
 import { recordOwnVersionStep, resolveOwnBaseVersion } from './ownVersions';
+import { uploadNoteImage } from '../api/images';
+import { deleteFileIfExists } from '../utils/fs';
 import type { Label, NoteShare } from '@jot/shared';
 
 export type QueueOperation =
@@ -59,6 +63,7 @@ export type QueueOperation =
   | 'removeLabelFromNote'
   | 'updateSettings'
   | 'removeImage'
+  | 'uploadImage'
   | 'markViewed';
 
 interface QueueEntry {
@@ -338,7 +343,7 @@ const GONE_IDEMPOTENT_OPERATIONS: ReadonlySet<QueueOperation> = new Set([
   'deleteLabel',
 ]);
 
-/** Called after a row is queued, with its operation (none for an image upload). */
+/** Called after a row is queued, with its operation, if known. */
 type EnqueueListener = (operation?: QueueOperation) => void;
 
 const enqueueListeners = new Set<EnqueueListener>();
@@ -357,10 +362,8 @@ export function subscribeToEnqueue(listener: EnqueueListener): () => void {
 
 /**
  * Notify enqueue listeners directly, bypassing `enqueueWrite`. Used by
- * imageUploadQueue.ts, whose offline upload queue is a separate table (a
- * multipart file upload doesn't fit the JSON `sync_queue` row shape) but
- * still wants to trigger OfflineContext's debounced drain like any other
- * freshly-queued write (issue #618).
+ * imageUploadQueue.ts when it puts a failed upload back in the queue, or moves
+ * queued uploads to another note, outside `enqueueWrite`.
  */
 export function notifyEnqueueListeners(operation?: QueueOperation): void {
   for (const listener of enqueueListeners) {
@@ -461,8 +464,13 @@ export async function enqueueWrite<T>(db: SQLiteDatabase, write: OutboxWrite<T>)
   return applied;
 }
 
-export async function getPendingCount(db: SQLiteDatabase): Promise<number> {
-  const row = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM sync_queue');
+/** Queued ops; `excludeUploads` leaves out image uploads, a backlog of their own that settles no other write. */
+export async function getPendingCount(db: SQLiteDatabase, options?: { excludeUploads?: boolean }): Promise<number> {
+  const row = await db.getFirstAsync<{ count: number }>(
+    options?.excludeUploads
+      ? `SELECT COUNT(*) as count FROM sync_queue WHERE operation != 'uploadImage'`
+      : 'SELECT COUNT(*) as count FROM sync_queue',
+  );
   return row?.count ?? 0;
 }
 
@@ -541,19 +549,18 @@ async function loadEntryKeys(db: SQLiteDatabase): Promise<EntryKeys> {
  * whether it has reached the cap. `attempts` counts every entry-specific
  * failure, for diagnostics and backoff; only a non-HTTP processing error is
  * capped, on its own count, since `attempts` keeps growing through a server
- * outage (#1283). Shared by both drains so they apply one rule.
+ * outage (#1283).
  */
-export async function chargeEntryFailure(
+async function chargeEntryFailure(
   db: SQLiteDatabase,
-  table: 'sync_queue' | 'pending_image_uploads',
-  entry: { id: number | string; attempts?: number; processing_errors?: number },
+  entry: { id: number; attempts?: number; processing_errors?: number },
   err: unknown,
 ): Promise<{ attempts: number; processingErrors: number; capped: boolean }> {
   const attempts = (entry.attempts ?? 0) + 1;
   const processingError = !axios.isAxiosError(err);
   const processingErrors = (entry.processing_errors ?? 0) + (processingError ? 1 : 0);
   await db.runAsync(
-    `UPDATE ${table} SET attempts = ?, processing_errors = ? WHERE id = ?`,
+    'UPDATE sync_queue SET attempts = ?, processing_errors = ? WHERE id = ?',
     [attempts, processingErrors, entry.id],
   );
   return { attempts, processingErrors, capped: processingError && processingErrors >= MAX_ENTRY_DRAIN_ATTEMPTS };
@@ -633,7 +640,8 @@ export async function clearNoteSyncFailedIfResolved(
 
 /**
  * Notes that server-sourced writes must leave untouched: those with a pending
- * queue op (#487), those with a queued or errored image upload (#1279), plus
+ * queue op (#487), queued image uploads included (#1288), those with a failed
+ * image upload awaiting Retry or Dismiss (#1279), plus
  * those with an unresolved failure (#492): flagged `sync_state = 'failed'`, or
  * still covered by a dead letter (#1263). A dead-lettered note no longer has a
  * queue row, so this is what keeps its preserved local content from being
@@ -653,14 +661,14 @@ export async function getProtectedNoteIds(db: SQLiteDatabase): Promise<Set<strin
 }
 
 /**
- * Notes with a `queued` or `error` row in `pending_image_uploads`. A queued photo
- * is an unsynced local change that has no `sync_queue` row, and the upload row
- * cascade-deletes with its note, so pruning the note would drop the photo
- * unuploaded (#1279).
+ * Notes with a failed upload in `pending_image_uploads`. The photo was never
+ * sent and has no `sync_queue` row, and the upload row cascade-deletes with its
+ * note, so pruning the note would drop the photo before the user retries it
+ * (#1279). A queued upload is a `sync_queue` row, covered by its key (#1288).
  */
 async function getNoteIdsWithPendingUploads(db: SQLiteDatabase): Promise<Set<string>> {
   const rows = await db.getAllAsync<{ note_id: string }>(
-    `SELECT DISTINCT note_id FROM pending_image_uploads WHERE status IN ('queued', 'error')`,
+    'SELECT DISTINCT note_id FROM pending_image_uploads',
   );
   return new Set(rows.map((r) => r.note_id));
 }
@@ -784,6 +792,87 @@ export async function saveServerNotesScope(
 /** Narrow an unknown API response to something carrying a string `id` (a note or label). */
 function hasStringId(data: unknown): data is { id: string } {
   return data !== null && typeof data === 'object' && typeof (data as { id?: unknown }).id === 'string';
+}
+
+/**
+ * The body of a queued `uploadImage` row (#1288): the upload's metadata and
+ * the stable copy of its file under `pending-image-uploads/`. The drain sends
+ * it as multipart, not JSON. `id` is the image's client ID, so a replay whose
+ * first response was lost returns the image already stored.
+ */
+export interface ImageUploadBody {
+  id: string;
+  local_path: string;
+  filename: string;
+  mime_type: string;
+  size_bytes: number | null;
+}
+
+/** A queued upload's body, or null when the stored one is malformed. */
+export function parseImageUploadBody(body: Record<string, unknown> | null | undefined): ImageUploadBody | null {
+  if (!body) return null;
+  const { id, local_path: localPath, filename, mime_type: mimeType, size_bytes: sizeBytes } = body;
+  if (typeof id !== 'string' || typeof localPath !== 'string' || typeof filename !== 'string' || typeof mimeType !== 'string') {
+    return null;
+  }
+  return {
+    id,
+    local_path: localPath,
+    filename,
+    mime_type: mimeType,
+    size_bytes: typeof sizeBytes === 'number' ? sizeBytes : null,
+  };
+}
+
+/**
+ * Settle a queued upload the server rejected for good, in place of a dead
+ * letter: a failed photo gets Retry and Dismiss on its gallery tile rather than
+ * the note-level failed-change flow, which forks the note's text. The upload
+ * moves to `pending_image_uploads` as an `error` row; its file stays for a
+ * retry. When the note is gone locally there is no tile to show, so the file
+ * goes too.
+ */
+async function flagImageUploadFailed(
+  db: SQLiteDatabase,
+  entry: QueueEntry,
+  noteId: string,
+  upload: ImageUploadBody,
+  message: string,
+  counts: { attempts: number; processingErrors: number } = {
+    attempts: entry.attempts ?? 0,
+    processingErrors: entry.processing_errors ?? 0,
+  },
+): Promise<void> {
+  let flagged = false;
+  await withSerializedTransaction(db, async () => {
+    const result = await db.runAsync(
+      `INSERT INTO pending_image_uploads
+         (id, note_id, local_path, filename, mime_type, size_bytes, status, error_message, created_at, attempts, processing_errors)
+       SELECT ?, id, ?, ?, ?, ?, 'error', ?, ?, ?, ? FROM notes WHERE id = ?
+       ON CONFLICT(id) DO UPDATE SET status = 'error', error_message = excluded.error_message`,
+      [
+        upload.id,
+        upload.local_path,
+        upload.filename,
+        upload.mime_type,
+        upload.size_bytes,
+        message,
+        entry.created_at,
+        counts.attempts,
+        counts.processingErrors,
+        noteId,
+      ],
+    );
+    flagged = result.changes > 0;
+    await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
+  });
+  if (!flagged) deleteFileIfExists(upload.local_path);
+}
+
+/** Drop a queued upload for good: its row and its file. */
+async function discardImageUpload(db: SQLiteDatabase, entry: QueueEntry, upload: ImageUploadBody | null): Promise<void> {
+  await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
+  if (upload) deleteFileIfExists(upload.local_path);
 }
 
 export interface DiscardedOperation {
@@ -938,6 +1027,11 @@ async function recordDeadLetter(
  *     failed over HTTP, so a long outage no longer turns queued changes into
  *     failed ones.
  *
+ * An `uploadImage` row is sent as multipart rather than JSON, and waits while
+ * its note is not confirmed on the server. A permanent rejection flags it for
+ * Retry or Dismiss in the gallery instead of dead-lettering it, unless its note
+ * is gone (404/403), which drops it (#1288).
+ *
  * Handles offline-create ID reconciliation: when a `create` or `duplicate` operation
  * succeeds, the server echoes back the client-supplied ID unchanged. The canonical
  * server note (with authoritative fields like `updated_at`, version, item IDs) is
@@ -989,8 +1083,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
     let body: Record<string, unknown> | undefined;
     // Flipped true the instant the server request returns 2xx. After that point a
     // throw is a *local reconciliation* failure, not a failed write, so it must
-    // not retry or dead-letter the entry (issue #714 — mirrors imageUploadQueue's
-    // "the upload already landed, so remove the queue entry first").
+    // not retry or dead-letter the entry (issue #714).
     let requestLanded = false;
     // The note this replay version-guarded, and the version its response
     // reports, when that version is its own (see rebaseQueuedEdits).
@@ -1007,7 +1100,29 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
       if (settledThisEntry.has(ownVersionStep.noteId)) recordOwnVersionStep(db, ownVersionStep.noteId, ownVersionStep.from, ownVersionStep.to);
       else await rebaseQueuedEdits(db, ownVersionStep);
     };
+    // An upload's note: its only key (#1288).
+    const uploadNoteId = entry.operation === 'uploadImage' ? targets()[0] : undefined;
     try {
+      if (entry.operation === 'uploadImage') {
+        // A photo waits while its note is not confirmed on the server: its
+        // create is still pending, or failed and awaits the user's review. An
+        // upload would 404 and be discarded, though the photo never reached
+        // anyone (#834). "Keep my version" moves it to the fork (see
+        // reassignPendingImageUploads). It waits without holding back the
+        // note's other ops, which do not depend on it.
+        const note = uploadNoteId === undefined
+          ? null
+          : await db.getFirstAsync<{ sync_state: string }>('SELECT sync_state FROM notes WHERE id = ?', [uploadNoteId]);
+        if (note === null) {
+          // Deleting a note takes its queued uploads with it, so this is a
+          // leftover: there is nothing to attach the image to.
+          console.info(`Dropping queued image upload id=${entry.id}: its note is gone locally`);
+          await discardImageUpload(db, entry, parseImageUploadBody(parseJsonObject(entry.body)));
+          continue;
+        }
+        if (note.sync_state !== 'synced') continue;
+      }
+
       // If this op targets a note whose create was just dead-lettered, replaying
       // it against a note the server never got is pointless — drop it (the note
       // stays flagged failed) rather than round-tripping to a guaranteed 404.
@@ -1055,6 +1170,32 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           if (baseVersion !== null) body.base_version = baseVersion;
         }
       }
+      if (uploadNoteId !== undefined) {
+        // Multipart with the upload timeout, not a JSON replay (#1288).
+        const upload = parseImageUploadBody(body);
+        if (!upload) throw new Error('Malformed image upload body');
+        const image = await uploadNoteImage(uploadNoteId, {
+          uri: upload.local_path,
+          name: upload.filename,
+          mimeType: upload.mime_type,
+          sizeBytes: upload.size_bytes ?? undefined,
+        }, undefined, undefined, upload.id);
+        requestLanded = true;
+        // The server bumped the note's updated_at to the image's created_at,
+        // and left its version alone: images are not version-guarded.
+        await withSerializedTransaction(db, async () => {
+          await patchLocalNoteImagesInTx(
+            db,
+            uploadNoteId,
+            (images) => images.some((img) => img.id === image.id) ? images : [...images, image],
+            image.created_at,
+          );
+          await removeLandedEntry();
+        });
+        deleteFileIfExists(upload.local_path);
+        continue;
+      }
+
       let response: { data?: unknown } | undefined;
       if (entry.method === 'POST') {
         response = await api.post(endpoint, body, REPLAY_REQUEST_CONFIG);
@@ -1197,6 +1338,10 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
             for (const noteId of targets()) await clearNotePendingCreate(db, noteId);
           }
         });
+        if (uploadNoteId !== undefined) {
+          const upload = parseImageUploadBody(body);
+          if (upload) deleteFileIfExists(upload.local_path);
+        }
         if (entry.operation !== 'delete' && entry.operation !== 'permanentDelete') {
           for (const noteId of targets()) pullNoteIds.add(noteId);
         }
@@ -1212,6 +1357,20 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // never succeed, so discard the entry and continue rather than letting one
         // bad operation wedge the whole queue indefinitely.
         discardedOperations.push({ operation: entry.operation, endpoint, status });
+
+        if (uploadNoteId !== undefined) {
+          const upload = parseImageUploadBody(body);
+          if (status === 404 || status === 403 || !upload) {
+            // The note is gone server-side (deleted or unshared while this
+            // device was offline): there is nothing to attach the image to.
+            console.info(`Dropping queued image upload id=${entry.id} (HTTP ${status}): its note is gone`);
+            await discardImageUpload(db, entry, upload);
+          } else {
+            console.warn(`Image upload id=${entry.id} was rejected (HTTP ${status}); flagging it for retry or dismiss`);
+            await flagImageUploadFailed(db, entry, uploadNoteId, upload, axios.isAxiosError(err) ? err.message : 'Upload failed');
+          }
+          continue;
+        }
         if (entry.operation === 'updateSettings') syncedSettings = true;
 
         // A 409 from a create-like replay is an idempotent already-applied
@@ -1359,7 +1518,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // Entry-specific transient failure: a 5xx tied to this op's payload (a
         // gateway status or a client timeout only when the server answered the
         // probe), or a non-HTTP error thrown while processing this entry.
-        const { attempts, processingErrors, capped } = await chargeEntryFailure(db, 'sync_queue', entry, err);
+        const { attempts, processingErrors, capped } = await chargeEntryFailure(db, entry, err);
 
         if (attempts >= MAX_ENTRY_DRAIN_ATTEMPTS && BEST_EFFORT_OPERATIONS.has(entry.operation)) {
           // Best-effort (see the permanent-failure branch above): the next
@@ -1385,6 +1544,16 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // A non-HTTP processing error at the cap: dead-letter it with
         // PROCESSING_ERROR_STATUS (0) and the endpoint/body actually sent.
         const errorMessage = errorSummary(err);
+        if (uploadNoteId !== undefined) {
+          // An upload (its stable file copy unreadable, say) gets an error
+          // tile with Retry and Dismiss instead.
+          console.warn(`Flagging image upload id=${entry.id} as failed after ${processingErrors} processing errors: ${errorMessage}`);
+          discardedOperations.push({ operation: entry.operation, endpoint, status: PROCESSING_ERROR_STATUS });
+          const upload = parseImageUploadBody(body ?? parseJsonObject(entry.body));
+          if (upload) await flagImageUploadFailed(db, entry, uploadNoteId, upload, errorMessage, { attempts, processingErrors });
+          else await discardImageUpload(db, entry, null);
+          continue;
+        }
         console.warn(
           `Dead-lettering queued operation id=${entry.id} after ${processingErrors} processing errors: ${errorMessage}`,
         );

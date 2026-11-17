@@ -95,7 +95,7 @@ Jot, 5xx included, proves the server answered and does not set it to `false`.
 |---|---|
 | Queue drain (`performDrain`) | Returns without sending and without rescheduling. |
 | Read sync (`retrySync`) | Aborts with `SyncAbortedError('unreachable')`. |
-| Note-image upload (`isOnlineWriteAllowed`) | Goes straight to the upload queue (§4.4). |
+| Note-image upload (`isOnlineWriteAllowed`) | Goes straight to the sync queue (§4.4). |
 | Share-sheet user search; empty trash, export and public-link sections (`isOnlineWriteAllowed`) | Search cached users; disable the online-only action. |
 
 Write hooks never read it: every write goes through the outbox (§4.1), and the
@@ -137,7 +137,7 @@ revalidation; the reconnect's own drain covers them.
 **Known cost.** If the API times out while the SSE stream stays healthy (an
 overloaded server, a proxy timing out only API routes), each keepalive re-arms
 the flag and the next request pays its timeout: a drain's replay, or a
-note-image upload, which then falls back to its queue. That is at most one
+note-image upload, which then falls back to the sync queue. That is at most one
 stalled request per keepalive interval, against syncing stopping outright.
 Nothing the user waits on stalls: a write has already returned. The drain's
 failure cap still bounds the replays.
@@ -186,7 +186,7 @@ uploads.
 | **Writes** | note/item/label create·update·delete, share, reorder, image removal, settings | Yes (queue) | Commit the local edit and its queue row in one transaction, return immediately; the drain sends it (§4.1). |
 | **Reads** | note list, note body, labels | Yes (cached data) | Serve local cache immediately; refresh in the background with bounded retries; never block load/refresh on the network. |
 | **Auth / one-shot** | login, register, logout, server switch, PAT create/revoke, public link create·re-time·revoke, empty trash, export | No | Finite timeout (`DEFAULT_REQUEST_TIMEOUT_MS`) + visible pending state + honest error. Optimistic where the local outcome is authoritative (logout). |
-| **Uploads** | note images, profile icon | Partial (image queue for note images) | Finite timeout (never `0`), cancellable, fall back to the upload queue where one exists. |
+| **Uploads** | note images, profile icon | Partial (note images fall back to the sync queue) | Finite timeout (never `0`), cancellable, fall back to the sync queue where one exists. |
 
 ### 4.1 Writes — never block, ever
 
@@ -224,7 +224,7 @@ failure (#1284 converted `useUpdateNote`, #1285 the rest). It reverses the
 decision in #1261 to keep that path and gate it per note: with the online path
 gone, the per-note gate, the fallback copies of each local apply, the short
 write timeout, the in-flight bookkeeping and the pending indicators went with
-it. Note-image uploads are the remaining exception (§4.4).
+it. Note-image uploads are the remaining online-first write (§4.4).
 
 ### 4.2 Reads — serve stale, refresh quietly
 
@@ -281,10 +281,17 @@ it. Note-image uploads are the remaining exception (§4.4).
 - Never `timeout: 0`. A stalled upload must become a recoverable error within a
   generous finite cap, not an infinite spinner.
 - Provide a cancel affordance for an in-flight upload.
-- Where an offline upload queue exists (note images, issue #618), an upload
-  goes online only while `isOnlineWriteAllowed()` holds and the note's create
-  has landed, and falls back to that queue on a transient failure. This is the
-  last online-first write; #1288 moves it onto the outbox.
+- A note-image upload goes online only while `isOnlineWriteAllowed()` holds
+  and the note's create has landed, so the tile can show progress and a cancel
+  button, and falls back to the sync queue on a transient failure (#618). The
+  queued upload is an `uploadImage` row keyed `note:<id>` (#1288): it lands
+  behind its note's create, keeps the note protected, and holds its file under
+  `pending-image-uploads/`. The drain sends it as multipart with
+  `NOTE_IMAGE_UPLOAD_TIMEOUT_MS`, and holds it back while its note's create is
+  pending or failed and unreviewed, without holding back the note's other
+  ops. A permanent rejection is not a failed change: the upload moves to
+  `pending_image_uploads` as an error tile with Retry and Dismiss, or is
+  dropped when its note is gone (404/403).
 
 ---
 
@@ -391,10 +398,9 @@ Rules of thumb:
     A best-effort op (`markViewed`, `removeImage`) that keeps failing is
     dropped at the same count, as a permanent rejection of one is: the next
     sync reconciles it, and it never holds back its note's edits.
-  - The image-upload queue (`pending_image_uploads.attempts`) follows the same
-    rules per note: a transiently failing upload stays queued and holds back its
-    note's later uploads for the pass; only a non-HTTP error at the cap flags it
-    `error` for a manual retry.
+  - A queued image upload (`uploadImage`) follows the same rules, except that
+    a non-HTTP error at the cap flags it for a manual retry in the gallery
+    instead of dead-lettering it (§4.4).
 
   Dead letters written before #1283 may hold a 5xx, or status 0 for a timeout,
   from when the drain capped every entry-specific failure. They stay for the
@@ -414,8 +420,8 @@ handling and loop safety are two halves of the same system.)
   already-applied — no second copy). So a create whose request timed out after
   the server committed it replays as that 409 rather than as a second entity.
   Note-image uploads follow the same rule with a different status:
-  `POST /notes/{id}/images` takes an optional `id` form field (the upload
-  queue's row ID), and a repeated ID on the same note returns the existing
+  `POST /notes/{id}/images` takes an optional `id` form field (the upload's
+  client ID), and a repeated ID on the same note returns the existing
   image with 200 (409 if it belongs to another note).
 - Writes are **partial/field-level** where possible so a replayed op doesn't
   clobber fields another device changed concurrently.
@@ -661,7 +667,7 @@ its own edit times. Merging (§8.5) therefore loses nothing history would keep.
 | What each queued op touches (`note:`/`label:`/`settings` keys, recorded at enqueue and kept by its dead letter); the protected set reads them | `src/db/queueKeys.ts` (`sync_queue_keys`, `dead_letter_keys`) |
 | Snapshot gate (own writes landed after a fetch started) | `src/db/snapshotGate.ts`, wired in `src/api/client.ts` |
 | Bounded read retries | `src/utils/retryWithBackoff.ts` (`retrySync`) |
-| Write hooks (all on the outbox; image uploads keep their own queue) | `src/hooks/useNotes.ts`, `useLabels.ts`, `useNoteImages.ts`; settings in `src/screens/settings/` and `NotesListScreen.tsx` (sort) |
+| Write hooks (all on the outbox; image uploads go online first, §4.4) | `src/hooks/useNotes.ts`, `useLabels.ts`, `useNoteImages.ts`; settings in `src/screens/settings/` and `NotesListScreen.tsx` (sort) |
 | Local-first read queries | `src/hooks/useOfflineNotes.ts` |
 | SSE stream + reconnect | `src/api/events.ts` |
 | Catch-up resync signal on SSE reconnect | `src/store/resyncEvents.ts` (published by `src/hooks/useSSE.ts`) |

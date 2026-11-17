@@ -87,8 +87,9 @@ export async function seedQueueEntry(
 }
 
 /**
- * Insert a `pending_image_uploads` row (and the note it hangs off, for the FK),
- * with its stable file copy present in the mock filesystem.
+ * Seed an image upload (and the note it hangs off), with its stable file copy
+ * present in the mock filesystem: a queued one as an `uploadImage` row in the
+ * sync queue, a failed (`status: 'error'`) one in `pending_image_uploads`.
  */
 export async function seedImageUpload(
   db: TestDatabase,
@@ -112,16 +113,35 @@ export async function seedImageUpload(
   if (!exists) {
     await saveNote(db, makeTextNote({ id: entry.note_id }));
   }
-  await db.runAsync(
-    `INSERT INTO pending_image_uploads
-       (id, note_id, local_path, filename, mime_type, size_bytes, status, error_message, created_at, attempts, processing_errors)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      entry.id, entry.note_id, entry.local_path, entry.filename, entry.mime_type,
-      entry.size_bytes, entry.status, entry.error_message, entry.created_at, entry.attempts ?? 0,
-      entry.processing_errors ?? 0,
-    ],
-  );
+  if (entry.status === 'queued') {
+    await seedQueueEntry(db, {
+      operation: 'uploadImage',
+      endpoint: `/notes/${entry.note_id}/images`,
+      method: 'POST',
+      body: {
+        id: entry.id,
+        local_path: entry.local_path,
+        filename: entry.filename,
+        mime_type: entry.mime_type,
+        size_bytes: entry.size_bytes,
+      },
+      keys: [`note:${entry.note_id}`],
+      created_at: entry.created_at,
+      attempts: entry.attempts ?? 0,
+      processing_errors: entry.processing_errors ?? 0,
+    });
+  } else {
+    await db.runAsync(
+      `INSERT INTO pending_image_uploads
+         (id, note_id, local_path, filename, mime_type, size_bytes, status, error_message, created_at, attempts, processing_errors)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        entry.id, entry.note_id, entry.local_path, entry.filename, entry.mime_type,
+        entry.size_bytes, entry.status, entry.error_message, entry.created_at, entry.attempts ?? 0,
+        entry.processing_errors ?? 0,
+      ],
+    );
+  }
   globalThis.mockFileSystem.files.set(entry.local_path, 'png-bytes');
   return entry;
 }

@@ -15,7 +15,6 @@ import { drainQueue, getPendingCount, getDeadLetterCount, subscribeToEnqueue } f
 import { isServerReachable, markServerReachable, subscribeToServerReachability } from '../api/serverReachability';
 import { publishReconnectResync } from './resyncEvents';
 import { isNetworkChange, mergeNetworkIdentity, networkIdentity, type NetworkIdentity } from './networkChange';
-import { drainImageUploadQueue, getQueuedImageUploadCount } from '../db/imageUploadQueue';
 import { getPendingCreateNoteIds, getFailedNoteIds } from '../db/noteQueries';
 import { isClosedDatabaseError } from '../db/errors';
 import { useAuth } from './AuthContext';
@@ -281,44 +280,28 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       // refresh the failed-note badges and review-banner count (#492/#493).
       refreshSyncFailures();
 
-      // Offline image uploads (issue #618) are a separate table — a multipart
-      // file upload doesn't fit sync_queue's JSON-body row shape — so they get
-      // their own drain pass, run after the note queue above so a note whose
-      // offline `create` just landed can immediately take its queued images too.
-      const { uploadedNoteIds, discardedCount } = await drainImageUploadQueue(db);
-      if (discardedCount > 0) {
-        console.warn(`Image upload queue discarded/flagged ${discardedCount} entr(y/ies) after a permanent failure.`);
-      }
-      if (uploadedNoteIds.length > 0) {
-        for (const noteId of new Set(uploadedNoteIds)) {
-          queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
-        }
-        queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-      }
+      // Queued image uploads drained with everything else (#1288): refresh
+      // their gallery tiles, queued or flagged failed.
       queryClient.invalidateQueries({ queryKey: pendingImageUploadsQueryScopeKey() });
 
       // drainQueue resolves even when it stops early on a transient failure, so
       // inspect what's left to decide whether a backoff retry is warranted.
-      // Uploads flagged `error` (permanent failures) need a manual retry, so
-      // they don't count here — otherwise a doomed request would retry forever.
-      // A row queued while the pass ran (an autosave, #1284) is new work, not a
-      // stall: it gets a fresh drain without charging the failure budget.
-      const [pendingCount, queuedImageUploadCount] = await Promise.all([
-        getPendingCount(db),
-        getQueuedImageUploadCount(db),
-      ]);
-      const remaining = leftBehind + queuedImageUploadCount;
-      // Revalidate the session after a settings drain only when the *settings'
-      // own* queue (sync_queue) is empty. The pre-drain revalidation had fetched
-      // stale server values (before the PATCH ran), so we need a fresh GET /users/me to
-      // reflect what the drain just applied. Guarding on pendingCount === 0 (not
-      // the combined `remaining`) avoids clobbering in-memory optimistic settings
-      // state without being held hostage by an unrelated, independent image
-      // upload backlog (issue #618) that has nothing to do with the settings write.
-      if (syncedSettings && pendingCount === 0) {
+      // Uploads flagged failed (permanent failures) leave the queue for a
+      // manual retry, so they don't count here — otherwise a doomed request
+      // would retry forever. A row queued while the pass ran (an autosave,
+      // #1284) is new work, not a stall: it gets a fresh drain without
+      // charging the failure budget.
+      // Revalidate the session after a settings drain only once no write but
+      // an image upload is left in the queue. The pre-drain revalidation had
+      // fetched stale server values (before the PATCH ran), so we need a fresh
+      // GET /users/me to reflect what the drain just applied. Waiting for an
+      // empty queue avoids clobbering in-memory optimistic settings state; an
+      // image upload backlog (issue #618) has nothing to do with the settings
+      // write, so it does not hold the revalidation hostage.
+      if (syncedSettings && await getPendingCount(db, { excludeUploads: true }) === 0) {
         await revalidateSession().catch(() => {});
       }
-      if (remaining > 0) {
+      if (leftBehind > 0) {
         stalled = true;
         onDrainStalled();
       } else {

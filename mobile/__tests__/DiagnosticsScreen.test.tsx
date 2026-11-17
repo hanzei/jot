@@ -341,15 +341,17 @@ describe('DiagnosticsScreen', () => {
     });
 
     it('shows queued and failed counts and the oldest queued upload\'s attempts, highlighted', async () => {
-      const { findByText, getByText } = await renderScreen();
+      const { findByText, getAllByText, getByText } = await renderScreen();
 
       expect(await findByText('Image Uploads')).toBeTruthy();
       expect(await findByText('Oldest upload waiting')).toBeTruthy();
       // Rows are siblings of their labels; assert on the values' highlight.
+      // Queued uploads are sync queue rows too (#1288), so the sync queue
+      // section above shows the same numbers: take the last match.
       const orange = { color: '#f97316' };
-      expect(getByText('3')).toHaveStyle(orange);
+      expect(getAllByText('3').at(-1)).toHaveStyle(orange);
       expect(getByText('4')).toHaveStyle(orange);
-      expect(getByText('7')).toHaveStyle(orange);
+      expect(getAllByText('7').at(-1)).toHaveStyle(orange);
     });
 
     it('includes the image upload queue in the share report, without paths or filenames', async () => {

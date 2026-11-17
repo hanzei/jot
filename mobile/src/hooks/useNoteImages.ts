@@ -42,8 +42,8 @@ export function useUploadNoteImage() {
 
       // While the note's own create is still queued (#475) it doesn't exist on
       // the server, so a direct upload would 404 — permanent, so the picked file
-      // would be dropped rather than queued. Take the offline upload queue, which
-      // waits for the create to drain before retrying (drainImageUploadQueue).
+      // would be dropped rather than queued. Queue it instead: the drain sends it
+      // after the create, which shares its key (#1288).
       // Local mode has no server and never marks a note pending, so it is
       // unaffected and still uploads (terminally) below.
       const pendingCreate = await isNotePendingCreate(db, noteId);
@@ -74,28 +74,16 @@ export function useUploadNoteImage() {
           // through to the offline queue below instead of losing the picked
           // file; a permanent failure (413 too large, 400 validation, etc.)
           // rethrows so the caller shows an error tile.
-          // Uploads keep this online-first path until they drain through the
-          // sync queue (#1288).
+          // Online first, for the tile's progress bar and cancel button; the
+          // sync queue is the fallback.
           if (isLocalModeActive() || !isTransientError(err)) throw err;
         }
       }
 
       // Offline, or a transient online failure above: persist the file and
-      // queue it for replay once the sync engine's drain can reach the server.
-      //
-      // Known accepted trade-off: `POST /notes/{id}/images` has no client-
-      // supplied id for the server to recognize a retry by (unlike notes/items,
-      // which do — see useCreateNote), so a "transient" failure whose response
-      // was lost after the server had *already* committed the row (network drop
-      // mid-upload, most plausible for `status === undefined`, the "no response"
-      // case in isTransientHttpStatus) can replay into a duplicate image on the
-      // next drain. Closing this fully needs a server-side idempotency key,
-      // which is out of scope for this mobile-only issue (#618 adds no API
-      // changes). Restricting the offline queue to only hard-`isConnected: false`
-      // cases would dodge the ambiguity but defeat the point of queuing at all —
-      // flaky connectivity, not just literal offline, is the case #618 exists
-      // for — and would only push the same risk onto the tile's manual Retry
-      // button, which replays the same file today regardless.
+      // queue it in the sync queue for the drain to send (#1288). `uploadId`
+      // is the image's client ID, so a replay of an upload whose response was
+      // lost returns the image already stored rather than a duplicate.
       await enqueueImageUpload(db, { id: uploadId, noteId, file });
       return { status: 'queued' };
     },

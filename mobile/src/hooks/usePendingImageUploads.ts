@@ -15,11 +15,11 @@ import { pendingImageUploadsQueryKey, pendingImageUploadsQueryScopeKey } from '.
 // component's types; NoteImageGallery re-exports it for its existing callers.
 //
 // 'queued' additionally covers an offline-deferred upload (issue #618):
-// persisted to the pending_image_uploads table, so — unlike 'uploading' and
-// 'error', which are held only in NoteEditorScreen's in-memory state — it
-// survives navigating away or an app restart until the sync engine's drain
-// flushes it (rendered the same as 'error': no progress bar, since nothing is
-// in flight yet).
+// persisted as a sync_queue row (#1288), so — unlike 'uploading', which is held
+// only in NoteEditorScreen's in-memory state — it survives navigating away or
+// an app restart until the sync engine's drain sends it (rendered the same as
+// 'error': no progress bar, since nothing is in flight yet). A persisted
+// 'error' is one the server rejected (pending_image_uploads).
 export interface PendingImageUpload {
   id: string;
   filename: string;
@@ -31,8 +31,9 @@ export interface PendingImageUpload {
 
 // The persisted counterpart to NoteEditorScreen's in-memory `imageUploads`
 // state: uploads that were queued while offline (or hit a transient failure)
-// live in the pending_image_uploads table so they survive navigating away or
-// an app restart until the sync engine's drain flushes them (issue #618).
+// wait in the sync queue, and those the server rejected in
+// pending_image_uploads, so they survive navigating away or an app restart
+// (issue #618, #1288).
 export function usePendingImageUploads(noteId: string | null): PendingImageUpload[] {
   const db = useSQLiteContext();
   const { data } = useQuery({

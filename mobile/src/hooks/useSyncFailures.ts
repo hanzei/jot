@@ -136,10 +136,10 @@ export async function reconcileDiscard(db: SQLiteDatabase, dl: DeadLetteredOpera
  * original is dropped only on success, so a failure here can never lose bytes.
  *
  * A dead-lettered `create` means the original note never reached the server,
- * so an image captured for it before the failure surfaced is still sitting in
- * the offline upload queue against the abandoned note id (drainImageUploadQueue
- * skips uploading it there, per issue #834). Reassign any such rows to the
- * fork before `reconcileDiscard` deletes the original and cascades them away.
+ * so an image captured for it before the failure surfaced is still queued
+ * against the abandoned note id (the drain holds it there, per issue #834).
+ * Reassign any such uploads to the fork before `reconcileDiscard` deletes the
+ * original and its uploads with it.
  */
 export async function keepThenDiscard(
   db: SQLiteDatabase,

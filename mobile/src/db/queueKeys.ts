@@ -8,6 +8,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 // | Operation                                        | Keys                          |
 // |--------------------------------------------------|-------------------------------|
 // | note ops (create, update, items, share, …)       | note:<id>                     |
+// | uploadImage, removeImage                         | note:<id>                     |
 // | duplicate                                        | note:<clone>; note:<source> read-only |
 // | reorder                                          | note:<id> per note named      |
 // | addLabelToNote, removeLabelFromNote              | note:<id>, label:<id>         |
