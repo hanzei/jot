@@ -305,6 +305,54 @@ describe('SSEConnectionManager', () => {
     jest.useRealTimers();
   });
 
+  describe('reconnectNow (#1309)', () => {
+    const errorHandler = () => mockAddEventListener.mock.calls.findLast(
+      (call: [string, unknown]) => call[0] === 'error',
+    )?.[1] as (event: { status?: number }) => void;
+
+    it('opens a stream that is waiting to retry at once, with a fresh backoff', async () => {
+      jest.useFakeTimers();
+      const manager = new SSEConnectionManager();
+      await manager.connect(jest.fn());
+
+      // Two failed attempts: the next retry is 12 s out.
+      errorHandler()({});
+      await jest.advanceTimersByTimeAsync(3000);
+      errorHandler()({});
+      MockEventSource.mockClear();
+
+      manager.reconnectNow();
+      await jest.advanceTimersByTimeAsync(0);
+      expect(MockEventSource).toHaveBeenCalledTimes(1);
+
+      // The old retry no longer fires, and the next failure waits the base delay.
+      MockEventSource.mockClear();
+      errorHandler()({});
+      await jest.advanceTimersByTimeAsync(3000);
+      expect(MockEventSource).toHaveBeenCalledTimes(1);
+
+      manager.disconnect();
+      jest.useRealTimers();
+    });
+
+    it('does nothing while the stream is not waiting to retry', async () => {
+      jest.useFakeTimers();
+      const manager = new SSEConnectionManager();
+      await manager.connect(jest.fn());
+      MockEventSource.mockClear();
+
+      manager.reconnectNow();
+      await jest.advanceTimersByTimeAsync(0);
+      expect(MockEventSource).not.toHaveBeenCalled();
+
+      manager.disconnect();
+      manager.reconnectNow();
+      await jest.advanceTimersByTimeAsync(0);
+      expect(MockEventSource).not.toHaveBeenCalled();
+      jest.useRealTimers();
+    });
+  });
+
   it('re-reads token from storage on reconnect', async () => {
     jest.useFakeTimers();
 

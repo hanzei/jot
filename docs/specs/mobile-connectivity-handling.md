@@ -134,6 +134,18 @@ other drain (a pending timer, a finishing drain's rerun, a resume) returns
 without draining or parking, so nothing reaches the server ahead of the
 revalidation; the reconnect's own drain covers them.
 
+**A reconnect that gets no answer retries.** A device reports a network as
+connected before DNS and routing are ready, so the reconnect's session check
+can fail with no response, leaving the flag `false` and the drain parked. The
+reconnect then retries in full (re-arm, revalidate, drain) on a short, bounded
+backoff, so after a reconnect queued changes start syncing within a few seconds
+of the network becoming usable (#1309). The retries end early when the device
+goes offline, when the server answers anything else first, on a server switch,
+and on a fresh trigger, which starts its own. A flip back to `true` also opens a
+stream that is waiting out a retry at once, with a fresh backoff, and its open
+publishes the read caches' catch-up resync. The stream's own backoff is the
+fallback once the retries are spent, not the first recovery path.
+
 **Known cost.** If the API times out while the SSE stream stays healthy (an
 overloaded server, a proxy timing out only API routes), each keepalive re-arms
 the flag and the next request pays its timeout: a drain's replay, or a

@@ -19,6 +19,7 @@ import { snapshotMark } from '../db/snapshotGate';
 import { isSseQuiesced, subscribeToServerSwitchLifecycle } from '../store/serverSwitchLifecycle';
 import { publishProfileIconUpdate } from '../store/profileIconEvents';
 import { publishReconnectResync } from '../store/resyncEvents';
+import { subscribeToServerReachability } from '../api/serverReachability';
 import {
   labelsQueryKey,
   noteLocalQueryKey,
@@ -342,9 +343,16 @@ export function useSSE(
       }
     });
 
+    // Another request found the server reachable again: a stream waiting out
+    // a retry scheduled while the network was unusable opens now (#1309).
+    const reachabilityUnsubscribe = subscribeToServerReachability((reachable) => {
+      if (reachable) managerRef.current?.reconnectNow();
+    });
+
     return () => {
       subscription.remove();
       lifecycleUnsubscribe();
+      reachabilityUnsubscribe();
       stopConnection();
     };
   }, [isAuthenticated, isConnected, isLocalMode, startConnection, stopConnection]);

@@ -197,6 +197,22 @@ export class SSEConnectionManager {
     }, delay);
   }
 
+  /**
+   * Open the stream now if it is waiting to retry, with a fresh backoff. Called
+   * when another request finds the server reachable again, so the stream (and
+   * the catch-up resync its reopen publishes) need not wait out a retry
+   * scheduled while the network was unusable (#1309). A no-op while the stream
+   * is open, opening, or closed.
+   */
+  reconnectNow(): void {
+    if (this.closed || this.reconnectTimer === null) return;
+    this.clearReconnectTimer();
+    this.reconnectDelay = BASE_RECONNECT_DELAY_MS;
+    this.openConnection().catch(() => {
+      // Handled inside openConnection; this catch prevents unhandled rejection
+    });
+  }
+
   disconnect(): void {
     this.closed = true;
     this._isConnected = false;
