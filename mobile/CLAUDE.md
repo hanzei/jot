@@ -131,6 +131,11 @@ What the device may believe after a sync (spec §8). These are the target; spec
   the content it belongs to, or the reverse.
 - **Writes to one note stay in order.** The drain is the only sender and sends
   them FIFO per key.
+- **An op that supersedes a queued one is merged into its row** at enqueue
+  (spec §8.5, `src/db/queueMerge.ts`): only into the last op sharing a key,
+  never into the row the drain is sending, never content and per-user fields
+  together. The drain re-reads each row when it reaches it
+  (`claimQueueEntry`); never send a row from the pass's initial load.
 - **A write commits its local edit and its queue row in one transaction**
   (`enqueueWrite`), and the drain applies the response and deletes the row in
   one transaction.

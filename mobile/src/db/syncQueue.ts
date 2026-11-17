@@ -32,6 +32,7 @@ import {
   type QueueKey,
 } from './queueKeys';
 import { withSerializedTransaction } from './transaction';
+import { clearEntryInFlight, markEntryInFlight, mergeQueuedOp } from './queueMerge';
 import { rewriteLabelId, rewriteLabelKeys } from './labelIdRewrite';
 import { notesWrittenSince, recordWriteLanded, snapshotMark, type SnapshotMark } from './snapshotGate';
 import { recordOwnVersionStep, resolveOwnBaseVersion } from './ownVersions';
@@ -456,7 +457,8 @@ export async function enqueueWrite<T>(db: SQLiteDatabase, write: OutboxWrite<T>)
     applied = await write.localApply();
     if (!queue) return;
     for (const op of [write.op(applied)].flat()) {
-      await insertQueueEntry(db, op);
+      // An op that supersedes an earlier queued one is written into its row (spec §8.5).
+      if (!(await mergeQueuedOp(db, op))) await insertQueueEntry(db, op);
       operations.push(op.operation);
     }
   });
@@ -525,10 +527,13 @@ interface EntryKeys {
   writtenNoteIds: Map<number, string[]>;
 }
 
+type EntryKeyRow = { entry_id: number; key: string; read_only: number };
+
 async function loadEntryKeys(db: SQLiteDatabase): Promise<EntryKeys> {
-  const rows = await db.getAllAsync<{ entry_id: number; key: string; read_only: number }>(
-    'SELECT entry_id, key, read_only FROM sync_queue_keys',
-  );
+  return groupEntryKeys(await db.getAllAsync<EntryKeyRow>('SELECT entry_id, key, read_only FROM sync_queue_keys'));
+}
+
+function groupEntryKeys(rows: readonly EntryKeyRow[]): EntryKeys {
   const keys = new Map<number, string[]>();
   const writtenNoteIds = new Map<number, string[]>();
   const add = (map: Map<number, string[]>, entryId: number, value: string): void => {
@@ -542,6 +547,30 @@ async function loadEntryKeys(db: SQLiteDatabase): Promise<EntryKeys> {
     if (noteId !== null) add(writtenNoteIds, row.entry_id, noteId);
   }
   return { keys, writtenNoteIds };
+}
+
+/**
+ * Re-read queue row `entry` as it is now and mark it in flight, in one
+ * serialized transaction: a merge at enqueue (spec §8.5) committed before this
+ * is sent with the row, and one after it sees the mark and appends a new row
+ * instead (see queueMerge.ts). The row's fields and keys are updated in place;
+ * returns false when the row is gone.
+ */
+async function claimQueueEntry(db: SQLiteDatabase, entry: QueueEntry, entryKeys: EntryKeys): Promise<boolean> {
+  let claimed = false;
+  await withSerializedTransaction(db, async () => {
+    const row = await db.getFirstAsync<QueueEntry>('SELECT * FROM sync_queue WHERE id = ?', [entry.id]);
+    if (row === null) return;
+    Object.assign(entry, row);
+    const fresh = groupEntryKeys(
+      await db.getAllAsync<EntryKeyRow>('SELECT entry_id, key, read_only FROM sync_queue_keys WHERE entry_id = ?', [entry.id]),
+    );
+    entryKeys.keys.set(entry.id, fresh.keys.get(entry.id) ?? []);
+    entryKeys.writtenNoteIds.set(entry.id, fresh.writtenNoteIds.get(entry.id) ?? []);
+    markEntryInFlight(db, entry.id);
+    claimed = true;
+  });
+  return claimed;
 }
 
 /**
@@ -1037,14 +1066,23 @@ async function recordDeadLetter(
  * update their caches.
  */
 export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
+  try {
+    return await drainQueuePass(db);
+  } finally {
+    clearEntryInFlight(db);
+  }
+}
+
+async function drainQueuePass(db: SQLiteDatabase): Promise<DrainResult> {
   const entries = await db.getAllAsync<QueueEntry>(
     'SELECT * FROM sync_queue ORDER BY id ASC',
   );
+  // Each entry's row and keys are re-read when the pass reaches it (see
+  // claimQueueEntry): a merge at enqueue or a label-id rewrite may have
+  // changed them since this load.
   const entryKeys = await loadEntryKeys(db);
-  // A label-id rewrite mid-drain moves only `label:` keys, so this holds throughout.
   const noteIdsByEntry = entryKeys.writtenNoteIds;
-  // Reloaded after a label-id rewrite, which moves `label:` keys.
-  let keysByEntry = entryKeys.keys;
+  const keysByEntry = entryKeys.keys;
   // Keys of the entries this pass held back: one that failed transiently, and
   // every later one that shares a key with it (#1283).
   const blockedKeys = new Set<string>();
@@ -1072,6 +1110,9 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
 
   for (const entry of entries) {
     settledThisEntry = new Set<string>();
+    // Sent as it is now, and closed to merges until the next entry (spec §8.5).
+    // A row gone since the load (an upload moved or dismissed) is skipped.
+    if (!(await claimQueueEntry(db, entry, entryKeys))) continue;
     // Declared outside the try so the catch can dead-letter using the endpoint
     // and body that were actually sent to the server.
     let endpoint = entry.endpoint;
@@ -1423,19 +1464,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
                   await rewriteLabelId(db, clientLabelId, serverLabel.id, serverLabel);
                   await rewriteLabelKeys(db, clientLabelId, serverLabel.id);
                 });
-                // The drain snapshot predates the rewrite: refresh the rows behind this one.
-                keysByEntry = (await loadEntryKeys(db)).keys;
-                const rewritten = new Map(
-                  (await db.getAllAsync<QueueEntry>('SELECT * FROM sync_queue WHERE id > ?', [entry.id]))
-                    .map((row) => [row.id, row]),
-                );
-                for (const later of entries) {
-                  const fresh = rewritten.get(later.id);
-                  if (fresh) {
-                    later.endpoint = fresh.endpoint;
-                    later.body = fresh.body;
-                  }
-                }
+                // The rows behind this one are re-read when the pass reaches them.
               }
               idempotentConflict = true;
             }
@@ -1562,6 +1591,8 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
       }
     }
   }
+
+  clearEntryInFlight(db);
 
   if (pullNoteIds.size > 0 && !stoppedOnConnectivity) {
     await pullTouchedNotes(db, pullNoteIds);
@@ -1690,12 +1721,12 @@ export interface ServerResponseOptions {
  *
  * - **Unresolved failed change:** take neither content nor version; the local
  *   row is what "Keep my version" forks from.
- * - **Another op queued for the note:** the response predates that edit (a
- *   create holds the content as of the first autosave), so take no content.
- *   Take the version only with `ownVersion`, so a chain of queued edits replays
- *   against the versions its own writes produced (#489) — a temporary
- *   exception to §8.3 until queued ops are merged (§8.5, #1268). A version that
- *   may carry a collaborator's edit is never adopted without its content.
+ * - **Another op queued for the note:** the response predates that edit, so
+ *   take no content. Take the version only with `ownVersion`, so a chain of
+ *   queued edits replays against the versions its own writes produced (#489):
+ *   an exception to §8.3 that merging at enqueue (§8.5) does not retire, see
+ *   spec §8.8. A version that may carry a collaborator's edit is never adopted
+ *   without its content.
  * - **Otherwise:** save it whole, which also brings in any collaborator edit
  *   made while the note was protected from snapshots.
  *

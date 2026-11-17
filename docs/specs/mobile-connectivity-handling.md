@@ -481,9 +481,9 @@ editor's baseline, and the rewritten rows do. A step only ever moves the
 version up. A duplicate starts at version 1 locally, like a create,
 since that is the version of the server's copy (§8.1); migration 15 resets the
 duplicates older builds queued with their source's version. An edit based on any other version is sent as it is, so a real
-conflict still gets its 409. Merging queued edits at enqueue (#1268) would
-make the chain one request; until then the rebase is what keeps it apart from
-a conflict.
+conflict still gets its 409. Merging at enqueue (§8.5) turns most chains into
+one row; the rebase keeps apart what merging cannot: a save queued while the
+row before it is being sent, or one behind an interleaved per-user change.
 
 A row queued by an app version from before the outbox has no stored base; the
 drain resolves it from the note's local version at send time, as it used to.
@@ -606,13 +606,33 @@ change.
   repeated reorders; repeated edits or check-offs of the same item.
 - **Do not merge:** opposite pairs (add/remove a label, share/unshare), ops of
   different types, ops on different notes.
-- Merge only into the **last** queued op for that note, so the order relative
-  to everything else is unchanged. Folding into a queued create is the one
-  exception.
-- Never merge into a row the drain is sending.
+- Merge only into the **last** queued op that shares a key with the new one,
+  read-only keys included (a queued duplicate copies its source, so an edit
+  queued after it stays after it). The order relative to everything else is
+  unchanged. A later reorder takes over the earlier row's keys, since every
+  note it names had nothing queued after that row.
+- **Folding into a queued create** is the one exception: an edit of the
+  fields a create takes (text, colour, pin) is folded into it, past the item
+  and label ops behind it, so the server receives one create with the final
+  content. Not when an `update` or a conversion is queued after the create, or
+  a duplicate of the note: those would see the folded value change under them.
+  A field the create does not take (archive, collapse) stays an `update`.
+- **Never merge into a row the drain is sending.** The drain re-reads each
+  row and marks it in flight in one serialized transaction just before it
+  sends it, so a merge either lands before that read or appends a new row.
+  A row the pass loaded but has not reached yet is still merged into; it is
+  sent as it stands when the pass gets there.
 - Keep **content and per-user fields in separate rows**. Content is
   version-guarded and per-user fields are not; in one request a content
-  conflict would take the pin down with it.
+  conflict would take the pin down with it. A body that carries both is not
+  merged. A merged content row keeps the `base_version` of the first save it
+  absorbed; a row queued before edits stored their base is not merged with
+  one that has it.
+- Merged item edits keep a re-parent: an `updateItem` whose `parent_id` is
+  `null` (unchanged) does not undo the queued row's.
+
+Merging lives in `src/db/queueMerge.ts`, called from `enqueueWrite` inside the
+write's transaction.
 
 ### 8.6 Local data belongs to one account
 
@@ -643,8 +663,7 @@ its own edit times. Merging (§8.5) therefore loses nothing history would keep.
 | Rule | Issue |
 |---|---|
 | §8.4 protection lasts until the dead letter is resolved | #1263 |
-| §8.5 merging queued ops | #1268 |
-| §8.3 "take neither content nor version" while other ops are queued. Until queued ops are merged, a chain of queued edits to one note would conflict with itself, so the drain still adopts a response's version without its content when the version can only be its own write's: a create, or a version-guarded edit the server accepted at `base_version` or one above (`saveServerResponseNote`'s `ownVersion`). An outbox edit or conversion no longer needs it (its rows are rebased, §8.2); a row from before the outbox still resolves its base from the local version. Remove the exception with #1268. | #1268 |
+| §8.3 "take neither content nor version" while other ops are queued. The drain still adopts a response's version without its content when the version can only be its own write's: a create, or a version-guarded edit the server accepted at `base_version` or one above (`saveServerResponseNote`'s `ownVersion`). Merging (§8.5) shortens chains but does not end them: a row from before the outbox resolves its base from the local version, and an editor opened after a restart, while the note still has ops queued, takes its baseline from the row, with no in-memory own-version step left to advance it. Both need the adopted version until they can resolve their base another way. | — |
 
 ---
 
@@ -661,6 +680,7 @@ its own edit times. Merging (§8.5) therefore loses nothing history would keep.
 | Failed-change review and resolution (§8.4) | `src/hooks/useSyncFailures.ts` |
 | Local-data ownership, logout wipe, unsynced count (§8.6) | `src/db/accountOwner.ts`, `src/store/AccountDataGate.tsx` (wired in `App.tsx`), `src/components/DrawerContent.tsx` |
 | Outbox write: local edit + queue rows in one transaction (§4.1) | `src/db/syncQueue.ts` (`enqueueWrite`, `enqueueSettingsUpdate`) |
+| Merging queued ops at enqueue; the row in flight (§8.5) | `src/db/queueMerge.ts`, `claimQueueEntry` in `src/db/syncQueue.ts` |
 | Own-version steps for queued content edits (§8.2) | `src/db/ownVersions.ts`, `rebaseQueuedEdits` in `src/db/syncQueue.ts` |
 | Sync queue + transient/permanent split + FIFO per key (§7) | `src/db/syncQueue.ts` (`isGlobalDrainFailure`, `drainQueue`, `MAX_ENTRY_DRAIN_ATTEMPTS`, `getSyncQueueStats`) |
 | Per-operation rejection policy (§8.4) | `src/db/syncQueue.ts` (`SERVER_STATE_ON_REJECTION_OPERATIONS`, `acceptsServerStateOnRejection`, `BEST_EFFORT_OPERATIONS`) |
