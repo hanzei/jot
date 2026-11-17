@@ -1428,8 +1428,10 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
           case 'duplicate': {
             // The server keeps the client-supplied `id`, so the id is stable —
             // adopt the canonical note (server item ids etc.) and clear the
-            // pending-create marker. Nobody else can have
-            // edited a note the server only just created, so its version is ours.
+            // pending-create marker. A note the server only just created is at
+            // version 1, as the local row already is, so taking its version
+            // changes nothing. A duplicate's content is the server's copy of
+            // its source, which may differ from the device's (spec §8.1).
             const clientId = body?.id as string | undefined;
             if (clientId && responseNote) {
               syncedNote = await applyResponse(true);
@@ -1922,9 +1924,9 @@ export interface ServerResponseOptions {
  * - **Another op queued for the note:** the response predates that edit, so
  *   take no content. Take the version only with `ownVersion`, so a chain of
  *   queued edits replays against the versions its own writes produced (#489):
- *   an exception to §8.3 that merging at enqueue (§8.5) does not retire, see
- *   spec §8.8. A version that may carry a collaborator's edit is never adopted
- *   without its content.
+ *   it holds nothing but this device's write, which the row already has
+ *   (spec §8.1). A version that may carry a collaborator's edit is never
+ *   adopted without its content.
  * - **Otherwise:** save it whole, which also brings in any collaborator edit
  *   made while the note was protected from snapshots.
  *
