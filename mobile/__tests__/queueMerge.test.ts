@@ -313,6 +313,16 @@ describe('note reorders', () => {
     expect(op!.keys).toEqual([`note:${OTHER_ID}`, `note:${NOTE_ID}`, 'note:Third000000000000000000']);
   });
 
+  it('does not replace a reorder with one that leaves out a note it moved', async () => {
+    // A reorder from a label view names only that label's notes.
+    await enqueueAll(reorder([NOTE_ID, OTHER_ID]), reorder([OTHER_ID]));
+
+    expect(await rows()).toEqual([
+      ['reorder', { note_ids: [NOTE_ID, OTHER_ID] }],
+      ['reorder', { note_ids: [OTHER_ID] }],
+    ]);
+  });
+
   it('does not move a reorder ahead of a create of a note it names', async () => {
     await enqueueAll(reorder([NOTE_ID, OTHER_ID]), createText('Third000000000000000000'), reorder(['Third000000000000000000', NOTE_ID, OTHER_ID]));
 

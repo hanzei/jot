@@ -609,8 +609,11 @@ change.
 - Merge only into the **last** queued op that shares a key with the new one,
   read-only keys included (a queued duplicate copies its source, so an edit
   queued after it stays after it). The order relative to everything else is
-  unchanged. A later reorder takes over the earlier row's keys, since every
-  note it names had nothing queued after that row.
+  unchanged. A later reorder replaces an earlier one only when it names every
+  note (or item) the earlier one did: the server positions only the ids it
+  is sent, so a reorder from a filtered view must not drop the moves of the
+  notes it leaves out. The merged row takes over the later reorder's keys,
+  since every note it names had nothing queued after that row.
 - **Folding into a queued create** is the one exception: an edit of the
   fields a create takes (text, colour, pin) is folded into it, past the item
   and label ops behind it, so the server receives one create with the final
@@ -663,7 +666,7 @@ its own edit times. Merging (§8.5) therefore loses nothing history would keep.
 | Rule | Issue |
 |---|---|
 | §8.4 protection lasts until the dead letter is resolved | #1263 |
-| §8.3 "take neither content nor version" while other ops are queued. The drain still adopts a response's version without its content when the version can only be its own write's: a create, or a version-guarded edit the server accepted at `base_version` or one above (`saveServerResponseNote`'s `ownVersion`). Merging (§8.5) shortens chains but does not end them: a row from before the outbox resolves its base from the local version, and an editor opened after a restart, while the note still has ops queued, takes its baseline from the row, with no in-memory own-version step left to advance it. Both need the adopted version until they can resolve their base another way. | — |
+| §8.3 "take neither content nor version" while other ops are queued. The drain still adopts a response's version without its content when the version can only be its own write's: a create, or a version-guarded edit the server accepted at `base_version` or one above (`saveServerResponseNote`'s `ownVersion`). Merging (§8.5) shortens chains but does not end them: a row from before the outbox resolves its base from the local version, and an editor opened after a restart, while the note still has ops queued, takes its baseline from the row, with no in-memory own-version step left to advance it. Both need the adopted version until they can resolve their base another way. | #1307 |
 
 ---
 

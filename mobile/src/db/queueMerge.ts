@@ -60,6 +60,13 @@ function sameIdSet(a: unknown, b: unknown): boolean {
   return left.size === new Set(b).size && b.every((id) => left.has(id));
 }
 
+/** Whether id list `b` names every id in `a`. */
+function coversIds(a: unknown, b: unknown): boolean {
+  if (!Array.isArray(a) || !Array.isArray(b)) return false;
+  const right = new Set(b);
+  return a.every((id) => right.has(id));
+}
+
 /**
  * The body that replaces `queued`'s when `next`, an op of the same operation
  * and endpoint, is merged into it; null when the two must stay separate rows.
@@ -97,9 +104,15 @@ function mergedBody(
     case 'setItemsCompleted':
       return sameIdSet(queued.item_ids, next.item_ids) ? next : null;
     case 'reorder':
+      // The server sets each named note's position to its index, so the later
+      // order replaces the earlier one only when it names every note that one
+      // did: a reorder from a filtered view (a label, the archive) names a
+      // subset, and the notes only the earlier one moved would keep their old
+      // server positions.
+      return coversIds(queued.note_ids, next.note_ids) ? next : null;
     case 'reorderItems':
-      // The latest order is the only one that matters.
-      return next;
+      // Likewise per item.
+      return coversIds(queued.item_ids, next.item_ids) ? next : null;
     default:
       return null;
   }

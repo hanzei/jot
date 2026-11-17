@@ -515,60 +515,43 @@ export async function getSyncQueueStats(db: SQLiteDatabase): Promise<SyncQueueSt
   };
 }
 
-/** What each queued entry touches, by entry id, from one read of `sync_queue_keys`. */
-interface EntryKeys {
+/** A queue row as the drain sends it, with what it touches. */
+interface ClaimedEntry {
+  entry: QueueEntry;
   /** Every key, read-only ones included: what the drain holds back behind an entry that fails (#1283). */
-  keys: Map<number, string[]>;
+  keys: string[];
   /**
    * The notes the entry writes (its written `note:` keys): what a landing is
    * recorded for, what a dead letter links and flags failed, and what the
    * drain pulls afterwards.
    */
-  writtenNoteIds: Map<number, string[]>;
-}
-
-type EntryKeyRow = { entry_id: number; key: string; read_only: number };
-
-async function loadEntryKeys(db: SQLiteDatabase): Promise<EntryKeys> {
-  return groupEntryKeys(await db.getAllAsync<EntryKeyRow>('SELECT entry_id, key, read_only FROM sync_queue_keys'));
-}
-
-function groupEntryKeys(rows: readonly EntryKeyRow[]): EntryKeys {
-  const keys = new Map<number, string[]>();
-  const writtenNoteIds = new Map<number, string[]>();
-  const add = (map: Map<number, string[]>, entryId: number, value: string): void => {
-    const values = map.get(entryId);
-    if (values) values.push(value);
-    else map.set(entryId, [value]);
-  };
-  for (const row of rows) {
-    add(keys, row.entry_id, row.key);
-    const noteId = row.read_only === 0 ? noteIdOfKey(row.key) : null;
-    if (noteId !== null) add(writtenNoteIds, row.entry_id, noteId);
-  }
-  return { keys, writtenNoteIds };
+  writtenNoteIds: string[];
 }
 
 /**
- * Re-read queue row `entry` as it is now and mark it in flight, in one
- * serialized transaction: a merge at enqueue (spec §8.5) committed before this
- * is sent with the row, and one after it sees the mark and appends a new row
- * instead (see queueMerge.ts). The row's fields and keys are updated in place;
- * returns false when the row is gone.
+ * Read queue row `entryId` as it is now, with its keys, and mark it in flight,
+ * in one serialized transaction: a merge at enqueue (spec §8.5) committed
+ * before this is sent with the row, and one after it sees the mark and appends
+ * a new row instead (see queueMerge.ts). Null when the row is gone.
  */
-async function claimQueueEntry(db: SQLiteDatabase, entry: QueueEntry, entryKeys: EntryKeys): Promise<boolean> {
-  let claimed = false;
+async function claimQueueEntry(db: SQLiteDatabase, entryId: number): Promise<ClaimedEntry | null> {
+  let claimed = null as ClaimedEntry | null;
   await withSerializedTransaction(db, async () => {
-    const row = await db.getFirstAsync<QueueEntry>('SELECT * FROM sync_queue WHERE id = ?', [entry.id]);
-    if (row === null) return;
-    Object.assign(entry, row);
-    const fresh = groupEntryKeys(
-      await db.getAllAsync<EntryKeyRow>('SELECT entry_id, key, read_only FROM sync_queue_keys WHERE entry_id = ?', [entry.id]),
+    const entry = await db.getFirstAsync<QueueEntry>('SELECT * FROM sync_queue WHERE id = ?', [entryId]);
+    if (entry === null) return;
+    const rows = await db.getAllAsync<{ key: string; read_only: number }>(
+      'SELECT key, read_only FROM sync_queue_keys WHERE entry_id = ?',
+      [entryId],
     );
-    entryKeys.keys.set(entry.id, fresh.keys.get(entry.id) ?? []);
-    entryKeys.writtenNoteIds.set(entry.id, fresh.writtenNoteIds.get(entry.id) ?? []);
-    markEntryInFlight(db, entry.id);
-    claimed = true;
+    const keys: string[] = [];
+    const writtenNoteIds: string[] = [];
+    for (const row of rows) {
+      keys.push(row.key);
+      const noteId = row.read_only === 0 ? noteIdOfKey(row.key) : null;
+      if (noteId !== null) writtenNoteIds.push(noteId);
+    }
+    markEntryInFlight(db, entryId);
+    claimed = { entry, keys, writtenNoteIds };
   });
   return claimed;
 }
@@ -1074,15 +1057,11 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
 }
 
 async function drainQueuePass(db: SQLiteDatabase): Promise<DrainResult> {
-  const entries = await db.getAllAsync<QueueEntry>(
-    'SELECT * FROM sync_queue ORDER BY id ASC',
-  );
-  // Each entry's row and keys are re-read when the pass reaches it (see
-  // claimQueueEntry): a merge at enqueue or a label-id rewrite may have
+  // Only the ids: each row and its keys are read when the pass reaches it (see
+  // claimQueueEntry), since a merge at enqueue or a label-id rewrite may have
   // changed them since this load.
-  const entryKeys = await loadEntryKeys(db);
-  const noteIdsByEntry = entryKeys.writtenNoteIds;
-  const keysByEntry = entryKeys.keys;
+  const entryIds = (await db.getAllAsync<{ id: number }>('SELECT id FROM sync_queue ORDER BY id ASC'))
+    .map((row) => row.id);
   // Keys of the entries this pass held back: one that failed transiently, and
   // every later one that shares a key with it (#1283).
   const blockedKeys = new Set<string>();
@@ -1108,11 +1087,13 @@ async function drainQueuePass(db: SQLiteDatabase): Promise<DrainResult> {
   let stoppedOnConnectivity = false;
   let syncedSettings = false;
 
-  for (const entry of entries) {
+  for (const entryId of entryIds) {
     settledThisEntry = new Set<string>();
     // Sent as it is now, and closed to merges until the next entry (spec §8.5).
     // A row gone since the load (an upload moved or dismissed) is skipped.
-    if (!(await claimQueueEntry(db, entry, entryKeys))) continue;
+    const claimed = await claimQueueEntry(db, entryId);
+    if (claimed === null) continue;
+    const { entry, keys, writtenNoteIds } = claimed;
     // Declared outside the try so the catch can dead-letter using the endpoint
     // and body that were actually sent to the server.
     let endpoint = entry.endpoint;
@@ -1125,8 +1106,7 @@ async function drainQueuePass(db: SQLiteDatabase): Promise<DrainResult> {
     // reports, when that version is its own (see rebaseQueuedEdits).
     let ownVersionStep: OwnVersionStep | null = null;
     // The notes this entry writes, and every key it touches.
-    const targets = (): readonly string[] => noteIdsByEntry.get(entry.id) ?? [];
-    const keys = keysByEntry.get(entry.id) ?? [];
+    const targets = (): readonly string[] => writtenNoteIds;
     // Deletes the landed entry and rebases the edits behind it, inside the
     // caller's transaction. A note this response settled has no other queued
     // op, so only the in-memory step is left to record.
@@ -1600,7 +1580,7 @@ async function drainQueuePass(db: SQLiteDatabase): Promise<DrainResult> {
 
   // Ids are AUTOINCREMENT, never reused: a row above the last one this pass
   // loaded was queued while it ran.
-  const lastLoadedId = entries.length > 0 ? entries[entries.length - 1]!.id : 0;
+  const lastLoadedId = entryIds[entryIds.length - 1] ?? 0;
   const leftRow = await db.getFirstAsync<{ count: number }>(
     'SELECT COUNT(*) AS count FROM sync_queue WHERE id <= ?',
     [lastLoadedId],
