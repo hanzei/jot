@@ -646,6 +646,7 @@ export default function NoteEditorScreen() {
     items,
     markDirtyAndScheduleUpdate,
     cancelScheduledSave,
+    scheduleSaveIfDirty: sync.scheduleSaveIfDirty,
     setSaveError,
     savedItemsRef: sync.savedItemsRef,
     savedOrderRef: sync.savedOrderRef,
@@ -905,7 +906,9 @@ export default function NoteEditorScreen() {
   }, [getShareText]);
 
   const handleDelete = useCallback(async () => {
-    if (!noteId) {
+    // A new note that is not being created either has nothing to delete. One
+    // whose first save is still creating it does: that save is awaited below.
+    if (!noteIdRef.current && !saveInFlightRef.current) {
       intentionalExitRef.current = true;
       navigation.goBack();
       return;
@@ -945,7 +948,7 @@ export default function NoteEditorScreen() {
     } catch {
       Alert.alert(t('common.error'), t('note.failedDelete'));
     }
-  }, [cancelScheduledSave, deleteMutation, intentionalExitRef, navigation, noteId, noteIdRef, restoreMutation, saveInFlightRef, showToast, t, zoomCloseAndExit]);
+  }, [cancelScheduledSave, deleteMutation, intentionalExitRef, navigation, noteIdRef, restoreMutation, saveInFlightRef, showToast, t, zoomCloseAndExit]);
 
   // Restore a trashed note (read-only view) and return to the list.
   const handleRestoreNote = useCallback(async () => {

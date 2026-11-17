@@ -75,6 +75,12 @@ export interface NoteEditorSync {
   cancelScheduledSave: () => void;
   /** Flags the editor dirty and (re)arms the debounced save. */
   markDirtyAndScheduleUpdate: () => void;
+  /**
+   * Re-arms the debounced save when the editor still has unsaved edits, for a
+   * caller that cancelled it to write through another path. A no-op when
+   * nothing is dirty, so it never starts a save loop.
+   */
+  scheduleSaveIfDirty: () => void;
 
   /** PATCHes note metadata (pin/archive/color) without touching the body. */
   runMetadataUpdate: (id: string, data: Partial<UpdateNoteRequest>) => Promise<void>;
@@ -520,6 +526,10 @@ export function useNoteEditorSync({
     }
   }, []);
 
+  const scheduleSaveIfDirty = useCallback(() => {
+    if (isMountedRef.current && hasPendingChangesRef.current) scheduleUpdate();
+  }, [scheduleUpdate]);
+
   const flushPendingChanges = useCallback(async (options?: FlushOptions): Promise<boolean> => {
     cancelScheduledSave();
     return flushSave(false, options);
@@ -668,6 +678,7 @@ export function useNoteEditorSync({
     flushPendingChanges,
     cancelScheduledSave,
     markDirtyAndScheduleUpdate,
+    scheduleSaveIfDirty,
     runMetadataUpdate,
     commitMetadataBaseline,
     savedVersionRef,

@@ -1,9 +1,12 @@
-import { render, act, waitFor } from '@testing-library/react-native';
+import { Platform } from 'react-native';
+import { render, act, fireEvent, waitFor } from '@testing-library/react-native';
+import { VALIDATION } from '@jot/shared';
 import {
   mockUseRoute,
   mockNavigationAddListener,
   mockUseOfflineNote,
   mockToggleItemCompletedMutateAsync as mockToggleMutateAsync,
+  mockUpdateItemMutateAsync,
 } from './helpers/noteEditorScreenTestSetup';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 
@@ -123,5 +126,86 @@ describe('NoteEditorScreen toggle rollback', () => {
     expect(mockToggleMutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({ itemId: PARENT_ID, completed: true }),
     );
+  });
+});
+
+describe('NoteEditorScreen toggle with a save pending', () => {
+  const originalPlatform = Platform.OS;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // The item formatting bar, whose indent button this test uses, is an
+    // ordinary view in the tree on Android only.
+    Platform.OS = 'android';
+    mockNavigationAddListener.mockReturnValue(jest.fn());
+    mockUseRoute.mockReturnValue({ params: { noteId: 'note-rollback' } });
+    const note = listNoteWithParentAndChild();
+    // Both rows start top-level; the test indents the second under the first.
+    note.items[1]!.parent_id = null;
+    mockUseOfflineNote.mockReturnValue({ data: note });
+    mockUpdateItemMutateAsync.mockResolvedValue({});
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    Platform.OS = originalPlatform;
+    jest.restoreAllMocks();
+  });
+
+  // The toggle cancels the debounced save so it cannot race the toggle's own
+  // write. That save held the indent, and the toggle's write leaves the
+  // child's completed flag to it too: it cascades by the stored hierarchy,
+  // where the child is still top-level. Both must still be saved once the
+  // toggle settles, not only on the next edit or on exit.
+  it('saves an indent made just before a toggle, with the cascaded completed flag', async () => {
+    jest.useFakeTimers();
+    // The local write commits the parent only: SQLite does not know the child
+    // is nested under it yet.
+    mockToggleMutateAsync.mockResolvedValue([PARENT_ID]);
+
+    const { getAllByTestId, getByTestId } = await render(<NoteEditorScreen />);
+
+    await act(async () => {
+      await fireEvent(getAllByTestId('list-item-text')[1]!, 'focus', { nativeEvent: {} });
+    });
+    await act(async () => {
+      await fireEvent.press(getByTestId('format-indent-btn'));
+    });
+
+    // Check the parent before the indent's debounced save fires.
+    await act(async () => {
+      await fireEvent.press(getAllByTestId('list-item-checkbox')[0]!);
+    });
+    expect(mockToggleMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ itemId: PARENT_ID, completed: true }),
+    );
+    expect(mockUpdateItemMutateAsync).not.toHaveBeenCalled();
+
+    await act(async () => { jest.advanceTimersByTime(VALIDATION.AUTO_SAVE_TIMEOUT_MS); });
+
+    expect(mockUpdateItemMutateAsync).toHaveBeenCalledWith({
+      noteId: 'note-rollback',
+      itemId: CHILD_ID,
+      data: { parent_id: PARENT_ID, completed: true },
+    });
+    // The parent's flag is the toggle's: the save does not send it again.
+    expect(mockUpdateItemMutateAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not arm a save after a toggle when nothing is unsaved', async () => {
+    jest.useFakeTimers();
+    mockToggleMutateAsync.mockResolvedValue([PARENT_ID, CHILD_ID]);
+
+    const { getAllByTestId } = await render(<NoteEditorScreen />);
+    const setTimeoutSpy = jest.spyOn(globalThis, 'setTimeout');
+
+    await act(async () => {
+      await fireEvent.press(getAllByTestId('list-item-checkbox')[0]!);
+    });
+
+    expect(mockToggleMutateAsync).toHaveBeenCalledTimes(1);
+    // No debounced save was armed once the toggle settled.
+    const autosaves = setTimeoutSpy.mock.calls.filter(([, ms]) => ms === VALIDATION.AUTO_SAVE_TIMEOUT_MS);
+    expect(autosaves).toHaveLength(0);
   });
 });

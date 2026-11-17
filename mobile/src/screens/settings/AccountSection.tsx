@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, TextInput } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -32,7 +32,14 @@ export default function AccountSection() {
     setUsername(user?.username ?? '');
   }, [user?.first_name, user?.last_name, user?.username]);
 
+  // Set while a save's enqueue is pending, so a second tap is ignored without
+  // a visible pending state (a write never shows one, mobile/CLAUDE.md).
+  // Otherwise a failed first save would roll back to the `user` captured at
+  // its tap and overwrite the second save.
+  const saveInFlightRef = useRef(false);
+
   const handleSaveProfile = useCallback(async () => {
+    if (saveInFlightRef.current) return;
     setProfileError('');
     setProfileSuccess('');
     // The save is queued and sent later (#1285), so a username the server
@@ -62,6 +69,9 @@ export default function AccountSection() {
       return;
     }
 
+    // Everything above runs synchronously within the tap, so setting the guard
+    // here, just before the first await, covers the whole save.
+    saveInFlightRef.current = true;
     // Through the outbox (#1285): the drain sends it, and a rejection (say a
     // username already taken) surfaces as a failed change, after which the
     // session is re-read. The enqueue itself is a local SQLite write and can
@@ -76,6 +86,8 @@ export default function AccountSection() {
         if (settings) void cacheAuthProfile({ user: previousUser, settings });
       }
       setProfileError(extractApiError(err) ?? 'settings.failedUpdateProfile');
+    } finally {
+      saveInFlightRef.current = false;
     }
   }, [firstName, lastName, setUser, username, user, settings, db, isLocalMode]);
 

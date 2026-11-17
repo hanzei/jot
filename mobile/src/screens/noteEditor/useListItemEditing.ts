@@ -64,6 +64,8 @@ export interface UseListItemEditingParams {
   markDirtyAndScheduleUpdate: () => void;
   /** Drops a debounced save that would otherwise race a direct item write. */
   cancelScheduledSave: () => void;
+  /** Re-arms the debounced save after such a write if edits are still unsaved. */
+  scheduleSaveIfDirty: () => void;
   /** Surfaces the in-editor save-failure banner when an item write fails locally. */
   setSaveError: React.Dispatch<React.SetStateAction<string | null>>;
   /** Save baseline, advanced in step with the item writes made here. */
@@ -173,14 +175,16 @@ export interface ListItemEditing {
  * applied.
  *
  * Of those, only the toggle cancels a pending debounced save
- * (`cancelScheduledSave`), so that save can't race its API call. The bulk
- * operations leave a scheduled save armed.
+ * (`cancelScheduledSave`), so that save can't race its API call, and re-arms
+ * it once the write settles (`scheduleSaveIfDirty`). The bulk operations leave
+ * a scheduled save armed.
  */
 export function useListItemEditing({
   doc,
   items,
   markDirtyAndScheduleUpdate,
   cancelScheduledSave,
+  scheduleSaveIfDirty,
   setSaveError,
   savedItemsRef,
   savedOrderRef,
@@ -398,10 +402,15 @@ export function useListItemEditing({
       // The request and the reconcile that follows it both run inside the
       // in-flight window: until the reconciled state is set, a note re-read
       // still describes this item as it was before the tap.
-      return withItemWriteInFlight(() => persistCompletedWrite(priorById, () =>
+      const persisted = await withItemWriteInFlight(() => persistCompletedWrite(priorById, () =>
         toggleItemCompletedRef.current({ noteId: currentNoteId, itemId, completed })));
+      // Re-arm the save cancelled above: it held edits made just before the
+      // tap (an indent, say), along with any completed flag the write left to
+      // it because the stored hierarchy did not cascade to that item yet.
+      scheduleSaveIfDirty();
+      return persisted;
     },
-    [cancelScheduledSave, itemsRef, markDirtyAndScheduleUpdate, noteIdRef, persistCompletedWrite, setItems, withItemWriteInFlight],
+    [cancelScheduledSave, itemsRef, markDirtyAndScheduleUpdate, noteIdRef, persistCompletedWrite, scheduleSaveIfDirty, setItems, withItemWriteInFlight],
   );
 
   // Unchecks every currently-completed item in one bulk request (overflow

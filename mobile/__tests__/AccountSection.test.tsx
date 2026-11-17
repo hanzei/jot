@@ -114,6 +114,45 @@ describe('AccountSection', () => {
     expect(getByText(i18n.t('settings.profileUpdated'))).toBeTruthy();
   });
 
+  it('ignores a second save while the first is still being queued', async () => {
+    mockAuth(false);
+    let failEnqueue!: (err: Error) => void;
+    mockEnqueueSettingsUpdate.mockReturnValueOnce(new Promise<void>((_resolve, reject) => { failEnqueue = reject; }));
+
+    const { getByTestId, getByText } = await render(<AccountSection />);
+    await fireEvent.changeText(getByTestId('settings-first-name'), 'Renamed');
+    // Not awaited: the press resolves only once the enqueue does.
+    let pressed!: Promise<unknown>;
+    await act(async () => { pressed = fireEvent.press(getByTestId('settings-save-profile')); });
+    expect(mockEnqueueSettingsUpdate).toHaveBeenCalledTimes(1);
+
+    await fireEvent.changeText(getByTestId('settings-first-name'), 'Renamed again');
+    await fireEvent.press(getByTestId('settings-save-profile'));
+    // The second tap is ignored rather than racing the first: a failure of
+    // the first would roll back to the profile captured at its tap and so
+    // overwrite the second save.
+    expect(mockEnqueueSettingsUpdate).toHaveBeenCalledTimes(1);
+    // Still no visible pending state.
+    expect(getByTestId('settings-save-profile')).not.toBeDisabled();
+
+    await act(async () => {
+      failEnqueue(new Error('sqlite write failed'));
+      await pressed;
+    });
+    expect(getByText(i18n.t('settings.failedUpdateProfile'))).toBeTruthy();
+
+    // Once the first save has settled, a tap saves again.
+    await fireEvent.press(getByTestId('settings-save-profile'));
+    await waitFor(() => {
+      expect(getByText(i18n.t('settings.profileUpdated'))).toBeTruthy();
+    });
+    expect(mockEnqueueSettingsUpdate).toHaveBeenCalledTimes(2);
+    expect(mockEnqueueSettingsUpdate).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ first_name: 'Renamed again' }),
+    );
+  });
+
   it('does not touch the server or sync queue in local mode', async () => {
     mockAuth(true);
 

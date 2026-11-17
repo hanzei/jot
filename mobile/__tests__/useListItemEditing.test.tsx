@@ -28,6 +28,7 @@ const mockConfirm = jest.fn().mockResolvedValue(true);
 const mockShowToast = jest.fn();
 const markDirty = jest.fn();
 const cancelScheduledSave = jest.fn();
+const scheduleSaveIfDirty = jest.fn();
 const setSaveError = jest.fn();
 const openAssigneePicker = jest.fn();
 
@@ -52,6 +53,7 @@ function useHarness() {
     items: doc.items,
     markDirtyAndScheduleUpdate: markDirty,
     cancelScheduledSave,
+    scheduleSaveIfDirty,
     setSaveError,
     savedItemsRef,
     savedOrderRef,

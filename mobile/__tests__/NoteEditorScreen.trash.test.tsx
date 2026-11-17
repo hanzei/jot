@@ -1,5 +1,6 @@
 import { Alert } from 'react-native';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
+import { VALIDATION } from '@jot/shared';
 import {
   mockUseRoute,
   mockGoBack,
@@ -7,6 +8,8 @@ import {
   mockRestoreMutateAsync,
   mockPermanentDeleteMutateAsync,
   mockUseOfflineNote,
+  mockCreateMutateAsync,
+  mockDeleteMutateAsync,
 } from './helpers/noteEditorScreenTestSetup';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 import { ConfirmProvider } from '../src/components/ConfirmDialog';
@@ -143,5 +146,63 @@ describe('NoteEditorScreen read-only trashed note', () => {
 
     // The completed-items collapse toggle is disabled.
     expect(getByTestId('toggle-checked-items').props.accessibilityState).toMatchObject({ disabled: true });
+  });
+});
+
+describe('NoteEditorScreen move to trash on a new note', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockNavigationAddListener.mockReturnValue(jest.fn());
+    mockUseRoute.mockReturnValue({ params: { noteId: null } });
+    mockUseOfflineNote.mockReturnValue({ data: null });
+    mockDeleteMutateAsync.mockResolvedValue({});
+    jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  it('just exits a blank new note, which has nothing to delete', async () => {
+    const { getByTestId } = await render(<NoteEditorScreen />);
+
+    await fireEvent.press(getByTestId('toolbar-menu-btn'));
+    await act(async () => {
+      await fireEvent.press(getByTestId('editor-menu-trash'));
+    });
+
+    expect(mockGoBack).toHaveBeenCalledTimes(1);
+    expect(mockCreateMutateAsync).not.toHaveBeenCalled();
+    expect(mockDeleteMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('waits for the first save still creating the note, then trashes the created note', async () => {
+    jest.useFakeTimers();
+    let resolveCreate!: (note: unknown) => void;
+    mockCreateMutateAsync.mockReturnValue(new Promise((res) => { resolveCreate = res; }));
+    const { getByTestId } = await render(<NoteEditorScreen />);
+
+    await act(async () => {
+      await fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
+    });
+    await act(async () => { jest.advanceTimersByTime(VALIDATION.AUTO_SAVE_TIMEOUT_MS); });
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
+
+    // Trash while the create is still in flight: the note has no id yet.
+    await act(async () => { await fireEvent.press(getByTestId('toolbar-menu-btn')); });
+    await act(async () => { await fireEvent.press(getByTestId('editor-menu-trash')); });
+    expect(mockGoBack).not.toHaveBeenCalled();
+    expect(mockDeleteMutateAsync).not.toHaveBeenCalled();
+
+    await act(async () => { resolveCreate({ id: 'note-new', note_type: 'text', content: 'Hello' }); });
+
+    await waitFor(() => {
+      expect(mockDeleteMutateAsync).toHaveBeenCalledWith('note-new');
+    });
+    await waitFor(() => {
+      expect(mockGoBack).toHaveBeenCalledTimes(1);
+    });
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
   });
 });
