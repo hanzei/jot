@@ -10,6 +10,7 @@ import type { TestDatabase } from './helpers/testDb';
 import { makeLabel, makeListNote, makeTextNote, seedQueueEntry } from './helpers/fixtures';
 import { getLocalNote, saveNote } from '../src/db/noteQueries';
 import { silenceConsole } from './helpers/consoleGuard';
+import { markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
 import {
   labelsQueryKey,
   noteLocalQueryKey,
@@ -115,12 +116,14 @@ const mockConnect = jest.fn().mockImplementation(
 );
 const mockDisconnect = jest.fn();
 const mockManagerIsConnected = jest.fn(() => false);
+const mockReconnectNow = jest.fn();
 
 jest.mock('../src/api/events', () => ({
   SSEConnectionManager: jest.fn().mockImplementation(() => ({
     connect: mockConnect,
     disconnect: mockDisconnect,
     isConnected: mockManagerIsConnected,
+    reconnectNow: mockReconnectNow,
   })),
 }));
 
@@ -177,6 +180,26 @@ describe('useSSE', () => {
     await renderHook(() => useSSE(), { wrapper: Wrapper });
 
     expect(mockConnect).not.toHaveBeenCalled();
+  });
+
+  it('asks a waiting stream to reconnect at once when the server becomes reachable again (#1309)', async () => {
+    const { Wrapper } = createWrapper();
+    const { unmount } = await renderHook(() => useSSE(), { wrapper: Wrapper });
+
+    await act(() => {
+      markServerUnreachable();
+    });
+    expect(mockReconnectNow).not.toHaveBeenCalled();
+    await act(() => {
+      markServerReachable();
+    });
+    expect(mockReconnectNow).toHaveBeenCalledTimes(1);
+
+    // Not after the hook is gone.
+    await unmount();
+    markServerUnreachable();
+    markServerReachable();
+    expect(mockReconnectNow).toHaveBeenCalledTimes(1);
   });
 
   it('disconnects on unmount', async () => {

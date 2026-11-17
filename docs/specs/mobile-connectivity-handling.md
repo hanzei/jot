@@ -78,7 +78,10 @@ answers. It starts `true`, and is not per server: a server switch resets it.
 - **The flag recovers on its own.** With the stream open, within one keepalive
   interval (30 s). With the stream down, through the stream's own reconnects.
   After a reconnect, queued changes should start syncing within a few seconds
-  of the network becoming usable (#1309).
+  of the network becoming usable (#1309): a reconnect whose session check gets
+  no answer retries on a short, bounded backoff, and a stream waiting to retry
+  opens as soon as the flag recovers. The stream's backoff is the fallback,
+  not the first recovery path.
 - **When it recovers, a drain that stopped on it resumes**, without skipping a
   pending backoff or resetting the failure count.
 - **A write queued while a drain runs is never stranded**: a pass follows to

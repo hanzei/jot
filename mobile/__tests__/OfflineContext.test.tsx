@@ -12,6 +12,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { OfflineProvider, useOfflineContext } from '../src/store/OfflineContext';
 import { clearQueuedWriteWaits, drainQueue, getOldestFailingSince, getPendingCount, type DrainResult } from '../src/db/syncQueue';
 import { setLocalModeActive } from '../src/store/localMode';
+import { abortServerSwitchLifecycle, beginServerSwitchLifecycle } from '../src/store/serverSwitchLifecycle';
 import * as serverReachability from '../src/api/serverReachability';
 import { silenceConsole } from './helpers/consoleGuard';
 import { subscribeToReconnectResync } from '../src/store/resyncEvents';
@@ -104,6 +105,11 @@ async function flush() {
   });
 }
 
+/** The listener the provider registered with NetInfo. */
+function getNetInfoListener<S>(): (state: S) => void {
+  return (NetInfo.addEventListener as jest.Mock).mock.calls[0][0] as (state: S) => void;
+}
+
 function getAppStateHandler(): (state: AppStateStatus) => void {
   const spy = AppState.addEventListener as jest.Mock;
   const call = spy.mock.calls.find((c) => c[0] === 'change');
@@ -128,7 +134,7 @@ describe('OfflineProvider queue draining', () => {
     // The provider logs each stalled drain, the give-up and the recovery; the
     // backoff and failure-cap tests drive exactly those paths.
     silenceConsole('warn', /^Queue drain failed \d+ times/);
-    silenceConsole('info', /^Queue drain stalled/, /^Queue drain succeeded after/);
+    silenceConsole('info', /^Queue drain stalled/, /^Queue drain succeeded after/, /^Reconnect got no answer/);
   });
 
   afterEach(async () => {
@@ -904,6 +910,190 @@ describe('OfflineProvider queue draining', () => {
     warnSpy.mockRestore();
     infoSpy.mockRestore();
   });
+  describe('a reconnect whose session check gets no answer (#1309)', () => {
+    type NetState = { isConnected: boolean; isInternetReachable: boolean | null };
+    // What the interceptor does when GET /users/me gets no response;
+    // revalidateSession keeps the session.
+    const noAnswer = async () => {
+      serverReachability.markServerUnreachable();
+      return true;
+    };
+
+    /** Mount online, then drop to offline and come back; returns the drains so far. */
+    async function reconnectAfterOutage(): Promise<number> {
+      await renderProvider();
+      await flush();
+      await act(async () => {
+        getNetInfoListener<NetState>()({ isConnected: false, isInternetReachable: false });
+      });
+      mockRevalidate.mockClear();
+      const drains = mockDrainQueue.mock.calls.length;
+      await act(async () => {
+        getNetInfoListener<NetState>()({ isConnected: true, isInternetReachable: null });
+      });
+      await flush();
+      return drains;
+    }
+
+    it('retries the reconnect after 1 s and drains, with no SSE event', async () => {
+      mockRevalidate.mockImplementationOnce(() => Promise.resolve(true)).mockImplementationOnce(noAnswer);
+      const drains = await reconnectAfterOutage();
+      expect(mockRevalidate).toHaveBeenCalledTimes(1);
+      expect(mockDrainQueue).toHaveBeenCalledTimes(drains);
+
+      await act(async () => {
+        jest.advanceTimersByTime(999);
+      });
+      await flush();
+      expect(mockRevalidate).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        jest.advanceTimersByTime(1);
+      });
+      await flush();
+      expect(mockRevalidate).toHaveBeenCalledTimes(2);
+      expect(mockDrainQueue).toHaveBeenCalledTimes(drains + 1);
+    });
+
+    it('retries exactly four more times, on a growing backoff, then waits for another trigger', async () => {
+      mockRevalidate.mockImplementation(noAnswer);
+      const drains = await reconnectAfterOutage();
+      expect(mockRevalidate).toHaveBeenCalledTimes(1);
+
+      for (const [delay, calls] of [[1000, 2], [2000, 3], [4000, 4], [8000, 5]] as const) {
+        await act(async () => {
+          jest.advanceTimersByTime(delay - 1);
+        });
+        await flush();
+        expect(mockRevalidate).toHaveBeenCalledTimes(calls - 1);
+        await act(async () => {
+          jest.advanceTimersByTime(1);
+        });
+        await flush();
+        expect(mockRevalidate).toHaveBeenCalledTimes(calls);
+      }
+
+      await act(async () => {
+        jest.advanceTimersByTime(120000);
+      });
+      await flush();
+      expect(mockRevalidate).toHaveBeenCalledTimes(5);
+      expect(mockDrainQueue).toHaveBeenCalledTimes(drains);
+    });
+
+    it('cancels the retries when the device goes offline', async () => {
+      mockRevalidate.mockImplementation(noAnswer);
+      await reconnectAfterOutage();
+      await act(async () => {
+        getNetInfoListener<NetState>()({ isConnected: false, isInternetReachable: false });
+      });
+
+      await act(async () => {
+        jest.advanceTimersByTime(120000);
+      });
+      await flush();
+      expect(mockRevalidate).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops retrying once the server answers something else first', async () => {
+      mockRevalidate.mockImplementation(noAnswer);
+      const drains = await reconnectAfterOutage();
+
+      // E.g. the SSE stream opened: the parked drain resumes instead.
+      await act(() => {
+        serverReachability.markServerReachable();
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(120000);
+      });
+      await flush();
+      expect(mockRevalidate).toHaveBeenCalledTimes(1);
+      expect(mockDrainQueue).toHaveBeenCalledTimes(drains + 1);
+    });
+
+    it('does not retry the reconnect when the session check answered and the drain stalled', async () => {
+      // /users/me answers; the queued write then times out.
+      mockGetPendingCount.mockResolvedValue(1);
+      mockDrainQueue.mockImplementation(async () => {
+        serverReachability.markServerUnreachable();
+        return drainResult({ leftBehind: 1, stoppedOnConnectivity: true });
+      });
+      await reconnectAfterOutage();
+      expect(mockRevalidate).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        jest.advanceTimersByTime(120000);
+      });
+      await flush();
+      expect(mockRevalidate).toHaveBeenCalledTimes(1);
+    });
+
+    it('cancels the retries on a server switch', async () => {
+      mockRevalidate.mockImplementation(noAnswer);
+      await reconnectAfterOutage();
+      await act(() => {
+        beginServerSwitchLifecycle();
+      });
+      await act(() => {
+        abortServerSwitchLifecycle();
+      });
+
+      await act(async () => {
+        jest.advanceTimersByTime(120000);
+      });
+      await flush();
+      expect(mockRevalidate).toHaveBeenCalledTimes(1);
+    });
+
+    it('schedules no retry for a reconnect that finishes after unmount', async () => {
+      let answer: (value: boolean) => void = () => {};
+      mockRevalidate.mockImplementationOnce(() => Promise.resolve(true)).mockImplementationOnce(() => new Promise<boolean>((resolve) => {
+        answer = resolve;
+      }));
+      const view = await renderProvider();
+      await flush();
+      await act(async () => {
+        getNetInfoListener<NetState>()({ isConnected: false, isInternetReachable: false });
+      });
+      await act(async () => {
+        getNetInfoListener<NetState>()({ isConnected: true, isInternetReachable: null });
+      });
+      await view.unmount();
+
+      serverReachability.markServerUnreachable();
+      answer(true);
+      await flush();
+      mockRevalidate.mockClear();
+      jest.advanceTimersByTime(120000);
+      await flush();
+      expect(mockRevalidate).not.toHaveBeenCalled();
+    });
+
+    it('restarts the retry budget on a fresh trigger', async () => {
+      mockRevalidate.mockImplementation(noAnswer);
+      await reconnectAfterOutage();
+      for (const delay of [1000, 2000, 4000, 8000]) {
+        await act(async () => {
+          jest.advanceTimersByTime(delay);
+        });
+        await flush();
+      }
+      expect(mockRevalidate).toHaveBeenCalledTimes(5);
+
+      // A foreground reconnects, and gets its own retries.
+      await act(async () => {
+        getAppStateHandler()('active');
+      });
+      await flush();
+      expect(mockRevalidate).toHaveBeenCalledTimes(6);
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+      });
+      await flush();
+      expect(mockRevalidate).toHaveBeenCalledTimes(7);
+    });
+  });
+
   describe('a network without internet access (#1266)', () => {
     type NetState = {
       isConnected: boolean;
@@ -911,8 +1101,6 @@ describe('OfflineProvider queue draining', () => {
       type: string;
       details: { ipAddress?: string; strength?: number } | null;
     };
-    const getNetInfoListener = () =>
-      (NetInfo.addEventListener as jest.Mock).mock.calls[0][0] as (state: NetState) => void;
     const wifi = (overrides: Partial<NetState> = {}): NetState => ({
       isConnected: true,
       isInternetReachable: true,
@@ -944,7 +1132,7 @@ describe('OfflineProvider queue draining', () => {
       await flush();
 
       await act(async () => {
-        getNetInfoListener()(wifi({ isInternetReachable: false }));
+        getNetInfoListener<NetState>()(wifi({ isInternetReachable: false }));
       });
 
       expect(lastIsConnected).toBe(true);
@@ -964,7 +1152,7 @@ describe('OfflineProvider queue draining', () => {
       expect(resync).not.toHaveBeenCalled();
 
       await act(async () => {
-        getNetInfoListener()(after);
+        getNetInfoListener<NetState>()(after);
       });
       await flush();
 
@@ -981,10 +1169,10 @@ describe('OfflineProvider queue draining', () => {
       await flush();
 
       await act(async () => {
-        getNetInfoListener()({ isConnected: false, isInternetReachable: false, type: 'none', details: null });
+        getNetInfoListener<NetState>()({ isConnected: false, isInternetReachable: false, type: 'none', details: null });
       });
       await act(async () => {
-        getNetInfoListener()(wifi());
+        getNetInfoListener<NetState>()(wifi());
       });
       await flush();
 
@@ -1004,7 +1192,7 @@ describe('OfflineProvider queue draining', () => {
       expect(mockRevalidate).toHaveBeenCalledTimes(1);
 
       await act(async () => {
-        getNetInfoListener()(after);
+        getNetInfoListener<NetState>()(after);
       });
       await flush();
 
