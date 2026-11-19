@@ -38,6 +38,7 @@ import { notesWrittenSince, recordWriteLanded, snapshotMark, type SnapshotMark }
 import { recordOwnVersionStep, resolveOwnBaseVersion } from './ownVersions';
 import { uploadNoteImage } from '../api/images';
 import { deleteFileIfExists } from '../utils/fs';
+import { cacheUploadedNoteImage } from '../utils/noteImageCache';
 import { BACKOFF_BASE_MS, BACKOFF_MAX_MS, backoffDelayMs } from '../utils/backoff';
 import type { Label, NoteShare } from '@jot/shared';
 
@@ -1368,7 +1369,8 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
           );
           await removeLandedEntry();
         });
-        deleteFileIfExists(upload.local_path);
+        // The queue's copy becomes the cached original (it is deleted if that fails).
+        await cacheUploadedNoteImage(image.id, upload.local_path, { move: true });
         // Ops it followed withheld their responses while it was queued; the
         // pull catches the note up once nothing is left queued for it.
         pullNoteIds.add(uploadNoteId);
@@ -1531,7 +1533,8 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
         });
         if (uploadNoteId !== undefined) {
           const upload = parseImageUploadBody(body);
-          if (upload) deleteFileIfExists(upload.local_path);
+          // The image landed under its client ID, so the copy is its original.
+          if (upload) await cacheUploadedNoteImage(upload.id, upload.local_path, { move: true });
         }
         if (entry.operation !== 'delete' && entry.operation !== 'permanentDelete') {
           for (const noteId of writtenNoteIds) pullNoteIds.add(noteId);

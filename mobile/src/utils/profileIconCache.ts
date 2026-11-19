@@ -1,4 +1,5 @@
-import { cachePath, deleteFileIfExists, downloadFile, ensureDirExists, fileExists, listFileNames } from './fs';
+import { sessionCookieHeaders } from '../api/client';
+import { cachePath, deleteFileIfExists, downloadFileAtomically, ensureDirExists, fileExists, listFileNames } from './fs';
 
 const CACHE_DIR = cachePath('profile-icons');
 
@@ -45,13 +46,14 @@ export async function downloadAndCacheIcon(
   const path = iconFilePath(userId, updatedAt);
   try {
     ensureDirExists(CACHE_DIR);
-    await downloadFile(networkUrl, path);
+    // Atomic, since a cached file is trusted by existence alone. The cookie is
+    // explicit because the native downloader skips the axios interceptor.
+    await downloadFileAtomically(networkUrl, path, { headers: await sessionCookieHeaders(networkUrl) });
     purgeStaleIcons(userId, updatedAt);
     return path;
   } catch {
-    // A non-2xx response or a transport error both reject here. Clean up any
-    // partially-written file to prevent corrupt cache entries.
-    deleteFileIfExists(path);
+    // A non-2xx response or a transport error both reject here; nothing was
+    // written to `path`.
     return null;
   } finally {
     inProgress.delete(key);

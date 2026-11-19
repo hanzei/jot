@@ -7,7 +7,14 @@
  * Backed by the in-memory `expo-file-system` mock from jest.setup.js.
  */
 
-import { getCachedNoteImageUri, downloadAndCacheNoteImage, deleteCachedNoteImage } from '../src/utils/noteImageCache';
+import { getCachedNoteImageUri, downloadAndCacheNoteImage, deleteCachedNoteImage, cacheUploadedNoteImage } from '../src/utils/noteImageCache';
+import { silenceConsole } from './helpers/consoleGuard';
+
+jest.mock('../src/api/client', () => ({
+  sessionCookieHeaders: jest.fn().mockResolvedValue({ Cookie: 'jot_session=session-token' }),
+}));
+
+const DOWNLOAD_OPTIONS = { idempotent: true, headers: { Cookie: 'jot_session=session-token' } };
 
 const fs = globalThis.mockFileSystem;
 
@@ -52,8 +59,8 @@ describe('downloadAndCacheNoteImage', () => {
     expect(result).toBe(`${CACHE_DIR}/img-1`);
     expect(fs.downloadFileAsync).toHaveBeenCalledWith(
       networkUrl,
-      expect.objectContaining({ uri: `${CACHE_DIR}/img-1` }),
-      { idempotent: true },
+      expect.objectContaining({ uri: `${CACHE_DIR}/img-1.part` }),
+      DOWNLOAD_OPTIONS,
     );
   });
 
@@ -75,6 +82,28 @@ describe('downloadAndCacheNoteImage', () => {
 
     expect(result).toBeNull();
     expect(fs.files.has(`${CACHE_DIR}/img-1`)).toBe(false);
+    expect(fs.files.has(`${CACHE_DIR}/img-1.part`)).toBe(false);
+  });
+
+  it('never exposes an in-progress download as a cached image', async () => {
+    // A process killed mid-download must not leave a truncated file where
+    // getCachedNoteImageUri would trust it.
+    let resolveDownload: () => void = () => {};
+    fs.downloadFileAsync.mockImplementationOnce((_url: string, destination: { uri: string }) => {
+      fs.files.set(destination.uri, 'partial');
+      return new Promise<void>((resolve) => {
+        resolveDownload = resolve;
+      });
+    });
+
+    const download = downloadAndCacheNoteImage('img-1', 'original', networkUrl);
+    await new Promise(setImmediate);
+    expect(await getCachedNoteImageUri('img-1', 'original')).toBeNull();
+
+    resolveDownload();
+    expect(await download).toBe(`${CACHE_DIR}/img-1`);
+    expect(fs.files.get(`${CACHE_DIR}/img-1`)).toBe('partial');
+    expect(fs.files.has(`${CACHE_DIR}/img-1.part`)).toBe(false);
   });
 
   it('overwrites a leftover partial file rather than failing on an existing destination', async () => {
@@ -95,21 +124,54 @@ describe('downloadAndCacheNoteImage', () => {
 
   it('deduplicates concurrent downloads for the same image + variant', async () => {
     let resolveDownload: () => void = () => {};
-    fs.downloadFileAsync.mockReturnValueOnce(
-      new Promise<void>((resolve) => {
+    fs.downloadFileAsync.mockImplementationOnce((_url: string, destination: { uri: string }) => {
+      fs.files.set(destination.uri, 'jpeg-bytes');
+      return new Promise<void>((resolve) => {
         resolveDownload = resolve;
-      }),
-    );
+      });
+    });
 
     const first = downloadAndCacheNoteImage('img-1', 'original', networkUrl);
     const second = downloadAndCacheNoteImage('img-1', 'original', networkUrl);
 
+    // Let the first call reach the download (it awaits the session header first).
+    await new Promise(setImmediate);
     resolveDownload();
     const [firstResult, secondResult] = await Promise.all([first, second]);
 
     expect(fs.downloadFileAsync).toHaveBeenCalledTimes(1);
     expect(firstResult).toBe(`${CACHE_DIR}/img-1`);
     expect(secondResult).toBeNull();
+  });
+});
+
+describe('cacheUploadedNoteImage', () => {
+  const source = 'file:///cache/ImagePicker/photo.jpg';
+
+  it('copies a picker file into the original slot, leaving the source alone', async () => {
+    fs.files.set(source, 'jpeg-bytes');
+
+    await cacheUploadedNoteImage('img-1', source);
+
+    expect(await getCachedNoteImageUri('img-1', 'original')).toBe(`${CACHE_DIR}/img-1`);
+    expect(fs.files.get(`${CACHE_DIR}/img-1`)).toBe('jpeg-bytes');
+    expect(fs.files.has(source)).toBe(true);
+  });
+
+  it('moves a file the caller owns', async () => {
+    fs.files.set(source, 'jpeg-bytes');
+
+    await cacheUploadedNoteImage('img-1', source, { move: true });
+
+    expect(fs.files.get(`${CACHE_DIR}/img-1`)).toBe('jpeg-bytes');
+    expect(fs.files.has(source)).toBe(false);
+  });
+
+  it('does not throw when the source is gone', async () => {
+    silenceConsole('warn', /Could not cache uploaded image/);
+
+    await expect(cacheUploadedNoteImage('img-1', source, { move: true })).resolves.toBeUndefined();
+    expect(await getCachedNoteImageUri('img-1', 'original')).toBeNull();
   });
 });
 
@@ -124,6 +186,16 @@ describe('deleteCachedNoteImage', () => {
     expect(fs.files.has(original)).toBe(false);
     expect(fs.files.has(thumbnail)).toBe(false);
     expect(fs.files.has(unrelated)).toBe(true);
+  });
+
+  it('deletes a download left unfinished by a killed process', async () => {
+    const originalPart = seedCachedImage('img-1.part');
+    const thumbnailPart = seedCachedImage('img-1_thumb.part');
+
+    await deleteCachedNoteImage('img-1');
+
+    expect(fs.files.has(originalPart)).toBe(false);
+    expect(fs.files.has(thumbnailPart)).toBe(false);
   });
 
   it('is a no-op when neither variant is cached', async () => {

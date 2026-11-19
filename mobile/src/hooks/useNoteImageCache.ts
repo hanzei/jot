@@ -32,7 +32,16 @@ export function useCachedNoteImageUri(
         setResolved({ key: imageKey, uri: cached });
         return;
       }
-      // Cache miss — display the network URL in the meantime, download in background.
+      // A thumbnail miss falls back to a cached original: an image uploaded
+      // from this device has its original cached but no thumbnail until the
+      // gallery has shown it online, and offline the network URL shows nothing.
+      if (variant === 'thumbnail') {
+        const original = await getCachedNoteImageUri(imageId, 'original');
+        if (cancelled) return;
+        if (original) setResolved({ key: imageKey, uri: original });
+      }
+      // Cache miss — display the fallback (or the network URL) in the
+      // meantime, download in background.
       const downloaded = await downloadAndCacheNoteImage(imageId, variant, networkUrl);
       if (!cancelled && downloaded) {
         setResolved({ key: imageKey, uri: downloaded });

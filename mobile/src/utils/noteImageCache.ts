@@ -1,4 +1,5 @@
-import { cachePath, deleteFileIfExists, downloadFile, ensureDirExists, fileExists } from './fs';
+import { sessionCookieHeaders } from '../api/client';
+import { cachePath, copyFile, deleteFileIfExists, downloadFileAtomically, ensureDirExists, fileExists, moveFile } from './fs';
 
 const CACHE_DIR = cachePath('note-images');
 
@@ -40,21 +41,55 @@ export async function downloadAndCacheNoteImage(
   const path = imageFilePath(imageId, variant);
   try {
     ensureDirExists(CACHE_DIR);
-    await downloadFile(networkUrl, path);
+    // Atomic, since a cached file is trusted by existence alone. The cookie is
+    // explicit because the native downloader skips the axios interceptor.
+    await downloadFileAtomically(networkUrl, path, { headers: await sessionCookieHeaders(networkUrl) });
     return path;
   } catch {
-    // A non-2xx response or a transport error both reject here. Clean up any
-    // partially-written file to prevent corrupt cache entries.
-    deleteFileIfExists(path);
+    // A non-2xx response or a transport error both reject here; nothing was
+    // written to `path`.
     return null;
   } finally {
     inProgress.delete(key);
   }
 }
 
+/**
+ * Store the file a just-uploaded image was sent from as its cached original,
+ * so the lightbox can show it without a network round trip — otherwise the
+ * original is only cached once it has been viewed online, and an image
+ * uploaded and then opened offline would not show. The server stores an
+ * original's bytes unchanged, so the local file is the original.
+ *
+ * `move` hands over a file the caller owns (the sync queue's stable copy);
+ * otherwise the source is copied (a picker/camera result the OS owns).
+ * Best-effort: a failure only means the original is downloaded on first view.
+ */
+export async function cacheUploadedNoteImage(
+  imageId: string,
+  sourceUri: string,
+  { move = false }: { move?: boolean } = {},
+): Promise<void> {
+  const path = imageFilePath(imageId, 'original');
+  try {
+    ensureDirExists(CACHE_DIR);
+    if (move) await moveFile(sourceUri, path);
+    else await copyFile(sourceUri, path);
+  } catch (err) {
+    console.warn(`Could not cache uploaded image ${imageId}:`, err);
+    // A failed move must not leave the queue's copy behind.
+    if (move) deleteFileIfExists(sourceUri);
+  }
+}
+
 // Removes both cached variants of an image. Called when an image is removed
 // from a note (locally or via SSE) so its cache entries don't linger forever.
 export async function deleteCachedNoteImage(imageId: string): Promise<void> {
-  deleteFileIfExists(imageFilePath(imageId, 'original'));
-  deleteFileIfExists(imageFilePath(imageId, 'thumbnail'));
+  for (const variant of ['original', 'thumbnail'] as const) {
+    const path = imageFilePath(imageId, variant);
+    deleteFileIfExists(path);
+    // A download the process died during leaves its `.part` file behind
+    // (downloadFileAtomically); nothing else would ever remove it.
+    deleteFileIfExists(`${path}.part`);
+  }
 }
