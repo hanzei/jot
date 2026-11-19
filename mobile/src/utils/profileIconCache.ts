@@ -16,8 +16,8 @@ function safeVersion(updatedAt: string): string {
   return updatedAt.replace(/[^a-zA-Z0-9-]/g, '_');
 }
 
-function iconFilePath(userId: string, updatedAt: string): string {
-  return `${cacheDir()}/${userId}_${safeVersion(updatedAt)}`;
+function iconFilePath(userId: string, updatedAt: string, dir: string = cacheDir()): string {
+  return `${dir}/${userId}_${safeVersion(updatedAt)}`;
 }
 
 // Returns the local file URI for a cached icon, or null if not cached.
@@ -27,10 +27,9 @@ export async function getCachedIconUri(userId: string, updatedAt: string): Promi
   return fileExists(path) ? path : null;
 }
 
-// Removes cached icon files for userId that don't match currentUpdatedAt.
-function purgeStaleIcons(userId: string, currentUpdatedAt: string): void {
+// Removes cached icon files in `dir` for userId that don't match currentUpdatedAt.
+function purgeStaleIcons(dir: string, userId: string, currentUpdatedAt: string): void {
   const currentFile = `${userId}_${safeVersion(currentUpdatedAt)}`;
-  const dir = cacheDir();
   for (const file of listFileNames(dir)) {
     if (file.startsWith(`${userId}_`) && file !== currentFile) {
       deleteFileIfExists(`${dir}/${file}`);
@@ -50,11 +49,14 @@ export async function downloadAndCacheIcon(
   const key = `${userId}_${updatedAt}`;
   if (inProgress.has(key)) return null;
   inProgress.add(key);
-  const path = iconFilePath(userId, updatedAt);
+  // The folder is fixed when the download starts, so a server switch while it
+  // runs cannot put this server's icon in, or purge from, another's folder.
+  const dir = cacheDir();
+  const path = iconFilePath(userId, updatedAt, dir);
   try {
-    ensureDirExists(cacheDir());
+    ensureDirExists(dir);
     await downloadFile(networkUrl, path);
-    purgeStaleIcons(userId, updatedAt);
+    purgeStaleIcons(dir, userId, updatedAt);
     return path;
   } catch {
     // A non-2xx response or a transport error both reject here. Clean up any
@@ -72,7 +74,12 @@ export async function refreshIconCacheForUsers(
   users: { id: string; has_profile_icon: boolean; updated_at?: string }[],
   baseUrl: string,
 ): Promise<void> {
+  // `users` and `baseUrl` belong to the server active now. Stop once another
+  // server becomes active, or the rest would be cached in that server's folder
+  // and outlive a wipe of their own.
+  const serverId = getActiveServerId();
   for (const user of users) {
+    if (getActiveServerId() !== serverId) return;
     if (!user.has_profile_icon || !user.updated_at) continue;
     const cached = await getCachedIconUri(user.id, user.updated_at);
     if (!cached) {

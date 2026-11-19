@@ -22,8 +22,8 @@ function cacheKey(imageId: string, variant: NoteImageVariant): string {
   return variant === 'thumbnail' ? `${imageId}_thumb` : imageId;
 }
 
-function imageFilePath(imageId: string, variant: NoteImageVariant): string {
-  return `${cacheDir()}/${cacheKey(imageId, variant)}`;
+function imageFilePath(imageId: string, variant: NoteImageVariant, dir: string = cacheDir()): string {
+  return `${dir}/${cacheKey(imageId, variant)}`;
 }
 
 // Returns the local file URI for a cached note image, or null if not cached.
@@ -44,9 +44,12 @@ export async function downloadAndCacheNoteImage(
   const key = cacheKey(imageId, variant);
   if (inProgress.has(key)) return null;
   inProgress.add(key);
-  const path = imageFilePath(imageId, variant);
+  // Fixed when the download starts, so a server switch while it runs cannot
+  // put this server's image in another server's folder.
+  const dir = cacheDir();
+  const path = imageFilePath(imageId, variant, dir);
   try {
-    ensureDirExists(cacheDir());
+    ensureDirExists(dir);
     await downloadFile(networkUrl, path);
     return path;
   } catch {
