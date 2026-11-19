@@ -1,6 +1,13 @@
-import { cachePath, deleteDirectoryIfExists, deleteFileIfExists, downloadFile, ensureDirExists, fileExists, listFileNames } from './fs';
+import { getActiveServerId } from '../api/client';
+import { cachePath, deleteFileIfExists, downloadFile, ensureDirExists, fileExists, listFileNames } from './fs';
+import { clearServerCacheDir, serverCacheDir } from './serverCacheDir';
 
-const CACHE_DIR = cachePath('profile-icons');
+const CACHE_ROOT = cachePath('profile-icons');
+
+// The active server's cache folder: user ids are only meaningful per server.
+function cacheDir(): string {
+  return serverCacheDir(CACHE_ROOT, getActiveServerId());
+}
 
 // Tracks downloads in progress to avoid concurrent duplicate downloads.
 const inProgress = new Set<string>();
@@ -10,7 +17,7 @@ function safeVersion(updatedAt: string): string {
 }
 
 function iconFilePath(userId: string, updatedAt: string): string {
-  return `${CACHE_DIR}/${userId}_${safeVersion(updatedAt)}`;
+  return `${cacheDir()}/${userId}_${safeVersion(updatedAt)}`;
 }
 
 // Returns the local file URI for a cached icon, or null if not cached.
@@ -23,9 +30,10 @@ export async function getCachedIconUri(userId: string, updatedAt: string): Promi
 // Removes cached icon files for userId that don't match currentUpdatedAt.
 function purgeStaleIcons(userId: string, currentUpdatedAt: string): void {
   const currentFile = `${userId}_${safeVersion(currentUpdatedAt)}`;
-  for (const file of listFileNames(CACHE_DIR)) {
+  const dir = cacheDir();
+  for (const file of listFileNames(dir)) {
     if (file.startsWith(`${userId}_`) && file !== currentFile) {
-      deleteFileIfExists(`${CACHE_DIR}/${file}`);
+      deleteFileIfExists(`${dir}/${file}`);
     }
   }
 }
@@ -44,7 +52,7 @@ export async function downloadAndCacheIcon(
   inProgress.add(key);
   const path = iconFilePath(userId, updatedAt);
   try {
-    ensureDirExists(CACHE_DIR);
+    ensureDirExists(cacheDir());
     await downloadFile(networkUrl, path);
     purgeStaleIcons(userId, updatedAt);
     return path;
@@ -74,8 +82,8 @@ export async function refreshIconCacheForUsers(
   }
 }
 
-// Removes every cached profile icon. Called when local data is wiped (logout or
-// another account signing in, spec §8.6), alongside the note image cache.
-export function clearProfileIconCache(): void {
-  deleteDirectoryIfExists(CACHE_DIR);
+// Removes every cached profile icon of one server. Called when that server's
+// local data is wiped (logout or another account signing in, spec §8.6).
+export function clearProfileIconCache(serverId: string | null): void {
+  clearServerCacheDir(CACHE_ROOT, serverId);
 }

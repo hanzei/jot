@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useAuth } from '../store/AuthContext';
 import { getUnsyncedChangeCount, wipeLocalData } from '../db/accountOwner';
+import { getActiveServerId } from '../api/client';
 import { useCreateLabel, useDeleteLabel, useLabels, useRenameLabel } from '../hooks/useLabels';
 import { useTheme } from '../theme/ThemeContext';
 import UserAvatar from './UserAvatar';
@@ -99,7 +100,8 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     // data ownerless, so anything a write in flight stores afterwards goes at
     // the next sign-in.
     try {
-      await wipeLocalData(db);
+      // The drawer's database is the active server's.
+      await wipeLocalData(db, getActiveServerId());
     } catch (error) {
       console.warn('Failed to wipe local data on logout:', error);
       Alert.alert(t('common.error'), t('nav.logoutFailed'));

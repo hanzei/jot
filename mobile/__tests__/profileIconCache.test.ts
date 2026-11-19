@@ -8,9 +8,14 @@
 
 import { getCachedIconUri, downloadAndCacheIcon, refreshIconCacheForUsers } from '../src/utils/profileIconCache';
 
+jest.mock('../src/api/client', () => ({
+  getActiveServerId: jest.fn(() => 'server-1'),
+}));
+
 const fs = globalThis.mockFileSystem;
 
-const CACHE_DIR = 'file:///cache/profile-icons';
+// The active server's folder: the caches are split by server.
+const CACHE_DIR = 'file:///cache/profile-icons/server-1';
 
 function iconFilePath(userId: string, updatedAt: string): string {
   const safeVersion = updatedAt.replace(/[^a-zA-Z0-9-]/g, '_');

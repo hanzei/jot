@@ -1,6 +1,13 @@
-import { cachePath, deleteDirectoryIfExists, deleteFileIfExists, downloadFile, ensureDirExists, fileExists } from './fs';
+import { getActiveServerId } from '../api/client';
+import { cachePath, deleteFileIfExists, downloadFile, ensureDirExists, fileExists } from './fs';
+import { clearServerCacheDir, serverCacheDir } from './serverCacheDir';
 
-const CACHE_DIR = cachePath('note-images');
+const CACHE_ROOT = cachePath('note-images');
+
+// The active server's cache folder: image ids are only meaningful per server.
+function cacheDir(): string {
+  return serverCacheDir(CACHE_ROOT, getActiveServerId());
+}
 
 export type NoteImageVariant = 'original' | 'thumbnail';
 
@@ -16,7 +23,7 @@ function cacheKey(imageId: string, variant: NoteImageVariant): string {
 }
 
 function imageFilePath(imageId: string, variant: NoteImageVariant): string {
-  return `${CACHE_DIR}/${cacheKey(imageId, variant)}`;
+  return `${cacheDir()}/${cacheKey(imageId, variant)}`;
 }
 
 // Returns the local file URI for a cached note image, or null if not cached.
@@ -39,7 +46,7 @@ export async function downloadAndCacheNoteImage(
   inProgress.add(key);
   const path = imageFilePath(imageId, variant);
   try {
-    ensureDirExists(CACHE_DIR);
+    ensureDirExists(cacheDir());
     await downloadFile(networkUrl, path);
     return path;
   } catch {
@@ -59,8 +66,8 @@ export async function deleteCachedNoteImage(imageId: string): Promise<void> {
   deleteFileIfExists(imageFilePath(imageId, 'thumbnail'));
 }
 
-// Removes every cached note image. Called when local data is wiped (logout or
-// another account signing in, spec §8.6): the cache holds the account's images.
-export function clearNoteImageCache(): void {
-  deleteDirectoryIfExists(CACHE_DIR);
+// Removes every cached note image of one server. Called when that server's
+// local data is wiped (logout or another account signing in, spec §8.6).
+export function clearNoteImageCache(serverId: string | null): void {
+  clearServerCacheDir(CACHE_ROOT, serverId);
 }

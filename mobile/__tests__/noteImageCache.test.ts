@@ -9,9 +9,14 @@
 
 import { getCachedNoteImageUri, downloadAndCacheNoteImage, deleteCachedNoteImage } from '../src/utils/noteImageCache';
 
+jest.mock('../src/api/client', () => ({
+  getActiveServerId: jest.fn(() => 'server-1'),
+}));
+
 const fs = globalThis.mockFileSystem;
 
-const CACHE_DIR = 'file:///cache/note-images';
+// The active server's folder: the caches are split by server.
+const CACHE_DIR = 'file:///cache/note-images/server-1';
 
 /** Pretend a previous run already cached this image variant. */
 function seedCachedImage(name: string): string {

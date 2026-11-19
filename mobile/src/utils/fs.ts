@@ -98,6 +98,19 @@ export function deleteDirectoryIfExists(uri: string): void {
   }
 }
 
+/** Names of the plain files (not subdirectories) in a directory. Empty when the directory is absent. */
+export function listPlainFileNames(uri: string): string[] {
+  try {
+    const dir = new Directory(uri);
+    if (!dir.exists) {
+      return [];
+    }
+    return dir.list().filter((entry) => entry instanceof File).map((entry) => entry.name);
+  } catch {
+    return [];
+  }
+}
+
 /** Copy a file, overwriting the destination. */
 export async function copyFile(fromUri: string, toUri: string): Promise<void> {
   await new File(fromUri).copy(new File(toUri), { overwrite: true });

@@ -61,6 +61,7 @@ jest.mock('../src/api/client', () => ({
   switchActiveServer: jest.fn(),
   getBaseUrl: jest.fn(() => 'http://localhost:8080'),
   getStoredServerUrl: jest.fn(async () => null),
+  getActiveServerId: jest.fn(() => 'server-1'),
 }));
 
 jest.mock('../src/store/serverAccounts', () => ({
@@ -108,7 +109,7 @@ beforeEach(async () => {
   mockIsLocalMode = false;
   db = globalThis.testDb;
   globalThis.mockFileSystem.reset();
-  await claimLocalData(db, 'user-1');
+  await claimLocalData(db, 'user-1', 'server-1');
   await saveNote(db, makeTextNote({ id: 'note-1' }));
 });
 
