@@ -66,6 +66,61 @@ describe('NoteCard', () => {
     mockConsoleError.mockClear();
   });
 
+  describe('Selection', () => {
+    it('renders no checkbox without a selection handler', () => {
+      renderNoteCard(defaultProps);
+      expect(screen.queryByTestId('note-card-select')).not.toBeInTheDocument();
+    });
+
+    it('toggles the selection from the checkbox without opening the note', async () => {
+      const user = userEvent.setup();
+      const onToggleSelect = vi.fn();
+      renderNoteCard({ ...defaultProps, onToggleSelect });
+
+      await user.click(screen.getByRole('checkbox', { name: 'Select note: Test Note' }));
+
+      expect(onToggleSelect).toHaveBeenCalledWith(defaultProps.note.id, false);
+      expect(defaultProps.onEdit).not.toHaveBeenCalled();
+    });
+
+    it('toggles instead of opening on a card click while a selection is active', async () => {
+      const user = userEvent.setup();
+      const onToggleSelect = vi.fn();
+      renderNoteCard({ ...defaultProps, onToggleSelect, selectionActive: true, selected: true });
+
+      expect(screen.getByTestId('note-card')).toHaveAttribute('data-selected', 'true');
+      expect(screen.getByTestId('note-card-select')).toBeChecked();
+      await user.click(screen.getByTestId('note-card'));
+
+      expect(onToggleSelect).toHaveBeenCalledWith(defaultProps.note.id, false);
+      expect(defaultProps.onEdit).not.toHaveBeenCalled();
+    });
+
+    it('selects a range on a shift-click even with nothing selected', async () => {
+      const user = userEvent.setup();
+      const onToggleSelect = vi.fn();
+      renderNoteCard({ ...defaultProps, onToggleSelect });
+
+      await user.keyboard('{Shift>}');
+      await user.click(screen.getByTestId('note-card'));
+      await user.keyboard('{/Shift}');
+
+      expect(onToggleSelect).toHaveBeenCalledWith(defaultProps.note.id, true);
+      expect(defaultProps.onEdit).not.toHaveBeenCalled();
+    });
+
+    it('opens the note on a plain click while nothing is selected', async () => {
+      const user = userEvent.setup();
+      const onToggleSelect = vi.fn();
+      renderNoteCard({ ...defaultProps, onToggleSelect });
+
+      await user.click(screen.getByTestId('note-card'));
+
+      expect(defaultProps.onEdit).toHaveBeenCalled();
+      expect(onToggleSelect).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Colour', () => {
     it.each(['#f28b82', '#F28B82'])('renders the coral background for %s', (color) => {
       renderNoteCard({ ...defaultProps, note: createMockListNote({ title: 'Test Note', color }) });

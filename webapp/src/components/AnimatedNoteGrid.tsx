@@ -196,6 +196,9 @@ interface AnimatedNoteGridProps {
   activeCardId: string | null;
   /** Fires when any control inside a card gains focus, to update `activeCardId`. */
   onCardFocus: (noteId: string) => void;
+  /** The dashboard's multi-select (#1255); omit `onToggleSelect` to render no checkboxes. */
+  selectedIds?: ReadonlySet<string> | undefined;
+  onToggleSelect?: ((noteId: string, range: boolean) => void) | undefined;
 }
 
 /**
@@ -223,6 +226,8 @@ export default function AnimatedNoteGrid({
   onActiveChange,
   activeCardId,
   onCardFocus,
+  selectedIds = EMPTY_IDS,
+  onToggleSelect,
 }: AnimatedNoteGridProps) {
   const [state, setState] = useState<ReconcileResult>(() => swap(notes));
   // Track the inputs the current `state` was derived from so we can reconcile
@@ -282,6 +287,9 @@ export default function AnimatedNoteGrid({
               onLabelClick={onLabelClick}
               isActive={entry.note.id === activeCardId}
               onCardFocus={onCardFocus}
+              selected={!entry.leaving && selectedIds.has(entry.note.id)}
+              selectionActive={selectedIds.size > 0}
+              onToggleSelect={entry.leaving ? undefined : onToggleSelect}
             />
           </AnimatedCard>
         ))}

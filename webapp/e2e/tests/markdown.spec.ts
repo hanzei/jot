@@ -96,7 +96,8 @@ test.describe('Markdown note editing', () => {
 
     const card = dashboardPage.noteCardByText('passport');
     await expect(card).toContainText('☐ passport');
-    await expect(card.locator('input')).toHaveCount(0);
+    // The preview renders glyphs, not controls.
+    await expect(card.locator('.markdown-card input')).toHaveCount(0);
 
     await dashboardPage.openTextNote('passport');
     const preview = noteEditorPage.preview();

@@ -21,6 +21,8 @@ compiled web app, while SQLite keeps the default deployment small and portable.
 - **Pin, archive, duplicate, trash**: Keep active notes focused while retaining
   archived notes and automatically purging trashed notes after a
   configurable retention period (seven days by default).
+- **Multi-select**: On the web, select several notes and pin, archive, color,
+  label, trash, or restore them in one go, with a single undo.
 - **Import and export**: Import from a Jot export, Google Keep, or usememos,
   keeping each note's creation and last-modified dates, and export your Jot
   notes, with their images, as a `.zip` bundle — either a Jot backup that

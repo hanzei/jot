@@ -19,8 +19,7 @@ export async function signUp(request: APIRequestContext, prefix = 'publink'): Pr
   const username = uniqueUsername(prefix);
   await ok(request.post('/api/v1/register', { data: { username, password: 'testpass123' } }));
   await ok(request.post('/api/v1/login', { data: { username, password: 'testpass123' } }));
-  const me = (await (await ok(request.get('/api/v1/users/me'))).json()) as { user: { id: string } };
-  return { id: me.user.id, username };
+  return { id: await currentUserId(request), username };
 }
 
 export interface NewItem {
@@ -30,9 +29,24 @@ export interface NewItem {
   indent?: 0 | 1;
 }
 
+/** The id of the user `request` is signed in as. */
+export async function currentUserId(request: APIRequestContext): Promise<string> {
+  const me = (await (await ok(request.get('/api/v1/users/me'))).json()) as { user: { id: string } };
+  return me.user.id;
+}
+
 export async function createTextNote(request: APIRequestContext, content: string): Promise<string> {
   const res = await ok(request.post('/api/v1/notes', { data: { note_type: 'text', content } }));
   return ((await res.json()) as { id: string }).id;
+}
+
+/** Creates one text note per entry, in order, and returns their ids. */
+export async function createTextNotes(request: APIRequestContext, contents: string[]): Promise<string[]> {
+  const ids: string[] = [];
+  for (const content of contents) {
+    ids.push(await createTextNote(request, content));
+  }
+  return ids;
 }
 
 export async function createListNote(
