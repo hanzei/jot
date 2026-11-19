@@ -903,6 +903,35 @@ describe('NotesListScreen search result swap', () => {
     expect(screen.getByTestId('note-card-apple', { includeHiddenElements: true })).toBeTruthy();
   });
 
+  it('settles on the active results when the archived read fails', async () => {
+    await render(<NotesListScreen variant="notes" />);
+    await search('ap');
+
+    active.apr = offlineResult([apricot]);
+    archived.apr = { ...offlineResult(undefined), isLoading: false, isError: true };
+    await search('apr');
+    expect(screen.queryByText('apple')).toBeNull();
+    expect(screen.queryByText('old apple')).toBeNull();
+    expect(screen.getByText('apricot')).toBeTruthy();
+  });
+
+  it('keeps the empty-account page up while a search over it loads', async () => {
+    active[''] = offlineResult([]);
+    await render(<NotesListScreen variant="notes" />);
+    expect(screen.getByTestId('notes-empty-state')).toBeTruthy();
+
+    active.a = offlineResult(undefined);
+    archived.a = offlineResult(undefined);
+    await search('a');
+    expect(screen.getByTestId('notes-empty-state')).toBeTruthy();
+
+    active.a = offlineResult([]);
+    archived.a = offlineResult([]);
+    await rerender();
+    expect(screen.queryByTestId('notes-empty-state')).toBeNull();
+    expect(screen.getByText('No notes matching "a"')).toBeTruthy();
+  });
+
   it('keeps drag off while a cleared search still shows its results', async () => {
     await render(<NotesListScreen variant="notes" />);
     await search('ap');

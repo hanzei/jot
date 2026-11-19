@@ -135,7 +135,8 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
     search: debouncedSearch || undefined,
     label: variant === 'notes' ? labelId : undefined,
   }), [debouncedSearch, labelId, variant]);
-  const { data: archivedSearchNotes } = useOfflineNotes(archivedParams, { enabled: fetchArchivedSeparately });
+  const { data: archivedSearchNotes, isError: isArchivedError } =
+    useOfflineNotes(archivedParams, { enabled: fetchArchivedSeparately });
 
   // What the list renders. While a new search term's reads are pending this is
   // still the previous term's results, so `shown.search` can trail
@@ -143,7 +144,9 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
   const shown = useSettledSearchResults(
     JSON.stringify(notesLocalQueryKey({ ...params, search: undefined })),
     { search: debouncedSearch, notes, archived: archivedSearchNotes },
-    fetchArchivedSeparately,
+    // A failed archived read will not land: settle without it, leaving the
+    // archived section empty, rather than hold the previous term indefinitely.
+    fetchArchivedSeparately && !isArchivedError,
   );
   const isSearchLoading = isLoading && !shown.notes && !!debouncedSearch;
   const reorderNotes = useReorderNotes();
@@ -604,9 +607,11 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
     );
   }
 
-  const isEmpty = !isLoading && (!shown.notes || shown.notes.length === 0);
+  // Judged on the shown results, like the rest of the list: a search typed over
+  // an empty view keeps this page up until its own results land.
+  const isEmpty = shown.notes !== undefined && shown.notes.length === 0;
 
-  if (isEmpty && !debouncedSearch && (variant !== 'notes' || !labelId)) {
+  if (isEmpty && !shown.search && (variant !== 'notes' || !labelId)) {
     const EmptyIcon: LucideIcon =
       variant === 'trash' ? Trash2 :
       variant === 'archived' ? Archive :
