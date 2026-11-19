@@ -610,6 +610,14 @@ export interface ChangePasswordRequest {
   new_password: string;
 }
 
+/**
+ * Confirms `DELETE /users/me`: an account with a password (`has_password`
+ * true) sends it, one without (e.g. SSO-only) sends its username.
+ */
+export type DeleteAccountRequest =
+  | { current_password: string }
+  | { username: string };
+
 export interface ShareNoteRequest {
   user_id: string;
 }
@@ -757,6 +765,7 @@ export type ApiErrorCode =
   | 'registration_disabled'
   | 'local_login_disabled'
   | 'incorrect_password'
+  | 'incorrect_username'
   | 'username_taken'
   | 'cannot_share_with_self'
   | 'already_shared'

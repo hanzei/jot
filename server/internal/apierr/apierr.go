@@ -51,13 +51,14 @@ const (
 	CodeSessionRequired      Code = "session_required"       // 403 — the endpoint needs a browser session, and the request authenticated with a personal access token.
 	CodeRegistrationDisabled Code = "registration_disabled"  // 403 — self-registration is turned off.
 	CodeLocalLoginDisabled   Code = "local_login_disabled"   // 403 from register, login, and password change — password login is turned off; use SSO.
-	CodeIncorrectPassword    Code = "incorrect_password"     // 403 — the current password given to change a password is wrong.
+	CodeIncorrectPassword    Code = "incorrect_password"     // 403 — the current password given to change a password or delete the account is wrong.
+	CodeIncorrectUsername    Code = "incorrect_username"     // 403 — the username given to confirm deleting an account without a password does not match.
 	CodeUsernameTaken        Code = "username_taken"         // 409 — another account already has this username.
 	CodeCannotShareWithSelf  Code = "cannot_share_with_self" // 400 — a note cannot be shared with its owner.
 	CodeAlreadyShared        Code = "already_shared"         // 409 — the note is already shared with that user.
 	CodeLabelNameTaken       Code = "label_name_taken"       // 400 from rename, 409 from a create with a client-supplied ID — the user already has a label with this name.
 	CodeLastAdmin            Code = "last_admin"             // 409 — the change would leave the server without an admin.
-	CodeCannotDeleteSelf     Code = "cannot_delete_self"     // 403 — admins cannot delete their own account.
+	CodeCannotDeleteSelf     Code = "cannot_delete_self"     // 403 — the admin endpoint cannot delete the caller's own account; use DELETE /users/me.
 	CodeSSOIdentityLinked    Code = "sso_identity_linked"    // 409 — the SSO identity belongs to another account.
 	CodeWouldStrandAccount   Code = "would_strand_account"   // 422 — unlinking SSO would leave the account with no way to sign in.
 	CodeLabelNameTooLong     Code = "label_name_too_long"    // 422 — the label name exceeds the label name length limit.
@@ -152,6 +153,7 @@ var sentinels = []struct {
 	{models.ErrNotNoteOwner, http.StatusForbidden, ""},
 	{models.ErrLabelNameConflict, 0, CodeLabelNameTaken},
 	{models.ErrLastAdmin, http.StatusConflict, CodeLastAdmin},
+	{models.ErrLastAdminDelete, http.StatusConflict, CodeLastAdmin},
 	{models.ErrCannotDeleteSelf, http.StatusForbidden, CodeCannotDeleteSelf},
 	{models.ErrOIDCIdentityLinked, http.StatusConflict, CodeSSOIdentityLinked},
 	{models.ErrWouldStrandAccount, http.StatusUnprocessableEntity, CodeWouldStrandAccount},

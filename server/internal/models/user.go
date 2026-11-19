@@ -45,7 +45,14 @@ var ErrUserNotFound = errors.New("user not found")
 // admin user, which would leave the system with no administrators.
 var ErrLastAdmin = errors.New("cannot demote the last admin")
 
-// ErrCannotDeleteSelf is returned when an admin tries to delete their own account.
+// ErrLastAdminDelete is returned when an attempt is made to delete the only
+// remaining admin user. It maps to the same API code as [ErrLastAdmin]; only
+// the message differs, because the remedy is to promote someone else first.
+var ErrLastAdminDelete = errors.New("the last admin cannot be deleted; promote another user to admin first")
+
+// ErrCannotDeleteSelf is returned when an admin tries to delete their own
+// account through the admin endpoint. It is the admin handler's rule, not the
+// store's: a user deletes their own account through DELETE /users/me.
 var ErrCannotDeleteSelf = errors.New("cannot delete your own account")
 
 // ErrOIDCIdentityLinked is returned when an attempt is made to bind an
@@ -478,12 +485,9 @@ func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 // looking it up afterward would find nothing. postDelete executes after the
 // user row is deleted (and cascade effects like note_shares removal have
 // taken place) but before the transaction commits, so any cleanup is atomic
-// with the delete.
-func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID string, preDelete, postDelete func(ctx context.Context, tx *sql.Tx) error) error {
-	if id == requestingUserID {
-		return ErrCannotDeleteSelf
-	}
-
+// with the delete. Deleting the last admin is refused with
+// [ErrLastAdminDelete]; who may delete whom is the caller's decision.
+func (s *userStore) DeleteWithCleanup(ctx context.Context, id string, preDelete, postDelete func(ctx context.Context, tx *sql.Tx) error) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -505,7 +509,7 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 			return fmt.Errorf("failed to count admins: %w", err)
 		}
 		if adminCount <= 1 {
-			return ErrLastAdmin
+			return ErrLastAdminDelete
 		}
 	}
 

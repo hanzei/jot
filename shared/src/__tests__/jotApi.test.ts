@@ -61,6 +61,7 @@ describe('createJotApi', () => {
     ['users.changePassword', a => a.users.changePassword({ new_password: 'x' } as never), 'put', ['/users/me/password', { new_password: 'x' }], {}, undefined],
     ['users.uploadProfileIcon', a => a.users.uploadProfileIcon('form'), 'post', ['/users/me/profile-icon', 'form', undefined], { id: 'u1' }, { id: 'u1' }],
     ['users.deleteProfileIcon', a => a.users.deleteProfileIcon(), 'delete', ['/users/me/profile-icon'], {}, undefined],
+    ['users.deleteMe', a => a.users.deleteMe({ current_password: 'x' }), 'delete', ['/users/me', { data: { current_password: 'x' } }], {}, undefined],
     ['sessions.list', a => a.sessions.list(), 'get', ['/sessions'], { sessions: [1] }, [1]],
     ['sessions.revoke', a => a.sessions.revoke('s1'), 'delete', ['/sessions/s1'], {}, undefined],
     ['pats.list', a => a.pats.list(), 'get', ['/pats'], { pats: [1] }, [1]],

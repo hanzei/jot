@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -267,7 +265,7 @@ func (h *AdminHandler) SetUserPassword(w http.ResponseWriter, r *http.Request) (
 //	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
 //	@Failure	403	{object}	apierr.ErrorResponse	"forbidden"
 //	@Failure	404	{object}	apierr.ErrorResponse	"user not found"
-//	@Failure	409	{object}	apierr.ErrorResponse	"cannot demote the last admin"
+//	@Failure	409	{object}	apierr.ErrorResponse	"the last admin cannot be deleted"
 //	@Router		/admin/users/{id} [delete]
 func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	targetID := chi.URLParam(r, "id")
@@ -276,31 +274,15 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusUnauthorized, nil, authErr
 	}
 
-	// Deleting the user cascades away both their owned notes' note_images
-	// rows and any note_images rows where they're the uploader on someone
-	// else's note (note_images.uploader_id also cascades), so the candidate
-	// blob hashes must be read before the delete — afterward the rows are
-	// gone and there's nothing left to look up. Reading via preDelete inside
-	// DeleteWithCleanup's own transaction (rather than a separate query
-	// beforehand) keeps the read atomic with the delete: a plain query run
-	// before the call could miss an image added in the gap between the read
-	// and the delete actually starting.
-	var shas []string
-	err := h.userStore.DeleteWithCleanup(r.Context(), targetID, requestingUser.ID,
-		func(ctx context.Context, tx *sql.Tx) error {
-			var err error
-			shas, err = h.noteStore.GetNoteImageSHA256sForUserTx(ctx, tx, targetID)
-			return err
-		},
-		func(ctx context.Context, tx *sql.Tx) error {
-			return h.noteStore.ClearUserAssignmentsTx(ctx, tx, targetID)
-		},
-	)
-	if err != nil {
-		return storeError(err, "delete user")
+	// Users delete their own account through DELETE /users/me, which asks
+	// them to re-authenticate; the admin endpoint does not.
+	if targetID == requestingUser.ID {
+		return http.StatusForbidden, nil, models.ErrCannotDeleteSelf
 	}
 
-	blobstore.ReclaimOrphaned(r.Context(), h.noteStore, h.imageStore, shas)
+	if err := deleteUserWithCleanup(r.Context(), h.userStore, h.noteStore, h.imageStore, targetID); err != nil {
+		return storeError(err, "delete user")
+	}
 
 	return http.StatusNoContent, nil, nil
 }

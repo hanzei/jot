@@ -10,6 +10,7 @@ import type {
   CreateNoteRequest,
   CreatePATRequest,
   CreateUserRequest,
+  DeleteAccountRequest,
   DeleteNoteItemsRequest,
   DuplicateNoteRequest,
   EmptyTrashResponse,
@@ -246,6 +247,13 @@ export function createJotApi(http: JotHttpClient) {
       updateMe: (body: UpdateMeRequest): Promise<AuthResponse> => data(http.patch<AuthResponse>(apiPaths.usersMe, body)),
 
       changePassword: (body: ChangePasswordRequest): Promise<void> => done(http.put(apiPaths.usersMePassword, body)),
+
+      /**
+       * Permanently deletes the caller's account. Needs a browser session; the
+       * server clears the cookie. 409 `last_admin` when the caller is the only
+       * admin.
+       */
+      deleteMe: (body: DeleteAccountRequest): Promise<void> => done(http.delete(apiPaths.usersMe, { data: body })),
 
       /** `formData` carries the image as `file`. */
       uploadProfileIcon: (formData: unknown, config?: HttpRequestConfig): Promise<User> =>

@@ -39,6 +39,7 @@ const MAPPED: Record<string, string> = {
   'handlers.CreateNoteItemRequest': 'CreateNoteItemRequest',
   'handlers.CreateNoteRequest': 'CreateNoteRequest',
   'handlers.CreateUserRequest': 'CreateUserRequest',
+  'handlers.DeleteAccountRequest': 'DeleteAccountRequest',
   'handlers.DeleteNoteItemsRequest': 'DeleteNoteItemsRequest',
   'handlers.DuplicateNoteRequest': 'DuplicateNoteRequest',
   'handlers.EmptyTrashResponse': 'EmptyTrashResponse',
