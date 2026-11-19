@@ -748,6 +748,17 @@ export async function getStoredSession(): Promise<string | null> {
   return sessionCache;
 }
 
+/**
+ * The session cookie as an explicit header, for requests that bypass the axios
+ * interceptor above (native file downloads). Android's expo-file-system
+ * downloader uses a bare OkHttpClient with no cookie jar, so without this the
+ * request is unauthenticated there. Empty when signed out.
+ */
+export async function sessionCookieHeaders(): Promise<Record<string, string>> {
+  const token = await getStoredSession();
+  return token ? { Cookie: `jot_session=${token}` } : {};
+}
+
 export async function clearStoredSession(): Promise<void> {
   sessionCache = null;
   const serverId = await resolveActiveServerId();

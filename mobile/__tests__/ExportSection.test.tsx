@@ -17,7 +17,7 @@ jest.mock('../src/hooks/useNetworkStatus', () => ({
 
 jest.mock('../src/api/client', () => ({
   getBaseUrl: jest.fn(() => 'http://localhost:8080'),
-  getStoredSession: jest.fn().mockResolvedValue('session-token'),
+  sessionCookieHeaders: jest.fn().mockResolvedValue({ Cookie: 'jot_session=session-token' }),
 }));
 
 const mockIsAvailableAsync = Sharing.isAvailableAsync as jest.MockedFunction<typeof Sharing.isAvailableAsync>;

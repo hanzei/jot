@@ -1,5 +1,5 @@
 import { apiPaths, apiUrl, type ExportFormat } from '@jot/shared';
-import { getBaseUrl, getStoredSession } from './client';
+import { getBaseUrl, sessionCookieHeaders } from './client';
 import { cachePath, deleteFileIfExists, downloadFile, ensureDirExists, listFileNames } from '../utils/fs';
 
 const EXPORT_DIR = cachePath('exports');
@@ -70,8 +70,7 @@ export async function downloadExportBundle(format: ExportFormat = 'jot', signal?
   ensureDirExists(EXPORT_DIR);
   const destUri = `${EXPORT_DIR}/${bundleName(format, now)}`;
 
-  const token = await getStoredSession();
-  const headers: Record<string, string> = token ? { Cookie: `jot_session=${token}` } : {};
+  const headers = await sessionCookieHeaders();
 
   const controller = new AbortController();
   const abort = () => controller.abort();

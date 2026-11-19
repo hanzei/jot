@@ -288,6 +288,8 @@ describe('draining queued uploads', () => {
     });
     expect(await uploadRow(entry.id)).toBeNull();
     expect(fs.files.has(entry.local_path)).toBe(false);
+    // The queue's copy became the cached original, so the image opens offline.
+    expect(fs.files.has(`file:///cache/note-images/${image.id}`)).toBe(true);
     expect(result.discardedOperations).toHaveLength(0);
   });
 
@@ -302,6 +304,8 @@ describe('draining queued uploads', () => {
 
     expect(await uploadRow(entry.id)).toBeNull();
     expect(fs.files.has(entry.local_path)).toBe(false);
+    // It landed under its client ID, so the copy is still cached as its original.
+    expect(fs.files.has(`file:///cache/note-images/${entry.id}`)).toBe(true);
     expect(result.discardedOperations).toHaveLength(0);
   });
 
