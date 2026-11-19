@@ -749,14 +749,27 @@ export async function getStoredSession(): Promise<string | null> {
 }
 
 /**
- * The session cookie as an explicit header, for requests that bypass the axios
- * interceptor above (native file downloads). Android's expo-file-system
- * downloader uses a bare OkHttpClient with no cookie jar, so without this the
- * request is unauthenticated there. Empty when signed out.
+ * The session cookie as an explicit header for a request to `url` that
+ * bypasses the axios interceptor above (native file downloads). Android's
+ * expo-file-system downloader uses a bare OkHttpClient with no cookie jar, so
+ * without this the request is unauthenticated there.
+ *
+ * The cookie is the active server's, so it is only returned when `url` is on
+ * that server and no server switch happened while it was read. A caller can
+ * hold a URL built for a server that is no longer active (a cache warm-up loop
+ * that outlives a switch), and must not send the new server's session to the
+ * old one: it gets no cookie and the request fails as unauthenticated.
+ * Empty when signed out.
  */
-export async function sessionCookieHeaders(): Promise<Record<string, string>> {
+export async function sessionCookieHeaders(url: string): Promise<Record<string, string>> {
+  const serverId = activeServerId;
+  const generationId = getCurrentSwitchGenerationId();
   const token = await getStoredSession();
-  return token ? { Cookie: `jot_session=${token}` } : {};
+  if (!token) return {};
+  if (activeServerId !== serverId || getCurrentSwitchGenerationId() !== generationId) return {};
+  const target = canonicalizeServerOrigin(url);
+  if (target === null || target !== canonicalizeServerOrigin(currentBaseUrl)) return {};
+  return { Cookie: `jot_session=${token}` };
 }
 
 export async function clearStoredSession(): Promise<void> {

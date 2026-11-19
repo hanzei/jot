@@ -43,7 +43,7 @@ export async function downloadAndCacheNoteImage(
     ensureDirExists(CACHE_DIR);
     // Atomic, since a cached file is trusted by existence alone. The cookie is
     // explicit because the native downloader skips the axios interceptor.
-    await downloadFileAtomically(networkUrl, path, { headers: await sessionCookieHeaders() });
+    await downloadFileAtomically(networkUrl, path, { headers: await sessionCookieHeaders(networkUrl) });
     return path;
   } catch {
     // A non-2xx response or a transport error both reject here; nothing was

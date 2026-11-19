@@ -48,7 +48,7 @@ export async function downloadAndCacheIcon(
     ensureDirExists(CACHE_DIR);
     // Atomic, since a cached file is trusted by existence alone. The cookie is
     // explicit because the native downloader skips the axios interceptor.
-    await downloadFileAtomically(networkUrl, path, { headers: await sessionCookieHeaders() });
+    await downloadFileAtomically(networkUrl, path, { headers: await sessionCookieHeaders(networkUrl) });
     purgeStaleIcons(userId, updatedAt);
     return path;
   } catch {

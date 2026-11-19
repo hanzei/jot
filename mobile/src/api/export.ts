@@ -70,7 +70,8 @@ export async function downloadExportBundle(format: ExportFormat = 'jot', signal?
   ensureDirExists(EXPORT_DIR);
   const destUri = `${EXPORT_DIR}/${bundleName(format, now)}`;
 
-  const headers = await sessionCookieHeaders();
+  const url = `${apiUrl(apiPaths.notesExport, getBaseUrl())}?format=${format}`;
+  const headers = await sessionCookieHeaders(url);
 
   const controller = new AbortController();
   const abort = () => controller.abort();
@@ -85,7 +86,7 @@ export async function downloadExportBundle(format: ExportFormat = 'jot', signal?
   armStallTimer();
 
   try {
-    await downloadFile(`${apiUrl(apiPaths.notesExport, getBaseUrl())}?format=${format}`, destUri, {
+    await downloadFile(url, destUri, {
       headers,
       signal: controller.signal,
       onProgress: armStallTimer,
