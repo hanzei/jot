@@ -1,7 +1,13 @@
-import { sessionCookieHeaders } from '../api/client';
+import { getActiveServerId, sessionCookieHeaders } from '../api/client';
 import { cachePath, copyFile, deleteFileIfExists, downloadFileAtomically, ensureDirExists, fileExists, moveFile } from './fs';
+import { clearServerCacheDir, serverCacheDir } from './serverCacheDir';
 
-const CACHE_DIR = cachePath('note-images');
+const CACHE_ROOT = cachePath('note-images');
+
+// The active server's cache folder: image ids are only meaningful per server.
+function cacheDir(): string {
+  return serverCacheDir(CACHE_ROOT, getActiveServerId());
+}
 
 export type NoteImageVariant = 'original' | 'thumbnail';
 
@@ -16,8 +22,8 @@ function cacheKey(imageId: string, variant: NoteImageVariant): string {
   return variant === 'thumbnail' ? `${imageId}_thumb` : imageId;
 }
 
-function imageFilePath(imageId: string, variant: NoteImageVariant): string {
-  return `${CACHE_DIR}/${cacheKey(imageId, variant)}`;
+function imageFilePath(imageId: string, variant: NoteImageVariant, dir: string = cacheDir()): string {
+  return `${dir}/${cacheKey(imageId, variant)}`;
 }
 
 // Returns the local file URI for a cached note image, or null if not cached.
@@ -38,9 +44,12 @@ export async function downloadAndCacheNoteImage(
   const key = cacheKey(imageId, variant);
   if (inProgress.has(key)) return null;
   inProgress.add(key);
-  const path = imageFilePath(imageId, variant);
+  // Fixed when the download starts, so a server switch while it runs cannot
+  // put this server's image in another server's folder.
+  const dir = cacheDir();
+  const path = imageFilePath(imageId, variant, dir);
   try {
-    ensureDirExists(CACHE_DIR);
+    ensureDirExists(dir);
     // Atomic, since a cached file is trusted by existence alone. The cookie is
     // explicit because the native downloader skips the axios interceptor.
     await downloadFileAtomically(networkUrl, path, { headers: await sessionCookieHeaders(networkUrl) });
@@ -70,9 +79,10 @@ export async function cacheUploadedNoteImage(
   sourceUri: string,
   { move = false }: { move?: boolean } = {},
 ): Promise<void> {
-  const path = imageFilePath(imageId, 'original');
+  const dir = cacheDir();
+  const path = imageFilePath(imageId, 'original', dir);
   try {
-    ensureDirExists(CACHE_DIR);
+    ensureDirExists(dir);
     if (move) await moveFile(sourceUri, path);
     else await copyFile(sourceUri, path);
   } catch (err) {
@@ -92,4 +102,10 @@ export async function deleteCachedNoteImage(imageId: string): Promise<void> {
     // (downloadFileAtomically); nothing else would ever remove it.
     deleteFileIfExists(`${path}.part`);
   }
+}
+
+// Removes every cached note image of one server. Called when that server's
+// local data is wiped (logout or another account signing in, spec §8.6).
+export function clearNoteImageCache(serverId: string | null): void {
+  clearServerCacheDir(CACHE_ROOT, serverId);
 }

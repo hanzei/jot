@@ -60,7 +60,7 @@ function gate() {
 const signedIn = (id: string, userServerId = 'server-1'): MockAuth => ({ user: { id }, userServerId, isLocalMode: false });
 
 async function seedOwnedBy(owner: string): Promise<void> {
-  await claimLocalData(db, owner);
+  await claimLocalData(db, owner, 'server-1');
   await saveNote(db, makeTextNote({ id: 'note-1' }));
   await seedQueueEntry(db, { operation: 'update', endpoint: '/notes/note-1', method: 'PATCH', body: { title: 'x' } });
 }

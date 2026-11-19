@@ -41,7 +41,7 @@ export function AccountDataGate({ serverId, children }: { serverId: string | nul
   useEffect(() => {
     if (claimUserId === null) return;
     let cancelled = false;
-    claimLocalData(db, claimUserId).then(
+    claimLocalData(db, claimUserId, serverId).then(
       () => {
         if (!cancelled) setResult({ userId: claimUserId, ok: true });
       },
@@ -58,7 +58,7 @@ export function AccountDataGate({ serverId, children }: { serverId: string | nul
       // this), so the next sign-in is checked rather than trusted.
       setResult(null);
     };
-  }, [db, claimUserId, attempt]);
+  }, [db, claimUserId, serverId, attempt]);
 
   if (claimUserId === null || (result?.userId === claimUserId && result.ok)) {
     return children;

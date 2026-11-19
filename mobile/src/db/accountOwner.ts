@@ -2,6 +2,8 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { withSerializedTransaction } from './transaction';
 import { deleteFileIfExists } from '../utils/fs';
 import { clearOwnVersionSteps } from './ownVersions';
+import { clearNoteImageCache } from '../utils/noteImageCache';
+import { clearProfileIconCache } from '../utils/profileIconCache';
 
 /**
  * Account ownership of a server's local database (issue #1264, spec §8.6).
@@ -68,6 +70,16 @@ function deleteUploadFiles(paths: readonly string[]): void {
   }
 }
 
+// The image caches hold the account's note images (originals and thumbnails)
+// and its collaborators' profile icons. They are split by server, so only this
+// database's server loses its copies; the other servers this device is signed
+// in to keep theirs. A 401 never gets here, so the same user signing back in
+// keeps them too.
+function clearImageCaches(serverId: string | null): void {
+  clearNoteImageCache(serverId);
+  clearProfileIconCache(serverId);
+}
+
 /** The recorded owner: a user id, `''` after a logout wipe, or `null` when nothing has been recorded yet. */
 export async function getAccountOwner(db: SQLiteDatabase): Promise<string | null> {
   const row = await db.getFirstAsync<{ user_id: string }>('SELECT user_id FROM account_owner WHERE id = 1');
@@ -83,9 +95,10 @@ export async function getAccountOwner(db: SQLiteDatabase): Promise<string | null
  * database wiped on logout (`''`) is wiped again: a write that was in flight
  * at logout can have landed after the wipe.
  *
- * Resolves `true` when it wiped.
+ * `serverId` names the server this database belongs to, whose image caches
+ * go with a wipe. Resolves `true` when it wiped.
  */
-export async function claimLocalData(db: SQLiteDatabase, userId: string): Promise<boolean> {
+export async function claimLocalData(db: SQLiteDatabase, userId: string, serverId: string | null): Promise<boolean> {
   // An object, not a `let`: TypeScript does not see assignments made inside the callback.
   const wiped: { files: string[] | null } = { files: null };
   await withSerializedTransaction(db, async () => {
@@ -99,18 +112,24 @@ export async function claimLocalData(db: SQLiteDatabase, userId: string): Promis
   });
   if (wiped.files === null) return false;
   deleteUploadFiles(wiped.files);
+  clearImageCaches(serverId);
   clearOwnVersionSteps(db);
   console.info('Local data belonged to another account; wiped it before sign-in.');
   return true;
 }
 
-/** Deletes all local account data, the queues and their upload files included, for a deliberate logout. */
-export async function wipeLocalData(db: SQLiteDatabase): Promise<void> {
+/**
+ * Deletes all local account data, the queues, their upload files and the
+ * image caches of `serverId` (this database's server) included, for a
+ * deliberate logout.
+ */
+export async function wipeLocalData(db: SQLiteDatabase, serverId: string | null): Promise<void> {
   const wiped: { files: string[] } = { files: [] };
   await withSerializedTransaction(db, async () => {
     wiped.files = await wipeRows(db, NO_OWNER);
   });
   deleteUploadFiles(wiped.files);
+  clearImageCaches(serverId);
   clearOwnVersionSteps(db);
 }
 

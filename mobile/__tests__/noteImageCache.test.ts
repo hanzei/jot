@@ -10,15 +10,17 @@
 import { getCachedNoteImageUri, downloadAndCacheNoteImage, deleteCachedNoteImage, cacheUploadedNoteImage } from '../src/utils/noteImageCache';
 import { silenceConsole } from './helpers/consoleGuard';
 
+const DOWNLOAD_OPTIONS = { idempotent: true, headers: { Cookie: 'jot_session=session-token' } };
+
 jest.mock('../src/api/client', () => ({
+  getActiveServerId: jest.fn(() => 'server-1'),
   sessionCookieHeaders: jest.fn().mockResolvedValue({ Cookie: 'jot_session=session-token' }),
 }));
 
-const DOWNLOAD_OPTIONS = { idempotent: true, headers: { Cookie: 'jot_session=session-token' } };
-
 const fs = globalThis.mockFileSystem;
 
-const CACHE_DIR = 'file:///cache/note-images';
+// The active server's folder: the caches are split by server.
+const CACHE_DIR = 'file:///cache/note-images/server-1';
 
 /** Pretend a previous run already cached this image variant. */
 function seedCachedImage(name: string): string {

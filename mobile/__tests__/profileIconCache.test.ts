@@ -7,8 +7,10 @@
  */
 
 import { getCachedIconUri, downloadAndCacheIcon, refreshIconCacheForUsers } from '../src/utils/profileIconCache';
+import { getActiveServerId } from '../src/api/client';
 
 jest.mock('../src/api/client', () => ({
+  getActiveServerId: jest.fn(() => 'server-1'),
   sessionCookieHeaders: jest.fn().mockResolvedValue({ Cookie: 'jot_session=session-token' }),
 }));
 
@@ -16,7 +18,8 @@ const DOWNLOAD_OPTIONS = { idempotent: true, headers: { Cookie: 'jot_session=ses
 
 const fs = globalThis.mockFileSystem;
 
-const CACHE_DIR = 'file:///cache/profile-icons';
+// The active server's folder: the caches are split by server.
+const CACHE_DIR = 'file:///cache/profile-icons/server-1';
 
 function iconFilePath(userId: string, updatedAt: string): string {
   const safeVersion = updatedAt.replace(/[^a-zA-Z0-9-]/g, '_');
@@ -31,8 +34,11 @@ function seedCachedIcon(userId: string, updatedAt: string): string {
   return path;
 }
 
+const mockGetActiveServerId = jest.mocked(getActiveServerId);
+
 beforeEach(() => {
   fs.reset();
+  mockGetActiveServerId.mockReturnValue('server-1');
 });
 
 // ── getCachedIconUri ──────────────────────────────────────────────────────────
@@ -194,5 +200,25 @@ describe('refreshIconCacheForUsers', () => {
       expect.objectContaining({ uri: expect.stringContaining('u2') }),
       DOWNLOAD_OPTIONS,
     );
+  });
+
+  it('stops once another server becomes active, so its folder gets none of these icons', async () => {
+    const users = [
+      { id: 'u1', has_profile_icon: true, updated_at: '2024-01-15T10:00:00Z' },
+      { id: 'u2', has_profile_icon: true, updated_at: '2024-01-16T10:00:00Z' },
+    ];
+    // The user switches to server-2 while u1's icon downloads.
+    fs.downloadFileAsync.mockImplementationOnce((_url: string, destination: { uri: string }) => {
+      mockGetActiveServerId.mockReturnValue('server-2');
+      fs.files.set(destination.uri, 'png-bytes');
+      return Promise.resolve(destination);
+    });
+
+    await refreshIconCacheForUsers(users, baseUrl);
+
+    expect(fs.downloadFileAsync).toHaveBeenCalledTimes(1);
+    // The download already under way finishes into its own server's folder.
+    expect(fs.files.has(iconFilePath('u1', '2024-01-15T10:00:00Z'))).toBe(true);
+    expect([...fs.files.keys()].some((uri) => uri.includes('/server-2/'))).toBe(false);
   });
 });

@@ -398,7 +398,9 @@ row at enqueue.
   different user signing in gets a wipe first.
 - Currently: the database records its owner, checked at every sign-in before
   anything reads it (`src/db/accountOwner.ts`). A database from before the
-  record is stamped with the next user rather than wiped.
+  record is stamped with the next user rather than wiped. A wipe also clears
+  that server's cached note images and profile icons, which are kept in a
+  folder per server so that the other servers' caches survive.
 
 ### 8.7 Version history
 

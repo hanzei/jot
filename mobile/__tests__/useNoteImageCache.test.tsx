@@ -6,11 +6,13 @@ import { renderHook, waitFor } from '@testing-library/react-native';
 import { useCachedNoteImageUri } from '../src/hooks/useNoteImageCache';
 
 jest.mock('../src/api/client', () => ({
+  getActiveServerId: jest.fn(() => 'server-1'),
   sessionCookieHeaders: jest.fn().mockResolvedValue({}),
 }));
 
 const fs = globalThis.mockFileSystem;
-const CACHE_DIR = 'file:///cache/note-images';
+// The active server's folder: the caches are split by server.
+const CACHE_DIR = 'file:///cache/note-images/server-1';
 const THUMB_URL = 'http://test-server/api/v1/images/img-1/thumbnail';
 
 function seed(name: string): string {
