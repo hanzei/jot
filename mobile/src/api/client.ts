@@ -477,11 +477,8 @@ api.interceptors.request.use(async (config) => {
   setRequestHeader(config, REQUEST_ID_HEADER, requestId);
   switchAwareConfig.__jotRequestId = requestId;
 
-  let token = sessionCache;
-  if (token === undefined) {
-    token = await getStoredSession();
-    sessionCache = token ?? null;
-  }
+  // getStoredSession fills the cache itself, and only for the server it read.
+  const token = sessionCache !== undefined ? sessionCache : await getStoredSession();
   if (token) {
     setRequestHeader(config, 'Cookie', `jot_session=${token}`);
   }
@@ -743,9 +740,13 @@ export async function getStoredSession(): Promise<string | null> {
     sessionCache = null;
     return null;
   }
-  const token = await getServerStorageValue(serverId, SESSION_KEY);
-  sessionCache = token ?? null;
-  return sessionCache;
+  const token = (await getServerStorageValue(serverId, SESSION_KEY)) ?? null;
+  // A server switch during the read reset the cache for the new server; storing
+  // this token would hand the old server's session to every later request.
+  if (activeServerId === serverId) {
+    sessionCache = token;
+  }
+  return token;
 }
 
 /**

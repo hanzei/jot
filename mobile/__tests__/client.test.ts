@@ -862,6 +862,8 @@ describe('API Client', () => {
 
       // B's token must not go to A, although A is active by the time it is read.
       await expect(headers).resolves.toEqual({});
+      // Nor may it stay cached as A's session for later requests.
+      await expect(getStoredSession()).resolves.toBe('token-a');
     });
 
     it('returns no cookie when signed out', async () => {
