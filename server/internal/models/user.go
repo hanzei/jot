@@ -444,9 +444,9 @@ func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 			return nil, fmt.Errorf("failed to query current role: %w", err)
 		}
 		if currentRole == RoleAdmin {
-			var adminCount int
-			if err = tx.QueryRowContext(ctx, s.d.RewritePlaceholders(`SELECT COUNT(*) FROM users WHERE role = 'admin'`)).Scan(&adminCount); err != nil {
-				return nil, fmt.Errorf("failed to count admins: %w", err)
+			adminCount, countErr := s.lockAndCountAdminsTx(ctx, tx)
+			if countErr != nil {
+				return nil, countErr
 			}
 			if adminCount <= 1 {
 				return nil, ErrLastAdmin
@@ -477,6 +477,29 @@ func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 	return &user, nil
 }
 
+// lockAndCountAdminsTx counts the admins inside tx, locking their rows on
+// Postgres first. Without the lock two concurrent transactions (two admins
+// each deleting or demoting themselves) both count 2 under READ COMMITTED and
+// both commit, leaving no admin; with it the second waits and then sees the
+// first's change. SQLite already serializes writers. The rows are read rather
+// than COUNT(*)ed because Postgres refuses FOR UPDATE with an aggregate.
+func (s *userStore) lockAndCountAdminsTx(ctx context.Context, tx *sql.Tx) (int, error) {
+	query := `SELECT id FROM users WHERE role = 'admin'` + s.d.ForUpdate()
+	rows, err := tx.QueryContext(ctx, s.d.RewritePlaceholders(query))
+	if err != nil {
+		return 0, fmt.Errorf("lock admins: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	count := 0
+	for rows.Next() {
+		count++
+	}
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("count admins: %w", err)
+	}
+	return count, nil
+}
+
 // DeleteWithCleanup deletes a user and runs optional preDelete/postDelete
 // callbacks inside the same transaction. preDelete executes before the user
 // row is deleted, while it (and everything that cascades from it, e.g.
@@ -504,9 +527,9 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id string, preDelete,
 	}
 
 	if role == RoleAdmin {
-		var adminCount int
-		if err = tx.QueryRowContext(ctx, s.d.RewritePlaceholders(`SELECT COUNT(*) FROM users WHERE role = 'admin'`)).Scan(&adminCount); err != nil {
-			return fmt.Errorf("failed to count admins: %w", err)
+		adminCount, countErr := s.lockAndCountAdminsTx(ctx, tx)
+		if countErr != nil {
+			return countErr
 		}
 		if adminCount <= 1 {
 			return ErrLastAdminDelete

@@ -11,6 +11,7 @@ import (
 	_ "image/png"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/apierr"
@@ -644,7 +645,7 @@ func (h *AuthHandler) DeleteMe(w http.ResponseWriter, r *http.Request) (int, any
 
 	user, err := h.userStore.GetByID(r.Context(), currentUser.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("get user: %w", err)
+		return storeError(err, "get user")
 	}
 
 	// For an account without a password, the username only guards against an
@@ -662,7 +663,9 @@ func (h *AuthHandler) DeleteMe(w http.ResponseWriter, r *http.Request) (int, any
 		if req.Username == "" {
 			return http.StatusBadRequest, nil, errors.New("username is required")
 		}
-		if req.Username != user.Username {
+		// Case-insensitive: rows predating the lower-case username rule may
+		// hold capitals, and clients may lower-case what the user types.
+		if !strings.EqualFold(req.Username, user.Username) {
 			return http.StatusForbidden, nil, apierr.New(apierr.CodeIncorrectUsername, "username does not match")
 		}
 	}
@@ -672,9 +675,10 @@ func (h *AuthHandler) DeleteMe(w http.ResponseWriter, r *http.Request) (int, any
 	}
 
 	// The session row went with the user (ON DELETE CASCADE); this clears the
-	// cookie.
+	// cookie. The account is already gone, so a failure here must not turn
+	// into an error response the client would read as "not deleted".
 	if err := h.sessionService.DeleteSession(w, r); err != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("clear session: %w", err)
+		logutil.FromContext(r.Context()).WithError(err).Warn("Failed to clear the session cookie after deleting the account")
 	}
 
 	return http.StatusNoContent, nil, nil

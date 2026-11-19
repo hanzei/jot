@@ -239,7 +239,8 @@ func TestDeleteMeSSOUser(t *testing.T) {
 				strings.NewReader(`{"username":"someoneelse"}`), http.Header{"Content-Type": {"application/json"}})
 			requireEnvelope(t, http.StatusForbidden, string(apierr.CodeIncorrectUsername), status, header, body)
 
-			resp = ts.deleteMe(t, c, `{"username":"ssoleaver"}`)
+			// The comparison ignores case.
+			resp = ts.deleteMe(t, c, `{"username":"SSOLeaver"}`)
 			require.NoError(t, resp.Body.Close())
 			require.Equal(t, http.StatusNoContent, resp.StatusCode)
 
