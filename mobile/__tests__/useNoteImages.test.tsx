@@ -47,6 +47,7 @@ jest.mock('../src/db/imageUploadQueue', () => {
 
 jest.mock('../src/utils/noteImageCache', () => ({
   deleteCachedNoteImage: jest.fn().mockResolvedValue(undefined),
+  cacheUploadedNoteImage: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../src/hooks/useNetworkStatus', () => ({
@@ -77,6 +78,7 @@ const mockNoteQueries = noteQueriesModule as jest.Mocked<typeof noteQueriesModul
 const mockClientModule = clientModule as jest.Mocked<typeof clientModule>;
 const mockEnqueueImageUpload = imageUploadQueueModule.enqueueImageUpload as jest.Mock;
 const mockDeleteCachedNoteImage = noteImageCacheModule.deleteCachedNoteImage as jest.Mock;
+const mockCacheUploadedNoteImage = noteImageCacheModule.cacheUploadedNoteImage as jest.Mock;
 const mockUseNetworkStatus = useNetworkStatus as jest.Mock;
 const mockIsLocalModeActive = isLocalModeActive as jest.Mock;
 
@@ -192,6 +194,8 @@ describe('useNoteImages hooks', () => {
       );
       // The image really landed on the note's cached metadata.
       expect(await imagesOf('note-1')).toEqual([image]);
+      // The picked file becomes the cached original, so it opens offline.
+      expect(mockCacheUploadedNoteImage).toHaveBeenCalledWith(image.id, file.uri);
 
       // The patcher appends the new image without duplicating an existing one.
       const updater = mockNoteQueries.patchLocalNoteImages.mock.calls[0]![2];

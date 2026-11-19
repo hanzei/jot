@@ -166,6 +166,27 @@ export async function downloadFile(
   await File.downloadFileAsync(url, new File(destUri), { idempotent: true, ...options });
 }
 
+/**
+ * {@link downloadFile} into a cache slot that readers trust by existence alone.
+ * The bytes land in a `.part` sibling first and are moved into place only once
+ * complete, so a process killed mid-transfer never leaves a truncated file at
+ * `destUri`. Rejects like `downloadFile`, removing the `.part` file.
+ */
+export async function downloadFileAtomically(
+  url: string,
+  destUri: string,
+  options: { headers?: Record<string, string> } = {},
+): Promise<void> {
+  const partUri = `${destUri}.part`;
+  try {
+    await downloadFile(url, partUri, options);
+    await moveFile(partUri, destUri);
+  } catch (err) {
+    deleteFileIfExists(partUri);
+    throw err;
+  }
+}
+
 /** Read a whole file as text, or `null` when it is missing or unreadable. */
 export function readTextFile(uri: string): string | null {
   try {

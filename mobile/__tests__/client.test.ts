@@ -12,6 +12,7 @@ import {
   switchActiveServer,
   DEFAULT_REQUEST_TIMEOUT_MS,
   probeServerReachability,
+  sessionCookieHeaders,
 } from '../src/api/client';
 import { getActiveServer, getServerScopedStorageKey } from '../src/store/serverAccounts';
 import { isServerReachable, markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
@@ -807,6 +808,68 @@ describe('API Client', () => {
 
       await switchActiveServer(serverB.serverId);
       expect(await getStoredSession()).toBe('token-b');
+    });
+  });
+
+  describe('sessionCookieHeaders', () => {
+    const seedSessions = async () => {
+      await setServerUrl('https://cookie-a.example.com');
+      const serverA = await getActiveServer();
+      await setServerUrl('https://cookie-b.example.com');
+      const serverB = await getActiveServer();
+      if (!serverA || !serverB) throw new Error('missing servers');
+      memory.set(getServerScopedStorageKey(serverA.serverId, 'session'), 'token-a');
+      memory.set(getServerScopedStorageKey(serverB.serverId, 'session'), 'token-b');
+      return { serverA, serverB };
+    };
+
+    it("returns the active server's cookie for a URL on that server", async () => {
+      const { serverA } = await seedSessions();
+      await switchActiveServer(serverA.serverId);
+
+      await expect(sessionCookieHeaders('https://cookie-a.example.com/api/v1/images/img-1'))
+        .resolves.toEqual({ Cookie: 'jot_session=token-a' });
+    });
+
+    it('withholds the cookie from a URL built for a server that is no longer active', async () => {
+      // A cache warm-up loop captured server A's URL, then the user switched to B.
+      const { serverA, serverB } = await seedSessions();
+      await switchActiveServer(serverA.serverId);
+      const staleUrl = 'https://cookie-a.example.com/api/v1/users/u1/profile-icon';
+      await expect(sessionCookieHeaders(staleUrl)).resolves.toEqual({ Cookie: 'jot_session=token-a' });
+
+      await switchActiveServer(serverB.serverId);
+
+      await expect(sessionCookieHeaders(staleUrl)).resolves.toEqual({});
+    });
+
+    it('withholds the cookie when the server switches while the session is read', async () => {
+      const { serverA, serverB } = await seedSessions();
+      await switchActiveServer(serverB.serverId);
+      // Hold B's session read until the switch to A has finished.
+      let release: () => void = () => {};
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      mockSecureStore.getItemAsync.mockImplementation(async (key: string) => {
+        if (key === getServerScopedStorageKey(serverB.serverId, 'session')) await held;
+        return memory.get(key) ?? null;
+      });
+
+      const headers = sessionCookieHeaders('https://cookie-a.example.com/api/v1/images/img-1');
+      await switchActiveServer(serverA.serverId);
+      release();
+
+      // B's token must not go to A, although A is active by the time it is read.
+      await expect(headers).resolves.toEqual({});
+      // Nor may it stay cached as A's session for later requests.
+      await expect(getStoredSession()).resolves.toBe('token-a');
+    });
+
+    it('returns no cookie when signed out', async () => {
+      await setServerUrl('https://cookie-none.example.com');
+
+      await expect(sessionCookieHeaders('https://cookie-none.example.com/api/v1/images/img-1')).resolves.toEqual({});
     });
   });
 

@@ -11,7 +11,10 @@ import { getActiveServerId } from '../src/api/client';
 
 jest.mock('../src/api/client', () => ({
   getActiveServerId: jest.fn(() => 'server-1'),
+  sessionCookieHeaders: jest.fn().mockResolvedValue({ Cookie: 'jot_session=session-token' }),
 }));
+
+const DOWNLOAD_OPTIONS = { idempotent: true, headers: { Cookie: 'jot_session=session-token' } };
 
 const fs = globalThis.mockFileSystem;
 
@@ -90,8 +93,8 @@ describe('downloadAndCacheIcon', () => {
     expect(result).toBe(expectedPath);
     expect(fs.downloadFileAsync).toHaveBeenCalledWith(
       networkUrl,
-      expect.objectContaining({ uri: expectedPath }),
-      { idempotent: true },
+      expect.objectContaining({ uri: `${expectedPath}.part` }),
+      DOWNLOAD_OPTIONS,
     );
     expect(fs.files.has(expectedPath)).toBe(true);
   });
@@ -117,6 +120,7 @@ describe('downloadAndCacheIcon', () => {
 
     expect(result).toBeNull();
     expect(fs.files.has(expectedPath)).toBe(false);
+    expect(fs.files.has(`${expectedPath}.part`)).toBe(false);
   });
 
   it('returns null when the download throws', async () => {
@@ -151,7 +155,7 @@ describe('refreshIconCacheForUsers', () => {
     expect(fs.downloadFileAsync).toHaveBeenCalledWith(
       `${baseUrl}/api/v1/users/u1/profile-icon`,
       expect.objectContaining({ uri: expect.stringContaining('u1') }),
-      { idempotent: true },
+      DOWNLOAD_OPTIONS,
     );
   });
 
@@ -194,7 +198,7 @@ describe('refreshIconCacheForUsers', () => {
     expect(fs.downloadFileAsync).toHaveBeenCalledWith(
       `${baseUrl}/api/v1/users/u2/profile-icon`,
       expect.objectContaining({ uri: expect.stringContaining('u2') }),
-      { idempotent: true },
+      DOWNLOAD_OPTIONS,
     );
   });
 

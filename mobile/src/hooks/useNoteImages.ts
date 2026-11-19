@@ -8,7 +8,7 @@ import { enqueueWrite } from '../db/syncQueue';
 import { isTransientError } from '../utils/retryWithBackoff';
 import { noteKey } from '../db/queueKeys';
 import { enqueueImageUpload } from '../db/imageUploadQueue';
-import { deleteCachedNoteImage } from '../utils/noteImageCache';
+import { cacheUploadedNoteImage, deleteCachedNoteImage } from '../utils/noteImageCache';
 import { assertSwitchWriteAllowed } from '../api/client';
 import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from './useNetworkStatus';
@@ -61,6 +61,7 @@ export function useUploadNoteImage() {
             (images) => images.some((img) => img.id === image.id) ? images : [...images, image],
             image.created_at,
           );
+          await cacheUploadedNoteImage(image.id, file.uri);
           return { status: 'uploaded', image };
         } catch (err) {
           // A user-initiated cancel is neither a permanent error nor something

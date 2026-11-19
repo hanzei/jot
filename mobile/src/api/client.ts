@@ -477,11 +477,8 @@ api.interceptors.request.use(async (config) => {
   setRequestHeader(config, REQUEST_ID_HEADER, requestId);
   switchAwareConfig.__jotRequestId = requestId;
 
-  let token = sessionCache;
-  if (token === undefined) {
-    token = await getStoredSession();
-    sessionCache = token ?? null;
-  }
+  // getStoredSession fills the cache itself, and only for the server it read.
+  const token = sessionCache !== undefined ? sessionCache : await getStoredSession();
   if (token) {
     setRequestHeader(config, 'Cookie', `jot_session=${token}`);
   }
@@ -743,9 +740,37 @@ export async function getStoredSession(): Promise<string | null> {
     sessionCache = null;
     return null;
   }
-  const token = await getServerStorageValue(serverId, SESSION_KEY);
-  sessionCache = token ?? null;
-  return sessionCache;
+  const token = (await getServerStorageValue(serverId, SESSION_KEY)) ?? null;
+  // A server switch during the read reset the cache for the new server; storing
+  // this token would hand the old server's session to every later request.
+  if (activeServerId === serverId) {
+    sessionCache = token;
+  }
+  return token;
+}
+
+/**
+ * The session cookie as an explicit header for a request to `url` that
+ * bypasses the axios interceptor above (native file downloads). Android's
+ * expo-file-system downloader uses a bare OkHttpClient with no cookie jar, so
+ * without this the request is unauthenticated there.
+ *
+ * The cookie is the active server's, so it is only returned when `url` is on
+ * that server and no server switch happened while it was read. A caller can
+ * hold a URL built for a server that is no longer active (a cache warm-up loop
+ * that outlives a switch), and must not send the new server's session to the
+ * old one: it gets no cookie and the request fails as unauthenticated.
+ * Empty when signed out.
+ */
+export async function sessionCookieHeaders(url: string): Promise<Record<string, string>> {
+  const serverId = activeServerId;
+  const generationId = getCurrentSwitchGenerationId();
+  const token = await getStoredSession();
+  if (!token) return {};
+  if (activeServerId !== serverId || getCurrentSwitchGenerationId() !== generationId) return {};
+  const target = canonicalizeServerOrigin(url);
+  if (target === null || target !== canonicalizeServerOrigin(currentBaseUrl)) return {};
+  return { Cookie: `jot_session=${token}` };
 }
 
 export async function clearStoredSession(): Promise<void> {
