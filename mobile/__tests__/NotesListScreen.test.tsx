@@ -793,11 +793,11 @@ describe('NotesListScreen archived search', () => {
 });
 
 describe('NotesListScreen search result swap', () => {
-  const offlineResult = (notes: ReturnType<typeof buildNote>[], isPlaceholderData = false) => ({
+  // `undefined` models a read that has not landed yet.
+  const offlineResult = (notes: ReturnType<typeof buildNote>[] | undefined) => ({
     data: notes,
-    isLoading: false,
+    isLoading: notes === undefined,
     isError: false,
-    isPlaceholderData,
     refetch: jest.fn(),
     isRefetching: false,
   });
@@ -805,14 +805,21 @@ describe('NotesListScreen search result swap', () => {
 
   const apple = buildNote({ id: 'apple', title: 'apple' });
   const apricot = buildNote({ id: 'apricot', title: 'apricot' });
-  const noArchived = offlineResult([]);
+  const oldApple = buildNote({ id: 'old-apple', title: 'old apple', archived: true });
+  const oldApricot = buildNote({ id: 'old-apricot', title: 'old apricot', archived: true });
 
-  // What the active-notes hook returns per search term. Each entry is a stable
-  // object so the notes-dependent effects don't loop; a test swaps an entry and
-  // re-renders to model a pending read resolving.
-  let results: Record<string, OfflineResult>;
+  // What each read returns per search term. Entries are stable objects so the
+  // notes-dependent effects don't loop; a test swaps an entry and re-renders to
+  // model a pending read landing.
+  let active: Record<string, OfflineResult>;
+  let archived: Record<string, OfflineResult>;
   const searchedFor = (search: string) =>
     expect(mockUseOfflineNotes).toHaveBeenCalledWith(expect.objectContaining({ search }));
+  const search = async (text: string) => {
+    await fireEvent.changeText(screen.getByTestId('search-input'), text);
+    await waitFor(() => searchedFor(text));
+  };
+  const rerender = () => screen.rerender(<NotesListScreen variant="notes" />);
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -828,49 +835,85 @@ describe('NotesListScreen search result swap', () => {
     mockUseTheme.mockReturnValue({ colors: lightColors });
     mockUseAuth.mockReturnValue({ user: mockUser, settings: baseSettings, setSettings: jest.fn() });
     mockUseOfflineNote.mockReturnValue({ data: null });
-    results = {
+    active = {
       '': offlineResult([apple, apricot]),
       ap: offlineResult([apple, apricot]),
+      zzz: offlineResult([]),
+    };
+    archived = {
+      '': offlineResult(undefined),
+      ap: offlineResult([oldApple]),
+      zzz: offlineResult([]),
     };
     mockUseOfflineNotes.mockImplementation((params?: { archived?: boolean; search?: string }) =>
-      params?.archived ? noArchived : results[params?.search ?? '']!,
+      (params?.archived ? archived : active)[params?.search ?? '']!,
     );
   });
 
-  it('swaps the previous results for the new ones without animating the change', async () => {
+  it('swaps to the next term once both of its reads land, without animating', async () => {
     await render(<NotesListScreen variant="notes" />);
-    await fireEvent.changeText(screen.getByTestId('search-input'), 'ap');
-    await waitFor(() => searchedFor('ap'));
+    await search('ap');
+    expect(screen.getByText('old apple')).toBeTruthy();
 
-    // The 'apr' read is pending, so the hook still holds the 'ap' results.
-    results.apr = offlineResult([apple, apricot], true);
-    await fireEvent.changeText(screen.getByTestId('search-input'), 'apr');
-    await waitFor(() => searchedFor('apr'));
+    // The active read for 'apr' lands; its archived read is still pending.
+    active.apr = offlineResult([apricot]);
+    archived.apr = offlineResult(undefined);
+    await search('apr');
+    // Still all of 'ap', not its archived matches under 'apr' active notes.
     expect(screen.getByText('apple')).toBeTruthy();
+    expect(screen.getByText('old apple')).toBeTruthy();
     mockAnimateListReflow.mockClear();
 
-    results.apr = offlineResult([apricot]);
-    await screen.rerender(<NotesListScreen variant="notes" />);
+    archived.apr = offlineResult([oldApricot]);
+    await rerender();
 
     expect(screen.queryByText('apple')).toBeNull();
+    expect(screen.queryByText('old apple')).toBeNull();
     expect(screen.getByText('apricot')).toBeTruthy();
+    expect(screen.getByText('old apricot')).toBeTruthy();
     // A search switch swaps instantly; only in-view note changes animate.
     expect(mockAnimateListReflow).not.toHaveBeenCalled();
   });
 
+  it('names the term the shown results belong to when they are empty', async () => {
+    await render(<NotesListScreen variant="notes" />);
+    await search('zzz');
+
+    active.apple = offlineResult(undefined);
+    archived.apple = offlineResult(undefined);
+    await search('apple');
+    expect(screen.getByText('No notes matching "zzz"')).toBeTruthy();
+    expect(screen.queryByText('No notes matching "apple"')).toBeNull();
+  });
+
+  it('keeps a cleared search on screen until the full list lands', async () => {
+    await render(<NotesListScreen variant="notes" />);
+    await search('zzz');
+
+    active[''] = offlineResult(undefined);
+    await fireEvent.press(screen.getByTestId('clear-search'));
+    expect(screen.queryByTestId('notes-empty-state')).toBeNull();
+    expect(screen.getByText('No notes matching "zzz"')).toBeTruthy();
+
+    active[''] = offlineResult([apple, apricot]);
+    await rerender();
+    expect(screen.queryByText('No notes matching "zzz"')).toBeNull();
+    // The full list renders in the draggable grid, whose cards start in its
+    // hidden measurement pool.
+    expect(screen.getByTestId('note-card-apple', { includeHiddenElements: true })).toBeTruthy();
+  });
+
   it('keeps drag off while a cleared search still shows its results', async () => {
     await render(<NotesListScreen variant="notes" />);
-    await fireEvent.changeText(screen.getByTestId('search-input'), 'ap');
-    await waitFor(() => searchedFor('ap'));
+    await search('ap');
 
-    // The unfiltered read is pending, so the hook still holds the search results.
-    results[''] = offlineResult([apple], true);
+    active[''] = offlineResult(undefined);
     await fireEvent.press(screen.getByTestId('clear-search'));
+    expect(screen.getByText('old apple')).toBeTruthy();
     expect(screen.queryByTestId('notes-masonry-draggable')).toBeNull();
-    expect(screen.getByTestId('notes-masonry-grid')).toBeTruthy();
 
-    results[''] = offlineResult([apple, apricot]);
-    await screen.rerender(<NotesListScreen variant="notes" />);
+    active[''] = offlineResult([apple, apricot]);
+    await rerender();
     expect(screen.getByTestId('notes-masonry-draggable')).toBeTruthy();
   });
 });

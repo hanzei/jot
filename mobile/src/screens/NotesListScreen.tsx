@@ -38,6 +38,8 @@ import NotesListHeader from './notesList/NotesListHeader';
 import TrashBinInfo from './notesList/TrashBinInfo';
 import MasonryGrid from './notesList/MasonryGrid';
 import DraggableMasonry from './notesList/DraggableMasonry';
+import { useSettledSearchResults } from './notesList/useSettledSearchResults';
+import { notesLocalQueryKey } from '../hooks/queryKeys';
 import FadeInView from '../components/FadeInView';
 import { animateListReflow } from '../utils/layoutAnimation';
 import {
@@ -120,32 +122,30 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
     user_id: variant === 'my-tasks' ? user?.id : undefined,
   }), [variant, debouncedSearch, labelId, user?.id]);
 
-  const { data: notes, isLoading, isError, refetch, isRefetching, isPlaceholderData } = useOfflineNotes(params);
+  const { data: notes, isLoading, isError, refetch, isRefetching } = useOfflineNotes(params);
 
   // While searching or filtering by label outside the archive/trash views,
   // also surface archived matches in a separate section. My Tasks already
   // returns archived notes, so it needs no extra request — its archived
   // matches are split from `notes`.
-  const showArchivedSplit = (!!debouncedSearch || !!labelId) && variant !== 'archived' && variant !== 'trash';
-  const fetchArchivedSeparately = showArchivedSplit && variant !== 'my-tasks';
+  const splitsArchived = (search: string) => (!!search || !!labelId) && variant !== 'archived' && variant !== 'trash';
+  const fetchArchivedSeparately = splitsArchived(debouncedSearch) && variant !== 'my-tasks';
   const archivedParams = useMemo(() => ({
     archived: true,
     search: debouncedSearch || undefined,
     label: variant === 'notes' ? labelId : undefined,
   }), [debouncedSearch, labelId, variant]);
-  const { data: archivedSearchNotes, isPlaceholderData: isArchivedPlaceholderData } =
-    useOfflineNotes(archivedParams, { enabled: fetchArchivedSeparately });
+  const { data: archivedSearchNotes } = useOfflineNotes(archivedParams, { enabled: fetchArchivedSeparately });
 
-  // The search term the rendered results belong to. While a new term's read is
-  // pending, useOfflineNotes keeps showing the previous term's results, so this
-  // trails `debouncedSearch` until both queries have the new term's data.
-  const showsPlaceholderResults = isPlaceholderData || isArchivedPlaceholderData;
-  const [resultsSearch, setResultsSearch] = useState(debouncedSearch);
-  if (!showsPlaceholderResults && resultsSearch !== debouncedSearch) {
-    setResultsSearch(debouncedSearch);
-  }
-
-  const isSearchLoading = isLoading && !notes && !!debouncedSearch;
+  // What the list renders. While a new search term's reads are pending this is
+  // still the previous term's results, so `shown.search` can trail
+  // `debouncedSearch`: whatever describes the rendered notes reads `shown`.
+  const shown = useSettledSearchResults(
+    JSON.stringify(notesLocalQueryKey({ ...params, search: undefined })),
+    { search: debouncedSearch, notes, archived: archivedSearchNotes },
+    fetchArchivedSeparately,
+  );
+  const isSearchLoading = isLoading && !shown.notes && !!debouncedSearch;
   const reorderNotes = useReorderNotes();
   const navigation = useNavigation<NavigationProp>();
 
@@ -329,8 +329,9 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
 
   // Separate active from archived matches. For My Tasks the archived notes are
   // mixed into `notes`; otherwise they come from the dedicated archived fetch.
+  const showArchivedSplit = splitsArchived(shown.search);
   const { activeNotes, archivedNotes } = useMemo(() => {
-    const all = notes ?? EMPTY_NOTES;
+    const all = shown.notes ?? EMPTY_NOTES;
     if (!showArchivedSplit) {
       return { activeNotes: all, archivedNotes: EMPTY_NOTES };
     }
@@ -340,8 +341,8 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
         archivedNotes: all.filter((n) => n.archived),
       };
     }
-    return { activeNotes: all, archivedNotes: archivedSearchNotes ?? EMPTY_NOTES };
-  }, [notes, showArchivedSplit, variant, archivedSearchNotes]);
+    return { activeNotes: all, archivedNotes: shown.archived ?? EMPTY_NOTES };
+  }, [shown.notes, showArchivedSplit, variant, shown.archived]);
 
   const { pinned: pinnedNotes, other: otherNotes } = useMemo(
     () => sortNotesForDisplay(activeNotes, sortMode),
@@ -421,26 +422,26 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
         <View style={styles.emptySearchContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
-      ) : debouncedSearch || labelId ? (
+      ) : shown.search || labelId ? (
         <FadeInView style={styles.emptySearchContainer} scaleFrom={0.97}>
-          {debouncedSearch ? (
+          {shown.search ? (
             <Search size={48} color={colors.handleColor} />
           ) : (
             <Tag size={48} color={colors.handleColor} />
           )}
           <Text style={[styles.emptySearchTitle, { color: colors.textSecondary }]}>
-            {debouncedSearch
-              ? t('dashboard.noSearchResults', { query: debouncedSearch })
+            {shown.search
+              ? t('dashboard.noSearchResults', { query: shown.search })
               : t('dashboard.noNotesForLabel')}
           </Text>
-          {debouncedSearch && (
+          {shown.search && (
             <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>
               {t('dashboard.tryDifferentKeywords')}
             </Text>
           )}
         </FadeInView>
       ) : null,
-    [isSearchLoading, debouncedSearch, labelId, colors, t],
+    [isSearchLoading, shown.search, labelId, colors, t],
   );
 
   const handleDragEnd = useCallback(
@@ -510,20 +511,18 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
   // or misclassified manual order — disable dragging there. Search results are
   // additionally ordered by full-text relevance, not manual position, so a drag
   // would not even map to the positions being shown. Right after the search is
-  // cleared the list can still hold the old results as placeholder data, which
-  // are just as partial.
-  const isDraggable =
-    variant === 'notes' && sortMode === 'manual' && !debouncedSearch && !labelId && !showsPlaceholderResults;
+  // cleared the old results can still be on screen, which are just as partial.
+  const isDraggable = variant === 'notes' && sortMode === 'manual' && !debouncedSearch && !shown.search && !labelId;
 
   // Signature of the active view/filter/sort/layout. The static grid swaps
   // instantly when it changes, so only in-view note changes (create, delete,
   // archive, pin, sync) animate — never a search/sort switch or first load.
-  // Keyed on `resultsSearch`, not `debouncedSearch`: the key must change in the
-  // same render as the results do, not one render early while the previous
-  // term's results are still shown, or the swap would animate.
+  // Keyed on the shown term, not `debouncedSearch`: the key must change in the
+  // same render as the results do, not while the previous term's results are
+  // still on screen, or the swap would animate.
   // JSON-encoded (not delimiter-joined) so free-form search text — which may
   // contain any separator character — can't make two different views collide.
-  const gridViewKey = JSON.stringify([variant, resultsSearch, labelId ?? '', sortMode, layout]);
+  const gridViewKey = JSON.stringify([variant, shown.search, labelId ?? '', sortMode, layout]);
 
   const handleGridSectionReorder = useCallback(
     (sectionKey: string, newData: Note[]) => {
@@ -555,7 +554,7 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
   // Show full-screen loading only on initial load (no prior data, no active search query).
   // Uses debouncedSearch (not searchText) so clearing the input mid-debounce doesn't
   // trigger the full-screen loader while the previous query is still in-flight.
-  if (isLoading && !notes && !debouncedSearch) {
+  if (isLoading && !shown.notes && !debouncedSearch) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         {header}
@@ -605,7 +604,7 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
     );
   }
 
-  const isEmpty = !isLoading && (!notes || notes.length === 0);
+  const isEmpty = !isLoading && (!shown.notes || shown.notes.length === 0);
 
   if (isEmpty && !debouncedSearch && (variant !== 'notes' || !labelId)) {
     const EmptyIcon: LucideIcon =
