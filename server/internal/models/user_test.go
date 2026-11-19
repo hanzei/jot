@@ -185,14 +185,14 @@ func TestConcurrentAdminSelfDeletesKeepAnAdmin(t *testing.T) {
 		wg.Go(func() {
 			errB = store.DeleteWithCleanup(t.Context(), b.ID, nil, nil)
 		})
-		time.Sleep(200 * time.Millisecond) //nolint:forbidigo // give B time to reach the lock; the assertion holds whatever the timing
+		time.Sleep(200 * time.Millisecond) //nolint:forbidigo // lets B reach the lock while A holds it; without the wait B can start after A commits and never exercise the race
 		close(releaseA)
 		wg.Wait()
 
 		require.NoError(t, errA)
 		require.Error(t, errB, "the second self-delete must not succeed once the first commits")
 		if driver == dialect.DriverPostgres {
-			require.ErrorIs(t, errB, ErrLastAdminDelete)
+			require.ErrorIs(t, errB, ErrLastAdmin)
 		}
 
 		var admins int

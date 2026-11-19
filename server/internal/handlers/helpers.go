@@ -26,6 +26,17 @@ func requireUser(r *http.Request) (*models.User, error) {
 	return user, nil
 }
 
+// checkCurrentPassword re-authenticates user with password, for the endpoints
+// that ask for the current password before a sensitive change (password
+// change, account deletion). It returns the 403 incorrect_password error, or
+// nil when the password matches.
+func checkCurrentPassword(user *models.User, password string) error {
+	if !user.CheckPassword(password) {
+		return apierr.New(apierr.CodeIncorrectPassword, "current password is incorrect")
+	}
+	return nil
+}
+
 // pathID returns the URL parameter name, checked to be a well-formed ID. The
 // error names the ID by label ("missing note ID", "invalid note ID format")
 // and is ready to return with a 400.

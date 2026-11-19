@@ -407,8 +407,10 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusBadRequest, nil, err
 	}
 
-	if user.HasPassword && !user.CheckPassword(req.CurrentPassword) {
-		return http.StatusForbidden, nil, apierr.New(apierr.CodeIncorrectPassword, "current password is incorrect")
+	if user.HasPassword {
+		if err := checkCurrentPassword(user, req.CurrentPassword); err != nil {
+			return http.StatusForbidden, nil, err
+		}
 	}
 
 	if err := h.userStore.UpdatePassword(r.Context(), currentUser.ID, req.NewPassword); err != nil {
@@ -633,7 +635,9 @@ type DeleteAccountRequest struct {
 //	@Failure		500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router			/users/me [delete]
 func (h *AuthHandler) DeleteMe(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	currentUser, authErr := requireUser(r)
+	// The auth middleware loaded the full row (password hash included); a
+	// row that has since vanished surfaces as ErrUserNotFound from the delete.
+	user, authErr := requireUser(r)
 	if authErr != nil {
 		return http.StatusUnauthorized, nil, authErr
 	}
@@ -641,11 +645,6 @@ func (h *AuthHandler) DeleteMe(w http.ResponseWriter, r *http.Request) (int, any
 	var req DeleteAccountRequest
 	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, err
-	}
-
-	user, err := h.userStore.GetByID(r.Context(), currentUser.ID)
-	if err != nil {
-		return storeError(err, "get user")
 	}
 
 	// For an account without a password, the username only guards against an
@@ -656,8 +655,8 @@ func (h *AuthHandler) DeleteMe(w http.ResponseWriter, r *http.Request) (int, any
 		if req.CurrentPassword == "" {
 			return http.StatusBadRequest, nil, errors.New("current_password is required")
 		}
-		if !user.CheckPassword(req.CurrentPassword) {
-			return http.StatusForbidden, nil, apierr.New(apierr.CodeIncorrectPassword, "current password is incorrect")
+		if err := checkCurrentPassword(user, req.CurrentPassword); err != nil {
+			return http.StatusForbidden, nil, err
 		}
 	} else {
 		if req.Username == "" {
@@ -674,12 +673,8 @@ func (h *AuthHandler) DeleteMe(w http.ResponseWriter, r *http.Request) (int, any
 		return storeError(err, "delete user")
 	}
 
-	// The session row went with the user (ON DELETE CASCADE); this clears the
-	// cookie. The account is already gone, so a failure here must not turn
-	// into an error response the client would read as "not deleted".
-	if err := h.sessionService.DeleteSession(w, r); err != nil {
-		logutil.FromContext(r.Context()).WithError(err).Warn("Failed to clear the session cookie after deleting the account")
-	}
+	// The session row went with the user (ON DELETE CASCADE).
+	h.sessionService.ClearSessionCookie(w)
 
 	return http.StatusNoContent, nil, nil
 }

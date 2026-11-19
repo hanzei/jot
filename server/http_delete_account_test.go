@@ -14,24 +14,25 @@ import (
 )
 
 // deleteMe sends DELETE /users/me with the given JSON body via the session
-// client c and returns the response.
-func (ts *TestServer) deleteMe(t *testing.T, c *http.Client, body string) *http.Response {
+// client c.
+func (ts *TestServer) deleteMe(t *testing.T, c *http.Client, body string) (int, http.Header, []byte) {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, ts.HTTPServer.URL+"/api/v1/users/me", strings.NewReader(body))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.Do(req)
-	require.NoError(t, err)
-	return resp
+	return rawRequest(t, c, http.MethodDelete, ts.HTTPServer.URL+"/api/v1/users/me", strings.NewReader(body), jsonHeader)
+}
+
+// createPlainTestUser creates a non-admin user who can delete their account.
+// The first account to register becomes the admin, and the last admin cannot
+// delete itself, so this takes that seat first.
+func (ts *TestServer) createPlainTestUser(t *testing.T, username string) *TestUser {
+	t.Helper()
+	ts.createTestUser(t, "seatadmin", "password123", true)
+	return ts.createTestUser(t, username, "password123", false)
 }
 
 func TestDeleteMeWithPassword(t *testing.T) {
 	t.Parallel()
 	ts := setupTestServer(t)
-	// The first account to register becomes the admin, and the last admin
-	// cannot delete itself; take that seat so the user under test is plain.
-	ts.createTestUser(t, "seatadmin", "password123", true)
-	user := ts.createTestUser(t, "deleteme", "password123", false)
+	user := ts.createPlainTestUser(t, "deleteme")
 
 	t.Run("missing password returns 400", func(t *testing.T) {
 		err := user.Client.DeleteMe(t.Context(), "", "")
@@ -59,17 +60,13 @@ func TestDeleteMeWithPassword(t *testing.T) {
 
 	t.Run("correct password deletes the account and clears the cookie", func(t *testing.T) {
 		c := sessionClientFrom(t, ts, user)
-		resp := ts.deleteMe(t, c, `{"current_password":"password123"}`)
-		require.NoError(t, resp.Body.Close())
-		require.Equal(t, http.StatusNoContent, resp.StatusCode)
+		status, header, _ := ts.deleteMe(t, c, `{"current_password":"password123"}`)
+		require.Equal(t, http.StatusNoContent, status)
 
-		var cleared bool
-		for _, ck := range resp.Cookies() {
-			if ck.Value == "" && ck.MaxAge < 0 {
-				cleared = true
-			}
-		}
-		assert.True(t, cleared, "the response clears the session cookie")
+		cookie := sessionCookie(&http.Response{Header: header})
+		require.NotNil(t, cookie, "the response sets the session cookie")
+		assert.Empty(t, cookie.Value)
+		assert.Negative(t, cookie.MaxAge, "the session cookie is cleared")
 
 		_, err := user.Client.Me(t.Context())
 		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err), "the session no longer works")
@@ -84,10 +81,7 @@ func TestDeleteMeWithPassword(t *testing.T) {
 func TestDeleteMeRemovesCredentials(t *testing.T) {
 	t.Parallel()
 	ts := setupTestServer(t)
-	// The first account to register becomes the admin, and the last admin
-	// cannot delete itself; take that seat so the user under test is plain.
-	ts.createTestUser(t, "seatadmin", "password123", true)
-	user := ts.createTestUser(t, "credsuser", "password123", false)
+	user := ts.createPlainTestUser(t, "credsuser")
 
 	otherDevice := ts.newClient()
 	_, err := otherDevice.Login(t.Context(), "credsuser", "password123")
@@ -113,15 +107,12 @@ func TestDeleteMeRemovesCredentials(t *testing.T) {
 func TestDeleteMeRequiresSession(t *testing.T) {
 	t.Parallel()
 	ts := setupTestServer(t)
-	// The first account to register becomes the admin, and the last admin
-	// cannot delete itself; take that seat so the user under test is plain.
-	ts.createTestUser(t, "seatadmin", "password123", true)
-	user := ts.createTestUser(t, "patdelete", "password123", false)
+	user := ts.createPlainTestUser(t, "patdelete")
 	pat := createPAT(t, ts, user, "script")
 
 	status, header, body := rawRequest(t, ts.newClient().HTTPClient(), http.MethodDelete, ts.HTTPServer.URL+"/api/v1/users/me",
 		strings.NewReader(`{"current_password":"password123"}`),
-		http.Header{"Authorization": {"Bearer " + pat.Token}, "Content-Type": {"application/json"}})
+		http.Header{"Authorization": {"Bearer " + pat.Token}, "Content-Type": jsonHeader["Content-Type"]})
 	requireEnvelope(t, http.StatusForbidden, string(apierr.CodeSessionRequired), status, header, body)
 
 	_, err := user.Client.Me(t.Context())
@@ -132,10 +123,7 @@ func TestDeleteMeNotesAndImages(t *testing.T) {
 	t.Parallel()
 	var uploadDir string
 	ts := setupTestServerWithConfig(t, func(cfg *config.Config) { uploadDir = cfg.UploadDir })
-	// The first account to register becomes the admin, and the last admin
-	// cannot delete itself; take that seat so the user under test is plain.
-	ts.createTestUser(t, "seatadmin", "password123", true)
-	leaving := ts.createTestUser(t, "leaving", "password123", false)
+	leaving := ts.createPlainTestUser(t, "leaving")
 	staying := ts.createTestUser(t, "staying", "password123", false)
 
 	// A note the leaving user owns and shared out, with an image.
@@ -223,26 +211,21 @@ func TestDeleteMeSSOUser(t *testing.T) {
 			firstID := me.User.ID
 
 			// Give the account a note so the new one can be told apart.
-			resp = ts.postJSONWith(t, c, "/api/v1/notes", `{"content":"before"}`)
-			require.NoError(t, resp.Body.Close())
-			require.Equal(t, http.StatusCreated, resp.StatusCode)
+			status, _, _ = rawRequest(t, c, http.MethodPost, ts.HTTPServer.URL+"/api/v1/notes", strings.NewReader(`{"content":"before"}`), jsonHeader)
+			require.Equal(t, http.StatusCreated, status)
 
-			resp = ts.deleteMe(t, c, `{}`)
-			require.NoError(t, resp.Body.Close())
-			assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "username is required")
+			status, _, _ = ts.deleteMe(t, c, `{}`)
+			assert.Equal(t, http.StatusBadRequest, status, "username is required")
 
-			resp = ts.deleteMe(t, c, `{"current_password":"anything"}`)
-			require.NoError(t, resp.Body.Close())
-			assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "a password does not stand in for the username")
+			status, _, _ = ts.deleteMe(t, c, `{"current_password":"anything"}`)
+			assert.Equal(t, http.StatusBadRequest, status, "a password does not stand in for the username")
 
-			status, header, body := rawRequest(t, c, http.MethodDelete, ts.HTTPServer.URL+"/api/v1/users/me",
-				strings.NewReader(`{"username":"someoneelse"}`), http.Header{"Content-Type": {"application/json"}})
+			status, header, body := ts.deleteMe(t, c, `{"username":"someoneelse"}`)
 			requireEnvelope(t, http.StatusForbidden, string(apierr.CodeIncorrectUsername), status, header, body)
 
 			// The comparison ignores case.
-			resp = ts.deleteMe(t, c, `{"username":"SSOLeaver"}`)
-			require.NoError(t, resp.Body.Close())
-			require.Equal(t, http.StatusNoContent, resp.StatusCode)
+			status, _, _ = ts.deleteMe(t, c, `{"username":"SSOLeaver"}`)
+			require.Equal(t, http.StatusNoContent, status)
 
 			_, status = ts.me(t, c)
 			require.Equal(t, http.StatusUnauthorized, status)
@@ -261,15 +244,4 @@ func TestDeleteMeSSOUser(t *testing.T) {
 			assert.Zero(t, notes, "the new account starts empty")
 		})
 	}
-}
-
-// postJSONWith POSTs a JSON body via the session client c.
-func (ts *TestServer) postJSONWith(t *testing.T, c *http.Client, path, body string) *http.Response {
-	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.HTTPServer.URL+path, strings.NewReader(body))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.Do(req)
-	require.NoError(t, err)
-	return resp
 }

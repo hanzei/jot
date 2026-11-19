@@ -59,6 +59,13 @@ func (s *SessionService) DeleteSession(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
+// ClearSessionCookie tells the browser to drop the session cookie without
+// touching the database, for when the session row is already gone (it
+// cascades away with its user).
+func (s *SessionService) ClearSessionCookie(w http.ResponseWriter) {
+	s.setSessionCookie(w, "", -1)
+}
+
 func (s *SessionService) InvalidateUserSessions(ctx context.Context, userID string) error {
 	return s.sessionStore.DeleteByUserID(ctx, userID)
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/logutil"
@@ -277,7 +278,7 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, 
 	// Users delete their own account through DELETE /users/me, which asks
 	// them to re-authenticate; the admin endpoint does not.
 	if targetID == requestingUser.ID {
-		return http.StatusForbidden, nil, models.ErrCannotDeleteSelf
+		return http.StatusForbidden, nil, apierr.New(apierr.CodeCannotDeleteSelf, "cannot delete your own account")
 	}
 
 	if err := deleteUserWithCleanup(r.Context(), h.userStore, h.noteStore, h.imageStore, targetID); err != nil {

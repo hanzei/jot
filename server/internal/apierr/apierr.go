@@ -153,8 +153,6 @@ var sentinels = []struct {
 	{models.ErrNotNoteOwner, http.StatusForbidden, ""},
 	{models.ErrLabelNameConflict, 0, CodeLabelNameTaken},
 	{models.ErrLastAdmin, http.StatusConflict, CodeLastAdmin},
-	{models.ErrLastAdminDelete, http.StatusConflict, CodeLastAdmin},
-	{models.ErrCannotDeleteSelf, http.StatusForbidden, CodeCannotDeleteSelf},
 	{models.ErrOIDCIdentityLinked, http.StatusConflict, CodeSSOIdentityLinked},
 	{models.ErrWouldStrandAccount, http.StatusUnprocessableEntity, CodeWouldStrandAccount},
 	{models.ErrLabelNameTooLong, http.StatusUnprocessableEntity, CodeLabelNameTooLong},

@@ -41,19 +41,9 @@ var ErrUsernameTaken = errors.New("username already taken")
 // does not exist in the database.
 var ErrUserNotFound = errors.New("user not found")
 
-// ErrLastAdmin is returned when an attempt is made to demote the only remaining
-// admin user, which would leave the system with no administrators.
-var ErrLastAdmin = errors.New("cannot demote the last admin")
-
-// ErrLastAdminDelete is returned when an attempt is made to delete the only
-// remaining admin user. It maps to the same API code as [ErrLastAdmin]; only
-// the message differs, because the remedy is to promote someone else first.
-var ErrLastAdminDelete = errors.New("the last admin cannot be deleted; promote another user to admin first")
-
-// ErrCannotDeleteSelf is returned when an admin tries to delete their own
-// account through the admin endpoint. It is the admin handler's rule, not the
-// store's: a user deletes their own account through DELETE /users/me.
-var ErrCannotDeleteSelf = errors.New("cannot delete your own account")
+// ErrLastAdmin is returned when demoting or deleting the only remaining admin,
+// which would leave the system with no administrators.
+var ErrLastAdmin = errors.New("the server must keep at least one admin; promote another user to admin first")
 
 // ErrOIDCIdentityLinked is returned when an attempt is made to bind an
 // (issuer, subject) pair that is already linked to a different user.
@@ -481,21 +471,13 @@ func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 // Postgres first. Without the lock two concurrent transactions (two admins
 // each deleting or demoting themselves) both count 2 under READ COMMITTED and
 // both commit, leaving no admin; with it the second waits and then sees the
-// first's change. SQLite already serializes writers. The rows are read rather
-// than COUNT(*)ed because Postgres refuses FOR UPDATE with an aggregate.
+// first's change. SQLite already serializes writers. The lock sits in a
+// subquery because Postgres refuses FOR UPDATE alongside an aggregate.
 func (s *userStore) lockAndCountAdminsTx(ctx context.Context, tx *sql.Tx) (int, error) {
-	query := `SELECT id FROM users WHERE role = 'admin'` + s.d.ForUpdate()
-	rows, err := tx.QueryContext(ctx, s.d.RewritePlaceholders(query))
-	if err != nil {
-		return 0, fmt.Errorf("lock admins: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	count := 0
-	for rows.Next() {
-		count++
-	}
-	if err := rows.Err(); err != nil {
-		return 0, fmt.Errorf("count admins: %w", err)
+	query := `SELECT COUNT(*) FROM (SELECT id FROM users WHERE role = 'admin'` + s.d.ForUpdate() + `) admins`
+	var count int
+	if err := tx.QueryRowContext(ctx, s.d.RewritePlaceholders(query)).Scan(&count); err != nil {
+		return 0, fmt.Errorf("lock and count admins: %w", err)
 	}
 	return count, nil
 }
@@ -508,8 +490,8 @@ func (s *userStore) lockAndCountAdminsTx(ctx context.Context, tx *sql.Tx) (int, 
 // looking it up afterward would find nothing. postDelete executes after the
 // user row is deleted (and cascade effects like note_shares removal have
 // taken place) but before the transaction commits, so any cleanup is atomic
-// with the delete. Deleting the last admin is refused with
-// [ErrLastAdminDelete]; who may delete whom is the caller's decision.
+// with the delete. Deleting the last admin is refused with [ErrLastAdmin];
+// who may delete whom is the caller's decision.
 func (s *userStore) DeleteWithCleanup(ctx context.Context, id string, preDelete, postDelete func(ctx context.Context, tx *sql.Tx) error) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -532,7 +514,7 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id string, preDelete,
 			return countErr
 		}
 		if adminCount <= 1 {
-			return ErrLastAdminDelete
+			return ErrLastAdmin
 		}
 	}
 

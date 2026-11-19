@@ -12,7 +12,7 @@ import (
 // them. It is the one implementation behind both DELETE /admin/users/{id} and
 // DELETE /users/me, so the two cannot drift apart. Who may delete whom is the
 // caller's check; this refuses only the last admin
-// ([models.ErrLastAdminDelete]). Errors come back unwrapped, for the caller
+// ([models.ErrLastAdmin]). Errors come back unwrapped, for the caller
 // to pass to storeError, so a sentinel's message stays the API message.
 func deleteUserWithCleanup(ctx context.Context, userStore *models.UserStore, noteStore *models.NoteStore, imageStore *blobstore.ImageStore, userID string) error {
 	// Deleting the user cascades away both their owned notes' note_images
