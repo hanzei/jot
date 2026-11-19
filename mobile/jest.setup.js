@@ -95,6 +95,13 @@ class MockDirectory {
       .filter((uri) => uri.startsWith(prefix) && !uri.slice(prefix.length).includes('/'))
       .map((uri) => new MockFile(uri));
   }
+  delete() {
+    if (!fsDirs.has(this.uri)) throw new Error(`ENOENT: ${this.uri}`);
+    const prefix = `${this.uri}/`;
+    for (const uri of [...fsFiles.keys()]) if (uri.startsWith(prefix)) fsFiles.delete(uri);
+    for (const uri of [...fsDirs]) if (uri.startsWith(prefix)) fsDirs.delete(uri);
+    fsDirs.delete(this.uri);
+  }
 }
 
 jest.mock('expo-file-system', () => ({

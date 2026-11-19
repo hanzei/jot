@@ -14,7 +14,22 @@ import { silenceConsole } from './helpers/consoleGuard';
 const fs = globalThis.mockFileSystem;
 const TABLES = ['notes', 'note_items', 'labels', 'users', 'sync_queue', 'dead_letter', 'pending_image_uploads'];
 
+const NOTE_IMAGE = 'file:///cache/note-images/image-1';
+const PROFILE_ICON = 'file:///cache/profile-icons/user-a_2026-01-01';
+
 let db: TestDatabase;
+
+/** A cached note image and profile icon, as the image caches leave them on disk. */
+function seedImageCaches(): void {
+  fs.dirs.add('file:///cache/note-images');
+  fs.dirs.add('file:///cache/profile-icons');
+  fs.files.set(NOTE_IMAGE, 'png-bytes');
+  fs.files.set(PROFILE_ICON, 'png-bytes');
+}
+
+function cachedImageFiles(): string[] {
+  return [...fs.files.keys()].filter((uri) => uri.startsWith('file:///cache/'));
+}
 
 async function rowCounts(): Promise<Record<string, number>> {
   const counts: Record<string, number> = {};
@@ -69,6 +84,24 @@ describe('claimLocalData', () => {
     expect(await getUnsyncedChangeCount(db)).toBe(4);
   });
 
+  it('keeps the image caches when the owner signs back in after a 401', async () => {
+    await claimLocalData(db, 'user-a');
+    seedImageCaches();
+
+    await expect(claimLocalData(db, 'user-a')).resolves.toBe(false);
+
+    expect(cachedImageFiles()).toEqual([NOTE_IMAGE, PROFILE_ICON]);
+  });
+
+  it('clears the image caches before another user takes over', async () => {
+    await claimLocalData(db, 'user-a');
+    seedImageCaches();
+
+    await expect(claimLocalData(db, 'user-b')).resolves.toBe(true);
+
+    expect(cachedImageFiles()).toEqual([]);
+  });
+
   it('wipes every table and the queued upload files before another user takes over', async () => {
     await claimLocalData(db, 'user-a');
     const uploadPaths = await seedAccountData();
@@ -105,6 +138,24 @@ describe('wipeLocalData', () => {
     expect(Object.values(await rowCounts())).toEqual(TABLES.map(() => 0));
     expect(uploadPaths.some((path) => fs.files.has(path))).toBe(false);
     expect(await getAccountOwner(db)).toBe('');
+  });
+
+  it('clears the note image and profile icon caches', async () => {
+    await claimLocalData(db, 'user-a');
+    seedImageCaches();
+    fs.files.set('file:///cache/exports/export.zip', 'zip-bytes');
+
+    await wipeLocalData(db);
+
+    expect(cachedImageFiles()).toEqual(['file:///cache/exports/export.zip']);
+    expect(fs.dirs.has('file:///cache/note-images')).toBe(false);
+    expect(fs.dirs.has('file:///cache/profile-icons')).toBe(false);
+  });
+
+  it('succeeds when the image caches were never created', async () => {
+    await claimLocalData(db, 'user-a');
+
+    await expect(wipeLocalData(db)).resolves.toBeUndefined();
   });
 });
 

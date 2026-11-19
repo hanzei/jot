@@ -2,6 +2,8 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { withSerializedTransaction } from './transaction';
 import { deleteFileIfExists } from '../utils/fs';
 import { clearOwnVersionSteps } from './ownVersions';
+import { clearNoteImageCache } from '../utils/noteImageCache';
+import { clearProfileIconCache } from '../utils/profileIconCache';
 
 /**
  * Account ownership of a server's local database (issue #1264, spec §8.6).
@@ -68,6 +70,15 @@ function deleteUploadFiles(paths: readonly string[]): void {
   }
 }
 
+// The image caches hold the account's note images (originals and thumbnails)
+// and its collaborators' profile icons. They are not split by
+// server, so every server's copies go; they are re-fetched on demand. A 401
+// never gets here, so the same user signing back in keeps them.
+function clearImageCaches(): void {
+  clearNoteImageCache();
+  clearProfileIconCache();
+}
+
 /** The recorded owner: a user id, `''` after a logout wipe, or `null` when nothing has been recorded yet. */
 export async function getAccountOwner(db: SQLiteDatabase): Promise<string | null> {
   const row = await db.getFirstAsync<{ user_id: string }>('SELECT user_id FROM account_owner WHERE id = 1');
@@ -99,18 +110,20 @@ export async function claimLocalData(db: SQLiteDatabase, userId: string): Promis
   });
   if (wiped.files === null) return false;
   deleteUploadFiles(wiped.files);
+  clearImageCaches();
   clearOwnVersionSteps(db);
   console.info('Local data belonged to another account; wiped it before sign-in.');
   return true;
 }
 
-/** Deletes all local account data, the queues and their upload files included, for a deliberate logout. */
+/** Deletes all local account data, the queues, their upload files and the image caches included, for a deliberate logout. */
 export async function wipeLocalData(db: SQLiteDatabase): Promise<void> {
   const wiped: { files: string[] } = { files: [] };
   await withSerializedTransaction(db, async () => {
     wiped.files = await wipeRows(db, NO_OWNER);
   });
   deleteUploadFiles(wiped.files);
+  clearImageCaches();
   clearOwnVersionSteps(db);
 }
 

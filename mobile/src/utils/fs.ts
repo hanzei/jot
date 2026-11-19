@@ -82,6 +82,22 @@ export function deleteFileIfExists(uri: string): void {
   }
 }
 
+/**
+ * Delete a directory and everything in it, if it is there. Best-effort like
+ * {@link deleteFileIfExists}: never throws, since its callers only reclaim
+ * space or drop re-fetchable copies.
+ */
+export function deleteDirectoryIfExists(uri: string): void {
+  try {
+    const dir = new Directory(uri);
+    if (dir.exists) {
+      dir.delete();
+    }
+  } catch {
+    // Best-effort cleanup; a leftover directory only costs disk space.
+  }
+}
+
 /** Copy a file, overwriting the destination. */
 export async function copyFile(fromUri: string, toUri: string): Promise<void> {
   await new File(fromUri).copy(new File(toUri), { overwrite: true });

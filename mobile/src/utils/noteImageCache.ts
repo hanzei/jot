@@ -1,4 +1,4 @@
-import { cachePath, deleteFileIfExists, downloadFile, ensureDirExists, fileExists } from './fs';
+import { cachePath, deleteDirectoryIfExists, deleteFileIfExists, downloadFile, ensureDirExists, fileExists } from './fs';
 
 const CACHE_DIR = cachePath('note-images');
 
@@ -57,4 +57,10 @@ export async function downloadAndCacheNoteImage(
 export async function deleteCachedNoteImage(imageId: string): Promise<void> {
   deleteFileIfExists(imageFilePath(imageId, 'original'));
   deleteFileIfExists(imageFilePath(imageId, 'thumbnail'));
+}
+
+// Removes every cached note image. Called when local data is wiped (logout or
+// another account signing in, spec §8.6): the cache holds the account's images.
+export function clearNoteImageCache(): void {
+  deleteDirectoryIfExists(CACHE_DIR);
 }

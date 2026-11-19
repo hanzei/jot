@@ -1,4 +1,4 @@
-import { cachePath, deleteFileIfExists, downloadFile, ensureDirExists, fileExists, listFileNames } from './fs';
+import { cachePath, deleteDirectoryIfExists, deleteFileIfExists, downloadFile, ensureDirExists, fileExists, listFileNames } from './fs';
 
 const CACHE_DIR = cachePath('profile-icons');
 
@@ -72,4 +72,10 @@ export async function refreshIconCacheForUsers(
       await downloadAndCacheIcon(user.id, user.updated_at, networkUrl);
     }
   }
+}
+
+// Removes every cached profile icon. Called when local data is wiped (logout or
+// another account signing in, spec §8.6), alongside the note image cache.
+export function clearProfileIconCache(): void {
+  deleteDirectoryIfExists(CACHE_DIR);
 }
