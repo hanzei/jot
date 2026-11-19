@@ -49,6 +49,11 @@ jest.mock('expo-haptics', () => ({
   },
 }));
 
+jest.mock('../src/utils/layoutAnimation', () => ({
+  ...jest.requireActual('../src/utils/layoutAnimation'),
+  animateListReflow: jest.fn(),
+}));
+
 jest.mock('../src/hooks/useOfflineNotes', () => ({
   useOfflineNotes: jest.fn(),
   useOfflineNote: jest.fn(),
@@ -131,6 +136,7 @@ jest.mock('../src/components/LabelPicker', () => {
 
 const mockUseOfflineNotes = jest.requireMock('../src/hooks/useOfflineNotes').useOfflineNotes as jest.Mock;
 const mockUseOfflineNote = jest.requireMock('../src/hooks/useOfflineNotes').useOfflineNote as jest.Mock;
+const mockAnimateListReflow = jest.requireMock('../src/utils/layoutAnimation').animateListReflow as jest.Mock;
 const navigationModule = jest.requireMock('@react-navigation/native') as {
   __mockDispatch: jest.Mock;
 };
@@ -783,6 +789,89 @@ describe('NotesListScreen archived search', () => {
       ([params]) => params?.archived === true,
     );
     expect(archivedCall?.[1]).toEqual({ enabled: false });
+  });
+});
+
+describe('NotesListScreen search result swap', () => {
+  const offlineResult = (notes: ReturnType<typeof buildNote>[], isPlaceholderData = false) => ({
+    data: notes,
+    isLoading: false,
+    isError: false,
+    isPlaceholderData,
+    refetch: jest.fn(),
+    isRefetching: false,
+  });
+  type OfflineResult = ReturnType<typeof offlineResult>;
+
+  const apple = buildNote({ id: 'apple', title: 'apple' });
+  const apricot = buildNote({ id: 'apricot', title: 'apricot' });
+  const noArchived = offlineResult([]);
+
+  // What the active-notes hook returns per search term. Each entry is a stable
+  // object so the notes-dependent effects don't loop; a test swaps an entry and
+  // re-renders to model a pending read resolving.
+  let results: Record<string, OfflineResult>;
+  const searchedFor = (search: string) =>
+    expect(mockUseOfflineNotes).toHaveBeenCalledWith(expect.objectContaining({ search }));
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    markServerReachable();
+    mockUseToast.mockReturnValue({ showToast: jest.fn() });
+    notesHooks.useUpdateNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useDeleteNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useRestoreNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.usePermanentDeleteNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useReorderNotes.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useDuplicateNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    mockUseUsers.mockReturnValue({ refreshUsers: jest.fn() });
+    mockUseTheme.mockReturnValue({ colors: lightColors });
+    mockUseAuth.mockReturnValue({ user: mockUser, settings: baseSettings, setSettings: jest.fn() });
+    mockUseOfflineNote.mockReturnValue({ data: null });
+    results = {
+      '': offlineResult([apple, apricot]),
+      ap: offlineResult([apple, apricot]),
+    };
+    mockUseOfflineNotes.mockImplementation((params?: { archived?: boolean; search?: string }) =>
+      params?.archived ? noArchived : results[params?.search ?? '']!,
+    );
+  });
+
+  it('swaps the previous results for the new ones without animating the change', async () => {
+    await render(<NotesListScreen variant="notes" />);
+    await fireEvent.changeText(screen.getByTestId('search-input'), 'ap');
+    await waitFor(() => searchedFor('ap'));
+
+    // The 'apr' read is pending, so the hook still holds the 'ap' results.
+    results.apr = offlineResult([apple, apricot], true);
+    await fireEvent.changeText(screen.getByTestId('search-input'), 'apr');
+    await waitFor(() => searchedFor('apr'));
+    expect(screen.getByText('apple')).toBeTruthy();
+    mockAnimateListReflow.mockClear();
+
+    results.apr = offlineResult([apricot]);
+    await screen.rerender(<NotesListScreen variant="notes" />);
+
+    expect(screen.queryByText('apple')).toBeNull();
+    expect(screen.getByText('apricot')).toBeTruthy();
+    // A search switch swaps instantly; only in-view note changes animate.
+    expect(mockAnimateListReflow).not.toHaveBeenCalled();
+  });
+
+  it('keeps drag off while a cleared search still shows its results', async () => {
+    await render(<NotesListScreen variant="notes" />);
+    await fireEvent.changeText(screen.getByTestId('search-input'), 'ap');
+    await waitFor(() => searchedFor('ap'));
+
+    // The unfiltered read is pending, so the hook still holds the search results.
+    results[''] = offlineResult([apple], true);
+    await fireEvent.press(screen.getByTestId('clear-search'));
+    expect(screen.queryByTestId('notes-masonry-draggable')).toBeNull();
+    expect(screen.getByTestId('notes-masonry-grid')).toBeTruthy();
+
+    results[''] = offlineResult([apple, apricot]);
+    await screen.rerender(<NotesListScreen variant="notes" />);
+    expect(screen.getByTestId('notes-masonry-draggable')).toBeTruthy();
   });
 });
 

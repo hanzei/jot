@@ -13,7 +13,7 @@ import { useOfflineNotes, useOfflineNote } from '../src/hooks/useOfflineNotes';
 import { publishReconnectResync } from '../src/store/resyncEvents';
 import * as noteQueriesModule from '../src/db/noteQueries';
 import * as syncQueueModule from '../src/db/syncQueue';
-import type { Note } from '@jot/shared';
+import type { GetNotesParams, Note } from '@jot/shared';
 import { makeTextNote as buildTextNote, seedQueueEntry } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
 import { jot } from '../src/api/jot';
@@ -232,5 +232,73 @@ describe('useOfflineNote background fetch (#487)', () => {
     expect(await db.getFirstAsync('SELECT deleted_at FROM notes WHERE id = ?', ['racing'])).toEqual({
       deleted_at: null,
     });
+  });
+});
+
+describe('useOfflineNotes across search changes', () => {
+  const actualGetLocalNotes =
+    jest.requireActual<typeof noteQueriesModule>('../src/db/noteQueries').getLocalNotes;
+  const ids = (notes: Note[] | undefined) => notes?.map((note) => note.id).sort();
+
+  // Holds every SQLite read whose params match until the returned release runs,
+  // so the render between a param change and its data can be inspected.
+  function holdReads(matches: (params: GetNotesParams | undefined) => boolean) {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    mockNoteQueries.getLocalNotes.mockImplementation(async (database, params) => {
+      if (matches(params)) await gate;
+      return actualGetLocalNotes(database, params);
+    });
+    return release;
+  }
+
+  beforeEach(async () => {
+    // Mounting with a search keeps the mount-time sync from pruning the seeded
+    // rows: a search result is never treated as the full scope.
+    mockJot.notes.getAll.mockResolvedValue([]);
+    await noteQueriesModule.saveNote(db, buildTextNote({ id: 'apple', content: 'apple' }));
+    await noteQueriesModule.saveNote(db, buildTextNote({ id: 'apricot', content: 'apricot' }));
+    await noteQueriesModule.saveNote(db, buildTextNote({ id: 'old-apricot', content: 'apricot', archived: true }));
+  });
+
+  afterEach(() => {
+    mockNoteQueries.getLocalNotes.mockImplementation(actualGetLocalNotes);
+  });
+
+  it('keeps showing the previous results, not a loading state, while the next term loads', async () => {
+    const { result, rerender } = await renderHook(
+      (params: GetNotesParams) => useOfflineNotes(params),
+      { wrapper: createWrapper(), initialProps: { search: 'ap' } },
+    );
+    await waitFor(() => expect(ids(result.current.data)).toEqual(['apple', 'apricot']));
+
+    const release = holdReads((params) => params?.search === 'apr');
+    await rerender({ search: 'apr' });
+
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.isPlaceholderData).toBe(true);
+    expect(ids(result.current.data)).toEqual(['apple', 'apricot']);
+
+    await act(async () => { release(); });
+    await waitFor(() => expect(ids(result.current.data)).toEqual(['apricot']));
+    expect(result.current.isPlaceholderData).toBe(false);
+  });
+
+  it('does not carry results over when more than the search term changes', async () => {
+    const { result, rerender } = await renderHook(
+      (params: GetNotesParams) => useOfflineNotes(params),
+      { wrapper: createWrapper(), initialProps: { search: 'apr' } },
+    );
+    await waitFor(() => expect(ids(result.current.data)).toEqual(['apricot']));
+
+    // Same term, archived scope: the active results would be the wrong notes.
+    const release = holdReads((params) => params?.archived === true);
+    await rerender({ search: 'apr', archived: true });
+
+    expect(result.current.isLoading).toBe(true);
+    expect(result.current.data).toBeUndefined();
+
+    await act(async () => { release(); });
+    await waitFor(() => expect(ids(result.current.data)).toEqual(['old-apricot']));
   });
 });

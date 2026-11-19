@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { hashKey, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext } from 'expo-sqlite';
 import axios from 'axios';
 import { getLocalNotes, getLocalNote } from '../db/noteQueries';
@@ -19,6 +19,15 @@ import {
 } from './queryKeys';
 import { jot } from '../api/jot';
 
+/**
+ * True when two param sets select the same notes apart from the search term.
+ * `hashKey` sorts keys and drops `undefined` fields, so a missing `search` and
+ * `search: undefined` compare equal.
+ */
+function sameScopeIgnoringSearch(a: GetNotesParams | undefined, b: GetNotesParams | undefined): boolean {
+  return hashKey([{ ...a, search: undefined }]) === hashKey([{ ...b, search: undefined }]);
+}
+
 export function useOfflineNotes(params?: GetNotesParams, options?: { enabled?: boolean }) {
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
@@ -37,12 +46,21 @@ export function useOfflineNotes(params?: GetNotesParams, options?: { enabled?: b
   const isSyncingRef = useRef(false);
 
   // Primary query: reads from local SQLite (instant on subsequent launches)
-  const query = useQuery<Note[]>({
+  const query = useQuery({
     queryKey: notesLocalQueryKey(params),
     queryFn: () => getLocalNotes(db, params),
     enabled,
     staleTime: Infinity,
     gcTime: Infinity,
+    // Each search term is its own query key, with no data until its SQLite read
+    // resolves. Keep the previous term's results meanwhile, so typing swaps the
+    // list once per debounce instead of flashing a spinner between results.
+    // Only a search change qualifies: a different label, archive or trash
+    // scope selects other notes, and showing the old ones there would be wrong.
+    placeholderData: (previousData, previousQuery) =>
+      enabled && previousQuery && sameScopeIgnoringSearch(previousQuery.queryKey[2], params)
+        ? previousData
+        : undefined,
   });
 
   const syncFromServer = useCallback(async (canceller?: SyncCanceller) => {

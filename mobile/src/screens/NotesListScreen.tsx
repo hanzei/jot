@@ -120,7 +120,7 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
     user_id: variant === 'my-tasks' ? user?.id : undefined,
   }), [variant, debouncedSearch, labelId, user?.id]);
 
-  const { data: notes, isLoading, isError, refetch, isRefetching } = useOfflineNotes(params);
+  const { data: notes, isLoading, isError, refetch, isRefetching, isPlaceholderData } = useOfflineNotes(params);
 
   // While searching or filtering by label outside the archive/trash views,
   // also surface archived matches in a separate section. My Tasks already
@@ -133,7 +133,17 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
     search: debouncedSearch || undefined,
     label: variant === 'notes' ? labelId : undefined,
   }), [debouncedSearch, labelId, variant]);
-  const { data: archivedSearchNotes } = useOfflineNotes(archivedParams, { enabled: fetchArchivedSeparately });
+  const { data: archivedSearchNotes, isPlaceholderData: isArchivedPlaceholderData } =
+    useOfflineNotes(archivedParams, { enabled: fetchArchivedSeparately });
+
+  // The search term the rendered results belong to. While a new term's read is
+  // pending, useOfflineNotes keeps showing the previous term's results, so this
+  // trails `debouncedSearch` until both queries have the new term's data.
+  const showsPlaceholderResults = isPlaceholderData || isArchivedPlaceholderData;
+  const [resultsSearch, setResultsSearch] = useState(debouncedSearch);
+  if (!showsPlaceholderResults && resultsSearch !== debouncedSearch) {
+    setResultsSearch(debouncedSearch);
+  }
 
   const isSearchLoading = isLoading && !notes && !!debouncedSearch;
   const reorderNotes = useReorderNotes();
@@ -499,15 +509,21 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
   // (and mix in archived matches), so reordering them would persist a partial
   // or misclassified manual order — disable dragging there. Search results are
   // additionally ordered by full-text relevance, not manual position, so a drag
-  // would not even map to the positions being shown.
-  const isDraggable = variant === 'notes' && sortMode === 'manual' && !debouncedSearch && !labelId;
+  // would not even map to the positions being shown. Right after the search is
+  // cleared the list can still hold the old results as placeholder data, which
+  // are just as partial.
+  const isDraggable =
+    variant === 'notes' && sortMode === 'manual' && !debouncedSearch && !labelId && !showsPlaceholderResults;
 
   // Signature of the active view/filter/sort/layout. The static grid swaps
   // instantly when it changes, so only in-view note changes (create, delete,
   // archive, pin, sync) animate — never a search/sort switch or first load.
+  // Keyed on `resultsSearch`, not `debouncedSearch`: the key must change in the
+  // same render as the results do, not one render early while the previous
+  // term's results are still shown, or the swap would animate.
   // JSON-encoded (not delimiter-joined) so free-form search text — which may
   // contain any separator character — can't make two different views collide.
-  const gridViewKey = JSON.stringify([variant, debouncedSearch, labelId ?? '', sortMode, layout]);
+  const gridViewKey = JSON.stringify([variant, resultsSearch, labelId ?? '', sortMode, layout]);
 
   const handleGridSectionReorder = useCallback(
     (sectionKey: string, newData: Note[]) => {
