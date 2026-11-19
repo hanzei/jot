@@ -85,6 +85,11 @@ export async function cacheUploadedNoteImage(
 // Removes both cached variants of an image. Called when an image is removed
 // from a note (locally or via SSE) so its cache entries don't linger forever.
 export async function deleteCachedNoteImage(imageId: string): Promise<void> {
-  deleteFileIfExists(imageFilePath(imageId, 'original'));
-  deleteFileIfExists(imageFilePath(imageId, 'thumbnail'));
+  for (const variant of ['original', 'thumbnail'] as const) {
+    const path = imageFilePath(imageId, variant);
+    deleteFileIfExists(path);
+    // A download the process died during leaves its `.part` file behind
+    // (downloadFileAtomically); nothing else would ever remove it.
+    deleteFileIfExists(`${path}.part`);
+  }
 }

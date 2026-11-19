@@ -188,6 +188,16 @@ describe('deleteCachedNoteImage', () => {
     expect(fs.files.has(unrelated)).toBe(true);
   });
 
+  it('deletes a download left unfinished by a killed process', async () => {
+    const originalPart = seedCachedImage('img-1.part');
+    const thumbnailPart = seedCachedImage('img-1_thumb.part');
+
+    await deleteCachedNoteImage('img-1');
+
+    expect(fs.files.has(originalPart)).toBe(false);
+    expect(fs.files.has(thumbnailPart)).toBe(false);
+  });
+
   it('is a no-op when neither variant is cached', async () => {
     await expect(deleteCachedNoteImage('img-missing')).resolves.toBeUndefined();
   });
