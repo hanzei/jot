@@ -252,7 +252,22 @@
     "ssoLinkConflict": "Deze SSO-identiteit is al aan een ander account gekoppeld.",
     "ssoLinkUnavailable": "Deze server staat het koppelen van een SSO-account niet toe.",
     "ssoLinkFailed": "SSO koppelen is mislukt. Probeer het opnieuw.",
-    "ssoUnlinkWouldStrand": "SSO kan niet worden losgekoppeld: je account heeft geen wachtwoord, dus je zou niet meer kunnen inloggen."
+    "ssoUnlinkWouldStrand": "SSO kan niet worden losgekoppeld: je account heeft geen wachtwoord, dus je zou niet meer kunnen inloggen.",
+    "deleteAccount": "Account verwijderen",
+    "deleteAccountDescription": "Verwijder je account en alles erin definitief.",
+    "deleteAccountConfirmTitle": "Je account verwijderen?",
+    "deleteAccountConfirmMessage": "Hiermee worden je notities, afbeeldingen en labels definitief verwijderd, net als je sessies en toegangstokens, waardoor je overal wordt uitgelogd. Notities die anderen met je hebben gedeeld blijven bij hun eigenaar. Dit kan niet ongedaan worden gemaakt.",
+    "deleteAccountSsoNote": "Als je opnieuw inlogt met {{provider}}, wordt er een nieuw, leeg account aangemaakt.",
+    "deleteAccountUnsynced_one": "{{count}} wijziging op dit apparaat is nog niet gesynchroniseerd. Deze gaat verloren.",
+    "deleteAccountUnsynced_other": "{{count}} wijzigingen op dit apparaat zijn nog niet gesynchroniseerd. Ze gaan verloren.",
+    "deleteAccountPasswordLabel": "Voer je wachtwoord in om te bevestigen",
+    "deleteAccountUsernameLabel": "Typ je gebruikersnaam ({{username}}) om te bevestigen",
+    "deleteAccountDeleting": "Verwijderen…",
+    "deleteAccountIncorrectUsername": "Dat is niet je gebruikersnaam.",
+    "deleteAccountLastAdmin": "Je bent de enige beheerder van deze server. Maak een andere gebruiker beheerder voordat je je account verwijdert.",
+    "deleteAccountUnreachable": "De server is niet bereikbaar, dus je account is niet verwijderd. Probeer het opnieuw als je online bent.",
+    "deleteAccountFailed": "Je account kon niet worden verwijderd. Probeer het opnieuw.",
+    "deleteAccountCheckFailed": "Kon dit apparaat niet controleren op niet-gesynchroniseerde wijzigingen. Probeer het opnieuw."
   },
   "about": {
     "clientInfo": "Clientinformatie",
