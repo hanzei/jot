@@ -273,7 +273,21 @@
     "ssoDisconnectConfirmMessage": "Questo scollega {{provider}} dal tuo account. Ti servirà la password per accedere.",
     "ssoLinkCancelled": "Il collegamento dell'SSO è stato annullato.",
     "ssoLinkConflict": "Questa identità SSO è già collegata a un altro account.",
-    "ssoLinkFailed": "Impossibile collegare l'SSO. Riprova."
+    "ssoLinkFailed": "Impossibile collegare l'SSO. Riprova.",
+    "deleteAccountSection": "Elimina account",
+    "deleteAccountDescription": "Elimina definitivamente il tuo account e tutto il suo contenuto. L'operazione non può essere annullata.",
+    "deleteAccountButton": "Elimina account",
+    "deleteAccountConfirmTitle": "Eliminare il tuo account?",
+    "deleteAccountWhatIsDeleted": "Le tue note, immagini, etichette, sessioni e token di accesso verranno eliminati.",
+    "deleteAccountSharedWithYou": "Le note che altri hanno condiviso con te restano ai rispettivi proprietari.",
+    "deleteAccountSsoNote": "Accedendo di nuovo con SSO verrà creato un nuovo account vuoto.",
+    "deleteAccountIrreversible": "L'operazione non può essere annullata.",
+    "deleteAccountUsernameLabel": "Digita il tuo nome utente ({{username}}) per confermare",
+    "deleteAccountConfirmButton": "Elimina il mio account",
+    "deleteAccountDeleting": "Eliminazione…",
+    "deleteAccountLastAdminTitle": "Sei l'unico amministratore",
+    "deleteAccountLastAdminMessage": "Promuovi un altro utente ad amministratore prima di eliminare il tuo account.",
+    "deleteAccountFailed": "Impossibile eliminare il tuo account."
   },
   "about": {
     "title": "Informazioni su Jot",
@@ -717,7 +731,8 @@
     "patLimitReached": "Puoi avere al massimo {{max}} token di accesso personali. Revocane uno per crearne uno nuovo.",
     "unsupportedImageType": "Questo tipo di file non è supportato. Scegli un'altra immagine.",
     "invalidImage": "Impossibile leggere questa immagine. Potrebbe essere danneggiata.",
-    "invalidImportFile": "Impossibile leggere questo file come esportazione del tipo selezionato."
+    "invalidImportFile": "Impossibile leggere questo file come esportazione del tipo selezionato.",
+    "incorrectUsername": "Il nome utente non corrisponde."
   },
   "errorBoundary": {
     "title": "Qualcosa è andato storto",

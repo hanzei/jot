@@ -270,7 +270,21 @@
     "ssoDisconnectConfirmMessage": "Dadurch wird {{provider}} von deinem Konto getrennt. Zur Anmeldung benötigst du dein Passwort.",
     "ssoLinkCancelled": "Das Verknüpfen von SSO wurde abgebrochen.",
     "ssoLinkConflict": "Diese SSO-Identität ist bereits mit einem anderen Konto verknüpft.",
-    "ssoLinkFailed": "SSO konnte nicht verknüpft werden. Bitte versuche es erneut."
+    "ssoLinkFailed": "SSO konnte nicht verknüpft werden. Bitte versuche es erneut.",
+    "deleteAccountSection": "Konto löschen",
+    "deleteAccountDescription": "Dein Konto und alle Inhalte darin endgültig löschen. Das kann nicht rückgängig gemacht werden.",
+    "deleteAccountButton": "Konto löschen",
+    "deleteAccountConfirmTitle": "Konto löschen?",
+    "deleteAccountWhatIsDeleted": "Deine Notizen, Bilder, Labels, Sitzungen und Zugriffstoken werden gelöscht.",
+    "deleteAccountSharedWithYou": "Notizen, die andere mit dir geteilt haben, bleiben bei ihren Eigentümern.",
+    "deleteAccountSsoNote": "Wenn du dich erneut per SSO anmeldest, wird ein neues, leeres Konto angelegt.",
+    "deleteAccountIrreversible": "Das kann nicht rückgängig gemacht werden.",
+    "deleteAccountUsernameLabel": "Gib zur Bestätigung deinen Benutzernamen ({{username}}) ein",
+    "deleteAccountConfirmButton": "Mein Konto löschen",
+    "deleteAccountDeleting": "Wird gelöscht…",
+    "deleteAccountLastAdminTitle": "Du bist der einzige Admin",
+    "deleteAccountLastAdminMessage": "Mache zuerst einen anderen Benutzer zum Admin, bevor du dein Konto löschst.",
+    "deleteAccountFailed": "Das Konto konnte nicht gelöscht werden."
   },
   "about": {
     "title": "Info zu Jot",
@@ -705,7 +719,8 @@
     "patLimitReached": "Du kannst höchstens {{max}} persönliche Zugriffstoken haben. Widerrufe eines, um ein neues zu erstellen.",
     "unsupportedImageType": "Dieser Dateityp wird nicht unterstützt. Wähle ein anderes Bild.",
     "invalidImage": "Dieses Bild konnte nicht gelesen werden. Möglicherweise ist es beschädigt.",
-    "invalidImportFile": "Diese Datei konnte nicht als Export des gewählten Typs gelesen werden."
+    "invalidImportFile": "Diese Datei konnte nicht als Export des gewählten Typs gelesen werden.",
+    "incorrectUsername": "Der Benutzername stimmt nicht überein."
   },
   "errorBoundary": {
     "title": "Etwas ist schiefgelaufen",

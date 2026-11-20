@@ -441,6 +441,8 @@ interface PreferencesInfoColumnProps {
   exportFormat: ExportFormat;
   onExportFormatChange: (format: ExportFormat) => void;
   isExporting: boolean;
+  /** The danger-zone card, last on the page. */
+  deleteAccountSection: ReactNode;
 }
 
 export const PreferencesInfoColumn = ({
@@ -461,6 +463,7 @@ export const PreferencesInfoColumn = ({
   exportFormat,
   onExportFormatChange,
   isExporting,
+  deleteAccountSection,
 }: PreferencesInfoColumnProps) => (
   <div className="space-y-6">
     <SettingsSectionCard title={t('settings.sessionsSection')}>
@@ -603,5 +606,7 @@ export const PreferencesInfoColumn = ({
     </SettingsSectionCard>
 
     <DiagnosticsSection />
+
+    {deleteAccountSection}
   </div>
 );

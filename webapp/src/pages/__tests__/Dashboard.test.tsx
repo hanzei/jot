@@ -272,6 +272,7 @@ describe('Dashboard', () => {
         registerLabelCallbacks,
         registerSSECallbacks: mockRegisterSSECallbacks as unknown as AuthenticatedLayoutContext['registerSSECallbacks'],
         setSearchBar: (content: ReactNode) => captureSearchBarRef.current(content),
+        signOutLocally: vi.fn().mockResolvedValue(undefined),
       };
     });
   });

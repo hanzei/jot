@@ -273,7 +273,21 @@
     "ssoDisconnectConfirmMessage": "Cela dissocie {{provider}} de votre compte. Vous aurez besoin de votre mot de passe pour vous connecter.",
     "ssoLinkCancelled": "La liaison du SSO a été annulée.",
     "ssoLinkConflict": "Cette identité SSO est déjà liée à un autre compte.",
-    "ssoLinkFailed": "Impossible de lier le SSO. Veuillez réessayer."
+    "ssoLinkFailed": "Impossible de lier le SSO. Veuillez réessayer.",
+    "deleteAccountSection": "Supprimer le compte",
+    "deleteAccountDescription": "Supprimer définitivement votre compte et tout son contenu. Cette action est irréversible.",
+    "deleteAccountButton": "Supprimer le compte",
+    "deleteAccountConfirmTitle": "Supprimer votre compte ?",
+    "deleteAccountWhatIsDeleted": "Vos notes, images, libellés, sessions et jetons d'accès seront supprimés.",
+    "deleteAccountSharedWithYou": "Les notes que d'autres personnes ont partagées avec vous restent à leurs propriétaires.",
+    "deleteAccountSsoNote": "Une nouvelle connexion par SSO crée un nouveau compte vide.",
+    "deleteAccountIrreversible": "Cette action est irréversible.",
+    "deleteAccountUsernameLabel": "Saisissez votre nom d'utilisateur ({{username}}) pour confirmer",
+    "deleteAccountConfirmButton": "Supprimer mon compte",
+    "deleteAccountDeleting": "Suppression…",
+    "deleteAccountLastAdminTitle": "Vous êtes le seul administrateur",
+    "deleteAccountLastAdminMessage": "Nommez un autre utilisateur administrateur avant de supprimer votre compte.",
+    "deleteAccountFailed": "Impossible de supprimer votre compte."
   },
   "about": {
     "title": "À propos de Jot",
@@ -717,7 +731,8 @@
     "patLimitReached": "Vous pouvez avoir au maximum {{max}} jetons d'accès personnels. Révoquez-en un pour en créer un nouveau.",
     "unsupportedImageType": "Ce type de fichier n'est pas pris en charge. Choisissez une autre image.",
     "invalidImage": "Impossible de lire cette image. Elle est peut-être endommagée.",
-    "invalidImportFile": "Impossible de lire ce fichier comme une exportation du type sélectionné."
+    "invalidImportFile": "Impossible de lire ce fichier comme une exportation du type sélectionné.",
+    "incorrectUsername": "Le nom d'utilisateur ne correspond pas."
   },
   "errorBoundary": {
     "title": "Un problème est survenu",

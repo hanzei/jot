@@ -377,7 +377,8 @@ another client, expect timestamp columns to hold UTC wall-clock values.
 | `JOT_PUBLIC_LINKS_ENABLED` | `true` | Set to `false` to switch public note links off: the unauthenticated `/api/v1/public/notes/…` endpoints return 404 (so `/share/{token}` pages show "not found") and no link can be created (`PUT /notes/{id}/public-link` returns 403). Revoking still works, and existing links are kept: turning the switch back on brings them back. Exposed as `public_links_enabled` in `GET /api/v1/config`. |
 | `JOT_PUBLIC_URL` | empty | The address people outside use to reach this instance, such as `https://jot.example.com`: an `http`/`https` origin (scheme, host, optional port) with no path, query or fragment; a single trailing `/` is stripped. Clients build public links from it. Set it when users reach Jot on an address outsiders cannot use — a LAN IP, an internal host name, a VPN or Tailscale name — or their copied links will not work for the recipient. Unset, each client uses its own address. Also makes a public link's preview card use absolute URLs: unset, the card's image URL stays relative and it carries no `og:url`, so chat apps that require absolute URLs (WhatsApp, iMessage) show the note's title without its image. Never derived from the `Host` header. Exposed as `public_url` in `GET /api/v1/config`. |
 
-Users can delete their own account (`DELETE /api/v1/users/me`); it removes
+Users can delete their own account (Settings → Delete account in the webapp,
+or `DELETE /api/v1/users/me`); it removes
 their notes, images, labels, sessions and tokens, while notes shared *with*
 them stay with their owners. The only admin cannot delete their own account:
 they get 409 `last_admin` and must promote another user first. On a

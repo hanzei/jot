@@ -37,6 +37,12 @@ export interface AuthenticatedLayoutContext {
   registerLabelCallbacks: (callbacks: LabelCallbacks) => void;
   registerSSECallbacks: (callbacks: SSECallbacks) => void;
   setSearchBar: (content: ReactNode) => void;
+  /**
+   * Clears client auth state and returns to the login page, without
+   * `POST /logout`: for when the server has already ended the session (e.g.
+   * the account was deleted). Logout runs the same cleanup after its call.
+   */
+  signOutLocally: () => Promise<void>;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components -- context hook colocated with its layout by design; not worth a separate module
@@ -162,15 +168,19 @@ const AuthenticatedLayout = ({ onLogout, trashRetentionDays }: AuthenticatedLayo
     }
   }, [isAtDashboard, selectedLabelId, searchParams, navigate]);
 
+  const signOutLocally = useCallback(async () => {
+    await removeUser();
+    onLogout();
+  }, [onLogout]);
+
   const handleLogout = useCallback(async () => {
     try {
       await auth.logout();
     } catch {
       // Continue with logout even if the server call fails
     }
-    await removeUser();
-    onLogout();
-  }, [onLogout]);
+    await signOutLocally();
+  }, [signOutLocally]);
 
   const sidebarChildren = useMemo(() => (
     <SidebarLabels
@@ -192,6 +202,7 @@ const AuthenticatedLayout = ({ onLogout, trashRetentionDays }: AuthenticatedLayo
     registerLabelCallbacks,
     registerSSECallbacks,
     setSearchBar,
+    signOutLocally,
   }), [
     labels,
     loadLabels,
@@ -200,6 +211,7 @@ const AuthenticatedLayout = ({ onLogout, trashRetentionDays }: AuthenticatedLayo
     handleDeleteLabel,
     registerLabelCallbacks,
     registerSSECallbacks,
+    signOutLocally,
   ]);
 
   return (

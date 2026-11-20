@@ -21,6 +21,7 @@ vi.mock('@/utils/api', () => ({
     changePassword: vi.fn(),
     uploadProfileIcon: vi.fn(),
     deleteProfileIcon: vi.fn(),
+    deleteMe: vi.fn(),
   },
   sessions: {
     list: vi.fn().mockResolvedValue([]),
@@ -38,6 +39,11 @@ vi.mock('@/utils/api', () => ({
     get: vi.fn().mockResolvedValue({ version: '1.2.3', commit: 'abc1234' }),
   },
   SSO_LINK_URL: '/api/v1/auth/oidc/link',
+}));
+
+const mockSignOutLocally = vi.fn().mockResolvedValue(undefined);
+vi.mock('@/components/AuthenticatedLayout', () => ({
+  useAuthenticatedLayout: () => ({ signOutLocally: mockSignOutLocally }),
 }));
 
 vi.mock('@/utils/auth', () => ({
@@ -562,6 +568,74 @@ describe('Settings', () => {
       const list = within(section.getByRole('list', { name: 'Recent failed requests' }));
       expect(list.getByText('DELETE /notes/{id}')).toBeInTheDocument();
       expect(list.getByText('Ref: req123')).toBeInTheDocument();
+    });
+  });
+
+  describe('Delete account', () => {
+    const openDialog = async (user: ReturnType<typeof userEvent.setup>) => {
+      const section = screen.getByRole('heading', { name: 'Delete account' }).closest('section')!;
+      await user.click(within(section).getByRole('button', { name: 'Delete account' }));
+      return screen.findByRole('dialog', { name: 'Delete your account?' });
+    };
+
+    it('renders a danger-zone section last on the page', () => {
+      renderSettings();
+      const headings = screen.getAllByRole('heading', { level: 2 });
+      expect(headings[headings.length - 1]).toHaveTextContent('Delete account');
+    });
+
+    it('asks a password account for its current password', async () => {
+      const user = userEvent.setup();
+      renderSettings();
+      const dialog = within(await openDialog(user));
+      expect(dialog.getByLabelText('Current Password')).toHaveAttribute('type', 'password');
+      expect(dialog.queryByText('Signing in with SSO again creates a new, empty account.')).not.toBeInTheDocument();
+    });
+
+    it('asks a passwordless SSO account for its username and warns about re-provisioning', async () => {
+      const user = userEvent.setup();
+      vi.mocked(authUtils.getUser).mockReturnValue({ ...mockUser, has_sso_linked: true, has_password: false });
+      renderSettings({ enabled: true, provider_name: 'Keycloak', local_login_enabled: true });
+      const dialog = within(await openDialog(user));
+      expect(dialog.getByLabelText('Type your username (testuser) to confirm')).toBeInTheDocument();
+      expect(dialog.getByText('Signing in with SSO again creates a new, empty account.')).toBeInTheDocument();
+    });
+
+    it('signs out locally without POST /logout after a successful delete', async () => {
+      const user = userEvent.setup();
+      vi.mocked(users.deleteMe).mockResolvedValue(undefined);
+      renderSettings();
+      const dialog = within(await openDialog(user));
+      await user.type(dialog.getByLabelText('Current Password'), 'password123');
+      await user.click(dialog.getByRole('button', { name: 'Delete my account' }));
+
+      await waitFor(() => expect(mockSignOutLocally).toHaveBeenCalledTimes(1));
+      expect(users.deleteMe).toHaveBeenCalledWith({ current_password: 'password123' });
+      expect(auth.logout).not.toHaveBeenCalled();
+    });
+
+    it('stays signed in when the delete fails', async () => {
+      const user = userEvent.setup();
+      vi.mocked(users.deleteMe).mockRejectedValue(createApiError(409, 'last_admin', 'the last admin cannot be deleted'));
+      renderSettings();
+      const dialog = within(await openDialog(user));
+      await user.type(dialog.getByLabelText('Current Password'), 'password123');
+      await user.click(dialog.getByRole('button', { name: 'Delete my account' }));
+
+      expect(await dialog.findByText('You are the only admin')).toBeInTheDocument();
+      expect(mockSignOutLocally).not.toHaveBeenCalled();
+    });
+
+    it('starts empty when reopened after cancelling', async () => {
+      const user = userEvent.setup();
+      renderSettings();
+      let dialog = within(await openDialog(user));
+      await user.type(dialog.getByLabelText('Current Password'), 'typed');
+      await user.click(dialog.getByRole('button', { name: 'Cancel' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+      dialog = within(await openDialog(user));
+      expect(dialog.getByLabelText('Current Password')).toHaveValue('');
     });
   });
 });

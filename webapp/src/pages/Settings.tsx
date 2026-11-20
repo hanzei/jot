@@ -17,6 +17,8 @@ import { isPasswordTooShort, type ActiveSession, type ExportFormat, type Persona
 import { IdentitySecurityColumn, PreferencesInfoColumn } from './settings/SettingsSections';
 import { passwordFormKeys } from './settings/passwordFormKeys';
 import SsoSettingsSection from './settings/SsoSettingsSection';
+import DeleteAccountSection from './settings/DeleteAccountSection';
+import { useAuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { ssoLinkErrorMessage, useSsoErrorParam } from '@/utils/ssoError';
 import { apiErrorMessage } from '@/utils/apiError';
 
@@ -28,6 +30,7 @@ interface SettingsProps {
 const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
   const { t } = useTranslation();
   const { showToast, showErrorToast } = useToast();
+  const { signOutLocally } = useAuthenticatedLayout();
   useEffect(() => { document.title = t('pageTitle.settings'); }, [t]);
   const displayMsg = (msg: string) => (i18n.exists(msg) ? t(msg) : msg);
   const currentUser = getUser();
@@ -462,6 +465,16 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
             exportFormat={exportFormat}
             onExportFormatChange={setExportFormat}
             isExporting={isExporting}
+            deleteAccountSection={(
+              <DeleteAccountSection
+                t={t}
+                hasPassword={hasPassword}
+                username={currentUsername}
+                ssoLinked={ssoLinked}
+                // The server already ended the session, so skip POST /logout.
+                onDeleted={signOutLocally}
+              />
+            )}
           />
         </div>
       </PageContent>

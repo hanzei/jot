@@ -195,4 +195,40 @@ export class SettingsPage {
     return this.page.getByRole('dialog', { name: 'About Jot' });
   }
 
+  deleteAccountSection() {
+    return this.page.getByRole('heading', { name: 'Delete account', exact: true }).locator('..');
+  }
+
+  deleteAccountButton() {
+    return this.deleteAccountSection().getByRole('button', { name: 'Delete account', exact: true });
+  }
+
+  deleteAccountDialog() {
+    return this.page.getByRole('dialog', { name: 'Delete your account?' });
+  }
+
+  /**
+   * The dialog's one field: the current password, or the username on an
+   * account without a password.
+   */
+  deleteAccountField() {
+    return this.deleteAccountDialog().getByLabel(/^(Current Password|Type your username \(.+\) to confirm)$/);
+  }
+
+  deleteAccountConfirmButton() {
+    return this.deleteAccountDialog().getByRole('button', { name: 'Delete my account' });
+  }
+
+  async openDeleteAccountDialog() {
+    await this.deleteAccountButton().click();
+    await expect(this.deleteAccountField()).toBeVisible();
+    return this.deleteAccountDialog();
+  }
+
+  /** Opens the dialog, enters the password or username, and confirms. */
+  async deleteAccount(confirmation: string) {
+    await this.openDeleteAccountDialog();
+    await this.deleteAccountField().fill(confirmation);
+    await this.deleteAccountConfirmButton().click();
+  }
 }
