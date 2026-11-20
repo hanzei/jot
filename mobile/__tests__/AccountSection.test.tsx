@@ -27,6 +27,12 @@ jest.mock('../src/db/syncQueue', () => ({
   enqueueSettingsUpdate: jest.fn().mockResolvedValue(undefined),
 }));
 
+// The card's "Delete account" action reads the server config (its own tests:
+// DeleteAccountAction.test.tsx).
+jest.mock('../src/hooks/useServerConfig', () => ({
+  useServerConfig: () => ({}),
+}));
+
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const mockUpdateMe = jest.mocked(jot.users.updateMe);
 const mockCacheAuthProfile = cacheAuthProfile as jest.MockedFunction<typeof cacheAuthProfile>;

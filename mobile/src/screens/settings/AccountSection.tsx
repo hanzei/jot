@@ -8,6 +8,7 @@ import { cacheAuthProfile } from '../../api/client';
 import { enqueueSettingsUpdate } from '../../db/syncQueue';
 import { displayMessage, extractApiError, USERNAME_ERROR_KEYS } from '../../i18n/utils';
 import { styles } from './styles';
+import DeleteAccountAction from './DeleteAccountAction';
 import { getUsernameValidationError, type UpdateMeRequest } from '@jot/shared';
 
 export default function AccountSection() {
@@ -143,6 +144,8 @@ export default function AccountSection() {
       >
         <Text style={styles.primaryButtonText}>{t('settings.saveChanges')}</Text>
       </TouchableOpacity>
+      {/* Local mode has no server account to delete. */}
+      {!isLocalMode && <DeleteAccountAction />}
     </View>
   );
 }

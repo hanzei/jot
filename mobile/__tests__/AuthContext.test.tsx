@@ -281,6 +281,45 @@ describe('AuthContext', () => {
     await unmount();
   });
 
+  it('endSessionLocally forgets the session without POST /logout (#1317)', async () => {
+    mockGetStoredSession.mockResolvedValue('token');
+    mockAuth.me.mockResolvedValue({ user: mockUser, settings: mockSettings });
+    mockClearStoredSession.mockResolvedValue(undefined);
+
+    function EndSessionConsumer() {
+      const { isAuthenticated, sessionEndedReason, endSessionLocally } = useAuth();
+      return (
+        <>
+          <Text testID="authenticated">{String(isAuthenticated)}</Text>
+          <Text testID="session-ended-reason">{sessionEndedReason ?? 'none'}</Text>
+          <TouchableOpacity testID="end-session-button" onPress={() => endSessionLocally()} />
+        </>
+      );
+    }
+
+    const { getByTestId, unmount } = await render(
+      <AuthProvider>
+        <EndSessionConsumer />
+      </AuthProvider>,
+    );
+    await waitFor(() => {
+      expect(getByTestId('authenticated').props.children).toBe('true');
+    });
+
+    await act(async () => {
+      await fireEvent.press(getByTestId('end-session-button'));
+    });
+
+    expect(getByTestId('authenticated').props.children).toBe('false');
+    // A deliberate end, not a "you were signed out" one.
+    expect(getByTestId('session-ended-reason').props.children).toBe('none');
+    expect(mockClearStoredSession).toHaveBeenCalled();
+    expect(mockClearCachedProfile).toHaveBeenCalled();
+    expect(mockAuth.logout).not.toHaveBeenCalled();
+    expect(mockQueryClient.clear).toHaveBeenCalled();
+    await unmount();
+  });
+
   it('logout clears state even when auth.logout rejects', async () => {
     mockGetStoredSession.mockResolvedValue('token');
     mockAuth.me.mockResolvedValue({ user: mockUser, settings: mockSettings });

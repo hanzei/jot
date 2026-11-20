@@ -229,7 +229,22 @@
     "ssoLinkConflict": "Diese SSO-Identität ist bereits mit einem anderen Konto verknüpft.",
     "ssoLinkUnavailable": "Dieser Server erlaubt das Verknüpfen eines SSO-Kontos nicht.",
     "ssoLinkFailed": "SSO konnte nicht verknüpft werden. Bitte versuche es erneut.",
-    "ssoUnlinkWouldStrand": "SSO kann nicht getrennt werden: Dein Konto hat kein Passwort, du könntest dich sonst nicht mehr anmelden."
+    "ssoUnlinkWouldStrand": "SSO kann nicht getrennt werden: Dein Konto hat kein Passwort, du könntest dich sonst nicht mehr anmelden.",
+    "deleteAccount": "Konto löschen",
+    "deleteAccountDescription": "Lösche dein Konto und alles darin endgültig.",
+    "deleteAccountConfirmTitle": "Konto löschen?",
+    "deleteAccountConfirmMessage": "Dadurch werden deine Notizen, Bilder und Labels sowie deine Sitzungen und Zugriffstokens endgültig gelöscht, und du wirst überall abgemeldet. Notizen, die andere mit dir geteilt haben, bleiben bei ihren Eigentümern. Das kann nicht rückgängig gemacht werden.",
+    "deleteAccountSsoNote": "Wenn du dich erneut mit {{provider}} anmeldest, wird ein neues, leeres Konto erstellt.",
+    "deleteAccountUnsynced_one": "{{count}} Änderung auf diesem Gerät ist noch nicht synchronisiert. Sie geht verloren.",
+    "deleteAccountUnsynced_other": "{{count}} Änderungen auf diesem Gerät sind noch nicht synchronisiert. Sie gehen verloren.",
+    "deleteAccountPasswordLabel": "Gib zur Bestätigung dein Passwort ein",
+    "deleteAccountUsernameLabel": "Gib zur Bestätigung deinen Benutzernamen ({{username}}) ein",
+    "deleteAccountDeleting": "Wird gelöscht …",
+    "deleteAccountIncorrectUsername": "Das ist nicht dein Benutzername.",
+    "deleteAccountLastAdmin": "Du bist der einzige Admin dieses Servers. Mache einen anderen Benutzer zum Admin, bevor du dein Konto löschst.",
+    "deleteAccountUnreachable": "Der Server ist nicht erreichbar, daher wurde dein Konto nicht gelöscht. Versuche es erneut, wenn du online bist.",
+    "deleteAccountFailed": "Dein Konto konnte nicht gelöscht werden. Bitte versuche es erneut.",
+    "deleteAccountCheckFailed": "Dieses Gerät konnte nicht auf nicht synchronisierte Änderungen geprüft werden. Bitte versuche es erneut."
   },
   "about": {
     "clientInfo": "Client-Info",

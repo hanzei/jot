@@ -1142,6 +1142,62 @@ async function recordDeadLetter(
 }
 
 /**
+ * Holds on the drain, per database: while any is in place, a pass that starts
+ * sends nothing, and a running pass stops before its next entry. Taken by a
+ * one-shot action after which the queue must not reach the server, namely
+ * deleting the account (#1317): once the server has deleted it, every queued
+ * write would only 401, so the drain must not run between the delete and the
+ * wipe of the queue.
+ */
+const drainHoldsByDb = new WeakMap<SQLiteDatabase, number>();
+/** The passes running per database, for {@link holdDrain} to wait on. */
+const runningDrainsByDb = new WeakMap<SQLiteDatabase, Set<Promise<DrainResult>>>();
+
+function isDrainHeld(db: SQLiteDatabase): boolean {
+  return (drainHoldsByDb.get(db) ?? 0) > 0;
+}
+
+/**
+ * Stops the drain of `db` from sending anything, and resolves once no pass is
+ * running, so every request a pass sent went out before the caller's next one.
+ * A running pass stops before its next entry; the request it has in flight
+ * ends within its finite timeout.
+ *
+ * Call the returned release once when done. `resume` asks for a drain at once
+ * (through the enqueue listeners), for when the queue still matters, say the
+ * action failed; leave it off when the queue is gone or must stay unsent.
+ */
+export async function holdDrain(db: SQLiteDatabase): Promise<(options?: { resume?: boolean }) => void> {
+  drainHoldsByDb.set(db, (drainHoldsByDb.get(db) ?? 0) + 1);
+  let released = false;
+  const release = (options?: { resume?: boolean }): void => {
+    if (released) return;
+    released = true;
+    const holds = (drainHoldsByDb.get(db) ?? 1) - 1;
+    if (holds > 0) drainHoldsByDb.set(db, holds);
+    else drainHoldsByDb.delete(db);
+    if (options?.resume && holds <= 0) notifyEnqueueListeners();
+  };
+  // allSettled never rejects: a pass that fails has still stopped sending.
+  await Promise.allSettled([...(runningDrainsByDb.get(db) ?? [])]);
+  return release;
+}
+
+/** A pass that found the drain held: nothing sent, the queue as it was. */
+async function heldDrainResult(db: SQLiteDatabase): Promise<DrainResult> {
+  const row = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM sync_queue');
+  return {
+    syncedNotes: [],
+    discardedOperations: [],
+    syncedSettings: false,
+    leftBehind: row?.count ?? 0,
+    stoppedOnConnectivity: false,
+    stoppedOnFailures: false,
+    nextAttemptAt: null,
+  };
+}
+
+/**
  * Drain the sync queue in one pass, in insertion order, FIFO per key: an op is
  * sent only after every earlier op that shares a key with it (a note, a label,
  * the settings; see queueKeys.ts). For each entry, make the corresponding API
@@ -1192,7 +1248,25 @@ async function recordDeadLetter(
  * Returns the canonical notes of the creates that succeeded, so callers can
  * update their caches.
  */
-export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {}): Promise<DrainResult> {
+export function drainQueue(db: SQLiteDatabase, options: DrainOptions = {}): Promise<DrainResult> {
+  // While held (see holdDrain), nothing is sent.
+  if (isDrainHeld(db)) return heldDrainResult(db);
+  const pass = drainPass(db, options);
+  let running = runningDrainsByDb.get(db);
+  if (!running) {
+    running = new Set();
+    runningDrainsByDb.set(db, running);
+  }
+  const passes = running;
+  passes.add(pass);
+  const done = (): void => {
+    passes.delete(pass);
+  };
+  pass.then(done, done);
+  return pass;
+}
+
+async function drainPass(db: SQLiteDatabase, options: DrainOptions): Promise<DrainResult> {
   // Only the ids: each row and its keys are read when the pass reaches it (see
   // claimQueueEntry), since a merge at enqueue or a label-id rewrite may have
   // changed them since this load.
@@ -1239,6 +1313,8 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
 
   for (const entryId of entryIds) {
     if (consecutiveSendFailures >= MAX_CONSECUTIVE_SEND_FAILURES) break;
+    // Held since the pass started (see holdDrain): the rest stays queued.
+    if (isDrainHeld(db)) break;
     settledThisEntry = new Set<string>();
     // Sent as it is now, and closed to merges until the next entry (spec §8.5).
     // A row gone since the load (an upload moved or dismissed) is skipped.
@@ -1786,7 +1862,7 @@ export async function drainQueue(db: SQLiteDatabase, options: DrainOptions = {})
   // row recorded until the next claim, which only means an append instead.
   sendingEntryByDb.delete(db);
 
-  if (pullNoteIds.size > 0 && !stoppedOnConnectivity) {
+  if (pullNoteIds.size > 0 && !stoppedOnConnectivity && !isDrainHeld(db)) {
     await pullTouchedNotes(db, pullNoteIds);
   }
 
