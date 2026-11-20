@@ -103,12 +103,12 @@ func (s *UserStore) UpdateRole(ctx context.Context, id, role string) (_ *User, e
 	return s.inner.UpdateRole(ctx, id, role)
 }
 
-func (s *UserStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID string, preDelete, postDelete func(ctx context.Context, tx *sql.Tx) error) (err error) {
+func (s *UserStore) DeleteWithCleanup(ctx context.Context, id string, preDelete, postDelete func(ctx context.Context, tx *sql.Tx) error) (err error) {
 	ctx, end := startSpan(ctx, s.instr, "UserStore.DeleteWithCleanup", &err,
 		attribute.String("user.id", id),
 	)
 	defer end()
-	return s.inner.DeleteWithCleanup(ctx, id, requestingUserID, preDelete, postDelete)
+	return s.inner.DeleteWithCleanup(ctx, id, preDelete, postDelete)
 }
 
 func (s *UserStore) GetByOIDCIdentity(ctx context.Context, issuer, subject string) (_ *User, err error) {

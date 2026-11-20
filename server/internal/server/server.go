@@ -171,7 +171,7 @@ func newServer(cfg *config.Config, log *logrus.Logger, tracerProvider trace.Trac
 	}
 	undo.push(func() { _ = imageStore.Close() })
 
-	authHandler := handlers.NewAuthHandler(userStore, noteStore, sessionService, userSettingsStore, hub, cfg.RegistrationEnabled, cfg.LocalLoginEnabled, cfg.PasswordMinLength)
+	authHandler := handlers.NewAuthHandler(userStore, noteStore, sessionService, userSettingsStore, imageStore, hub, cfg.RegistrationEnabled, cfg.LocalLoginEnabled, cfg.PasswordMinLength)
 	notes, err := notesvc.New(noteStore, labelStore, userStore, imageStore, notify.New(hub, noteStore), meter)
 	if err != nil {
 		return nil, fmt.Errorf("initialize notes service: %w", err)
@@ -480,6 +480,9 @@ func (s *Server) setupRoutes() error {
 			r.Get("/about", s.wrapHandler(s.handleAbout))
 			r.Get("/users/me", s.wrapHandler(s.authHandler.Me))
 			r.Patch("/users/me", s.wrapHandler(s.authHandler.UpdateUser))
+			// Account deletion is account management, session-only like
+			// PAT/session management below.
+			r.With(auth.SessionRequired).Delete("/users/me", s.wrapHandler(s.authHandler.DeleteMe))
 			r.Put("/users/me/password", s.wrapHandler(s.authHandler.ChangePassword))
 			r.Post("/users/me/profile-icon", s.wrapHandler(s.authHandler.UploadProfileIcon))
 			r.Delete("/users/me/profile-icon", s.wrapHandler(s.authHandler.DeleteProfileIcon))

@@ -18,6 +18,7 @@ definitions:
     - registration_disabled
     - local_login_disabled
     - incorrect_password
+    - incorrect_username
     - username_taken
     - cannot_share_with_self
     - already_shared
@@ -40,14 +41,17 @@ definitions:
     x-enum-comments:
       CodeAlreadyShared: 409 — the note is already shared with that user.
       CodeBadRequest: any other 4xx.
-      CodeCannotDeleteSelf: 403 — admins cannot delete their own account.
+      CodeCannotDeleteSelf: 403 — the admin endpoint cannot delete the caller's own
+        account; use DELETE /users/me.
       CodeCannotShareWithSelf: 400 — a note cannot be shared with its owner.
       CodeConflict: 409 — the request conflicts with current state (duplicate ID,
         concurrent modification, …).
       CodeForbidden: 403 — authenticated, but not allowed to do this.
       CodeImageLimitReached: 422 — the note would exceed the per-note image cap.
       CodeIncorrectPassword: 403 — the current password given to change a password
-        is wrong.
+        or delete the account is wrong.
+      CodeIncorrectUsername: 403 — the username given to confirm deleting an account
+        without a password does not match.
       CodeInternal: any 5xx. The message is always masked.
       CodeInvalidCredentials: 401 from login — wrong username or password.
       CodeInvalidImage: 400 — the uploaded file claims an accepted type but does not
@@ -104,14 +108,18 @@ definitions:
     - 403 — self-registration is turned off.
     - 403 from register, login, and password change — password login is turned off;
       use SSO.
-    - 403 — the current password given to change a password is wrong.
+    - 403 — the current password given to change a password or delete the account
+      is wrong.
+    - 403 — the username given to confirm deleting an account without a password does
+      not match.
     - 409 — another account already has this username.
     - 400 — a note cannot be shared with its owner.
     - 409 — the note is already shared with that user.
     - 400 from rename, 409 from a create with a client-supplied ID — the user already
       has a label with this name.
     - 409 — the change would leave the server without an admin.
-    - 403 — admins cannot delete their own account.
+    - 403 — the admin endpoint cannot delete the caller's own account; use DELETE
+      /users/me.
     - 409 — the SSO identity belongs to another account.
     - 422 — unlinking SSO would leave the account with no way to sign in.
     - 422 — the label name exceeds the label name length limit.
@@ -143,6 +151,7 @@ definitions:
     - CodeRegistrationDisabled
     - CodeLocalLoginDisabled
     - CodeIncorrectPassword
+    - CodeIncorrectUsername
     - CodeUsernameTaken
     - CodeCannotShareWithSelf
     - CodeAlreadyShared
@@ -315,6 +324,20 @@ definitions:
       role:
         type: string
       username:
+        type: string
+    type: object
+  handlers.DeleteAccountRequest:
+    properties:
+      current_password:
+        description: |-
+          CurrentPassword confirms the deletion of an account that has a password
+          (has_password true).
+        type: string
+      username:
+        description: |-
+          Username confirms the deletion of an account without a password
+          (has_password false, e.g. an SSO-provisioned user). It is ignored for an
+          account that has one.
         type: string
     type: object
   handlers.DeleteNoteItemsRequest:
@@ -1213,7 +1236,7 @@ paths:
           schema:
             $ref: '#/definitions/apierr.ErrorResponse'
         "409":
-          description: cannot demote the last admin
+          description: the last admin cannot be deleted
           schema:
             $ref: '#/definitions/apierr.ErrorResponse'
       security:
@@ -3370,6 +3393,51 @@ paths:
       tags:
       - users
   /users/me:
+    delete:
+      consumes:
+      - application/json
+      description: Permanently deletes the account with its notes, images, labels,
+        sessions and personal access tokens, and clears the session cookie. Notes
+        shared with the user stay with their owners. An account with a password confirms
+        with current_password; one without (has_password false, e.g. created by SSO
+        sign-in) confirms with its username instead. A later SSO sign-in with the
+        same identity creates a new, empty account. The last admin cannot be deleted.
+        Needs a browser session.
+      parameters:
+      - description: Confirmation
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.DeleteAccountRequest'
+      responses:
+        "204":
+          description: no content
+        "400":
+          description: bad request
+          schema:
+            $ref: '#/definitions/apierr.ErrorResponse'
+        "401":
+          description: unauthorized
+          schema:
+            $ref: '#/definitions/apierr.ErrorResponse'
+        "403":
+          description: incorrect password or username, or not a browser session
+          schema:
+            $ref: '#/definitions/apierr.ErrorResponse'
+        "409":
+          description: the last admin cannot be deleted
+          schema:
+            $ref: '#/definitions/apierr.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/apierr.ErrorResponse'
+      security:
+      - CookieAuth: []
+      summary: Delete the current user's account
+      tags:
+      - users
     get:
       produces:
       - application/json

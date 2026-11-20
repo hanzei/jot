@@ -41,12 +41,9 @@ var ErrUsernameTaken = errors.New("username already taken")
 // does not exist in the database.
 var ErrUserNotFound = errors.New("user not found")
 
-// ErrLastAdmin is returned when an attempt is made to demote the only remaining
-// admin user, which would leave the system with no administrators.
-var ErrLastAdmin = errors.New("cannot demote the last admin")
-
-// ErrCannotDeleteSelf is returned when an admin tries to delete their own account.
-var ErrCannotDeleteSelf = errors.New("cannot delete your own account")
+// ErrLastAdmin is returned when demoting or deleting the only remaining admin,
+// which would leave the system with no administrators.
+var ErrLastAdmin = errors.New("the server must keep at least one admin; promote another user to admin first")
 
 // ErrOIDCIdentityLinked is returned when an attempt is made to bind an
 // (issuer, subject) pair that is already linked to a different user.
@@ -437,9 +434,9 @@ func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 			return nil, fmt.Errorf("failed to query current role: %w", err)
 		}
 		if currentRole == RoleAdmin {
-			var adminCount int
-			if err = tx.QueryRowContext(ctx, s.d.RewritePlaceholders(`SELECT COUNT(*) FROM users WHERE role = 'admin'`)).Scan(&adminCount); err != nil {
-				return nil, fmt.Errorf("failed to count admins: %w", err)
+			adminCount, countErr := s.lockAndCountAdminsTx(ctx, tx)
+			if countErr != nil {
+				return nil, countErr
 			}
 			if adminCount <= 1 {
 				return nil, ErrLastAdmin
@@ -470,6 +467,21 @@ func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 	return &user, nil
 }
 
+// lockAndCountAdminsTx counts the admins inside tx, locking their rows on
+// Postgres first. Without the lock two concurrent transactions (two admins
+// each deleting or demoting themselves) both count 2 under READ COMMITTED and
+// both commit, leaving no admin; with it the second waits and then sees the
+// first's change. SQLite already serializes writers. The lock sits in a
+// subquery because Postgres refuses FOR UPDATE alongside an aggregate.
+func (s *userStore) lockAndCountAdminsTx(ctx context.Context, tx *sql.Tx) (int, error) {
+	query := `SELECT COUNT(*) FROM (SELECT id FROM users WHERE role = 'admin'` + s.d.ForUpdate() + `) admins`
+	var count int
+	if err := tx.QueryRowContext(ctx, s.d.RewritePlaceholders(query)).Scan(&count); err != nil {
+		return 0, fmt.Errorf("lock and count admins: %w", err)
+	}
+	return count, nil
+}
+
 // DeleteWithCleanup deletes a user and runs optional preDelete/postDelete
 // callbacks inside the same transaction. preDelete executes before the user
 // row is deleted, while it (and everything that cascades from it, e.g.
@@ -478,12 +490,9 @@ func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 // looking it up afterward would find nothing. postDelete executes after the
 // user row is deleted (and cascade effects like note_shares removal have
 // taken place) but before the transaction commits, so any cleanup is atomic
-// with the delete.
-func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID string, preDelete, postDelete func(ctx context.Context, tx *sql.Tx) error) error {
-	if id == requestingUserID {
-		return ErrCannotDeleteSelf
-	}
-
+// with the delete. Deleting the last admin is refused with [ErrLastAdmin];
+// who may delete whom is the caller's decision.
+func (s *userStore) DeleteWithCleanup(ctx context.Context, id string, preDelete, postDelete func(ctx context.Context, tx *sql.Tx) error) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -500,9 +509,9 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 	}
 
 	if role == RoleAdmin {
-		var adminCount int
-		if err = tx.QueryRowContext(ctx, s.d.RewritePlaceholders(`SELECT COUNT(*) FROM users WHERE role = 'admin'`)).Scan(&adminCount); err != nil {
-			return fmt.Errorf("failed to count admins: %w", err)
+		adminCount, countErr := s.lockAndCountAdminsTx(ctx, tx)
+		if countErr != nil {
+			return countErr
 		}
 		if adminCount <= 1 {
 			return ErrLastAdmin

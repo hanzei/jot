@@ -11,10 +11,12 @@ import (
 	_ "image/png"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/sse"
@@ -27,18 +29,20 @@ type AuthHandler struct {
 	noteStore           *models.NoteStore
 	sessionService      *auth.SessionService
 	userSettingsStore   *models.UserSettingsStore
+	imageStore          *blobstore.ImageStore
 	hub                 *sse.Hub
 	registrationEnabled bool
 	localLoginEnabled   bool
 	passwordMinLength   int
 }
 
-func NewAuthHandler(userStore *models.UserStore, noteStore *models.NoteStore, sessionService *auth.SessionService, userSettingsStore *models.UserSettingsStore, hub *sse.Hub, registrationEnabled, localLoginEnabled bool, passwordMinLength int) *AuthHandler {
+func NewAuthHandler(userStore *models.UserStore, noteStore *models.NoteStore, sessionService *auth.SessionService, userSettingsStore *models.UserSettingsStore, imageStore *blobstore.ImageStore, hub *sse.Hub, registrationEnabled, localLoginEnabled bool, passwordMinLength int) *AuthHandler {
 	return &AuthHandler{
 		userStore:           userStore,
 		noteStore:           noteStore,
 		sessionService:      sessionService,
 		userSettingsStore:   userSettingsStore,
+		imageStore:          imageStore,
 		hub:                 hub,
 		registrationEnabled: registrationEnabled,
 		localLoginEnabled:   localLoginEnabled,
@@ -403,8 +407,10 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusBadRequest, nil, err
 	}
 
-	if user.HasPassword && !user.CheckPassword(req.CurrentPassword) {
-		return http.StatusForbidden, nil, apierr.New(apierr.CodeIncorrectPassword, "current password is incorrect")
+	if user.HasPassword {
+		if err := checkCurrentPassword(user, req.CurrentPassword); err != nil {
+			return http.StatusForbidden, nil, err
+		}
 	}
 
 	if err := h.userStore.UpdatePassword(r.Context(), currentUser.ID, req.NewPassword); err != nil {
@@ -601,6 +607,76 @@ func resizeToJPEG(img image.Image, cfg image.Config, maxDim int) ([]byte, error)
 	}
 
 	return buf.Bytes(), nil
+}
+
+type DeleteAccountRequest struct {
+	// CurrentPassword confirms the deletion of an account that has a password
+	// (has_password true).
+	CurrentPassword string `json:"current_password"`
+	// Username confirms the deletion of an account without a password
+	// (has_password false, e.g. an SSO-provisioned user). It is ignored for an
+	// account that has one.
+	Username string `json:"username"`
+}
+
+// DeleteMe godoc
+//
+//	@Summary		Delete the current user's account
+//	@Description	Permanently deletes the account with its notes, images, labels, sessions and personal access tokens, and clears the session cookie. Notes shared with the user stay with their owners. An account with a password confirms with current_password; one without (has_password false, e.g. created by SSO sign-in) confirms with its username instead. A later SSO sign-in with the same identity creates a new, empty account. The last admin cannot be deleted. Needs a browser session.
+//	@Tags			users
+//	@Security		CookieAuth
+//	@Accept			json
+//	@Param			body	body	DeleteAccountRequest	true	"Confirmation"
+//	@Success		204		"no content"
+//	@Failure		400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure		401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure		403		{object}	apierr.ErrorResponse	"incorrect password or username, or not a browser session"
+//	@Failure		409		{object}	apierr.ErrorResponse	"the last admin cannot be deleted"
+//	@Failure		500		{object}	apierr.ErrorResponse	"internal server error"
+//	@Router			/users/me [delete]
+func (h *AuthHandler) DeleteMe(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	// The auth middleware loaded the full row (password hash included); a
+	// row that has since vanished surfaces as ErrUserNotFound from the delete.
+	user, authErr := requireUser(r)
+	if authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
+	}
+
+	var req DeleteAccountRequest
+	if err := decodeJSONBody(w, r, &req); err != nil {
+		return http.StatusBadRequest, nil, err
+	}
+
+	// For an account without a password, the username only guards against an
+	// accidental tap: anyone holding the session can read it from
+	// GET /users/me. That is acceptable under the threat model; the route is
+	// session-only, so a personal access token cannot get this far.
+	if user.HasPassword {
+		if req.CurrentPassword == "" {
+			return http.StatusBadRequest, nil, errors.New("current_password is required")
+		}
+		if err := checkCurrentPassword(user, req.CurrentPassword); err != nil {
+			return http.StatusForbidden, nil, err
+		}
+	} else {
+		if req.Username == "" {
+			return http.StatusBadRequest, nil, errors.New("username is required")
+		}
+		// Case-insensitive: rows predating the lower-case username rule may
+		// hold capitals, and clients may lower-case what the user types.
+		if !strings.EqualFold(req.Username, user.Username) {
+			return http.StatusForbidden, nil, apierr.New(apierr.CodeIncorrectUsername, "username does not match")
+		}
+	}
+
+	if err := deleteUserWithCleanup(r.Context(), h.userStore, h.noteStore, h.imageStore, user.ID); err != nil {
+		return storeError(err, "delete user")
+	}
+
+	// The session row went with the user (ON DELETE CASCADE).
+	h.sessionService.ClearSessionCookie(w)
+
+	return http.StatusNoContent, nil, nil
 }
 
 // UploadProfileIcon godoc

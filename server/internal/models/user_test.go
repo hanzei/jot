@@ -1,9 +1,12 @@
 package models
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/hanzei/jot/server/internal/database/dbtest"
 	"github.com/hanzei/jot/server/internal/database/dialect"
@@ -150,6 +153,51 @@ func TestConcurrentFirstUserGetsExactlyOneAdmin(t *testing.T) {
 			})
 			assert.Equal(t, 1, adminCount(t, users))
 		})
+	})
+}
+
+// TestConcurrentAdminSelfDeletesKeepAnAdmin covers two admins each deleting
+// their own account at once. Without locking the admin rows, both
+// transactions count two admins under Postgres's READ COMMITTED and both
+// commit, leaving none.
+func TestConcurrentAdminSelfDeletesKeepAnAdmin(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, driver string) {
+		store := newTestUserStore(t, driver)
+		a, err := store.Create(t.Context(), "admina", "password123", RoleAdmin)
+		require.NoError(t, err)
+		b, err := store.Create(t.Context(), "adminb", "password123", RoleAdmin)
+		require.NoError(t, err)
+
+		// A holds its transaction open after the last-admin check until B has
+		// had time to reach its own check.
+		aChecked := make(chan struct{})
+		releaseA := make(chan struct{})
+		var errA, errB error
+		var wg sync.WaitGroup
+		wg.Go(func() {
+			errA = store.DeleteWithCleanup(t.Context(), a.ID, func(context.Context, *sql.Tx) error {
+				close(aChecked)
+				<-releaseA
+				return nil
+			}, nil)
+		})
+		<-aChecked
+		wg.Go(func() {
+			errB = store.DeleteWithCleanup(t.Context(), b.ID, nil, nil)
+		})
+		time.Sleep(200 * time.Millisecond) //nolint:forbidigo // lets B reach the lock while A holds it; without the wait B can start after A commits and never exercise the race
+		close(releaseA)
+		wg.Wait()
+
+		require.NoError(t, errA)
+		require.Error(t, errB, "the second self-delete must not succeed once the first commits")
+		if driver == dialect.DriverPostgres {
+			require.ErrorIs(t, errB, ErrLastAdmin)
+		}
+
+		var admins int
+		require.NoError(t, store.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM users WHERE role = 'admin'`).Scan(&admins))
+		assert.Equal(t, 1, admins)
 	})
 }
 

@@ -372,10 +372,17 @@ another client, expect timestamp columns to hold UTC wall-clock values.
 | Variable | Default | Description |
 | --- | --- | --- |
 | `JOT_COOKIE_SECURE` | `true` | Sets the session cookie `Secure` flag. Use `false` only for local HTTP development. |
-| `JOT_REGISTRATION_ENABLED` | `true` | Set to `false` to disable public registration; admins can still create users. |
+| `JOT_REGISTRATION_ENABLED` | `true` | Set to `false` to disable public registration; admins can still create users. SSO logins still provision accounts (see [Single sign-on](#single-sign-on-oidc--sso)). |
 | `JOT_PASSWORD_MIN_LENGTH` | `10` | Minimum password length, from 1 to 72 characters. |
 | `JOT_PUBLIC_LINKS_ENABLED` | `true` | Set to `false` to switch public note links off: the unauthenticated `/api/v1/public/notes/…` endpoints return 404 (so `/share/{token}` pages show "not found") and no link can be created (`PUT /notes/{id}/public-link` returns 403). Revoking still works, and existing links are kept: turning the switch back on brings them back. Exposed as `public_links_enabled` in `GET /api/v1/config`. |
 | `JOT_PUBLIC_URL` | empty | The address people outside use to reach this instance, such as `https://jot.example.com`: an `http`/`https` origin (scheme, host, optional port) with no path, query or fragment; a single trailing `/` is stripped. Clients build public links from it. Set it when users reach Jot on an address outsiders cannot use — a LAN IP, an internal host name, a VPN or Tailscale name — or their copied links will not work for the recipient. Unset, each client uses its own address. Also makes a public link's preview card use absolute URLs: unset, the card's image URL stays relative and it carries no `og:url`, so chat apps that require absolute URLs (WhatsApp, iMessage) show the note's title without its image. Never derived from the `Host` header. Exposed as `public_url` in `GET /api/v1/config`. |
+
+Users can delete their own account (`DELETE /api/v1/users/me`); it removes
+their notes, images, labels, sessions and tokens, while notes shared *with*
+them stay with their owners. The only admin cannot delete their own account:
+they get 409 `last_admin` and must promote another user first. On a
+single-user server that means the operator keeps their account; they own the
+database.
 
 ### Single sign-on (OIDC / SSO)
 
@@ -420,6 +427,13 @@ Notes for operators:
   (`DELETE /api/v1/sessions/{id}`) or delete the user.
 - Personal access tokens work unchanged for SSO-provisioned (password-less)
   users.
+- **A deleted SSO account comes back empty on the next SSO login.** A user can
+  delete their own account (`DELETE /api/v1/users/me`, confirmed with the
+  password, or with the username for a password-less account), and an admin
+  can delete anyone else's. Either way the IdP identity is untouched, so that
+  person's next SSO login provisions a new, empty account, even with
+  `JOT_REGISTRATION_ENABLED=false`: the IdP decides who may sign in with SSO.
+  To keep someone out, remove their access at the IdP.
 - **The mobile app** signs in and links accounts through the same provider,
   with no extra IdP registration: it opens the server's native hand-off in the
   system browser and receives a one-time code on `jot://oidc-callback`. It needs an app build that includes

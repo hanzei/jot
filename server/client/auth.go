@@ -81,6 +81,17 @@ func (c *Client) ChangePassword(ctx context.Context, currentPassword, newPasswor
 	})
 }
 
+// DeleteMe permanently deletes the authenticated user's account. An account
+// with a password confirms with currentPassword; one without (an SSO-only
+// account) confirms with its username. Pass the one that applies and leave
+// the other empty. Needs a browser session, not a personal access token.
+func (c *Client) DeleteMe(ctx context.Context, currentPassword, username string) error {
+	return c.doNoContent(ctx, http.MethodDelete, "/api/v1/users/me", map[string]string{
+		"current_password": currentPassword,
+		"username":         username,
+	})
+}
+
 // UploadProfileIcon uploads an image as the current user's profile icon.
 // data is read fully; filename is used only for the multipart header.
 func (c *Client) UploadProfileIcon(ctx context.Context, filename string, data io.Reader) (*User, error) {
