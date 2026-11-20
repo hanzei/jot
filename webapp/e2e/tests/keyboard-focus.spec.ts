@@ -287,6 +287,23 @@ test.describe('Modal focus management', () => {
     await expect(dialog).toHaveCount(0);
     await expect(resetButton).toBeFocused();
   });
+
+  test('delete account dialog focuses its field, traps focus, and restores it on Escape', async ({ authenticatedUser, page, settingsPage }) => {
+    void authenticatedUser;
+    await settingsPage.goto();
+    const opener = settingsPage.deleteAccountButton();
+    await opener.click();
+
+    const dialog = settingsPage.deleteAccountDialog();
+    await expect(settingsPage.deleteAccountField()).toBeFocused();
+    // Filled, so the confirm button is enabled and part of the tab cycle.
+    await settingsPage.deleteAccountField().fill('typed');
+    await expectFocusTrapped(page, dialog);
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(opener).toBeFocused();
+  });
 });
 
 test.describe('Keyboard drag and drop', () => {

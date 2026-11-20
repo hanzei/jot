@@ -276,7 +276,21 @@
     "ssoDisconnectConfirmMessage": "Spowoduje to odłączenie {{provider}} od Twojego konta. Do zalogowania będzie potrzebne hasło.",
     "ssoLinkCancelled": "Łączenie SSO zostało anulowane.",
     "ssoLinkConflict": "Ta tożsamość SSO jest już połączona z innym kontem.",
-    "ssoLinkFailed": "Nie udało się połączyć SSO. Spróbuj ponownie."
+    "ssoLinkFailed": "Nie udało się połączyć SSO. Spróbuj ponownie.",
+    "deleteAccountSection": "Usuń konto",
+    "deleteAccountDescription": "Trwale usuń swoje konto i całą jego zawartość. Tej operacji nie można cofnąć.",
+    "deleteAccountButton": "Usuń konto",
+    "deleteAccountConfirmTitle": "Usunąć konto?",
+    "deleteAccountWhatIsDeleted": "Twoje notatki, obrazy, etykiety, sesje i tokeny dostępu zostaną usunięte.",
+    "deleteAccountSharedWithYou": "Notatki udostępnione Ci przez innych pozostaną u ich właścicieli.",
+    "deleteAccountSsoNote": "Ponowne zalogowanie przez SSO utworzy nowe, puste konto.",
+    "deleteAccountIrreversible": "Tej operacji nie można cofnąć.",
+    "deleteAccountUsernameLabel": "Wpisz swoją nazwę użytkownika ({{username}}), aby potwierdzić",
+    "deleteAccountConfirmButton": "Usuń moje konto",
+    "deleteAccountDeleting": "Usuwanie…",
+    "deleteAccountLastAdminTitle": "Jesteś jedynym administratorem",
+    "deleteAccountLastAdminMessage": "Przed usunięciem konta nadaj innemu użytkownikowi rolę administratora.",
+    "deleteAccountFailed": "Nie udało się usunąć konta."
   },
   "about": {
     "title": "O Jot",
@@ -729,7 +743,8 @@
     "patLimitReached": "Możesz mieć najwyżej {{max}} osobistych tokenów dostępu. Unieważnij jeden, aby utworzyć nowy.",
     "unsupportedImageType": "Ten typ pliku nie jest obsługiwany. Wybierz inny obraz.",
     "invalidImage": "Nie można odczytać tego obrazu. Może być uszkodzony.",
-    "invalidImportFile": "Nie można odczytać tego pliku jako eksportu wybranego typu."
+    "invalidImportFile": "Nie można odczytać tego pliku jako eksportu wybranego typu.",
+    "incorrectUsername": "Nazwa użytkownika się nie zgadza."
   },
   "errorBoundary": {
     "title": "Coś poszło nie tak",

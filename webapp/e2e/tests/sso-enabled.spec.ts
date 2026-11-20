@@ -19,6 +19,7 @@ const PROVIDER = 'Mock IdP';
 const PASSWORD = 'testpass123';
 
 interface Me {
+  id: string;
   username: string;
   has_sso_linked: boolean;
   has_password: boolean;
@@ -219,6 +220,46 @@ test.describe('SSO enabled (mock IdP)', () => {
     await expect(page).toHaveURL('/settings');
     await expect(page.getByTestId('toast')).toContainText('Connecting SSO was cancelled.');
     expect((await currentUser(page)).has_sso_linked).toBe(false);
+  });
+
+  test('an SSO-only account deletes itself by typing its username, and SSO then provisions a new, empty account', async ({ page, loginPage, dashboardPage, settingsPage, mockIdpPage }) => {
+    const idpUsername = uniqueUsername('idp');
+    const noteTitle = `Deleted with account ${idpUsername}`;
+
+    await loginPage.goto();
+    await ssoLoginLink(page).click();
+    await mockIdpPage.approve(idpUsername);
+    await loginPage.expectRedirectedToDashboard();
+    await dashboardPage.createNote(noteTitle);
+    const before = await currentUser(page);
+    expect(before).toMatchObject({ has_sso_linked: true, has_password: false });
+
+    await settingsPage.goto();
+    const dialog = await settingsPage.openDeleteAccountDialog();
+    await expect(dialog).toContainText('Signing in with SSO again creates a new, empty account.');
+    await expect(dialog.getByLabel(`Type your username (${idpUsername}) to confirm`)).toBeVisible();
+    await expect(dialog.getByLabel('Current Password')).toHaveCount(0);
+
+    // A mismatch is refused on the field.
+    await settingsPage.deleteAccountField().fill('someone-else');
+    await settingsPage.deleteAccountConfirmButton().click();
+    await expect(dialog).toContainText('The username does not match.');
+
+    // The check ignores case.
+    await settingsPage.deleteAccountField().fill(idpUsername.toUpperCase());
+    await settingsPage.deleteAccountConfirmButton().click();
+    await expect(page).toHaveURL('/login');
+    expect((await page.request.get('/api/v1/users/me')).status()).toBe(401);
+
+    // Same IdP identity, new account: the old data is gone.
+    await ssoLoginLink(page).click();
+    await mockIdpPage.approve(idpUsername);
+    await loginPage.expectRedirectedToDashboard();
+    const after = await currentUser(page);
+    expect(after.id).not.toBe(before.id);
+    const notes = await page.request.get('/api/v1/notes');
+    expect(notes.ok()).toBeTruthy();
+    expect(((await notes.json()) as { notes: unknown[] }).notes).toEqual([]);
   });
 });
 

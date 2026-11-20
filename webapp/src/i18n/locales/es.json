@@ -273,7 +273,21 @@
     "ssoDisconnectConfirmMessage": "Esto desvincula {{provider}} de tu cuenta. Necesitarás tu contraseña para iniciar sesión.",
     "ssoLinkCancelled": "Se canceló la vinculación del SSO.",
     "ssoLinkConflict": "Esta identidad SSO ya está vinculada a otra cuenta.",
-    "ssoLinkFailed": "No se pudo vincular el SSO. Inténtalo de nuevo."
+    "ssoLinkFailed": "No se pudo vincular el SSO. Inténtalo de nuevo.",
+    "deleteAccountSection": "Eliminar cuenta",
+    "deleteAccountDescription": "Elimina de forma permanente tu cuenta y todo su contenido. No se puede deshacer.",
+    "deleteAccountButton": "Eliminar cuenta",
+    "deleteAccountConfirmTitle": "¿Eliminar tu cuenta?",
+    "deleteAccountWhatIsDeleted": "Se eliminarán tus notas, imágenes, etiquetas, sesiones y tokens de acceso.",
+    "deleteAccountSharedWithYou": "Las notas que otras personas compartieron contigo se quedan con sus propietarios.",
+    "deleteAccountSsoNote": "Si vuelves a iniciar sesión con SSO, se creará una cuenta nueva y vacía.",
+    "deleteAccountIrreversible": "Esta acción no se puede deshacer.",
+    "deleteAccountUsernameLabel": "Escribe tu nombre de usuario ({{username}}) para confirmar",
+    "deleteAccountConfirmButton": "Eliminar mi cuenta",
+    "deleteAccountDeleting": "Eliminando…",
+    "deleteAccountLastAdminTitle": "Eres el único administrador",
+    "deleteAccountLastAdminMessage": "Asigna el rol de administrador a otro usuario antes de eliminar tu cuenta.",
+    "deleteAccountFailed": "No se pudo eliminar tu cuenta."
   },
   "about": {
     "title": "Acerca de Jot",
@@ -717,7 +731,8 @@
     "patLimitReached": "Puedes tener como máximo {{max}} tokens de acceso personal. Revoca uno para crear uno nuevo.",
     "unsupportedImageType": "Este tipo de archivo no es compatible. Elige otra imagen.",
     "invalidImage": "No se pudo leer esta imagen. Puede que esté dañada.",
-    "invalidImportFile": "No se pudo leer este archivo como una exportación del tipo seleccionado."
+    "invalidImportFile": "No se pudo leer este archivo como una exportación del tipo seleccionado.",
+    "incorrectUsername": "El nombre de usuario no coincide."
   },
   "errorBoundary": {
     "title": "Algo salió mal",

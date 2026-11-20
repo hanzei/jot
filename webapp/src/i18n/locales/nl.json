@@ -270,7 +270,21 @@
     "ssoDisconnectConfirmMessage": "Hiermee ontkoppel je {{provider}} van je account. Je hebt je wachtwoord nodig om in te loggen.",
     "ssoLinkCancelled": "SSO koppelen is geannuleerd.",
     "ssoLinkConflict": "Deze SSO-identiteit is al aan een ander account gekoppeld.",
-    "ssoLinkFailed": "SSO koppelen is mislukt. Probeer het opnieuw."
+    "ssoLinkFailed": "SSO koppelen is mislukt. Probeer het opnieuw.",
+    "deleteAccountSection": "Account verwijderen",
+    "deleteAccountDescription": "Verwijder je account en alles erin definitief. Dit kan niet ongedaan worden gemaakt.",
+    "deleteAccountButton": "Account verwijderen",
+    "deleteAccountConfirmTitle": "Je account verwijderen?",
+    "deleteAccountWhatIsDeleted": "Je notities, afbeeldingen, labels, sessies en toegangstokens worden verwijderd.",
+    "deleteAccountSharedWithYou": "Notities die anderen met je hebben gedeeld blijven bij hun eigenaars.",
+    "deleteAccountSsoNote": "Als je opnieuw inlogt met SSO, wordt er een nieuw, leeg account aangemaakt.",
+    "deleteAccountIrreversible": "Dit kan niet ongedaan worden gemaakt.",
+    "deleteAccountUsernameLabel": "Typ je gebruikersnaam ({{username}}) om te bevestigen",
+    "deleteAccountConfirmButton": "Mijn account verwijderen",
+    "deleteAccountDeleting": "Verwijderen…",
+    "deleteAccountLastAdminTitle": "Je bent de enige beheerder",
+    "deleteAccountLastAdminMessage": "Maak eerst een andere gebruiker beheerder voordat je je account verwijdert.",
+    "deleteAccountFailed": "Je account kon niet worden verwijderd."
   },
   "about": {
     "title": "Over Jot",
@@ -705,7 +719,8 @@
     "patLimitReached": "Je kunt maximaal {{max}} persoonlijke toegangstokens hebben. Trek er een in om een nieuwe aan te maken.",
     "unsupportedImageType": "Dit bestandstype wordt niet ondersteund. Kies een andere afbeelding.",
     "invalidImage": "Deze afbeelding kan niet worden gelezen. Mogelijk is ze beschadigd.",
-    "invalidImportFile": "Dit bestand kan niet worden gelezen als export van het gekozen type."
+    "invalidImportFile": "Dit bestand kan niet worden gelezen als export van het gekozen type.",
+    "incorrectUsername": "De gebruikersnaam komt niet overeen."
   },
   "errorBoundary": {
     "title": "Er is iets misgegaan",
