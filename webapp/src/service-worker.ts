@@ -41,6 +41,15 @@ const PUBLIC_API_PREFIX = API_BASE_PATH + apiPaths.publicNote('');
 // the user saw the request fail.
 const PUBLIC_LINK_PATH = new RegExp(`^${API_BASE_PATH}${apiPaths.notePublicLink('[^/]+')}$`);
 
+// Writes that re-authenticate are online-only too. Their bodies carry the
+// user's password, which a queued request would keep in IndexedDB, and the
+// synthetic 202 would read as success: a password change the user saw succeed
+// would land later, or an account deletion would sign them out while the
+// account still exists and then delete it whenever the queue replays.
+const isReauthenticatingWrite = (method: string, pathname: string): boolean =>
+  (method === 'DELETE' && pathname === API_BASE_PATH + apiPaths.usersMe)
+  || pathname === API_BASE_PATH + apiPaths.usersMePassword;
+
 // Note images are immutable for a given ID — the ID is minted per upload and
 // the bytes behind it never change — so cache-first is safe here in a way it is
 // not for build assets. Registered ahead of the API route below, which would
@@ -166,6 +175,7 @@ self.addEventListener('fetch', (event: FetchEvent) => {
   const url = new URL(request.url);
   if (!url.pathname.startsWith('/api/v1/')) return;
   if (PUBLIC_LINK_PATH.test(url.pathname)) return;
+  if (isReauthenticatingWrite(request.method, url.pathname)) return;
 
   // Only retry POSTs that are explicitly allowlisted as idempotent.
   // All other POSTs (note creation, import, register, etc.) fall through

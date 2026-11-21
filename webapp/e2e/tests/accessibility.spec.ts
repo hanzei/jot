@@ -321,6 +321,43 @@ for (const theme of THEMES) {
       await expectNoViolations(page);
     });
 
+    // The open dialog, then its field error: the red error text on the dark
+    // panel is the likelier contrast failure.
+    test('delete account dialog has no WCAG A/AA violations', async ({ page, authenticatedUser, settingsPage }) => {
+      void authenticatedUser;
+      await settingsPage.goto();
+      await settingsPage.openDeleteAccountDialog();
+      await expectTheme(page, theme);
+      await expectNoViolations(page);
+
+      await settingsPage.deleteAccountField().fill('not-the-password');
+      await settingsPage.deleteAccountConfirmButton().click();
+      await expect(settingsPage.deleteAccountDialog()).toContainText('Current password is incorrect.');
+      await expectNoViolations(page);
+    });
+
+    // The last-admin explanation has its own amber styling, so it gets its own
+    // scan. Answered by a stubbed 409 rather than the real admin: no account is
+    // at stake.
+    test('delete account last-admin explanation has no WCAG A/AA violations', async ({ page, authenticatedUser, settingsPage }) => {
+      void authenticatedUser;
+      await page.route('**/api/v1/users/me', async (route) => {
+        if (route.request().method() !== 'DELETE') {
+          await route.fallback();
+          return;
+        }
+        await route.fulfill({
+          status: 409,
+          json: { error: { code: 'last_admin', message: 'the last admin cannot be deleted; promote another user to admin first' } },
+        });
+      });
+      await settingsPage.goto();
+      await settingsPage.deleteAccount('any-password');
+      await expect(settingsPage.deleteAccountDialog()).toContainText('You are the only admin');
+      await expectTheme(page, theme);
+      await expectNoViolations(page);
+    });
+
     test('settings diagnostics with a failed request has no WCAG A/AA violations', async ({ page, authenticatedUser, settingsPage }) => {
       void authenticatedUser;
       await settingsPage.goto();

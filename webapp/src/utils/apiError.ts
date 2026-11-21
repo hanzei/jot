@@ -12,6 +12,7 @@ const API_ERROR_MESSAGE_KEYS: Partial<Record<ApiErrorCode, string>> = {
   registration_disabled: 'apiErrors.registrationDisabled',
   local_login_disabled: 'apiErrors.localLoginDisabled',
   incorrect_password: 'apiErrors.incorrectPassword',
+  incorrect_username: 'apiErrors.incorrectUsername',
   username_taken: 'apiErrors.usernameTaken',
   cannot_share_with_self: 'share.cannotShareSelf',
   already_shared: 'share.alreadyShared',

@@ -176,6 +176,17 @@ describe('service worker', () => {
     it.each(['PUT', 'DELETE'])('leaves public link %s to the network, so it is never replayed later', (method) => {
       expect(dispatchFetch(method, '/api/v1/notes/abc123/public-link')).not.toHaveBeenCalled();
     });
+
+    it.each([
+      ['DELETE', '/api/v1/users/me'],
+      ['PUT', '/api/v1/users/me/password'],
+    ])('leaves %s %s to the network, so a failure reaches the user and the password is never stored', (method, path) => {
+      expect(dispatchFetch(method, path)).not.toHaveBeenCalled();
+    });
+
+    it('still queues profile updates', () => {
+      expect(dispatchFetch('PATCH', '/api/v1/users/me')).toHaveBeenCalled();
+    });
   });
 
   describe('activate', () => {
