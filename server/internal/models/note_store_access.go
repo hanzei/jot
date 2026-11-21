@@ -130,3 +130,89 @@ func (s *noteStore) GetNoteAudienceIDs(ctx context.Context, noteID string) ([]st
 	}
 	return ids, nil
 }
+
+// UserNoteAudiences lists, for a user about to be hard-deleted, the notes the
+// delete changes for somebody else, each with the users who should hear of
+// it. Every audience still includes the user being deleted; the caller drops
+// them before publishing.
+type UserNoteAudiences struct {
+	// Owned are the user's own notes, which the delete removes.
+	Owned []DeletedNoteAudience
+	// SharedWith are other users' notes shared with the user. The delete
+	// removes the user's share (and with it any assignment to them, or every
+	// assignment on a note left with no shares), so the rest of the audience
+	// must refetch the note.
+	SharedWith []DeletedNoteAudience
+}
+
+// GetUserNoteAudiencesTx reads [UserNoteAudiences] for userID. It must run in
+// the user delete's transaction, before the delete: afterwards the cascade has
+// removed the notes and shares that identify the audiences.
+//
+// Collaborators are counted only for notes outside the trash: trashing a note
+// already sent them note_deleted, so a trashed note's audience is its owner
+// alone.
+func (s *noteStore) GetUserNoteAudiencesTx(ctx context.Context, tx *sql.Tx, userID string) (*UserNoteAudiences, error) {
+	owned, err := s.ownedNoteAudiencesTx(ctx, tx, userID)
+	if err != nil {
+		return nil, err
+	}
+	sharedWith, err := s.queryNoteAudiencesTx(ctx, tx,
+		`SELECT n.id, n.user_id FROM notes n
+		   JOIN note_shares me ON me.note_id = n.id
+		  WHERE me.shared_with_user_id = ?
+		 UNION
+		 SELECT ns.note_id, ns.shared_with_user_id FROM note_shares ns
+		   JOIN note_shares me ON me.note_id = ns.note_id
+		   JOIN notes n ON n.id = ns.note_id
+		  WHERE me.shared_with_user_id = ? AND n.deleted_at IS NULL
+		 ORDER BY 1, 2`,
+		userID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get audiences of notes shared with user: %w", err)
+	}
+	return &UserNoteAudiences{Owned: owned, SharedWith: sharedWith}, nil
+}
+
+// ownedNoteAudiencesTx returns every note userID owns, in any state, with its
+// audience: the owner, plus the collaborators of a note outside the trash.
+func (s *noteStore) ownedNoteAudiencesTx(ctx context.Context, tx *sql.Tx, userID string) ([]DeletedNoteAudience, error) {
+	owned, err := s.queryNoteAudiencesTx(ctx, tx,
+		`SELECT id, user_id FROM notes WHERE user_id = ?
+		 UNION
+		 SELECT ns.note_id, ns.shared_with_user_id FROM note_shares ns
+		   JOIN notes n ON n.id = ns.note_id
+		  WHERE n.user_id = ? AND n.deleted_at IS NULL
+		 ORDER BY 1, 2`,
+		userID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get audiences of owned notes: %w", err)
+	}
+	return owned, nil
+}
+
+// queryNoteAudiencesTx runs a query yielding (note_id, user_id) rows ordered
+// by note_id and groups them into one [DeletedNoteAudience] per note.
+func (s *noteStore) queryNoteAudiencesTx(ctx context.Context, tx *sql.Tx, query string, args ...any) ([]DeletedNoteAudience, error) {
+	rows, err := tx.QueryContext(ctx, s.d.RewritePlaceholders(query), args...)
+	if err != nil {
+		return nil, err
+	}
+	type pair struct{ noteID, userID string }
+	pairs, err := collectRows(rows, func(rows *sql.Rows) (pair, error) {
+		var p pair
+		return p, rows.Scan(&p.noteID, &p.userID)
+	})
+	if err != nil {
+		return nil, err
+	}
+	audiences := []DeletedNoteAudience{}
+	for _, p := range pairs {
+		if n := len(audiences); n > 0 && audiences[n-1].NoteID == p.noteID {
+			audiences[n-1].AudienceIDs = append(audiences[n-1].AudienceIDs, p.userID)
+			continue
+		}
+		audiences = append(audiences, DeletedNoteAudience{NoteID: p.noteID, AudienceIDs: []string{p.userID}})
+	}
+	return audiences, nil
+}

@@ -12,6 +12,7 @@ import (
 	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/notify"
 	"github.com/hanzei/jot/server/internal/sse"
 )
 
@@ -23,6 +24,7 @@ type AdminHandler struct {
 	imageStore        *blobstore.ImageStore
 	sessionService    *auth.SessionService
 	hub               *sse.Hub
+	events            *notify.Publisher
 	startedAt         time.Time
 	passwordMinLength int
 }
@@ -48,6 +50,7 @@ func NewAdminHandler(
 		imageStore:        imageStore,
 		sessionService:    sessionService,
 		hub:               hub,
+		events:            notify.New(hub, noteStore),
 		startedAt:         startedAt,
 		passwordMinLength: passwordMinLength,
 	}
@@ -281,7 +284,7 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusForbidden, nil, apierr.New(apierr.CodeCannotDeleteSelf, "cannot delete your own account")
 	}
 
-	if err := deleteUserWithCleanup(r.Context(), h.userStore, h.noteStore, h.imageStore, targetID); err != nil {
+	if err := deleteUserWithCleanup(r.Context(), h.userStore, h.noteStore, h.imageStore, h.events, targetID, requestingUser.ID); err != nil {
 		return storeError(err, "delete user")
 	}
 
@@ -306,7 +309,8 @@ type DeleteUserNotesResponse struct {
 //	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/admin/users/{id}/notes [delete]
 func (h *AdminHandler) DeleteUserNotes(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	if _, authErr := requireUser(r); authErr != nil {
+	requestingUser, authErr := requireUser(r)
+	if authErr != nil {
 		return http.StatusUnauthorized, nil, authErr
 	}
 
@@ -321,7 +325,13 @@ func (h *AdminHandler) DeleteUserNotes(w http.ResponseWriter, r *http.Request) (
 	}
 	blobstore.ReclaimOrphaned(r.Context(), h.noteStore, h.imageStore, shas)
 
-	return http.StatusOK, DeleteUserNotesResponse{Deleted: deleted}, nil
+	// The owner keeps their account, so their own sessions are in each
+	// audience along with the collaborators.
+	for _, note := range deleted {
+		h.events.NoteDeleted(r.Context(), note.NoteID, note.AudienceIDs, requestingUser.ID)
+	}
+
+	return http.StatusOK, DeleteUserNotesResponse{Deleted: len(deleted)}, nil
 }
 
 func validateRole(role string) error {

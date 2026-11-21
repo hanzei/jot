@@ -296,45 +296,46 @@ func (s *noteStore) EmptyTrash(ctx context.Context, userID string) ([]DeletedNot
 
 // DeleteAllByUser permanently removes every note owned by the user, regardless
 // of state (active, archived, or trashed), along with all dependent rows. It
-// returns the number of notes deleted and the distinct sha256 hashes of
-// images that were attached to them, for the caller to reclaim (see
-// deleteNoteDependenciesTx).
-func (s *noteStore) DeleteAllByUser(ctx context.Context, userID string) (int, []string, error) {
+// returns the deleted notes with their audiences (see ownedNoteAudiencesTx),
+// for the caller to publish note_deleted after the commit, and the distinct
+// sha256 hashes of images that were attached to them, for the caller to
+// reclaim (see deleteNoteDependenciesTx).
+func (s *noteStore) DeleteAllByUser(ctx context.Context, userID string) ([]DeletedNoteAudience, []string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return 0, nil, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	rows, err := tx.QueryContext(ctx, s.d.RewritePlaceholders(`SELECT id FROM notes WHERE user_id = ?`), userID)
+	deleted, err := s.ownedNoteAudiencesTx(ctx, tx, userID)
 	if err != nil {
-		return 0, nil, fmt.Errorf("failed to query owned notes: %w", err)
+		return nil, nil, err
 	}
-	noteIDs, err := collectRows(rows, scanString)
-	if err != nil {
-		return 0, nil, fmt.Errorf("failed to scan owned note IDs: %w", err)
-	}
-	if len(noteIDs) == 0 {
+	if len(deleted) == 0 {
 		if err = tx.Commit(); err != nil {
-			return 0, nil, fmt.Errorf("failed to commit delete-all transaction: %w", err)
+			return nil, nil, fmt.Errorf("failed to commit delete-all transaction: %w", err)
 		}
-		return 0, nil, nil
+		return deleted, nil, nil
 	}
 
+	noteIDs := make([]string, len(deleted))
+	for i, note := range deleted {
+		noteIDs[i] = note.NoteID
+	}
 	shas, err := deleteNoteDependenciesTx(ctx, tx, s.d, noteIDs)
 	if err != nil {
-		return 0, nil, fmt.Errorf("delete note dependencies: %w", err)
+		return nil, nil, fmt.Errorf("delete note dependencies: %w", err)
 	}
 
 	if _, err = tx.ExecContext(ctx, s.d.RewritePlaceholders(`DELETE FROM notes WHERE user_id = ?`), userID); err != nil {
-		return 0, nil, fmt.Errorf("failed to delete notes: %w", err)
+		return nil, nil, fmt.Errorf("failed to delete notes: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
-		return 0, nil, fmt.Errorf("failed to commit delete-all transaction: %w", err)
+		return nil, nil, fmt.Errorf("failed to commit delete-all transaction: %w", err)
 	}
 
-	return len(noteIDs), shas, nil
+	return deleted, shas, nil
 }
 
 // PurgeOldTrashedNotes permanently deletes all notes that have been in the

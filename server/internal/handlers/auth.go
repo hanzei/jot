@@ -19,6 +19,7 @@ import (
 	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/notify"
 	"github.com/hanzei/jot/server/internal/sse"
 	"golang.org/x/image/draw"
 	_ "golang.org/x/image/webp"
@@ -31,6 +32,7 @@ type AuthHandler struct {
 	userSettingsStore   *models.UserSettingsStore
 	imageStore          *blobstore.ImageStore
 	hub                 *sse.Hub
+	events              *notify.Publisher
 	registrationEnabled bool
 	localLoginEnabled   bool
 	passwordMinLength   int
@@ -44,6 +46,7 @@ func NewAuthHandler(userStore *models.UserStore, noteStore *models.NoteStore, se
 		userSettingsStore:   userSettingsStore,
 		imageStore:          imageStore,
 		hub:                 hub,
+		events:              notify.New(hub, noteStore),
 		registrationEnabled: registrationEnabled,
 		localLoginEnabled:   localLoginEnabled,
 		passwordMinLength:   passwordMinLength,
@@ -669,7 +672,7 @@ func (h *AuthHandler) DeleteMe(w http.ResponseWriter, r *http.Request) (int, any
 		}
 	}
 
-	if err := deleteUserWithCleanup(r.Context(), h.userStore, h.noteStore, h.imageStore, user.ID); err != nil {
+	if err := deleteUserWithCleanup(r.Context(), h.userStore, h.noteStore, h.imageStore, h.events, user.ID, user.ID); err != nil {
 		return storeError(err, "delete user")
 	}
 
