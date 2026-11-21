@@ -81,6 +81,13 @@ interface AuthState {
    */
   completeServerUpgrade: () => Promise<void>;
   logout: () => Promise<void>;
+  /**
+   * Ends the session on this device only: forgets the stored session and the
+   * cached profile, then clears auth, with no `POST /logout`. For a session the
+   * server has already ended itself, as when the account was deleted (#1317).
+   * The server stays in the server list, so the login screen is that server's.
+   */
+  endSessionLocally: () => Promise<void>;
   clearAuth: (reason?: SessionEndedReason) => void;
   revalidateSession: () => Promise<boolean>;
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
@@ -362,6 +369,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [clearAuth, isLocalMode]);
 
+  const endSessionLocally = useCallback(async () => {
+    // Best-effort storage cleanup, as on a 401; auth clears regardless. The
+    // stored session goes first, so a 401 that arrives later (a request that
+    // was in flight) finds no session and does not flag the sign-out as
+    // "session ended" (handleUnauthorizedSession).
+    await Promise.allSettled([clearStoredSession(), clearCachedProfile()]);
+    clearAuth();
+  }, [clearAuth]);
+
   const revalidateSession = useCallback(async (): Promise<boolean> => {
     // No server to revalidate against in local mode; the local identity is
     // always valid.
@@ -386,6 +402,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return true;
     } catch (error) {
       if (isUnauthorizedError(error)) {
+        // The session this check started with has already been ended on
+        // purpose (account deletion clears it before its wipe): the 401 is
+        // for that session, and the sign-out is not "session ended".
+        if ((await getStoredSession()) !== token) {
+          return false;
+        }
         await clearStoredSession();
         await clearCachedProfile();
         clearAuth('unauthorized');
@@ -434,6 +456,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       enableLocalMode,
       completeServerUpgrade,
       logout,
+      endSessionLocally,
       clearAuth,
       revalidateSession,
       setUser: setProfileUser,
@@ -454,6 +477,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       enableLocalMode,
       completeServerUpgrade,
       logout,
+      endSessionLocally,
       clearAuth,
       revalidateSession,
       setProfileUser,

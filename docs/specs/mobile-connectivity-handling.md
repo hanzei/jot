@@ -118,7 +118,7 @@ drain delete a write that never arrived.
 |---|---|---|
 | **Writes** | note, item and label changes, share, reorder, image removal, settings | Local first, through the queue (§4.1). |
 | **Reads** | note list, note, labels | Local first, background refresh (§4.2). |
-| **One-shot** | login, logout, server switch, PATs, public links, empty trash, export | On the network, bounded (§4.3). |
+| **One-shot** | login, logout, server switch, PATs, public links, empty trash, export, account deletion | On the network, bounded (§4.3). |
 | **Uploads** | note images, profile icon | Bounded and cancellable; note images fall back to the queue (§4.4). |
 
 ### 4.1 Writes never block
@@ -396,6 +396,19 @@ row at enqueue.
   when changes are unsynced or failed.
 - **A 401 keeps it**, so the same user can sign back in and the queue drains. A
   different user signing in gets a wipe first.
+- **Deleting the account ends like a deliberate logout** once the server has
+  deleted it: local data wiped, then the session forgotten, without
+  `POST /logout`. The warning names the unsynced changes it loses. The drain is
+  held from before the request until the wipe, so no queued write is sent
+  after the account is gone. The request goes only to the server the user
+  started on, and only if it still answers once the drain has settled. After
+  the 204 the session is forgotten in memory first, so a request still in
+  flight 401s quietly instead of reporting the sign-out as "session ended". A
+  request that gets no response may or may not have deleted the account, and
+  the user is told exactly that. A failed wipe still ends the session: the leftover
+  data names an account that no longer exists, so the next sign-in wipes it.
+  Currently: `src/store/accountDeletion.ts`, with `holdDrain` in
+  `src/db/syncQueue.ts`.
 - Currently: the database records its owner, checked at every sign-in before
   anything reads it (`src/db/accountOwner.ts`). A database from before the
   record is stamped with the next user rather than wiped. A wipe also clears

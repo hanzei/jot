@@ -38,10 +38,14 @@ appId: com.jot.app
       OPEN_BUTTON_ID: "settings-sso-connect"
       IDP_USERNAME: "${MAESTRO_JOT_SSO_LINK_USERNAME}"
 
-- extendedWaitUntil:
-    visible:
+# Scroll rather than wait in place: the section can sit below the fold, and
+# what follows it in Settings (Delete account) moves it around.
+- scrollUntilVisible:
+    element:
       id: "settings-sso-success"
     timeout: 30000
-- assertVisible:
-    id: "settings-sso-disconnect"
+- scrollUntilVisible:
+    element:
+      id: "settings-sso-disconnect"
+    timeout: 20000
 - takeScreenshot: sso-13-settings-linked

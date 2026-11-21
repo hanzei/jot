@@ -383,7 +383,10 @@ their notes, images, labels, sessions and tokens, while notes shared *with*
 them stay with their owners. The only admin cannot delete their own account:
 they get 409 `last_admin` and must promote another user first. On a
 single-user server that means the operator keeps their account; they own the
-database.
+database. In the mobile app it is **Settings → Account → Delete account**
+(server accounts only); it needs the server to be reachable, and afterwards
+the app signs out like a logout, discarding that server's data on the device,
+unsynced changes included, while keeping the server in its server list.
 
 ### Single sign-on (OIDC / SSO)
 
