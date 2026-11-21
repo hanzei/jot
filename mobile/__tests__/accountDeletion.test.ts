@@ -4,12 +4,13 @@
  * the server once the account is gone. Runs against the real SQLite adapter.
  */
 
-import { deleteAccount } from '../src/store/accountDeletion';
+import { AccountDeletionNotSentError, deleteAccount } from '../src/store/accountDeletion';
+import { markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
 import { claimLocalData, getAccountOwner } from '../src/db/accountOwner';
 import * as accountOwner from '../src/db/accountOwner';
 import { drainQueue, subscribeToEnqueue } from '../src/db/syncQueue';
 import { saveNote } from '../src/db/noteQueries';
-import api from '../src/api/client';
+import api, { clearStoredSession, getActiveServerId } from '../src/api/client';
 import { jot } from '../src/api/jot';
 import { makeTextNote, remainingQueueIds, seedQueueEntry } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
@@ -24,14 +25,19 @@ jest.mock('../src/api/client', () => ({
     delete: jest.fn(),
   },
   getActiveServerId: jest.fn(() => 'server-1'),
+  isServerSwitchInProgress: jest.fn(() => false),
+  clearStoredSession: jest.fn(async () => undefined),
 }));
 
 jest.mock('../src/api/jot', () => ({
-  jot: { users: { deleteMe: jest.fn() } },
+  jot: { users: { deleteMe: jest.fn() }, notes: { getById: jest.fn() } },
 }));
 
 const mockApi = api as jest.Mocked<typeof api>;
 const mockDeleteMe = jest.mocked(jot.users.deleteMe);
+const mockGetNote = jest.mocked(jot.notes.getById);
+const mockClearStoredSession = jest.mocked(clearStoredSession);
+const mockGetActiveServerId = jest.mocked(getActiveServerId);
 const NOTE_ID = 'DeleteAccountNote00000';
 
 let db: TestDatabase;
@@ -59,6 +65,7 @@ async function noteCount(): Promise<number> {
 
 beforeEach(async () => {
   jest.clearAllMocks();
+  markServerReachable();
   db = globalThis.testDb;
   globalThis.mockFileSystem.reset();
   mockApi.get.mockRejectedValue(Object.assign(new Error('Request failed with status code 404'), {
@@ -186,5 +193,89 @@ describe('deleteAccount', () => {
     await drainQueue(db);
     expect(mockApi.patch).not.toHaveBeenCalled();
     expect(await remainingQueueIds(db)).toEqual([]);
+  });
+
+  it('forgets the session in memory after the 204 and before the wipe', async () => {
+    await seedUpdate('unsynced');
+    mockDeleteMe.mockResolvedValueOnce(undefined);
+    const ownerAtClear: (string | null)[] = [];
+    mockClearStoredSession.mockImplementationOnce(async () => {
+      ownerAtClear.push(await getAccountOwner(db));
+    });
+
+    await deleteAccount(db, { current_password: 'secret' }, async () => undefined);
+
+    // Cleared once the account was gone, while the data was still there.
+    expect(mockClearStoredSession.mock.invocationCallOrder[0]).toBeGreaterThan(mockDeleteMe.mock.invocationCallOrder[0]!);
+    expect(ownerAtClear).toEqual(['user-1']);
+  });
+
+  it('sends nothing when the active server changed while the drain settled', async () => {
+    const queued = await seedUpdate('unsynced');
+    mockGetActiveServerId.mockReturnValueOnce('server-1').mockReturnValueOnce('server-2');
+    const listener = jest.fn();
+    const unsubscribe = subscribeToEnqueue(listener);
+    const endSession = jest.fn(async () => undefined);
+
+    const deletion = deleteAccount(db, { current_password: 'secret' }, endSession);
+    await expect(deletion).rejects.toBeInstanceOf(AccountDeletionNotSentError);
+    await expect(deletion).rejects.toMatchObject({ reason: 'server_changed' });
+    unsubscribe();
+
+    expect(mockDeleteMe).not.toHaveBeenCalled();
+    expect(mockClearStoredSession).not.toHaveBeenCalled();
+    expect(endSession).not.toHaveBeenCalled();
+    expect(await getAccountOwner(db)).toBe('user-1');
+    expect(await remainingQueueIds(db)).toEqual([queued]);
+    // The hold is released, and the queue may drain again.
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends nothing when the server stopped answering while the drain settled', async () => {
+    await seedUpdate('first');
+    const firstSend = deferred<{ data: unknown }>();
+    mockApi.patch.mockReturnValueOnce(firstSend.promise as never);
+
+    const drain = drainQueue(db);
+    await new Promise((r) => setImmediate(r));
+    expect(mockApi.patch).toHaveBeenCalledTimes(1);
+
+    const deletion = deleteAccount(db, { current_password: 'secret' }, async () => undefined);
+    await new Promise((r) => setImmediate(r));
+    // The pass's request times out, and the client marks the server unreachable.
+    markServerUnreachable();
+    firstSend.resolve({ data: makeTextNote({ id: NOTE_ID, content: 'first', version: 2 }) });
+    await drain;
+
+    await expect(deletion).rejects.toMatchObject({ reason: 'unreachable' });
+    expect(mockDeleteMe).not.toHaveBeenCalled();
+    expect(await getAccountOwner(db)).toBe('user-1');
+  });
+
+  it('still pulls the notes a running pass wrote, so a refused delete leaves nothing stale', async () => {
+    await seedUpdate('first');
+    const firstSend = deferred<{ data: unknown }>();
+    mockApi.patch.mockReturnValueOnce(firstSend.promise as never);
+    mockDeleteMe.mockRejectedValueOnce(Object.assign(new Error('Request failed with status code 403'), {
+      isAxiosError: true,
+      response: { status: 403, data: { error: { code: 'incorrect_password', message: 'incorrect password' } } },
+    }));
+
+    const drain = drainQueue(db);
+    await new Promise((r) => setImmediate(r));
+    const deletion = deleteAccount(db, { current_password: 'wrong' }, async () => undefined);
+    await new Promise((r) => setImmediate(r));
+
+    // A response without the note: the pass pulls it afterwards.
+    mockGetNote.mockResolvedValueOnce(makeTextNote({ id: NOTE_ID, content: 'first', version: 2 }));
+    firstSend.resolve({ data: null });
+    await drain;
+    await expect(deletion).rejects.toThrow('403');
+
+    expect(mockGetNote).toHaveBeenCalledWith(NOTE_ID);
+    // The pull ran inside the pass the delete waited for, before the request.
+    expect(mockGetNote.mock.invocationCallOrder[0]).toBeLessThan(mockDeleteMe.mock.invocationCallOrder[0]!);
+    const row = await db.getFirstAsync<{ version: number }>('SELECT version FROM notes WHERE id = ?', NOTE_ID);
+    expect(row?.version).toBe(2);
   });
 });

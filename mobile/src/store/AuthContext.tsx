@@ -402,6 +402,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return true;
     } catch (error) {
       if (isUnauthorizedError(error)) {
+        // The session this check started with has already been ended on
+        // purpose (account deletion clears it before its wipe): the 401 is
+        // for that session, and the sign-out is not "session ended".
+        if ((await getStoredSession()) !== token) {
+          return false;
+        }
         await clearStoredSession();
         await clearCachedProfile();
         clearAuth('unauthorized');

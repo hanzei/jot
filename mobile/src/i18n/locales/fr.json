@@ -247,6 +247,7 @@
     "deleteAccountIncorrectUsername": "Ce n'est pas votre nom d'utilisateur.",
     "deleteAccountLastAdmin": "Vous êtes le seul administrateur de ce serveur. Nommez un autre utilisateur administrateur avant de supprimer votre compte.",
     "deleteAccountUnreachable": "Impossible de joindre le serveur : votre compte n'a pas été supprimé. Réessayez une fois en ligne.",
+    "deleteAccountUnconfirmed": "Le serveur n'a pas répondu : impossible de savoir si votre compte a été supprimé. Réessayez une fois en ligne.",
     "deleteAccountFailed": "Impossible de supprimer votre compte. Veuillez réessayer.",
     "deleteAccountCheckFailed": "Impossible de vérifier les modifications non synchronisées sur cet appareil. Veuillez réessayer."
   },

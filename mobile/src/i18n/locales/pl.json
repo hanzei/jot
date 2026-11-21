@@ -251,6 +251,7 @@
     "deleteAccountIncorrectUsername": "To nie jest Twoja nazwa użytkownika.",
     "deleteAccountLastAdmin": "Jesteś jedynym administratorem tego serwera. Nadaj innemu użytkownikowi rolę administratora, zanim usuniesz konto.",
     "deleteAccountUnreachable": "Nie można połączyć się z serwerem, więc konto nie zostało usunięte. Spróbuj ponownie, gdy będziesz online.",
+    "deleteAccountUnconfirmed": "Serwer nie odpowiedział, więc nie wiadomo, czy konto zostało usunięte. Spróbuj ponownie, gdy będziesz online.",
     "deleteAccountFailed": "Nie udało się usunąć konta. Spróbuj ponownie.",
     "deleteAccountCheckFailed": "Nie udało się sprawdzić, czy na tym urządzeniu są niezsynchronizowane zmiany. Spróbuj ponownie."
   },

@@ -270,6 +270,7 @@
     "deleteAccountIncorrectUsername": "Ese no es tu nombre de usuario.",
     "deleteAccountLastAdmin": "Eres el único administrador de este servidor. Haz administrador a otro usuario antes de eliminar tu cuenta.",
     "deleteAccountUnreachable": "No se puede conectar con el servidor, así que tu cuenta no se ha eliminado. Inténtalo de nuevo cuando tengas conexión.",
+    "deleteAccountUnconfirmed": "El servidor no respondió, así que no se sabe si tu cuenta se ha eliminado. Inténtalo de nuevo cuando tengas conexión.",
     "deleteAccountFailed": "No se pudo eliminar tu cuenta. Inténtalo de nuevo.",
     "deleteAccountCheckFailed": "No se pudo comprobar si hay cambios sin sincronizar en este dispositivo. Inténtalo de nuevo."
   },

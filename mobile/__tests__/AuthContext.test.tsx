@@ -838,6 +838,36 @@ describe('AuthContext', () => {
     await unmount();
   });
 
+  it('revalidateSession leaves a 401 alone once its session was ended on purpose meanwhile (#1317)', async () => {
+    mockGetStoredSession.mockResolvedValue('token');
+    mockAuth.me.mockResolvedValueOnce({ user: mockUser, settings: mockSettings });
+
+    const { getByTestId, unmount } = await render(
+      <AuthProvider>
+        <RevalidateConsumer />
+      </AuthProvider>,
+    );
+    await waitFor(() => {
+      expect(getByTestId('authenticated').props.children).toBe('true');
+    });
+
+    // Account deletion clears the stored session while this check is in flight.
+    mockAuth.me.mockImplementationOnce(async () => {
+      mockGetStoredSession.mockResolvedValue(null);
+      throw { response: { status: 401 } };
+    });
+    let result: boolean | undefined;
+    await act(async () => {
+      result = await revalidateFn!();
+    });
+
+    expect(result).toBe(false);
+    // The deletion ends the session itself; this 401 does not.
+    expect(getByTestId('authenticated').props.children).toBe('true');
+    expect(mockClearStoredSession).not.toHaveBeenCalled();
+    await unmount();
+  });
+
   it('revalidateSession ignores network errors when there is no newer cached profile', async () => {
     mockGetStoredSession.mockResolvedValue('token');
     mockAuth.me.mockResolvedValueOnce({ user: mockUser, settings: mockSettings });

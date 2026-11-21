@@ -37,6 +37,11 @@ appId: com.jot.app
     timeout: 20000
 - tapOn:
     id: "settings-import-format-google_keep"
+# The button sits below the format choice and can be just off-screen.
+- scrollUntilVisible:
+    element:
+      id: "settings-import-select-file"
+    timeout: 20000
 - tapOn:
     id: "settings-import-select-file"
 - runFlow:
@@ -65,6 +70,10 @@ appId: com.jot.app
     timeout: 20000
 - tapOn:
     id: "settings-import-format-jot_json"
+- scrollUntilVisible:
+    element:
+      id: "settings-import-select-file"
+    timeout: 20000
 - tapOn:
     id: "settings-import-select-file"
 - runFlow:

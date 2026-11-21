@@ -400,7 +400,12 @@ row at enqueue.
   deleted it: local data wiped, then the session forgotten, without
   `POST /logout`. The warning names the unsynced changes it loses. The drain is
   held from before the request until the wipe, so no queued write is sent
-  after the account is gone. A failed wipe still ends the session: the leftover
+  after the account is gone. The request goes only to the server the user
+  started on, and only if it still answers once the drain has settled. After
+  the 204 the session is forgotten in memory first, so a request still in
+  flight 401s quietly instead of reporting the sign-out as "session ended". A
+  request that gets no response may or may not have deleted the account, and
+  the user is told exactly that. A failed wipe still ends the session: the leftover
   data names an account that no longer exists, so the next sign-in wipes it.
   Currently: `src/store/accountDeletion.ts`, with `holdDrain` in
   `src/db/syncQueue.ts`.

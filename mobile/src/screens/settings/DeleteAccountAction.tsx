@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSQLiteContext } from 'expo-sqlite';
 import { parseApiError, type DeleteAccountRequest } from '@jot/shared';
@@ -9,7 +9,8 @@ import { useServerConfig } from '../../hooks/useServerConfig';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { isOnlineWriteAllowed, isServerReachable } from '../../api/serverReachability';
 import { getUnsyncedChangeCount } from '../../db/accountOwner';
-import { deleteAccount } from '../../store/accountDeletion';
+import { AccountDeletionNotSentError, deleteAccount } from '../../store/accountDeletion';
+import { useKeyboardHeight } from '../../hooks/useKeyboardHeight';
 import { displayMessage, extractApiError } from '../../i18n/utils';
 import { styles as settingsStyles } from './styles';
 
@@ -80,6 +81,12 @@ export default function DeleteAccountAction() {
 
   const value = hasPassword ? confirmation : confirmation.trim();
 
+  const handleConfirmationChange = useCallback((text: string) => {
+    setConfirmation(text);
+    // A rejection was for what was typed then.
+    setFieldError('');
+  }, []);
+
   const handleDelete = useCallback(async () => {
     if (busyRef.current || value === '') return;
     setFieldError('');
@@ -98,6 +105,10 @@ export default function DeleteAccountAction() {
       if (isMountedRef.current) setVisible(false);
     } catch (err) {
       if (!isMountedRef.current) return;
+      if (err instanceof AccountDeletionNotSentError) {
+        setError(err.reason === 'unreachable' ? 'settings.deleteAccountUnreachable' : 'settings.deleteAccountFailed');
+        return;
+      }
       const code = parseApiError(err)?.code;
       if (code === 'incorrect_password') {
         setFieldError('apiErrors.incorrectPassword');
@@ -105,7 +116,11 @@ export default function DeleteAccountAction() {
         setFieldError('settings.deleteAccountIncorrectUsername');
       } else if (code === 'last_admin') {
         setError('settings.deleteAccountLastAdmin');
-      } else if (!hasResponse(err) || !isServerReachable()) {
+      } else if (!hasResponse(err)) {
+        // The request went out but no answer came back: the server may have
+        // deleted the account and lost the 204, so do not claim it did not.
+        setError('settings.deleteAccountUnconfirmed');
+      } else if (!isServerReachable()) {
         setError('settings.deleteAccountUnreachable');
       } else {
         setError(extractApiError(err) ?? 'settings.deleteAccountFailed');
@@ -143,106 +158,124 @@ export default function DeleteAccountAction() {
       </TouchableOpacity>
 
       <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
-        <Pressable
-          style={[styles.overlay, { backgroundColor: colors.overlay }]}
-          onPress={handleClose}
-          testID="settings-delete-account-overlay"
-          accessibilityRole="button"
-          accessibilityLabel={t('common.cancel')}
+        {/* The modal is its own window, out of reach of the settings screen's
+            keyboard handling: keep the field and buttons above the keyboard
+            the way BottomSheet does (iOS padding, an Android spacer). */}
+        <KeyboardAvoidingView
+          style={[styles.keyboardArea, { backgroundColor: colors.overlay }]}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <Pressable
-            style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}
-            onPress={(event) => event.stopPropagation()}
-            testID="settings-delete-account-dialog"
+            style={styles.overlay}
+            onPress={handleClose}
+            testID="settings-delete-account-overlay"
+            accessibilityRole="button"
+            accessibilityLabel={t('common.cancel')}
           >
-            <ScrollView keyboardShouldPersistTaps="handled">
-              <Text style={[styles.title, { color: colors.text }]} accessibilityRole="header">
-                {t('settings.deleteAccountConfirmTitle')}
-              </Text>
-              <Text style={[styles.paragraph, { color: colors.text }]}>{t('settings.deleteAccountConfirmMessage')}</Text>
-              {ssoLinked && (
-                <Text style={[styles.paragraph, { color: colors.text }]} testID="settings-delete-account-sso-note">
-                  {t('settings.deleteAccountSsoNote', { provider: providerName })}
+            <Pressable
+              style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}
+              onPress={(event) => event.stopPropagation()}
+              testID="settings-delete-account-dialog"
+            >
+              <ScrollView keyboardShouldPersistTaps="handled">
+                <Text style={[styles.title, { color: colors.text }]} accessibilityRole="header">
+                  {t('settings.deleteAccountConfirmTitle')}
                 </Text>
-              )}
-              {unsynced > 0 && (
-                <Text
-                  style={[styles.paragraph, styles.warning, { color: colors.error }]}
-                  testID="settings-delete-account-unsynced"
-                >
-                  {t('settings.deleteAccountUnsynced', { count: unsynced })}
-                </Text>
-              )}
-              <Text style={[settingsStyles.label, { color: colors.icon }]}>{fieldLabel}</Text>
-              <TextInput
-                style={[settingsStyles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBackground }]}
-                value={confirmation}
-                onChangeText={setConfirmation}
-                secureTextEntry={hasPassword}
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!deleting}
-                accessibilityLabel={fieldLabel}
-                testID={hasPassword ? 'settings-delete-account-password' : 'settings-delete-account-username'}
-              />
-              {fieldError !== '' && (
-                <Text
-                  style={[settingsStyles.errorText, { color: colors.error }]}
-                  testID="settings-delete-account-field-error"
-                  accessibilityRole="alert"
-                >
-                  {displayMessage(t, fieldError)}
-                </Text>
-              )}
-              {error !== '' && (
-                <Text
-                  style={[settingsStyles.errorText, { color: colors.error }]}
-                  testID="settings-delete-account-error"
-                  accessibilityRole="alert"
-                >
-                  {displayMessage(t, error)}
-                </Text>
-              )}
-              <View style={styles.actions}>
-                <TouchableOpacity
-                  style={[styles.button, styles.secondaryButton, { borderColor: colors.border }, deleting && settingsStyles.buttonDisabled]}
-                  onPress={handleClose}
-                  disabled={deleting}
-                  testID="settings-delete-account-cancel"
-                  accessibilityLabel={t('common.cancel')}
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: deleting }}
-                >
-                  <Text style={[styles.secondaryText, { color: colors.textSecondary }]}>{t('common.cancel')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.button, { backgroundColor: colors.error }, deleteDisabled && settingsStyles.buttonDisabled]}
-                  onPress={handleDelete}
-                  disabled={deleteDisabled}
-                  testID="settings-delete-account-confirm"
-                  accessibilityLabel={deleting ? t('settings.deleteAccountDeleting') : t('settings.deleteAccount')}
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: deleteDisabled, busy: deleting }}
-                >
-                  {deleting ? (
-                    <View style={styles.pendingRow}>
-                      <ActivityIndicator size="small" color="#fff" testID="settings-delete-account-spinner" />
-                      <Text style={styles.primaryText}>{t('settings.deleteAccountDeleting')}</Text>
-                    </View>
-                  ) : (
-                    <Text style={styles.primaryText}>{t('settings.deleteAccount')}</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
+                <Text style={[styles.paragraph, { color: colors.text }]}>{t('settings.deleteAccountConfirmMessage')}</Text>
+                {ssoLinked && (
+                  <Text style={[styles.paragraph, { color: colors.text }]} testID="settings-delete-account-sso-note">
+                    {t('settings.deleteAccountSsoNote', { provider: providerName })}
+                  </Text>
+                )}
+                {unsynced > 0 && (
+                  <Text
+                    style={[styles.paragraph, styles.warning, { color: colors.error }]}
+                    testID="settings-delete-account-unsynced"
+                  >
+                    {t('settings.deleteAccountUnsynced', { count: unsynced })}
+                  </Text>
+                )}
+                <Text style={[settingsStyles.label, { color: colors.icon }]}>{fieldLabel}</Text>
+                <TextInput
+                  style={[settingsStyles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBackground }]}
+                  value={confirmation}
+                  onChangeText={handleConfirmationChange}
+                  secureTextEntry={hasPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!deleting}
+                  accessibilityLabel={fieldLabel}
+                  testID={hasPassword ? 'settings-delete-account-password' : 'settings-delete-account-username'}
+                />
+                {fieldError !== '' && (
+                  <Text
+                    style={[settingsStyles.errorText, { color: colors.error }]}
+                    testID="settings-delete-account-field-error"
+                    accessibilityRole="alert"
+                  >
+                    {displayMessage(t, fieldError)}
+                  </Text>
+                )}
+                {error !== '' && (
+                  <Text
+                    style={[settingsStyles.errorText, { color: colors.error }]}
+                    testID="settings-delete-account-error"
+                    accessibilityRole="alert"
+                  >
+                    {displayMessage(t, error)}
+                  </Text>
+                )}
+                <View style={styles.actions}>
+                  <TouchableOpacity
+                    style={[styles.button, styles.secondaryButton, { borderColor: colors.border }, deleting && settingsStyles.buttonDisabled]}
+                    onPress={handleClose}
+                    disabled={deleting}
+                    testID="settings-delete-account-cancel"
+                    accessibilityLabel={t('common.cancel')}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: deleting }}
+                  >
+                    <Text style={[styles.secondaryText, { color: colors.textSecondary }]}>{t('common.cancel')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.button, { backgroundColor: colors.error }, deleteDisabled && settingsStyles.buttonDisabled]}
+                    onPress={handleDelete}
+                    disabled={deleteDisabled}
+                    testID="settings-delete-account-confirm"
+                    accessibilityLabel={deleting ? t('settings.deleteAccountDeleting') : t('settings.deleteAccount')}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: deleteDisabled, busy: deleting }}
+                  >
+                    {deleting ? (
+                      <View style={styles.pendingRow}>
+                        <ActivityIndicator size="small" color="#fff" testID="settings-delete-account-spinner" />
+                        <Text style={styles.primaryText}>{t('settings.deleteAccountDeleting')}</Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.primaryText}>{t('settings.deleteAccount')}</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </Pressable>
           </Pressable>
-        </Pressable>
+          {Platform.OS === 'android' ? <AndroidKeyboardSpacer /> : null}
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
 }
 
+// Its own component, so only an open dialog subscribes to keyboard events.
+function AndroidKeyboardSpacer() {
+  const keyboardHeight = useKeyboardHeight();
+  return <View style={{ height: keyboardHeight }} />;
+}
+
 const styles = StyleSheet.create({
+  keyboardArea: {
+    flex: 1,
+  },
   container: {
     marginTop: 24,
     paddingTop: 16,

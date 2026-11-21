@@ -266,6 +266,7 @@
     "deleteAccountIncorrectUsername": "Dat is niet je gebruikersnaam.",
     "deleteAccountLastAdmin": "Je bent de enige beheerder van deze server. Maak een andere gebruiker beheerder voordat je je account verwijdert.",
     "deleteAccountUnreachable": "De server is niet bereikbaar, dus je account is niet verwijderd. Probeer het opnieuw als je online bent.",
+    "deleteAccountUnconfirmed": "De server reageerde niet, dus het is niet duidelijk of je account is verwijderd. Probeer het opnieuw als je online bent.",
     "deleteAccountFailed": "Je account kon niet worden verwijderd. Probeer het opnieuw.",
     "deleteAccountCheckFailed": "Kon dit apparaat niet controleren op niet-gesynchroniseerde wijzigingen. Probeer het opnieuw."
   },

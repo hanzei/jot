@@ -270,6 +270,7 @@
     "deleteAccountIncorrectUsername": "Esse não é o seu nome de usuário.",
     "deleteAccountLastAdmin": "Você é o único administrador deste servidor. Torne outro usuário administrador antes de excluir sua conta.",
     "deleteAccountUnreachable": "Não foi possível acessar o servidor, então sua conta não foi excluída. Tente novamente quando estiver online.",
+    "deleteAccountUnconfirmed": "O servidor não respondeu, então não é possível saber se sua conta foi excluída. Tente novamente quando estiver online.",
     "deleteAccountFailed": "Não foi possível excluir sua conta. Tente novamente.",
     "deleteAccountCheckFailed": "Não foi possível verificar se há alterações não sincronizadas neste dispositivo. Tente novamente."
   },

@@ -266,6 +266,7 @@
     "deleteAccountIncorrectUsername": "That isn't your username.",
     "deleteAccountLastAdmin": "You are this server's only admin. Make another user an admin before deleting your account.",
     "deleteAccountUnreachable": "Can't reach the server, so your account was not deleted. Try again when you're online.",
+    "deleteAccountUnconfirmed": "The server didn't answer, so Jot can't tell whether your account was deleted. Try again when you're online.",
     "deleteAccountFailed": "Could not delete your account. Please try again.",
     "deleteAccountCheckFailed": "Could not check this device for unsynced changes. Please try again."
   },

@@ -1,9 +1,22 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { DeleteAccountRequest } from '@jot/shared';
 import { jot } from '../api/jot';
-import { getActiveServerId } from '../api/client';
+import { clearStoredSession, getActiveServerId, isServerSwitchInProgress } from '../api/client';
+import { isServerReachable } from '../api/serverReachability';
 import { holdDrain } from '../db/syncQueue';
 import { wipeLocalData } from '../db/accountOwner';
+
+/**
+ * The delete request was never sent, so the account is untouched: the server
+ * became unreachable, or the active server changed, while the drain was
+ * settling.
+ */
+export class AccountDeletionNotSentError extends Error {
+  constructor(readonly reason: 'unreachable' | 'server_changed') {
+    super(`Account deletion not sent: ${reason}`);
+    this.name = 'AccountDeletionNotSentError';
+  }
+}
 
 /**
  * Deletes the signed-in account on the server, then ends it on this device
@@ -24,14 +37,27 @@ export async function deleteAccount(
   body: DeleteAccountRequest,
   endSession: () => Promise<void>,
 ): Promise<void> {
+  // `db` is this server's database. Read the server before waiting on the
+  // drain: a switch meanwhile (a deep link, say) would point the shared client
+  // at another server, and the request below must only ever go to this one.
+  const serverId = getActiveServerId();
   // Once the server has deleted the account, every queued write would only
   // 401. So the drain is held from before the request to after the wipe: a
   // pass already running finishes first, and its writes go out while the
   // session is still valid; none starts again until the queue is gone.
   const release = await holdDrain(db);
-  // `db` is this server's database; read before the request, as a switch
-  // meanwhile would change the active server.
-  const serverId = getActiveServerId();
+  // Waiting on a pass can take up to a request timeout, and the world may have
+  // moved: send nothing unless this server is still active and answering.
+  let notSent: AccountDeletionNotSentError | null = null;
+  if (getActiveServerId() !== serverId || isServerSwitchInProgress()) {
+    notSent = new AccountDeletionNotSentError('server_changed');
+  } else if (!isServerReachable()) {
+    notSent = new AccountDeletionNotSentError('unreachable');
+  }
+  if (notSent) {
+    release({ resume: true });
+    throw notSent;
+  }
   try {
     await jot.users.deleteMe(body);
   } catch (err) {
@@ -39,6 +65,15 @@ export async function deleteAccount(
     release({ resume: true });
     throw err;
   }
+
+  // The server has removed the session with the account. Forget it in memory
+  // now, before the wipe: a request still in flight then 401s against no
+  // session, which handleUnauthorizedSession ignores, instead of ending the
+  // session as "signed out" while the wipe runs. Best-effort, like the rest of
+  // the cleanup; endSession clears it again.
+  await clearStoredSession().catch((error: unknown) => {
+    console.warn('Failed to clear the stored session after deleting the account:', error);
+  });
 
   try {
     // As on logout, wipe before ending the session, so the session never ends

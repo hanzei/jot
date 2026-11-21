@@ -1862,7 +1862,10 @@ async function drainPass(db: SQLiteDatabase, options: DrainOptions): Promise<Dra
   // row recorded until the next claim, which only means an append instead.
   sendingEntryByDb.delete(db);
 
-  if (pullNoteIds.size > 0 && !stoppedOnConnectivity && !isDrainHeld(db)) {
+  // Also while held: holdDrain waits for this pass, pulls included, so they
+  // still run under a valid session, and a refused deletion must not leave
+  // these notes stale.
+  if (pullNoteIds.size > 0 && !stoppedOnConnectivity) {
     await pullTouchedNotes(db, pullNoteIds);
   }
 

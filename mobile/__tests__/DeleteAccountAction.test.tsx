@@ -10,6 +10,7 @@ import type { User } from '@jot/shared';
 import AccountSection from '../src/screens/settings/AccountSection';
 import { useAuth } from '../src/store/AuthContext';
 import { jot } from '../src/api/jot';
+import * as accountDeletion from '../src/store/accountDeletion';
 import { removeServer } from '../src/store/serverAccounts';
 import { markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
 import { claimLocalData, getAccountOwner } from '../src/db/accountOwner';
@@ -31,6 +32,8 @@ jest.mock('../src/api/client', () => ({
   default: { get: jest.fn(), post: jest.fn(), patch: jest.fn(), delete: jest.fn() },
   cacheAuthProfile: jest.fn().mockResolvedValue(undefined),
   getActiveServerId: jest.fn(() => 'server-1'),
+  isServerSwitchInProgress: jest.fn(() => false),
+  clearStoredSession: jest.fn(async () => undefined),
 }));
 
 jest.mock('../src/store/serverAccounts', () => ({
@@ -224,6 +227,18 @@ describe('Delete account', () => {
     expect(await getAccountOwner(db)).toBe('user-1');
   });
 
+  it('clears a wrong password from the field once the user edits it', async () => {
+    mockAuth();
+    mockDeleteMe.mockRejectedValueOnce(apiError(403, 'incorrect_password'));
+    const screen = await openDialog();
+    await confirmWith(screen, 'settings-delete-account-password', 'wrong');
+    await waitFor(() => expect(screen.getByTestId('settings-delete-account-field-error')).toBeTruthy());
+
+    await fireEvent.changeText(screen.getByTestId('settings-delete-account-password'), 'wrong2');
+
+    expect(screen.queryByTestId('settings-delete-account-field-error')).toBeNull();
+  });
+
   it('shows a wrong username on the field', async () => {
     mockAuth({ user: { has_password: false } });
     mockDeleteMe.mockRejectedValueOnce(apiError(403, 'incorrect_username'));
@@ -265,7 +280,7 @@ describe('Delete account', () => {
     expect(mockEndSessionLocally).not.toHaveBeenCalled();
   });
 
-  it('says the server could not be reached when the request gets no answer', async () => {
+  it('says the outcome is unknown when the request gets no answer, since the server may have deleted it', async () => {
     mockAuth();
     mockDeleteMe.mockImplementationOnce(async () => {
       // What the API client's interceptor does on a request with no response.
@@ -277,10 +292,24 @@ describe('Delete account', () => {
     await confirmWith(screen, 'settings-delete-account-password', 'secret');
 
     await waitFor(() => expect(screen.getByTestId('settings-delete-account-error')).toHaveTextContent(
-      i18n.t('settings.deleteAccountUnreachable'),
+      i18n.t('settings.deleteAccountUnconfirmed'),
     ));
     expect(mockEndSessionLocally).not.toHaveBeenCalled();
     expect(await getAccountOwner(db)).toBe('user-1');
+  });
+
+  it.each([
+    ['unreachable', 'settings.deleteAccountUnreachable'],
+    ['server_changed', 'settings.deleteAccountFailed'],
+  ] as const)('says the account was not deleted when the request was not sent (%s)', async (reason, key) => {
+    mockAuth();
+    jest.spyOn(accountDeletion, 'deleteAccount').mockRejectedValueOnce(new accountDeletion.AccountDeletionNotSentError(reason));
+    const screen = await openDialog();
+
+    await confirmWith(screen, 'settings-delete-account-password', 'secret');
+
+    await waitFor(() => expect(screen.getByTestId('settings-delete-account-error')).toHaveTextContent(i18n.t(key)));
+    expect(mockEndSessionLocally).not.toHaveBeenCalled();
   });
 
   it('does not send the request while the server is known to be unreachable', async () => {
