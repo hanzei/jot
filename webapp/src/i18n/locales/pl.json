@@ -747,7 +747,8 @@
     "unsupportedImageType": "Ten typ pliku nie jest obsługiwany. Wybierz inny obraz.",
     "invalidImage": "Nie można odczytać tego obrazu. Może być uszkodzony.",
     "invalidImportFile": "Nie można odczytać tego pliku jako eksportu wybranego typu.",
-    "incorrectUsername": "Nazwa użytkownika się nie zgadza."
+    "incorrectUsername": "Nazwa użytkownika się nie zgadza.",
+    "memosImportDisabled": "Import z Memos nie jest skonfigurowany na tym serwerze."
   },
   "errorBoundary": {
     "title": "Coś poszło nie tak",

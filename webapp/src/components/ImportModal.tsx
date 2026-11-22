@@ -38,6 +38,9 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
   useEffect(() => {
     if (!isOpen) return;
     let cancelled = false;
+    // Forget what an earlier opening loaded until this request answers, so
+    // a Memos option the operator has since turned off is not offered.
+    setMemosURL(null);
     notes.importOptions()
       .then(options => {
         if (!cancelled) setMemosURL(options.memos?.url ?? null);
@@ -53,7 +56,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
   }, [isOpen]);
 
   const memosHost = memosURL ? hostOf(memosURL) : '';
-  const memosIsInsecure = memosURL?.startsWith('http://') ?? false;
+  const memosIsInsecure = memosURL ? isHTTP(memosURL) : false;
 
   const isFileType = importType !== 'usememos';
   const acceptedFileTypes = importType === 'jot_json' ? '.zip' : '.json,.zip';
@@ -334,6 +337,15 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
       </div>
     </Dialog>
   );
+}
+
+/** Whether a URL uses plain http, so a token sent to it is unencrypted. */
+function isHTTP(url: string): boolean {
+  try {
+    return new URL(url).protocol === 'http:';
+  } catch {
+    return false;
+  }
 }
 
 /** The host (with any port) of a URL, or the URL itself if it does not parse. */

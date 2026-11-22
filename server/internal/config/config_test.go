@@ -775,6 +775,7 @@ func TestLoadMemosURL(t *testing.T) {
 		{"http with port", "http://192.168.1.10:5230", "http://192.168.1.10:5230"},
 		{"path", "https://home.lan/memos", "https://home.lan/memos"},
 		{"trailing slash is stripped", "https://home.lan/memos/", "https://home.lan/memos"},
+		{"scheme is lower-cased", "HTTP://memos.lan", "http://memos.lan"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("JOT_MEMOS_URL", tt.value)

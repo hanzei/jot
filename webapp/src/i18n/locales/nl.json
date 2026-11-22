@@ -723,7 +723,8 @@
     "unsupportedImageType": "Dit bestandstype wordt niet ondersteund. Kies een andere afbeelding.",
     "invalidImage": "Deze afbeelding kan niet worden gelezen. Mogelijk is ze beschadigd.",
     "invalidImportFile": "Dit bestand kan niet worden gelezen als export van het gekozen type.",
-    "incorrectUsername": "De gebruikersnaam komt niet overeen."
+    "incorrectUsername": "De gebruikersnaam komt niet overeen.",
+    "memosImportDisabled": "De Memos-import is niet ingesteld op deze server."
   },
   "errorBoundary": {
     "title": "Er is iets misgegaan",

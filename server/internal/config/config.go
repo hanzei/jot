@@ -541,7 +541,8 @@ func requireBaseURL(name, v string) (string, error) {
 	if u.User != nil || strings.ContainsAny(v, "?#") {
 		return "", fmt.Errorf("invalid %s value %q: must not contain user info, a query or a fragment", name, v)
 	}
-	return strings.TrimRight(v, "/"), nil
+	// u.String() lower-cases the scheme, so clients can compare it literally.
+	return strings.TrimRight(u.String(), "/"), nil
 }
 
 // requireOriginURL extends requireAbsoluteURL with an origin-only check: v

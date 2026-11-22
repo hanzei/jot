@@ -342,6 +342,18 @@ describe('ImportModal', () => {
       expect(screen.getByRole('radio', { name: /google keep/i })).toBeInTheDocument();
     });
 
+    it('does not offer a Memos option from an earlier opening while reloading options', async () => {
+      mockImportOptions.mockResolvedValue({ memos: { url: MEMOS_URL } });
+      const { rerender } = render(<ImportModal {...defaultProps} />);
+      await screen.findByRole('radio', { name: /memos/i });
+
+      rerender(<ImportModal {...defaultProps} isOpen={false} />);
+      mockImportOptions.mockReturnValue(new Promise(() => {}));
+      rerender(<ImportModal {...defaultProps} isOpen />);
+
+      expect(screen.queryByRole('radio', { name: /memos/i })).not.toBeInTheDocument();
+    });
+
     it('shows the Memos option when an instance is configured', async () => {
       mockImportOptions.mockResolvedValue({ memos: { url: MEMOS_URL } });
       render(<ImportModal {...defaultProps} />);

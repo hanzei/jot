@@ -735,7 +735,8 @@
     "unsupportedImageType": "Questo tipo di file non è supportato. Scegli un'altra immagine.",
     "invalidImage": "Impossibile leggere questa immagine. Potrebbe essere danneggiata.",
     "invalidImportFile": "Impossibile leggere questo file come esportazione del tipo selezionato.",
-    "incorrectUsername": "Il nome utente non corrisponde."
+    "incorrectUsername": "Il nome utente non corrisponde.",
+    "memosImportDisabled": "L'importazione da Memos non è configurata su questo server."
   },
   "errorBoundary": {
     "title": "Qualcosa è andato storto",

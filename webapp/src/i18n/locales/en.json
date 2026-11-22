@@ -723,7 +723,8 @@
     "unsupportedImageType": "This file type isn't supported. Choose a different image.",
     "invalidImage": "This image could not be read. It may be damaged.",
     "invalidImportFile": "This file could not be read as an export of the selected type.",
-    "incorrectUsername": "The username does not match."
+    "incorrectUsername": "The username does not match.",
+    "memosImportDisabled": "The Memos import is not set up on this server."
   },
   "errorBoundary": {
     "title": "Something went wrong",

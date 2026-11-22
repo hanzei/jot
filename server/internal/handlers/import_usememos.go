@@ -50,6 +50,10 @@ func usememosRedirectError(resp *http.Response) error {
 	}
 	if base, ok := strings.CutSuffix(loc.Path, usememosMemosPath); ok {
 		suggested := url.URL{Scheme: loc.Scheme, Host: loc.Host, Path: base}
+		// Keep the target's own escaping (e.g. %2F) rather than re-encoding Path.
+		if rawBase, rawOK := strings.CutSuffix(loc.EscapedPath(), usememosMemosPath); rawOK {
+			suggested.RawPath = rawBase
+		}
 		return fmt.Errorf("memos server redirected to %s; set JOT_MEMOS_URL to %s", loc.Redacted(), suggested.String())
 	}
 	return fmt.Errorf("memos server redirected to %s; check JOT_MEMOS_URL", loc.Redacted())
