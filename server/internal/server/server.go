@@ -386,6 +386,12 @@ func (s *Server) setupRoutes() error {
 	// otelhttp sets the span name before chi populates RoutePattern, so a
 	// second middleware renames the span after routing is complete.
 	s.router.Use(chiRouteSpanNamer)
+	// Before the request logger, which records the client IP, and every
+	// per-IP rate limit below.
+	s.router.Use(clientIP(s.cfg.TrustedProxies)...)
+	if len(s.cfg.TrustedProxies) > 0 {
+		s.log.Infof("Trusting X-Forwarded-For from proxies in: %v", s.cfg.TrustedProxies)
+	}
 	s.router.Use(s.requestLoggerMiddleware)
 	s.router.Use(recoverer)
 	s.router.Use(securityHeaders(s.cfg.CookieSecure))
@@ -434,7 +440,6 @@ func (s *Server) setupRoutes() error {
 			// in context (it reads the session cookie directly, without
 			// AuthMiddleware), so it belongs in this group rather than the
 			// per-user one below.
-			r.Use(middleware.ClientIPFromRemoteAddr)
 			r.Use(s.rateLimiter.limit(bucketAuth, s.cfg.RateLimitAuthPerMinute, keyByClientIP))
 			r.Post("/register", s.wrapHandler(s.authHandler.Register))
 			r.Post("/login", s.wrapHandler(s.authHandler.Login))
@@ -458,7 +463,6 @@ func (s *Server) setupRoutes() error {
 		// thumbnails, so a viewer loading a note with many images is not
 		// throttled by the login bucket and vice versa.
 		r.Group(func(r chi.Router) {
-			r.Use(middleware.ClientIPFromRemoteAddr)
 			r.Use(s.rateLimiter.limit(bucketPublic, s.cfg.RateLimitPublicPerMinute, keyByClientIP))
 			r.Get("/public/notes/{token}", s.wrapHandler(s.notesHandler.GetPublicNote))
 			r.Get("/public/notes/{token}/images/{id}", s.wrapHandler(s.notesHandler.GetPublicNoteImage))
@@ -597,7 +601,6 @@ func (s *Server) setupRoutes() error {
 	// The public link viewer page looks its link up for the preview card
 	// (share_preview.go), so it draws from the public API's per-IP bucket.
 	s.router.With(
-		middleware.ClientIPFromRemoteAddr,
 		s.rateLimiter.limit(bucketPublic, s.cfg.RateLimitPublicPerMinute, keyByClientIP),
 	).Get(sharePathPrefix+"*", FileServer(staticRoot, s.sharePreview))
 	s.router.Get("/*", FileServer(staticRoot, nil))
@@ -894,6 +897,7 @@ func (s *Server) requestLoggerMiddleware(next http.Handler) http.Handler {
 			"request_id": requestID,
 			"method":     r.Method,
 			"path":       logPath(r.URL.Path),
+			"client_ip":  middleware.GetClientIP(r.Context()),
 		})
 		span := trace.SpanFromContext(r.Context())
 		// Also on the span, so an operator who keeps traces but not logs can

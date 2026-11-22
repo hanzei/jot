@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/netip"
 	"path/filepath"
 	"testing"
 	"time"
@@ -493,6 +494,54 @@ func TestLoadRateLimitInvalidValueErrors(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "must be between")
 	})
+}
+
+func TestLoadTrustedProxies(t *testing.T) {
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
+
+	pfx := netip.MustParsePrefix
+	valid := []struct {
+		name  string
+		value string
+		want  []netip.Prefix
+	}{
+		{name: "unset", value: "", want: nil},
+		{name: "prefixes", value: "127.0.0.1/32,::1/128", want: []netip.Prefix{pfx("127.0.0.1/32"), pfx("::1/128")}},
+		{name: "bare addresses become single hosts", value: "10.0.0.2, ::1", want: []netip.Prefix{pfx("10.0.0.2/32"), pfx("::1/128")}},
+		{name: "host bits are masked", value: "172.18.0.5/16", want: []netip.Prefix{pfx("172.18.0.0/16")}},
+		{name: "v4-mapped address is folded", value: "::ffff:10.0.0.2", want: []netip.Prefix{pfx("10.0.0.2/32")}},
+		{name: "empty entries are skipped", value: " 10.0.0.0/8 , ,", want: []netip.Prefix{pfx("10.0.0.0/8")}},
+	}
+	for _, tt := range valid {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("JOT_TRUSTED_PROXIES", tt.value)
+			cfg, err := Load()
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, cfg.TrustedProxies)
+		})
+	}
+
+	invalid := []struct {
+		name    string
+		value   string
+		wantErr string
+	}{
+		{name: "not an address", value: "proxy.local", wantErr: "must be an IP address or CIDR prefix"},
+		{name: "bad prefix length", value: "10.0.0.0/33", wantErr: "must be an IP address or CIDR prefix"},
+		{name: "zoned address", value: "fe80::1%eth0", wantErr: "must be an IP address or CIDR prefix"},
+		{name: "v4-mapped prefix", value: "::ffff:10.0.0.0/104", wantErr: "IPv4 form"},
+		{name: "every IPv4 address", value: "0.0.0.0/0", wantErr: "trusting every address"},
+		{name: "every IPv6 address", value: "10.0.0.1,::/0", wantErr: "trusting every address"},
+	}
+	for _, tt := range invalid {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("JOT_TRUSTED_PROXIES", tt.value)
+			_, err := Load()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "JOT_TRUSTED_PROXIES")
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
 }
 
 // TestLoadOTelVars verifies the renamed JOT_OTEL_* signal toggles and the

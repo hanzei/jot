@@ -190,14 +190,10 @@ func keyByUserID(r *http.Request) (string, error) {
 	return user.ID, nil
 }
 
-// keyByClientIP rate-limits unauthenticated requests by the direct TCP peer
-// address (via chi's ClientIPFromRemoteAddr, which must run upstream). Jot has
-// no documented reverse-proxy trust configuration, so this deliberately avoids
-// keying off spoofable client-supplied headers (X-Forwarded-For etc.).
-//
-// Caveat: behind a reverse proxy, the direct TCP peer is the proxy itself, so
-// every client behind it collapses onto one key and shares a single bucket —
-// see the "Rate limiting" section of README.md.
+// keyByClientIP rate-limits unauthenticated requests by client IP, as the
+// clientIP middleware (installed on the whole router) resolved it: the TCP
+// peer, or with JOT_TRUSTED_PROXIES set, the address a trusted reverse proxy
+// forwarded.
 func keyByClientIP(r *http.Request) (string, error) {
 	return httprate.CanonicalizeIP(middleware.GetClientIP(r.Context())), nil
 }
