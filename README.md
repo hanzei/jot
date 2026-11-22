@@ -21,8 +21,9 @@ compiled web app, while SQLite keeps the default deployment small and portable.
 - **Pin, archive, duplicate, trash**: Keep active notes focused while retaining
   archived notes and automatically purging trashed notes after a
   configurable retention period (seven days by default).
-- **Import and export**: Import from a Jot export, Google Keep, or usememos,
-  keeping each note's creation and last-modified dates, and export your Jot
+- **Import and export**: Import from a Jot export, Google Keep, or the
+  operator's Memos instance (`JOT_MEMOS_URL`; users supply only their access
+  token), keeping each note's creation and last-modified dates, and export your Jot
   notes, with their images, as a `.zip` bundle — either a Jot backup that
   imports back, or plain Markdown files that open as an Obsidian vault.
 
@@ -376,6 +377,7 @@ another client, expect timestamp columns to hold UTC wall-clock values.
 | `JOT_PASSWORD_MIN_LENGTH` | `10` | Minimum password length, from 1 to 72 characters. |
 | `JOT_PUBLIC_LINKS_ENABLED` | `true` | Set to `false` to switch public note links off: the unauthenticated `/api/v1/public/notes/…` endpoints return 404 (so `/share/{token}` pages show "not found") and no link can be created (`PUT /notes/{id}/public-link` returns 403). Revoking still works, and existing links are kept: turning the switch back on brings them back. Exposed as `public_links_enabled` in `GET /api/v1/config`. |
 | `JOT_PUBLIC_URL` | empty | The address people outside use to reach this instance, such as `https://jot.example.com`: an `http`/`https` origin (scheme, host, optional port) with no path, query or fragment; a single trailing `/` is stripped. Clients build public links from it. Set it when users reach Jot on an address outsiders cannot use — a LAN IP, an internal host name, a VPN or Tailscale name — or their copied links will not work for the recipient. Unset, each client uses its own address. Also makes a public link's preview card use absolute URLs: unset, the card's image URL stays relative and it carries no `og:url`, so chat apps that require absolute URLs (WhatsApp, iMessage) show the note's title without its image. Never derived from the `Host` header. Exposed as `public_url` in `GET /api/v1/config`. |
+| `JOT_MEMOS_URL` | empty | The one [Memos](https://usememos.com) instance users may import from, such as `https://memos.example.com` or `http://home.lan/memos`: an absolute `http`/`https` URL, optionally with a path, and no user info, query or fragment; a trailing `/` is stripped. Users choose nothing but supply their own Memos access token, which is used for that import only and never stored. The server does not follow redirects from it: if the instance redirects (for example from `http://` to `https://`), the import fails with an error naming the target, which is the value to set here. Unset, the Memos import is off: the option is hidden and `import_type=usememos` returns 403 `memos_import_disabled`. |
 
 Users can delete their own account (Settings → Delete account in the webapp,
 or `DELETE /api/v1/users/me`); it removes

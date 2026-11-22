@@ -1386,7 +1386,7 @@ const docTemplate = `{
         },
         "/notes/import": {
             "post": {
-                "description": "jot_json takes a Jot export bundle (.zip, as produced by GET /notes/export) of up to 1 GiB; a bare JSON file from an older export is rejected. Notes are imported all-or-nothing; an image that is missing or invalid is left off its note and listed in errors. google_keep takes a Takeout .zip or a single .json file of up to 32 MiB.",
+                "description": "jot_json takes a Jot export bundle (.zip, as produced by GET /notes/export) of up to 1 GiB; a bare JSON file from an older export is rejected. Notes are imported all-or-nothing; an image that is missing or invalid is left off its note and listed in errors. google_keep takes a Takeout .zip or a single .json file of up to 32 MiB. usememos fetches the user's memos from the operator-configured JOT_MEMOS_URL with the given access token; any url field is ignored, and when JOT_MEMOS_URL is unset the request fails with 403 memos_import_disabled. Redirects from the Memos server are not followed.",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -1400,7 +1400,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Import format: jot_json or google_keep (requires file); usememos (requires url and token)",
+                        "description": "Import format: jot_json or google_keep (requires file); usememos (requires token)",
                         "name": "import_type",
                         "in": "formData",
                         "required": true
@@ -1413,13 +1413,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Memos instance URL (required when import_type is usememos)",
-                        "name": "url",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Memos API token (required when import_type is usememos)",
+                        "description": "Memos access token (required when import_type is usememos)",
                         "name": "token",
                         "in": "formData"
                     }
@@ -1443,6 +1437,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
+                    "403": {
+                        "description": "the Memos import is not configured (memos_import_disabled)",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
                     "413": {
                         "description": "file too large",
                         "schema": {
@@ -1457,6 +1457,37 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/notes/import/options": {
+            "get": {
+                "description": "Returns the operator-configured Memos instance that import_type=usememos fetches from, or memos: null when that import is off.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notes"
+                ],
+                "summary": "Get the import sources this server offers",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ImportOptionsResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
                         "schema": {
                             "$ref": "#/definitions/apierr.ErrorResponse"
                         }
@@ -3862,7 +3893,8 @@ const docTemplate = `{
                 "invalid_import_file",
                 "sso_link_unavailable",
                 "sso_unlink_unavailable",
-                "public_links_disabled"
+                "public_links_disabled",
+                "memos_import_disabled"
             ],
             "x-enum-comments": {
                 "CodeAlreadyShared": "409 — the note is already shared with that user.",
@@ -3884,6 +3916,7 @@ const docTemplate = `{
                 "CodeLastAdmin": "409 — the change would leave the server without an admin.",
                 "CodeLimitExceeded": "422 — a resource cap or length limit was exceeded.",
                 "CodeLocalLoginDisabled": "403 from register, login, and password change — password login is turned off; use SSO.",
+                "CodeMemosImportDisabled": "403 — the Memos import is off because the operator has not set JOT_MEMOS_URL.",
                 "CodeMethodNotAllowed": "405 — the route exists but not for this method.",
                 "CodeNotFound": "404 — the resource or route does not exist (or is not visible to the caller).",
                 "CodePATLimitReached": "422 — the user already holds the maximum number of personal access tokens.",
@@ -3936,7 +3969,8 @@ const docTemplate = `{
                 "400 — the import file is not a readable export of the chosen import type.",
                 "403 — password login is turned off, so there is no local account to link SSO to.",
                 "403 — password login is turned off, so SSO is the only way to sign in and cannot be disconnected.",
-                "403 — the operator turned public note links off (JOT_PUBLIC_LINKS_ENABLED=false)."
+                "403 — the operator turned public note links off (JOT_PUBLIC_LINKS_ENABLED=false).",
+                "403 — the Memos import is off because the operator has not set JOT_MEMOS_URL."
             ],
             "x-enum-varnames": [
                 "CodeValidationFailed",
@@ -3973,7 +4007,8 @@ const docTemplate = `{
                 "CodeInvalidImportFile",
                 "CodeSSOLinkUnavailable",
                 "CodeSSOUnlinkUnavailable",
-                "CodePublicLinksDisabled"
+                "CodePublicLinksDisabled",
+                "CodeMemosImportDisabled"
             ]
         },
         "apierr.ErrorDetail": {
@@ -4219,6 +4254,20 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.ImportOptionsResponse": {
+            "type": "object",
+            "properties": {
+                "memos": {
+                    "description": "Memos is the configured Memos instance, or null when the Memos import\nis off (JOT_MEMOS_URL unset).",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/handlers.MemosImportOptions"
+                        }
+                    ],
+                    "x-nullable": true
+                }
+            }
+        },
         "handlers.ImportResponse": {
             "type": "object",
             "properties": {
@@ -4264,6 +4313,16 @@ const docTemplate = `{
                 "viewed_at": {
                     "description": "ViewedAt is when the user opened the note. Omit it to mean now.",
                     "type": "string"
+                }
+            }
+        },
+        "handlers.MemosImportOptions": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "description": "URL is JOT_MEMOS_URL: the instance's base URL, without a trailing slash.",
+                    "type": "string",
+                    "example": "https://memos.example.com"
                 }
             }
         },

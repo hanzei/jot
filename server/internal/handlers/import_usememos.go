@@ -23,12 +23,36 @@ const (
 )
 
 // usememosHTTPClient is shared across import calls so TCP connections are pooled
-// across the paginated requests of a single import session.
+// across the paginated requests of a single import session. It does not follow
+// redirects: the operator's JOT_MEMOS_URL is the only host the import may
+// contact, and a redirect is reported so the operator can correct it.
 var usememosHTTPClient = &http.Client{
 	Transport: &http.Transport{
 		ResponseHeaderTimeout: 15 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 	},
+	CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	},
+}
+
+// usememosMemosPath is the Memos API path the import pages through, appended
+// to JOT_MEMOS_URL.
+const usememosMemosPath = "/api/v1/memos"
+
+// usememosRedirectError describes a 3xx from the Memos server. When the
+// redirect target is the same API path on another base URL (typically http
+// upgraded to https), it names that base so the operator can set it directly.
+func usememosRedirectError(resp *http.Response) error {
+	loc, err := resp.Location()
+	if err != nil {
+		return fmt.Errorf("memos server answered with redirect status %d and no usable Location; check JOT_MEMOS_URL", resp.StatusCode)
+	}
+	if base, ok := strings.CutSuffix(loc.Path, usememosMemosPath); ok {
+		suggested := url.URL{Scheme: loc.Scheme, Host: loc.Host, Path: base}
+		return fmt.Errorf("memos server redirected to %s; set JOT_MEMOS_URL to %s", loc.Redacted(), suggested.String())
+	}
+	return fmt.Errorf("memos server redirected to %s; check JOT_MEMOS_URL", loc.Redacted())
 }
 
 type usememosAPIMemo struct {
@@ -261,20 +285,20 @@ func fetchUsememosMemosForState(ctx context.Context, baseURL, token, state strin
 	pageToken := ""
 
 	for pageNum := range usememosMaxPages {
-		apiURL := fmt.Sprintf("%s/api/v1/memos?pageSize=%d&state=%s", base, usememosPageSize, state)
+		apiURL := fmt.Sprintf("%s%s?pageSize=%d&state=%s", base, usememosMemosPath, usememosPageSize, state)
 		if pageToken != "" {
 			apiURL += "&pageToken=" + url.QueryEscape(pageToken)
 		}
 
 		pageCtx, cancel := context.WithTimeout(ctx, usememosRequestTimeout)
-		req, err := http.NewRequestWithContext(pageCtx, http.MethodGet, apiURL, nil) //nolint:gosec // URL is validated to be http/https in the handler before this function is called
+		req, err := http.NewRequestWithContext(pageCtx, http.MethodGet, apiURL, nil)
 		if err != nil {
 			cancel()
 			return nil, false, fmt.Errorf("build request: %w", err)
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
 
-		resp, err := usememosHTTPClient.Do(req) //nolint:gosec // same as above
+		resp, err := usememosHTTPClient.Do(req)
 		if err != nil {
 			cancel()
 			return nil, false, fmt.Errorf("fetch memos (page %d): %w", pageNum+1, err)
@@ -285,8 +309,11 @@ func fetchUsememosMemosForState(ctx context.Context, baseURL, token, state strin
 		if readErr != nil {
 			return nil, false, fmt.Errorf("read response (page %d): %w", pageNum+1, readErr)
 		}
+		if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+			return nil, false, usememosRedirectError(resp)
+		}
 		if resp.StatusCode != http.StatusOK {
-			return nil, false, fmt.Errorf("usememos returned status %d — check your URL and token", resp.StatusCode)
+			return nil, false, fmt.Errorf("usememos returned status %d — check your access token", resp.StatusCode)
 		}
 
 		var apiResp usememosAPIResponse

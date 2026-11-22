@@ -11,7 +11,6 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
-	"net/url"
 	"path"
 	"strings"
 	"time"
@@ -37,6 +36,42 @@ type ImportResponse struct {
 	Imported int      `json:"imported"`
 	Skipped  int      `json:"skipped"`
 	Errors   []string `json:"errors,omitempty"`
+}
+
+// ImportOptionsResponse describes the import sources this server offers
+// beyond file uploads. It is behind authentication, unlike GET /config, so an
+// internal Memos hostname is not shown to anyone who can reach the server.
+type ImportOptionsResponse struct {
+	// Memos is the configured Memos instance, or null when the Memos import
+	// is off (JOT_MEMOS_URL unset).
+	Memos *MemosImportOptions `json:"memos" extensions:"x-nullable"`
+}
+
+// MemosImportOptions describes the Memos instance users import from.
+type MemosImportOptions struct {
+	// URL is JOT_MEMOS_URL: the instance's base URL, without a trailing slash.
+	URL string `json:"url" example:"https://memos.example.com"`
+}
+
+// GetImportOptions godoc
+//
+//	@Summary		Get the import sources this server offers
+//	@Description	Returns the operator-configured Memos instance that import_type=usememos fetches from, or memos: null when that import is off.
+//	@Tags			notes
+//	@Security		CookieAuth
+//	@Produce		json
+//	@Success		200	{object}	ImportOptionsResponse
+//	@Failure		401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Router			/notes/import/options [get]
+func (h *NotesHandler) GetImportOptions(_ http.ResponseWriter, r *http.Request) (int, any, error) {
+	if _, authErr := requireUser(r); authErr != nil {
+		return http.StatusUnauthorized, nil, authErr
+	}
+	resp := ImportOptionsResponse{}
+	if h.memosURL != "" {
+		resp.Memos = &MemosImportOptions{URL: h.memosURL}
+	}
+	return http.StatusOK, resp, nil
 }
 
 const (
@@ -472,14 +507,14 @@ func validateJotImportItems(noteIdx int, items []jotImportNoteItem) ([]models.Jo
 //	@Security		CookieAuth
 //	@Accept			multipart/form-data
 //	@Produce		json
-//	@Description	jot_json takes a Jot export bundle (.zip, as produced by GET /notes/export) of up to 1 GiB; a bare JSON file from an older export is rejected. Notes are imported all-or-nothing; an image that is missing or invalid is left off its note and listed in errors. google_keep takes a Takeout .zip or a single .json file of up to 32 MiB.
-//	@Param			import_type	formData	string	true	"Import format: jot_json or google_keep (requires file); usememos (requires url and token)"
+//	@Description	jot_json takes a Jot export bundle (.zip, as produced by GET /notes/export) of up to 1 GiB; a bare JSON file from an older export is rejected. Notes are imported all-or-nothing; an image that is missing or invalid is left off its note and listed in errors. google_keep takes a Takeout .zip or a single .json file of up to 32 MiB. usememos fetches the user's memos from the operator-configured JOT_MEMOS_URL with the given access token; any url field is ignored, and when JOT_MEMOS_URL is unset the request fails with 403 memos_import_disabled. Redirects from the Memos server are not followed.
+//	@Param			import_type	formData	string	true	"Import format: jot_json or google_keep (requires file); usememos (requires token)"
 //	@Param			file		formData	file	false	"Export file (required when import_type is jot_json or google_keep)"
-//	@Param			url			formData	string	false	"Memos instance URL (required when import_type is usememos)"
-//	@Param			token		formData	string	false	"Memos API token (required when import_type is usememos)"
+//	@Param			token		formData	string	false	"Memos access token (required when import_type is usememos)"
 //	@Success		200			{object}	ImportResponse
 //	@Failure		400			{object}	apierr.ErrorResponse	"bad request, or not a readable export (invalid_import_file)"
 //	@Failure		401			{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure		403			{object}	apierr.ErrorResponse	"the Memos import is not configured (memos_import_disabled)"
 //	@Failure		413			{object}	apierr.ErrorResponse	"file too large"
 //	@Failure		422			{object}	apierr.ErrorResponse	"export exceeds a size or file-count limit"
 //	@Failure		500			{object}	apierr.ErrorResponse	"internal server error"
@@ -522,16 +557,17 @@ func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int,
 	}
 
 	if importType == importTypeUsememos {
-		rawURL := r.FormValue("url")
+		// The instance is the operator's JOT_MEMOS_URL; a "url" form field
+		// (sent by older clients) is ignored so users cannot choose the host
+		// the server fetches from.
+		if h.memosURL == "" {
+			return http.StatusForbidden, nil, apierr.New(apierr.CodeMemosImportDisabled, "the Memos import is not configured on this server (JOT_MEMOS_URL)")
+		}
 		token := r.FormValue("token")
-		if rawURL == "" || token == "" {
-			return http.StatusBadRequest, nil, errors.New("url and token are required for usememos import")
+		if token == "" {
+			return http.StatusBadRequest, nil, errors.New("token is required for usememos import")
 		}
-		parsed, err := url.Parse(rawURL)
-		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-			return http.StatusBadRequest, nil, errors.New("url must be a valid http or https URL")
-		}
-		imported, skipped, importErrors := h.importMemosFromUsememos(r.Context(), user.ID, rawURL, token)
+		imported, skipped, importErrors := h.importMemosFromUsememos(r.Context(), user.ID, h.memosURL, token)
 		return http.StatusOK, ImportResponse{Imported: imported, Skipped: skipped, Errors: importErrors}, nil
 	}
 

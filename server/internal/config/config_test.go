@@ -759,3 +759,45 @@ func TestLoadPublicURL(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadMemosURL(t *testing.T) {
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
+
+	t.Run("unset", func(t *testing.T) {
+		t.Setenv("JOT_MEMOS_URL", "")
+		cfg, err := Load()
+		require.NoError(t, err)
+		assert.Empty(t, cfg.MemosURL)
+	})
+
+	for _, tt := range []struct{ name, value, want string }{
+		{"https", "https://memos.example.com", "https://memos.example.com"},
+		{"http with port", "http://192.168.1.10:5230", "http://192.168.1.10:5230"},
+		{"path", "https://home.lan/memos", "https://home.lan/memos"},
+		{"trailing slash is stripped", "https://home.lan/memos/", "https://home.lan/memos"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("JOT_MEMOS_URL", tt.value)
+			cfg, err := Load()
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, cfg.MemosURL)
+		})
+	}
+
+	for _, tt := range []struct{ name, value string }{
+		{"relative URL", "/memos"},
+		{"host without scheme", "memos.example.com"},
+		{"non-http scheme", "ftp://memos.example.com"},
+		{"file scheme", "file:///etc/passwd"},
+		{"query", "https://memos.example.com?x=1"},
+		{"fragment", "https://memos.example.com#top"},
+		{"user info", "https://user:pass@memos.example.com"},
+	} {
+		t.Run("rejects "+tt.name, func(t *testing.T) {
+			t.Setenv("JOT_MEMOS_URL", tt.value)
+			_, err := Load()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "JOT_MEMOS_URL")
+		})
+	}
+}

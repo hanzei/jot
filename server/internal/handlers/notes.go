@@ -31,10 +31,13 @@ type NotesHandler struct {
 	uploadMaxBytes int64
 	// publicLinksEnabled is JOT_PUBLIC_LINKS_ENABLED.
 	publicLinksEnabled bool
+	// memosURL is JOT_MEMOS_URL, the one Memos instance the import fetches
+	// from, or "" when the Memos import is off.
+	memosURL string
 }
 
 // NewNotesHandler creates a NotesHandler.
-func NewNotesHandler(noteStore *models.NoteStore, notes *notesvc.Service, hub *sse.Hub, imageStore *blobstore.ImageStore, uploadMaxBytes int64, publicLinksEnabled bool) *NotesHandler {
+func NewNotesHandler(noteStore *models.NoteStore, notes *notesvc.Service, hub *sse.Hub, imageStore *blobstore.ImageStore, uploadMaxBytes int64, publicLinksEnabled bool, memosURL string) *NotesHandler {
 	return &NotesHandler{
 		noteStore:          noteStore,
 		notes:              notes,
@@ -43,6 +46,7 @@ func NewNotesHandler(noteStore *models.NoteStore, notes *notesvc.Service, hub *s
 		imageStore:         imageStore,
 		uploadMaxBytes:     uploadMaxBytes,
 		publicLinksEnabled: publicLinksEnabled,
+		memosURL:           memosURL,
 	}
 }
 

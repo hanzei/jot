@@ -65,12 +65,11 @@ export const notes = {
   import: (
     payload:
       | { file: File; importType: FileImportType }
-      | { importType: 'usememos'; url: string; token: string },
+      | { importType: 'usememos'; token: string },
   ): Promise<ImportResponse> => {
     const formData = new FormData();
     formData.append('import_type', payload.importType);
     if (payload.importType === 'usememos') {
-      formData.append('url', payload.url);
       formData.append('token', payload.token);
     } else {
       formData.append('file', payload.file);

@@ -404,6 +404,54 @@ test.describe('Export & Import', () => {
 
     void authenticatedUser;
   });
+
+  test('hides the Memos import when the server has no Memos instance configured', async ({ authenticatedUser, settingsPage, page }) => {
+    // The e2e server runs without JOT_MEMOS_URL.
+    const options = page.waitForResponse(resp => resp.url().endsWith('/api/v1/notes/import/options'));
+    await settingsPage.goto();
+    await page.getByRole('button', { name: 'Import Notes' }).click();
+    expect(await (await options).json()).toEqual({ memos: null });
+
+    await expect(page.getByRole('radio', { name: 'Google Keep' })).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Memos' })).toHaveCount(0);
+
+    void authenticatedUser;
+  });
+
+  test('guides a Memos import from the operator-configured instance', async ({ authenticatedUser, settingsPage, page }) => {
+    // Stand in for a server with JOT_MEMOS_URL set, and for the Memos server
+    // itself, which the e2e environment does not run.
+    await page.route('**/api/v1/notes/import/options', route =>
+      route.fulfill({ json: { memos: { url: 'http://memos.home.lan/memos' } } }));
+    let importBody = '';
+    await page.route('**/api/v1/notes/import', route => {
+      importBody = route.request().postData() ?? '';
+      return route.fulfill({ json: { imported: 3, skipped: 0 } });
+    });
+
+    await settingsPage.goto();
+    await page.getByRole('button', { name: 'Import Notes' }).click();
+    await page.getByRole('radio', { name: 'Memos' }).click();
+
+    const flow = page.getByTestId('usememos-inputs');
+    await expect(flow).toContainText('Import from memos.home.lan');
+    await expect(page.getByTestId('usememos-url')).toHaveText('http://memos.home.lan/memos');
+    await expect(page.getByRole('link', { name: 'Open your Memos instance' })).toHaveAttribute('href', 'http://memos.home.lan/memos');
+    await expect(flow).toContainText('In Memos, open Settings and create an access token.');
+    await expect(flow).toContainText('Your token is sent only to memos.home.lan and is not stored by Jot.');
+    await expect(page.getByTestId('usememos-insecure-note')).toBeVisible();
+
+    const importButton = page.getByRole('button', { name: 'Import', exact: true });
+    await expect(importButton).toBeDisabled();
+    await page.getByLabel('Paste it here:').fill('memos_pat_secret');
+    await importButton.click();
+
+    await expect(page.getByText('Imported 3 notes.')).toBeVisible();
+    expect(importBody).toContain('memos_pat_secret');
+    expect(importBody).not.toContain('name="url"');
+
+    void authenticatedUser;
+  });
 });
 
 test.describe('Settings sidebar labels — Mobile', () => {

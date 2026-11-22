@@ -37,6 +37,7 @@ definitions:
     - sso_link_unavailable
     - sso_unlink_unavailable
     - public_links_disabled
+    - memos_import_disabled
     type: string
     x-enum-comments:
       CodeAlreadyShared: 409 — the note is already shared with that user.
@@ -66,6 +67,8 @@ definitions:
       CodeLimitExceeded: 422 — a resource cap or length limit was exceeded.
       CodeLocalLoginDisabled: 403 from register, login, and password change — password
         login is turned off; use SSO.
+      CodeMemosImportDisabled: 403 — the Memos import is off because the operator
+        has not set JOT_MEMOS_URL.
       CodeMethodNotAllowed: 405 — the route exists but not for this method.
       CodeNotFound: 404 — the resource or route does not exist (or is not visible
         to the caller).
@@ -134,6 +137,7 @@ definitions:
     - 403 — password login is turned off, so SSO is the only way to sign in and cannot
       be disconnected.
     - 403 — the operator turned public note links off (JOT_PUBLIC_LINKS_ENABLED=false).
+    - 403 — the Memos import is off because the operator has not set JOT_MEMOS_URL.
     x-enum-varnames:
     - CodeValidationFailed
     - CodeUnauthorized
@@ -170,6 +174,7 @@ definitions:
     - CodeSSOLinkUnavailable
     - CodeSSOUnlinkUnavailable
     - CodePublicLinksDisabled
+    - CodeMemosImportDisabled
   apierr.ErrorDetail:
     properties:
       code:
@@ -368,6 +373,16 @@ definitions:
       deleted:
         type: integer
     type: object
+  handlers.ImportOptionsResponse:
+    properties:
+      memos:
+        allOf:
+        - $ref: '#/definitions/handlers.MemosImportOptions'
+        description: |-
+          Memos is the configured Memos instance, or null when the Memos import
+          is off (JOT_MEMOS_URL unset).
+        x-nullable: true
+    type: object
   handlers.ImportResponse:
     properties:
       errors:
@@ -397,6 +412,14 @@ definitions:
     properties:
       viewed_at:
         description: ViewedAt is when the user opened the note. Omit it to mean now.
+        type: string
+    type: object
+  handlers.MemosImportOptions:
+    properties:
+      url:
+        description: 'URL is JOT_MEMOS_URL: the instance''s base URL, without a trailing
+          slash.'
+        example: https://memos.example.com
         type: string
     type: object
   handlers.NativeExchangeRequest:
@@ -2944,10 +2967,13 @@ paths:
         of up to 1 GiB; a bare JSON file from an older export is rejected. Notes are
         imported all-or-nothing; an image that is missing or invalid is left off its
         note and listed in errors. google_keep takes a Takeout .zip or a single .json
-        file of up to 32 MiB.
+        file of up to 32 MiB. usememos fetches the user's memos from the operator-configured
+        JOT_MEMOS_URL with the given access token; any url field is ignored, and when
+        JOT_MEMOS_URL is unset the request fails with 403 memos_import_disabled. Redirects
+        from the Memos server are not followed.
       parameters:
       - description: 'Import format: jot_json or google_keep (requires file); usememos
-          (requires url and token)'
+          (requires token)'
         in: formData
         name: import_type
         required: true
@@ -2956,11 +2982,7 @@ paths:
         in: formData
         name: file
         type: file
-      - description: Memos instance URL (required when import_type is usememos)
-        in: formData
-        name: url
-        type: string
-      - description: Memos API token (required when import_type is usememos)
+      - description: Memos access token (required when import_type is usememos)
         in: formData
         name: token
         type: string
@@ -2979,6 +3001,10 @@ paths:
           description: unauthorized
           schema:
             $ref: '#/definitions/apierr.ErrorResponse'
+        "403":
+          description: the Memos import is not configured (memos_import_disabled)
+          schema:
+            $ref: '#/definitions/apierr.ErrorResponse'
         "413":
           description: file too large
           schema:
@@ -2994,6 +3020,26 @@ paths:
       security:
       - CookieAuth: []
       summary: Import notes from a supported export format
+      tags:
+      - notes
+  /notes/import/options:
+    get:
+      description: 'Returns the operator-configured Memos instance that import_type=usememos
+        fetches from, or memos: null when that import is off.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.ImportOptionsResponse'
+        "401":
+          description: unauthorized
+          schema:
+            $ref: '#/definitions/apierr.ErrorResponse'
+      security:
+      - CookieAuth: []
+      summary: Get the import sources this server offers
       tags:
       - notes
   /notes/reorder:
