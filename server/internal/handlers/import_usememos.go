@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 )
 
@@ -48,13 +49,11 @@ func usememosRedirectError(resp *http.Response) error {
 	if err != nil {
 		return fmt.Errorf("memos server answered with redirect status %d and no usable Location; check JOT_MEMOS_URL", resp.StatusCode)
 	}
-	if base, ok := strings.CutSuffix(loc.Path, usememosMemosPath); ok {
-		suggested := url.URL{Scheme: loc.Scheme, Host: loc.Host, Path: base}
-		// Keep the target's own escaping (e.g. %2F) rather than re-encoding Path.
-		if rawBase, rawOK := strings.CutSuffix(loc.EscapedPath(), usememosMemosPath); rawOK {
-			suggested.RawPath = rawBase
-		}
-		return fmt.Errorf("memos server redirected to %s; set JOT_MEMOS_URL to %s", loc.Redacted(), suggested.String())
+	target := *loc
+	target.User, target.RawQuery, target.Fragment = nil, "", ""
+	// String keeps the target's own path escaping (e.g. %2F).
+	if base, ok := strings.CutSuffix(target.String(), usememosMemosPath); ok {
+		return fmt.Errorf("memos server redirected to %s; set JOT_MEMOS_URL to %s", loc.Redacted(), base)
 	}
 	return fmt.Errorf("memos server redirected to %s; check JOT_MEMOS_URL", loc.Redacted())
 }
@@ -284,12 +283,11 @@ func fetchUsememosMemos(ctx context.Context, baseURL, token string) ([]usememosA
 // fetched memos and a boolean indicating whether the page-cap was hit before
 // the API stopped paginating (i.e., the result is incomplete).
 func fetchUsememosMemosForState(ctx context.Context, baseURL, token, state string) ([]usememosAPIMemo, bool, error) {
-	base := strings.TrimRight(baseURL, "/")
 	var all []usememosAPIMemo
 	pageToken := ""
 
 	for pageNum := range usememosMaxPages {
-		apiURL := fmt.Sprintf("%s%s?pageSize=%d&state=%s", base, usememosMemosPath, usememosPageSize, state)
+		apiURL := fmt.Sprintf("%s%s?pageSize=%d&state=%s", baseURL, usememosMemosPath, usememosPageSize, state)
 		if pageToken != "" {
 			apiURL += "&pageToken=" + url.QueryEscape(pageToken)
 		}
@@ -335,13 +333,16 @@ func fetchUsememosMemosForState(ctx context.Context, baseURL, token, state strin
 	return all, true, nil
 }
 
-// importMemosFromUsememos fetches all memos from the given usememos instance
+// importMemosFromUsememos fetches all memos from the JOT_MEMOS_URL instance
 // and imports them into Jot. NORMAL and ARCHIVED memos are imported (preserving
 // pinned and archived state); DELETED memos are skipped. Inline #hashtags are
 // extracted as Jot labels and stripped from the note content.
-func (h *NotesHandler) importMemosFromUsememos(ctx context.Context, userID, baseURL, token string) (imported, skipped int, importErrors []string) {
-	memos, capped, err := fetchUsememosMemos(ctx, baseURL, token)
+func (h *NotesHandler) importMemosFromUsememos(ctx context.Context, userID, token string) (imported, skipped int, importErrors []string) {
+	memos, capped, err := fetchUsememosMemos(ctx, h.memosURL, token)
 	if err != nil {
+		// Logged too: a redirect or unreachable instance is the operator's
+		// to fix, and they may never see the user's import result.
+		logutil.FromContext(ctx).WithError(err).Warn("Memos import could not fetch from JOT_MEMOS_URL")
 		return 0, 0, []string{err.Error()}
 	}
 	if capped {

@@ -567,7 +567,7 @@ func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int,
 		if token == "" {
 			return http.StatusBadRequest, nil, errors.New("token is required for usememos import")
 		}
-		imported, skipped, importErrors := h.importMemosFromUsememos(r.Context(), user.ID, h.memosURL, token)
+		imported, skipped, importErrors := h.importMemosFromUsememos(r.Context(), user.ID, token)
 		return http.StatusOK, ImportResponse{Imported: imported, Skipped: skipped, Errors: importErrors}, nil
 	}
 

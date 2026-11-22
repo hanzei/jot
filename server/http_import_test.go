@@ -4,7 +4,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/json"
-	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -504,30 +503,11 @@ func postUsememosImport(t *testing.T, ts *TestServer, c *http.Client, fields map
 	}
 	require.NoError(t, mw.Close())
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.HTTPServer.URL+"/api/v1/notes/import", &buf)
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", mw.FormDataContentType())
-	return doRaw(t, c, req)
+	status, _, body := rawRequest(t, c, http.MethodPost, ts.HTTPServer.URL+"/api/v1/notes/import", &buf, http.Header{"Content-Type": {mw.FormDataContentType()}})
+	return status, body
 }
 
-// doRaw sends req through c and returns the response status and body.
-func doRaw(t *testing.T, c *http.Client, req *http.Request) (int, []byte) {
-	t.Helper()
-	resp, err := c.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	return resp.StatusCode, body
-}
-
-// getImportOptions sends GET /notes/import/options through c.
-func getImportOptions(t *testing.T, ts *TestServer, c *http.Client) (int, []byte) {
-	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/notes/import/options", nil)
-	require.NoError(t, err)
-	return doRaw(t, c, req)
-}
+const importOptionsPath = "/api/v1/notes/import/options"
 
 // buildUsememosHandler serves pages of mock usememos
 // API responses at GET /api/v1/memos. The pages slice is served in order, filtered
@@ -980,9 +960,10 @@ func TestImportUsememosRedirectNotFollowed(t *testing.T) {
 	}))
 	defer target.Close()
 
+	ts, memosSrv := setupUsememosTestServer(t)
+	user := ts.createTestUser(t, "usememosredirect", "password123", false)
+
 	t.Run("same API path", func(t *testing.T) {
-		ts, memosSrv := setupUsememosTestServer(t)
-		user := ts.createTestUser(t, "usememosredirect1", "password123", false)
 		memosSrv.serve(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			//nolint:gosec // test mock: the redirect target is the test's own server
 			http.Redirect(w, r, target.URL+"/memos"+r.URL.RequestURI(), http.StatusMovedPermanently)
@@ -997,8 +978,6 @@ func TestImportUsememosRedirectNotFollowed(t *testing.T) {
 	})
 
 	t.Run("elsewhere", func(t *testing.T) {
-		ts, memosSrv := setupUsememosTestServer(t)
-		user := ts.createTestUser(t, "usememosredirect2", "password123", false)
 		memosSrv.serve(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, target.URL+"/login", http.StatusFound)
 		}))
@@ -1015,7 +994,7 @@ func TestImportUsememosRedirectNotFollowed(t *testing.T) {
 
 func TestImportUsememosUnauthenticatedReturns401(t *testing.T) {
 	t.Parallel()
-	ts, _ := setupUsememosTestServer(t)
+	ts := setupTestServer(t)
 
 	status, _ := postUsememosImport(t, ts, ts.HTTPServer.Client(), map[string]string{"token": "testtoken"})
 	assert.Equal(t, http.StatusUnauthorized, status)
@@ -1032,22 +1011,18 @@ func TestImportOptions(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, opts.Memos)
 		assert.Equal(t, memosSrv.URL, opts.Memos.URL)
+
+		status, _, _ := rawRequest(t, ts.HTTPServer.Client(), http.MethodGet, ts.HTTPServer.URL+importOptionsPath, nil, nil)
+		assert.Equal(t, http.StatusUnauthorized, status, "requires auth")
 	})
 
 	t.Run("not configured", func(t *testing.T) {
 		ts := setupTestServer(t)
 		user := ts.createTestUser(t, "importoptions2", "password123", false)
 
-		status, body := getImportOptions(t, ts, user.Client.HTTPClient())
+		status, _, body := rawRequest(t, user.Client.HTTPClient(), http.MethodGet, ts.HTTPServer.URL+importOptionsPath, nil, nil)
 		require.Equal(t, http.StatusOK, status)
 		assert.JSONEq(t, `{"memos":null}`, string(body))
-	})
-
-	t.Run("requires auth", func(t *testing.T) {
-		ts, _ := setupUsememosTestServer(t)
-
-		status, _ := getImportOptions(t, ts, ts.HTTPServer.Client())
-		assert.Equal(t, http.StatusUnauthorized, status)
 	})
 }
 

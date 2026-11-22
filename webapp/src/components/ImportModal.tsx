@@ -9,6 +9,14 @@ import { apiErrorMessage } from '@/utils/apiError';
 
 type ImportType = 'jot_json' | 'google_keep' | 'usememos';
 
+/** The operator's Memos instance (JOT_MEMOS_URL), parsed once for display. */
+interface MemosInstance {
+  url: string;
+  host: string;
+  /** Plain http: the token travels unencrypted. */
+  insecure: boolean;
+}
+
 interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -21,7 +29,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   // The operator's Memos instance (JOT_MEMOS_URL), or null while unknown or
   // when the Memos import is off; the Memos option is hidden until it is set.
-  const [memosURL, setMemosURL] = useState<string | null>(null);
+  const [memos, setMemos] = useState<MemosInstance | null>(null);
   const [usememosToken, setUsememosToken] = useState('');
   const tokenInputId = useId();
   const [isLoading, setIsLoading] = useState(false);
@@ -38,25 +46,21 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
   useEffect(() => {
     if (!isOpen) return;
     let cancelled = false;
-    // Forget what an earlier opening loaded until this request answers, so
-    // a Memos option the operator has since turned off is not offered.
-    setMemosURL(null);
     notes.importOptions()
       .then(options => {
-        if (!cancelled) setMemosURL(options.memos?.url ?? null);
+        if (cancelled || !options.memos) return;
+        const location = new URL(options.memos.url);
+        setMemos({ url: options.memos.url, host: location.host, insecure: location.protocol === 'http:' });
       })
       .catch(() => {
-        // Without the options the Memos import cannot be offered; the file
-        // imports do not depend on them.
-        if (!cancelled) setMemosURL(null);
+        // Without the options (or with a URL that does not parse) the Memos
+        // import is not offered; the file imports do not depend on them.
       });
     return () => {
       cancelled = true;
     };
   }, [isOpen]);
 
-  const memosHost = memosURL ? hostOf(memosURL) : '';
-  const memosIsInsecure = memosURL ? isHTTP(memosURL) : false;
 
   const isFileType = importType !== 'usememos';
   const acceptedFileTypes = importType === 'jot_json' ? '.zip' : '.json,.zip';
@@ -107,7 +111,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
   };
 
   const isImportReady = importType === 'usememos'
-    ? memosURL !== null && usememosToken.trim() !== ''
+    ? memos !== null && usememosToken.trim() !== ''
     : selectedFile !== null;
 
   const handleImport = async () => {
@@ -132,6 +136,9 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
 
   const handleClose = () => {
     resetFields();
+    // Forget the options so the next opening offers only what its own
+    // request returns.
+    setMemos(null);
     onClose();
   };
 
@@ -187,7 +194,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
                   />
                   <span className="text-sm text-gray-700 dark:text-gray-300">{t('import.formatJot')}</span>
                 </label>
-                {memosURL && (
+                {memos && (
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="radio"
@@ -264,24 +271,23 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
                   onChange={handleFileChange}
                 />
               </div>
-            ) : memosURL && (
+            ) : memos && (
               <div className="text-sm text-gray-700 dark:text-gray-300" data-testid="usememos-inputs">
                 <ol className="list-decimal list-outside ml-5 space-y-3">
                   <li>
                     <Trans
                       i18nKey="import.memosStepSource"
-                      values={{ host: memosHost }}
+                      values={{ host: memos.host }}
                       components={{ bold: <strong className="font-medium text-gray-900 dark:text-white" /> }}
                     />
-                    <span className="block text-xs text-gray-500 dark:text-gray-400 break-all" data-testid="usememos-url">{memosURL}</span>
+                    <span className="block text-xs text-gray-500 dark:text-gray-400 break-all" data-testid="usememos-url">{memos.url}</span>
                   </li>
                   <li>
                     <a
-                      href={memosURL}
+                      href={memos.url}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
-                      data-testid="usememos-open-link"
                     >
                       {t('import.memosStepOpen')}
                       <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
@@ -305,9 +311,9 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
                   </li>
                 </ol>
                 <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                  {t('import.memosTokenNote', { host: memosHost })}
+                  {t('import.memosTokenNote', { host: memos.host })}
                 </p>
-                {memosIsInsecure && (
+                {memos.insecure && (
                   <p className="mt-2 text-xs text-yellow-700 dark:text-yellow-400" data-testid="usememos-insecure-note">
                     {t('import.memosInsecureNote')}
                   </p>
@@ -337,22 +343,4 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
       </div>
     </Dialog>
   );
-}
-
-/** Whether a URL uses plain http, so a token sent to it is unencrypted. */
-function isHTTP(url: string): boolean {
-  try {
-    return new URL(url).protocol === 'http:';
-  } catch {
-    return false;
-  }
-}
-
-/** The host (with any port) of a URL, or the URL itself if it does not parse. */
-function hostOf(url: string): string {
-  try {
-    return new URL(url).host;
-  } catch {
-    return url;
-  }
 }

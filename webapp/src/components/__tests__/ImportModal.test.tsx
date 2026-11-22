@@ -347,6 +347,7 @@ describe('ImportModal', () => {
       const { rerender } = render(<ImportModal {...defaultProps} />);
       await screen.findByRole('radio', { name: /memos/i });
 
+      await userEvent.setup().click(screen.getByRole('button', { name: /cancel/i }));
       rerender(<ImportModal {...defaultProps} isOpen={false} />);
       mockImportOptions.mockReturnValue(new Promise(() => {}));
       rerender(<ImportModal {...defaultProps} isOpen />);
