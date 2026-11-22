@@ -458,27 +458,88 @@ are generous enough that normal interactive use (dashboard load, SSE, note
 editing, syncing after a short offline period) should never hit them.
 (`GET /config` is the one unauthenticated, side-effect-free exception: it's
 fetched on every page load, so it is intentionally left unlimited rather than
-risk throttling normal multi-user traffic behind a shared IP — see the
-reverse-proxy caveat below.)
+risk throttling normal multi-user traffic behind a shared IP — see
+[Behind a reverse proxy](#behind-a-reverse-proxy) below.)
 
 | Variable | Default | Description |
 | --- | --- | --- |
 | `JOT_RATE_LIMIT_ENABLED` | `true` | Set to `false` to disable rate limiting entirely. |
 | `JOT_RATE_LIMIT_PER_MINUTE` | `300` | Baseline requests/min per authenticated user, across all `/api/v1` routes. |
 | `JOT_RATE_LIMIT_AUTH_PER_MINUTE` | `20` | Requests/min per client IP, shared by `/register`, `/login`, and `/logout` (none of which have an authenticated user to key on yet). |
-| `JOT_RATE_LIMIT_PUBLIC_PER_MINUTE` | `120` | Requests/min per client IP, shared by the unauthenticated public link endpoints: a public note and its images and thumbnails (`/api/v1/public/notes/…`), and the `/share/…` viewer page, which looks the link up for its preview card. Dead links count too, so guessing tokens is throttled. Subject to the reverse-proxy caveat below. |
+| `JOT_RATE_LIMIT_PUBLIC_PER_MINUTE` | `120` | Requests/min per client IP, shared by the unauthenticated public link endpoints: a public note and its images and thumbnails (`/api/v1/public/notes/…`), and the `/share/…` viewer page, which looks the link up for its preview card. Dead links count too, so guessing tokens is throttled. |
 | `JOT_RATE_LIMIT_EXPENSIVE_PER_MINUTE` | `20` | Requests/min per user, shared by note search (a full-text index query, from `GET /notes?search=` or the MCP `list_notes` tool), import, export (streams every image), and image upload (decode/resize/thumbnail) — the costliest operations per request. These also count against the baseline limit above; the expensive limit is an additional, stricter cap on top of it. Plain note listing (no `search` query) is unaffected by this limit and only counts against the baseline. |
+| `JOT_TRUSTED_PROXIES` | empty | Comma-separated reverse proxies whose `X-Forwarded-For` header Jot believes when working out a request's client IP, as CIDR prefixes (`172.16.0.0/12`) or bare addresses (`127.0.0.1`, `::1`). Empty trusts no header and keys the per-IP limits on the TCP peer. See [Behind a reverse proxy](#behind-a-reverse-proxy). |
 
-**Reverse-proxy caveat:** `JOT_RATE_LIMIT_AUTH_PER_MINUTE` is keyed by the direct
-TCP peer address, not a client-supplied header (which would be trivially
-spoofable). If Jot runs behind a reverse proxy that terminates TLS — a common
-setup, since `JOT_COOKIE_SECURE` defaults to requiring HTTPS — every client behind
-that proxy shares one IP and therefore one bucket: one user's failed logins
-can throttle everyone else's login/register/logout attempts for up to a
-minute. If you run Jot behind such a proxy, raise `JOT_RATE_LIMIT_AUTH_PER_MINUTE`
-accordingly. The same applies to `JOT_RATE_LIMIT_PUBLIC_PER_MINUTE`: behind such
-a proxy all anonymous viewers of public links share one bucket, so raise it if
-widely shared links start returning 429.
+#### Behind a reverse proxy
+
+The per-IP limits (`JOT_RATE_LIMIT_AUTH_PER_MINUTE`,
+`JOT_RATE_LIMIT_PUBLIC_PER_MINUTE`) are keyed on the TCP peer by default, never
+on a client-supplied header, which anyone could forge. Behind a reverse proxy
+that terminates TLS — the usual setup, since `JOT_COOKIE_SECURE` defaults to
+requiring HTTPS — the peer is always the proxy, so every client shares one
+bucket: one person's failed logins throttle everyone's login, register and
+logout for up to a minute, and all anonymous viewers of public links share a
+single public bucket.
+
+Set `JOT_TRUSTED_PROXIES` to your proxy's address to fix this. Jot then reads
+`X-Forwarded-For` only on connections from a listed address, walks it right to
+left past the trusted hops, and keys the limit on the first address that is
+not one of them. A client that reaches Jot directly is keyed on its own
+address and cannot spoof another. When a trusted proxy sends no usable header
+(its own health checks, or a malformed chain), Jot falls back to the proxy's
+address. Trusting `0.0.0.0/0` or `::/0` is rejected: trusting every hop would
+leave no client to find.
+
+The proxy must set `X-Forwarded-For`. Caddy and Traefik do by default; nginx
+needs it spelled out:
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}
+```
+
+- **Proxy on the same host** (Caddy, nginx or Traefik installed natively):
+  `JOT_TRUSTED_PROXIES=127.0.0.1,::1`. Setting `JOT_HOST=127.0.0.1` as well
+  keeps Jot off the public network entirely.
+- **Proxy in Docker Compose:** the proxy container's address changes between
+  restarts, so give the shared network a fixed subnet and trust that:
+
+  ```yaml
+  services:
+    jot:
+      image: hanzei/jot:latest
+      environment:
+        JOT_TRUSTED_PROXIES: 172.30.0.0/24
+      # No "ports:" here: only the proxy reaches Jot.
+      networks: [web]
+    caddy:
+      image: caddy:2
+      ports: ["80:80", "443:443"]
+      networks: [web]
+  networks:
+    web:
+      ipam:
+        config:
+          - subnet: 172.30.0.0/24
+  ```
+
+  The Caddyfile then points at the service name: `reverse_proxy jot:8080`.
+
+  **Do not also publish Jot's port** (`ports: "8080:8080"`) when you trust a
+  Docker network. Depending on the Docker setup (rootless Docker, Docker
+  Desktop, the userland proxy), traffic to a published port arrives from the
+  network's gateway address, which is inside the trusted subnet, so a client
+  connecting to that port directly could forge `X-Forwarded-For`. If you need
+  the port for local access, bind it to loopback: `"127.0.0.1:8080:8080"`.
+
+At startup Jot logs `Trusting X-Forwarded-For from proxies in: …`, and every
+request log line carries a `client_ip` field. To check the setup, sign in
+from a device whose public address you know and confirm that address appears
+in the log, not the proxy's. If the proxy's address shows up, the proxy is not
+sending `X-Forwarded-For` or `JOT_TRUSTED_PROXIES` does not cover it.
 
 ### Metrics and observability
 

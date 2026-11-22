@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -52,6 +53,12 @@ type Config struct {
 	RateLimitAuthPerMinute      int
 	RateLimitExpensivePerMinute int
 	RateLimitPublicPerMinute    int
+
+	// TrustedProxies are the reverse proxies (JOT_TRUSTED_PROXIES) whose
+	// X-Forwarded-For header is believed when working out a request's client
+	// IP, which keys the per-IP rate limits. Empty, the default, trusts no
+	// header and uses the TCP peer.
+	TrustedProxies []netip.Prefix
 
 	// PublicLinksEnabled is the operator switch for public note links. When
 	// off, the public endpoints 404 and no link can be created, but existing
@@ -158,6 +165,44 @@ func parseHostEnv(name string) (string, error) {
 		return "", fmt.Errorf("invalid %s value %q: must be a host name or IP address without a port or brackets", name, v)
 	}
 	return v, nil
+}
+
+// parseTrustedProxies parses a comma-separated list of CIDR prefixes or bare
+// IP addresses (taken as a single host) into masked prefixes. Empty entries
+// are skipped, so a trailing comma is harmless. A prefix that covers every
+// address is rejected: trusting every hop means no hop is ever taken as the
+// client, so the setting would silently do nothing.
+func parseTrustedProxies(name, v string) ([]netip.Prefix, error) {
+	var prefixes []netip.Prefix
+	for entry := range strings.SplitSeq(v, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		var prefix netip.Prefix
+		if strings.Contains(entry, "/") {
+			p, err := netip.ParsePrefix(entry)
+			if err != nil {
+				return nil, fmt.Errorf("invalid %s entry %q: must be an IP address or CIDR prefix such as 172.16.0.0/12", name, entry)
+			}
+			if p.Addr().Is4In6() {
+				return nil, fmt.Errorf("invalid %s entry %q: write an IPv4-mapped prefix in IPv4 form", name, entry)
+			}
+			prefix = p.Masked()
+		} else {
+			addr, err := netip.ParseAddr(entry)
+			if err != nil || addr.Zone() != "" {
+				return nil, fmt.Errorf("invalid %s entry %q: must be an IP address or CIDR prefix such as 172.16.0.0/12", name, entry)
+			}
+			addr = addr.Unmap()
+			prefix = netip.PrefixFrom(addr, addr.BitLen())
+		}
+		if prefix.Bits() == 0 {
+			return nil, fmt.Errorf("invalid %s entry %q: trusting every address makes no hop the client, so list your proxies' addresses instead", name, entry)
+		}
+		prefixes = append(prefixes, prefix)
+	}
+	return prefixes, nil
 }
 
 // Load reads configuration from environment variables, applying defaults
@@ -362,6 +407,12 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	cfg.RateLimitPublicPerMinute = rateLimitPublicPerMinute
+
+	trustedProxies, err := parseTrustedProxies("JOT_TRUSTED_PROXIES", os.Getenv("JOT_TRUSTED_PROXIES"))
+	if err != nil {
+		return nil, err
+	}
+	cfg.TrustedProxies = trustedProxies
 
 	publicLinksEnabled, err := parseBoolEnv("JOT_PUBLIC_LINKS_ENABLED", cfg.PublicLinksEnabled)
 	if err != nil {
