@@ -541,7 +541,13 @@ location / {
           - subnet: 172.30.0.0/24
   ```
 
-  The `Caddyfile` points at the service name: `jot.example.com { reverse_proxy jot:8080 }`.
+  The `Caddyfile` points at the service name:
+
+  ```caddyfile
+  jot.example.com {
+      reverse_proxy jot:8080
+  }
+  ```
 
   **Do not also publish Jot's port** (`ports: "8080:8080"`) when you trust a
   Docker network. Depending on the Docker setup (rootless Docker, Docker
