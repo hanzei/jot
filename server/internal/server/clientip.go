@@ -32,7 +32,7 @@ func clientIP(trustedProxies []netip.Prefix) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		fromPeer := middleware.ClientIPFromRemoteAddr(next)
 		return fromXFF(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if middleware.GetClientIP(r.Context()) == "" {
+			if !middleware.GetClientIPAddr(r.Context()).IsValid() {
 				fromPeer.ServeHTTP(w, r)
 				return
 			}
