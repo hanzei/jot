@@ -57,6 +57,7 @@ describe('isInsecureServerOrigin', () => {
     expect(isInsecureServerOrigin('http://localhost:8080')).toBe(false);
     expect(isInsecureServerOrigin('http://LOCALHOST')).toBe(false);
     expect(isInsecureServerOrigin('http://127.0.0.1:8080')).toBe(false);
+    expect(isInsecureServerOrigin('http://127.0.1.1:8080')).toBe(false);
     expect(isInsecureServerOrigin('http://[::1]:8080')).toBe(false);
   });
 

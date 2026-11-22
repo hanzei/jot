@@ -36,7 +36,9 @@ export function canonicalizeServerOrigin(input: string): string | null {
  * `10.0.2.2` (the Android emulator's host alias) is deliberately absent: it is
  * also an ordinary LAN address.
  */
-const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
+const LOOPBACK_HOSTNAMES = new Set(['localhost', '[::1]']);
+/** All of 127.0.0.0/8 is loopback; `URL` normalizes IPv4 hosts to dotted decimal. */
+const IPV4_LOOPBACK = /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 
 /**
  * Whether talking to this server sends passwords, the session and note content
@@ -49,7 +51,7 @@ export function isInsecureServerOrigin(input: string): boolean {
     return false;
   }
   const { protocol, hostname } = new URL(canonical);
-  return protocol === HTTP_PROTOCOL && !LOOPBACK_HOSTNAMES.has(hostname);
+  return protocol === HTTP_PROTOCOL && !LOOPBACK_HOSTNAMES.has(hostname) && !IPV4_LOOPBACK.test(hostname);
 }
 
 export function createServerId(canonicalServerOrigin: string): string {

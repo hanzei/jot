@@ -23,6 +23,10 @@ describe('parseSessionCookie', () => {
     expect(parseSessionCookie('other=1; Path=/, jot_session=tok; Path=/; Secure')).toEqual({ token: 'tok', secure: true });
   });
 
+  it('skips an emptied jot_session ahead of the real one in a comma-joined header', () => {
+    expect(parseSessionCookie('jot_session=; Max-Age=0, jot_session=tok; Path=/; Secure')).toEqual({ token: 'tok', secure: true });
+  });
+
   it('ignores a cookie whose name merely ends in jot_session', () => {
     expect(parseSessionCookie('old_jot_session=x; Path=/')).toBeNull();
   });
@@ -40,8 +44,9 @@ describe('extractSessionCookie', () => {
     expect(() => extractSessionCookie('jot_session=tok; Secure', 'http://jot.lan:8080')).toThrow(InsecureSessionCookieError);
   });
 
-  it('applies to loopback too, like the server\'s Secure flag does', () => {
-    expect(() => extractSessionCookie('jot_session=tok; Secure', 'http://localhost:8080')).toThrow(InsecureSessionCookieError);
+  it('accepts a Secure cookie over loopback HTTP, as browsers do', () => {
+    expect(extractSessionCookie('jot_session=tok; Secure', 'http://localhost:8080')).toBe('tok');
+    expect(extractSessionCookie('jot_session=tok; Secure', 'http://127.0.0.1:8080')).toBe('tok');
   });
 
   it('accepts a Secure cookie over HTTPS', () => {
