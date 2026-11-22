@@ -19,6 +19,7 @@ import (
 	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/notesvc"
 	"github.com/hanzei/jot/server/internal/sse"
 	"golang.org/x/image/draw"
 	_ "golang.org/x/image/webp"
@@ -31,12 +32,13 @@ type AuthHandler struct {
 	userSettingsStore   *models.UserSettingsStore
 	imageStore          *blobstore.ImageStore
 	hub                 *sse.Hub
+	notes               *notesvc.Service
 	registrationEnabled bool
 	localLoginEnabled   bool
 	passwordMinLength   int
 }
 
-func NewAuthHandler(userStore *models.UserStore, noteStore *models.NoteStore, sessionService *auth.SessionService, userSettingsStore *models.UserSettingsStore, imageStore *blobstore.ImageStore, hub *sse.Hub, registrationEnabled, localLoginEnabled bool, passwordMinLength int) *AuthHandler {
+func NewAuthHandler(userStore *models.UserStore, noteStore *models.NoteStore, sessionService *auth.SessionService, userSettingsStore *models.UserSettingsStore, imageStore *blobstore.ImageStore, hub *sse.Hub, notes *notesvc.Service, registrationEnabled, localLoginEnabled bool, passwordMinLength int) *AuthHandler {
 	return &AuthHandler{
 		userStore:           userStore,
 		noteStore:           noteStore,
@@ -44,6 +46,7 @@ func NewAuthHandler(userStore *models.UserStore, noteStore *models.NoteStore, se
 		userSettingsStore:   userSettingsStore,
 		imageStore:          imageStore,
 		hub:                 hub,
+		notes:               notes,
 		registrationEnabled: registrationEnabled,
 		localLoginEnabled:   localLoginEnabled,
 		passwordMinLength:   passwordMinLength,
@@ -669,7 +672,7 @@ func (h *AuthHandler) DeleteMe(w http.ResponseWriter, r *http.Request) (int, any
 		}
 	}
 
-	if err := deleteUserWithCleanup(r.Context(), h.userStore, h.noteStore, h.imageStore, user.ID); err != nil {
+	if err := h.notes.DeleteUser(r.Context(), user.ID, user.ID); err != nil {
 		return storeError(err, "delete user")
 	}
 

@@ -33,9 +33,15 @@ interface ShareModalProps {
   publicLinks?: PublicLinksConfig | undefined;
   /** Called after this dialog created, changed or revoked the note's public link. */
   onPublicLinkChange?: (noteId: string, link: PublicLink | null) => void;
+  /**
+   * Bumped by the caller when a live update reports the note's collaborators
+   * changed elsewhere (another session, a collaborator leaving or deleting
+   * their account); each change refetches the access list.
+   */
+  sharesVersion?: number;
 }
 
-export default function ShareModal({ note, isOpen, onClose, notesList, currentUserId, publicLinks = PUBLIC_LINKS_DISABLED, onPublicLinkChange }: ShareModalProps) {
+export default function ShareModal({ note, isOpen, onClose, notesList, currentUserId, publicLinks = PUBLIC_LINKS_DISABLED, onPublicLinkChange, sharesVersion = 0 }: ShareModalProps) {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [shares, setShares] = useState<NoteShare[]>([]);
@@ -167,6 +173,15 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
 
     return () => { cancelled = true; };
   }, [noteId, isOpen, loadShares]);
+
+  // The effect above loads the list on open; refetch only for a version
+  // bumped after that.
+  const loadedSharesVersionRef = useRef(sharesVersion);
+  useEffect(() => {
+    if (!isOpen || sharesVersion === loadedSharesVersionRef.current) return;
+    loadedSharesVersionRef.current = sharesVersion;
+    loadShares();
+  }, [isOpen, loadShares, sharesVersion]);
 
   // Handle click outside to close suggestions
   useEffect(() => {

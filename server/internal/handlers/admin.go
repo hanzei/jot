@@ -12,6 +12,7 @@ import (
 	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/notesvc"
 	"github.com/hanzei/jot/server/internal/sse"
 )
 
@@ -23,6 +24,7 @@ type AdminHandler struct {
 	imageStore        *blobstore.ImageStore
 	sessionService    *auth.SessionService
 	hub               *sse.Hub
+	notes             *notesvc.Service
 	startedAt         time.Time
 	passwordMinLength int
 }
@@ -35,6 +37,7 @@ func NewAdminHandler(
 	imageStore *blobstore.ImageStore,
 	sessionService *auth.SessionService,
 	hub *sse.Hub,
+	notes *notesvc.Service,
 	// startedAt must come from time.Now, not models.Now: the uptime is
 	// measured against its monotonic clock reading, which models.Now strips.
 	startedAt time.Time,
@@ -48,6 +51,7 @@ func NewAdminHandler(
 		imageStore:        imageStore,
 		sessionService:    sessionService,
 		hub:               hub,
+		notes:             notes,
 		startedAt:         startedAt,
 		passwordMinLength: passwordMinLength,
 	}
@@ -281,7 +285,7 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusForbidden, nil, apierr.New(apierr.CodeCannotDeleteSelf, "cannot delete your own account")
 	}
 
-	if err := deleteUserWithCleanup(r.Context(), h.userStore, h.noteStore, h.imageStore, targetID); err != nil {
+	if err := h.notes.DeleteUser(r.Context(), targetID, requestingUser.ID); err != nil {
 		return storeError(err, "delete user")
 	}
 
@@ -306,7 +310,8 @@ type DeleteUserNotesResponse struct {
 //	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/admin/users/{id}/notes [delete]
 func (h *AdminHandler) DeleteUserNotes(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	if _, authErr := requireUser(r); authErr != nil {
+	requestingUser, authErr := requireUser(r)
+	if authErr != nil {
 		return http.StatusUnauthorized, nil, authErr
 	}
 
@@ -315,11 +320,10 @@ func (h *AdminHandler) DeleteUserNotes(w http.ResponseWriter, r *http.Request) (
 		return http.StatusBadRequest, nil, idErr
 	}
 
-	deleted, shas, err := h.noteStore.DeleteAllByUser(r.Context(), targetID)
+	deleted, err := h.notes.DeleteAllNotesOf(r.Context(), targetID, requestingUser.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("delete notes for user: %w", err)
 	}
-	blobstore.ReclaimOrphaned(r.Context(), h.noteStore, h.imageStore, shas)
 
 	return http.StatusOK, DeleteUserNotesResponse{Deleted: deleted}, nil
 }

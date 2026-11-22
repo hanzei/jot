@@ -122,6 +122,9 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
   const [newNoteDraft, setNewNoteDraft] = useState<{ type: NoteType; content: string } | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [sharingNote, setSharingNote] = useState<Note | null>(null);
+  // Bumped when the open share dialog's note gains or loses a collaborator
+  // elsewhere, so the dialog refetches its access list.
+  const [sharesVersion, setSharesVersion] = useState(0);
   const [usersById, setUsersById] = useState<Map<string, KnownUser>>(new Map());
   // Whether each grid section still has cards rendered (live or animating out),
   // so the last card can finish its exit animation before the section unmounts.
@@ -590,6 +593,11 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
         setIsShareModalOpen(false);
         setSharingNote(null);
       }
+    }
+
+    if ((event.type === 'note_shared' || event.type === 'note_unshared') && !currentUserLostAccess
+      && sharingNote && note_id === sharingNote.id) {
+      setSharesVersion(v => v + 1);
     }
 
     // An open share dialog shows the note's public link, which another user
@@ -1591,6 +1599,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES, publicLin
             currentUserId={user?.id}
             publicLinks={publicLinks}
             onPublicLinkChange={handlePublicLinkChange}
+            sharesVersion={sharesVersion}
           />
         )}
       </PageContent>

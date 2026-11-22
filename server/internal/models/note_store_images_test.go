@@ -360,9 +360,9 @@ func TestNoteHardDeletePathsReturnImageHashes(t *testing.T) {
 			_, err = store.CreateNoteImage(ctx, "note0000000000allbyu2", userID, "", "b.png", "image/png", 1, "sha-b", 1, 1, 0)
 			require.NoError(t, err)
 
-			deletedCount, shas, err := store.DeleteAllByUser(ctx, userID)
+			deleted, shas, err := store.DeleteAllByUser(ctx, userID)
 			require.NoError(t, err)
-			assert.Equal(t, 2, deletedCount)
+			assert.Len(t, deleted, 2)
 			assert.ElementsMatch(t, []string{"sha-a", "sha-b"}, shas)
 		})
 
