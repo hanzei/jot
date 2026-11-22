@@ -9,6 +9,7 @@ import { answerInsecureWarning } from './helpers/insecureServerAlert';
 import { useAuth } from '../src/store/AuthContext';
 import { getBaseUrl, getStoredServerUrl, probeServerReachability, setServerUrl, subscribeToClientActiveServerChanges } from '../src/api/client';
 import { VALIDATION } from '@jot/shared';
+import { CanceledError } from 'axios';
 import { InsecureSessionCookieError } from '../src/api/sessionCookie';
 
 jest.mock('../src/store/AuthContext', () => ({
@@ -232,6 +233,19 @@ describe('Auth first-run server setup flow', () => {
       await fireEvent.press(getByTestId('login-button'));
 
       expect(await findByText(i18n.t('auth.sessionRequiresHttps'))).toBeTruthy();
+    });
+
+    it('says the server changed when the sign-in was dropped for a server switch', async () => {
+      mockGetStoredServerUrl.mockResolvedValue('http://jot.lan:8080');
+      mockLogin.mockRejectedValueOnce(new CanceledError('Active server changed during sign-in.'));
+      const { getByTestId, findByTestId, findByText } = await renderLoginScreen();
+      await findByTestId('username-input');
+
+      await fireEvent.changeText(getByTestId('username-input'), 'alice');
+      await fireEvent.changeText(getByTestId('password-input'), 'pass1234');
+      await fireEvent.press(getByTestId('login-button'));
+
+      expect(await findByText(i18n.t('auth.ssoServerChanged'))).toBeTruthy();
     });
 
     it('shows the HTTPS-only error when registration is refused for a Secure cookie', async () => {

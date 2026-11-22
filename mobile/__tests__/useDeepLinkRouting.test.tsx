@@ -140,6 +140,32 @@ describe('useDeepLinkRouting and an unknown http:// server (#1337)', () => {
     expect(addServer).not.toHaveBeenCalled();
   });
 
+  it('gives a link for another server its own prompt instead of sharing an open one', async () => {
+    let answerFirst!: (confirmed: boolean) => void;
+    confirm.mockImplementationOnce(() => new Promise<boolean>((resolve) => { answerFirst = resolve; }));
+    await openLink(`jot://notes/a?server=${encodeURIComponent('https://first.example.com')}`);
+    urlHandler?.({ url: `jot://notes/b?server=${encodeURIComponent('http://jot.lan:8080')}` });
+    await flush();
+
+    // The http:// link waits for the open prompt rather than riding on it.
+    expect(confirm).toHaveBeenCalledTimes(1);
+    answerFirst(false);
+    await flush();
+    await flush();
+
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(confirm.mock.calls[1]![0].message).toContain('serverSecurity.insecureMessage');
+  });
+
+  it('shares an open prompt with a repeat link for the same server', async () => {
+    confirm.mockImplementationOnce(() => new Promise<boolean>(() => {}));
+    await openLink(`jot://notes/a?server=${encodeURIComponent('http://jot.lan:8080')}`);
+    urlHandler?.({ url: `jot://notes/b?server=${encodeURIComponent('http://jot.lan:8080')}` });
+    await flush();
+
+    expect(confirm).toHaveBeenCalledTimes(1);
+  });
+
   it('asks without the warning for an https:// server', async () => {
     await openLink(`jot://notes/abc?server=${encodeURIComponent('https://other.example.com')}`);
 

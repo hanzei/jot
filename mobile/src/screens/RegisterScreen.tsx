@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { useContext, useState } from 'react';
 import {
   Text,
@@ -63,6 +64,9 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
       const response = (err as { response?: unknown })?.response;
       if (err instanceof LocalizedError) {
         setError(displayMessage(t, err.messageKey));
+      } else if (axios.isCancel(err)) {
+        // The active server changed while signing in.
+        setError(t('auth.ssoServerChanged'));
       } else if (!response) {
         setError(t('auth.unableToConnect'));
       } else {

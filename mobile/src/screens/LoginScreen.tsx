@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { useCallback, useContext, useEffect, useState } from 'react';
 import {
   View,
@@ -110,6 +111,9 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       const response = (err as { response?: unknown })?.response;
       if (err instanceof LocalizedError) {
         setError(displayMessage(t, err.messageKey));
+      } else if (axios.isCancel(err)) {
+        // The active server changed while signing in.
+        setError(t('auth.ssoServerChanged'));
       } else if (!response) {
         setError(t('auth.unableToConnect'));
       } else {

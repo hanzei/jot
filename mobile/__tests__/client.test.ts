@@ -971,6 +971,20 @@ describe('API Client', () => {
       expect(mockAxiosInstance.post).not.toHaveBeenCalled();
     });
 
+    it.each([
+      ['login', () => auth.login({ username: 'test', password: 'pass' })],
+      ['register', () => auth.register({ username: 'test', password: 'pass' })],
+    ])('%s is dropped when the active server changes during the pre-check', async (_name, call) => {
+      const mockGet = (axios as unknown as { get: jest.Mock }).get;
+      mockGet.mockImplementationOnce(async () => {
+        await setServerUrl('https://switched-mid-login.example.com');
+        throw new Error('Network Error');
+      });
+
+      await expect(call()).rejects.toBeInstanceOf(CanceledError);
+      expect(mockAxiosInstance.post).not.toHaveBeenCalled();
+    });
+
     it('stores a cookie without Secure over http://', async () => {
       mockAxiosInstance.post.mockResolvedValueOnce({
         data: user,

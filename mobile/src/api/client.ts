@@ -649,6 +649,17 @@ export async function clearCachedProfile(): Promise<void> {
   }
 }
 
+/**
+ * The login screen's server switcher stays usable while a sign-in waits on
+ * assertSessionUsable. A switch in that wait must not send the credentials to
+ * a server the check never looked at, so the attempt is dropped (#1337).
+ */
+function assertServerUnchanged(origin: string): void {
+  if (currentBaseUrl !== origin) {
+    throw new CanceledError('Active server changed during sign-in.');
+  }
+}
+
 // The shared endpoints for the auth calls that don't read response headers.
 // (`api/jot.ts` can't be imported here: it imports this module.)
 const sharedAuth = createJotApi(api);
@@ -657,6 +668,7 @@ export const auth = {
   login: async (data: LoginRequest): Promise<AuthResponse> => {
     const origin = currentBaseUrl;
     await assertSessionUsable(origin);
+    assertServerUnchanged(origin);
     const res = await api.post(apiPaths.login, data);
     await storeSessionFromResponse(res.headers as Record<string, string | string[] | undefined>, origin);
     return res.data;
@@ -665,6 +677,7 @@ export const auth = {
   register: async (data: RegisterRequest): Promise<AuthResponse> => {
     const origin = currentBaseUrl;
     await assertSessionUsable(origin);
+    assertServerUnchanged(origin);
     const res = await api.post(apiPaths.register, data);
     await storeSessionFromResponse(res.headers as Record<string, string | string[] | undefined>, origin);
     return res.data;
