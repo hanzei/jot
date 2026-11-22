@@ -140,6 +140,10 @@ func TestSSEStreamEndsWhenCredentialRevoked(t *testing.T) {
 	t.Parallel()
 	ts := setupTestServer(t)
 	const password = "password123"
+	// The first account to register becomes an admin, and the last admin
+	// cannot delete itself. Take that seat before the parallel subtests race
+	// to register, so "deleting the account" never draws it.
+	ts.createTestUser(t, "sseseatadmin", password, true)
 	// Each subtest uses its own users, so they run in parallel.
 
 	t.Run("revoking the session", func(t *testing.T) {
