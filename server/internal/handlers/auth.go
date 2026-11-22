@@ -195,8 +195,13 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, any, e
 //	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/logout [post]
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	if err := h.sessionService.DeleteSession(w, r); err != nil {
+	userID, err := h.sessionService.DeleteSession(w, r)
+	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("delete session: %w", err)
+	}
+	if userID != "" {
+		// End a live-update stream the session holds open in another tab.
+		h.hub.InvalidateUser(userID)
 	}
 
 	return http.StatusNoContent, nil, nil
@@ -425,6 +430,8 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 	if err := h.sessionService.InvalidateUserSessions(r.Context(), currentUser.ID); err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("invalidate user sessions: %w", err)
 	}
+	// Live-update streams opened with those sessions end too.
+	h.hub.InvalidateUser(currentUser.ID)
 
 	// Issue a fresh session for the current request so the user stays logged in.
 	if err := h.sessionService.CreateSession(w, r, currentUser.ID); err != nil {
@@ -678,6 +685,7 @@ func (h *AuthHandler) DeleteMe(w http.ResponseWriter, r *http.Request) (int, any
 
 	// The session row went with the user (ON DELETE CASCADE).
 	h.sessionService.ClearSessionCookie(w)
+	h.hub.InvalidateUser(user.ID)
 
 	return http.StatusNoContent, nil, nil
 }

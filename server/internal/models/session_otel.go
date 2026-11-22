@@ -44,10 +44,16 @@ func (s *SessionStore) GetByUserID(ctx context.Context, userID string) (_ []*Ses
 	return s.inner.GetByUserID(ctx, userID)
 }
 
-func (s *SessionStore) Delete(ctx context.Context, rawToken string) (err error) {
+func (s *SessionStore) Delete(ctx context.Context, rawToken string) (_ string, err error) {
 	ctx, end := startSpan(ctx, s.instr, "SessionStore.Delete", &err)
 	defer end()
 	return s.inner.Delete(ctx, rawToken)
+}
+
+func (s *SessionStore) IsActive(ctx context.Context, tokenHash string) (_ bool, err error) {
+	ctx, end := startSpan(ctx, s.instr, "SessionStore.IsActive", &err)
+	defer end()
+	return s.inner.IsActive(ctx, tokenHash)
 }
 
 func (s *SessionStore) DeleteByUserIDAndTokenHash(ctx context.Context, userID, tokenHash string) (_ bool, err error) {

@@ -38,6 +38,11 @@ type Config struct {
 	LogLevel            string
 	LogFormat           string
 	SlowQueryThreshold  time.Duration
+	// SSECredentialRecheckInterval is how often an open /events stream
+	// re-checks its credential (0 means the handler's default). It is not
+	// read from the environment: the default has an obvious correct value,
+	// and the field exists so tests can shorten it.
+	SSECredentialRecheckInterval time.Duration
 	// TrashRetentionDays is how long a trashed note is kept before the
 	// trash-purge task deletes it for good. 0 turns the purge off.
 	TrashRetentionDays int

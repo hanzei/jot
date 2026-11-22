@@ -13,7 +13,7 @@ func TestHub_Subscribe(t *testing.T) {
 	t.Run("returns readable channel and unsubscribe func", func(t *testing.T) {
 		h, err := NewHub()
 		require.NoError(t, err)
-		ch, unsub := h.Subscribe(t.Context(), "user1")
+		ch, _, unsub := h.Subscribe(t.Context(), "user1")
 
 		require.NotNil(t, ch)
 		require.NotNil(t, unsub)
@@ -22,8 +22,8 @@ func TestHub_Subscribe(t *testing.T) {
 	t.Run("multiple subscribers for same user each get their own channel", func(t *testing.T) {
 		h, err := NewHub()
 		require.NoError(t, err)
-		ch1, _ := h.Subscribe(t.Context(), "user1")
-		ch2, _ := h.Subscribe(t.Context(), "user1")
+		ch1, _, _ := h.Subscribe(t.Context(), "user1")
+		ch2, _, _ := h.Subscribe(t.Context(), "user1")
 
 		assert.NotEqual(t, ch1, ch2)
 
@@ -37,7 +37,7 @@ func TestHub_Unsubscribe(t *testing.T) {
 	t.Run("removes channel and closes it", func(t *testing.T) {
 		h, err := NewHub()
 		require.NoError(t, err)
-		_, unsub := h.Subscribe(t.Context(), "user1")
+		_, _, unsub := h.Subscribe(t.Context(), "user1")
 
 		unsub()
 
@@ -51,8 +51,8 @@ func TestHub_Unsubscribe(t *testing.T) {
 	t.Run("removes only the unsubscribed channel when multiple exist", func(t *testing.T) {
 		h, err := NewHub()
 		require.NoError(t, err)
-		_, unsub1 := h.Subscribe(t.Context(), "user1")
-		_, _ = h.Subscribe(t.Context(), "user1")
+		_, _, unsub1 := h.Subscribe(t.Context(), "user1")
+		_, _, _ = h.Subscribe(t.Context(), "user1")
 
 		unsub1()
 
@@ -64,7 +64,7 @@ func TestHub_Unsubscribe(t *testing.T) {
 	t.Run("closed channel is readable and reflects no pending events", func(t *testing.T) {
 		h, err := NewHub()
 		require.NoError(t, err)
-		ch, unsub := h.Subscribe(t.Context(), "user1")
+		ch, _, unsub := h.Subscribe(t.Context(), "user1")
 		unsub()
 
 		// Channel should be closed; reading from it should return zero value immediately.
@@ -83,7 +83,7 @@ func TestHubPublish(t *testing.T) {
 	t.Run("delivers event to subscribed user", func(t *testing.T) {
 		h, err := NewHub()
 		require.NoError(t, err)
-		ch, unsub := h.Subscribe(t.Context(), "user1")
+		ch, _, unsub := h.Subscribe(t.Context(), "user1")
 		defer unsub()
 
 		h.Publish(t.Context(), []string{"user1"}, event)
@@ -99,8 +99,8 @@ func TestHubPublish(t *testing.T) {
 	t.Run("delivers event to all channels of a user", func(t *testing.T) {
 		h, err := NewHub()
 		require.NoError(t, err)
-		ch1, unsub1 := h.Subscribe(t.Context(), "user1")
-		ch2, unsub2 := h.Subscribe(t.Context(), "user1")
+		ch1, _, unsub1 := h.Subscribe(t.Context(), "user1")
+		ch2, _, unsub2 := h.Subscribe(t.Context(), "user1")
 		defer unsub1()
 		defer unsub2()
 
@@ -124,8 +124,8 @@ func TestHubPublish(t *testing.T) {
 	t.Run("delivers event to multiple different users", func(t *testing.T) {
 		h, err := NewHub()
 		require.NoError(t, err)
-		ch1, unsub1 := h.Subscribe(t.Context(), "user1")
-		ch2, unsub2 := h.Subscribe(t.Context(), "user2")
+		ch1, _, unsub1 := h.Subscribe(t.Context(), "user1")
+		ch2, _, unsub2 := h.Subscribe(t.Context(), "user2")
 		defer unsub1()
 		defer unsub2()
 
@@ -149,7 +149,7 @@ func TestHubPublish(t *testing.T) {
 	t.Run("skips users with no subscribers", func(t *testing.T) {
 		h, err := NewHub()
 		require.NoError(t, err)
-		ch, unsub := h.Subscribe(t.Context(), "user1")
+		ch, _, unsub := h.Subscribe(t.Context(), "user1")
 		defer unsub()
 
 		// Publish to user1 and a non-subscribed user; should not panic or block.
@@ -175,9 +175,9 @@ func TestHubEviction(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			h, err := NewHub()
 			require.NoError(t, err)
-			slow, unsubSlow := h.Subscribe(t.Context(), "user1")
+			slow, _, unsubSlow := h.Subscribe(t.Context(), "user1")
 			defer unsubSlow()
-			fast, unsubFast := h.Subscribe(t.Context(), "user1")
+			fast, _, unsubFast := h.Subscribe(t.Context(), "user1")
 			defer unsubFast()
 
 			for range subscriberBufferSize {
@@ -219,7 +219,7 @@ func TestHubEviction(t *testing.T) {
 	t.Run("unsubscribe after eviction does not double-close", func(t *testing.T) {
 		h, err := NewHub()
 		require.NoError(t, err)
-		_, unsub := h.Subscribe(t.Context(), "user1")
+		_, _, unsub := h.Subscribe(t.Context(), "user1")
 		for range subscriberBufferSize + 1 {
 			h.Publish(t.Context(), []string{"user1"}, event)
 		}
@@ -233,7 +233,7 @@ func TestHubEviction(t *testing.T) {
 	t.Run("Close after eviction does not double-close", func(t *testing.T) {
 		h, err := NewHub()
 		require.NoError(t, err)
-		_, unsub := h.Subscribe(t.Context(), "user1")
+		_, _, unsub := h.Subscribe(t.Context(), "user1")
 		for range subscriberBufferSize + 1 {
 			h.Publish(t.Context(), []string{"user1"}, event)
 		}
@@ -247,9 +247,9 @@ func TestHub(t *testing.T) {
 		t.Run("closes all subscriber channels", func(t *testing.T) {
 			h, err := NewHub()
 			require.NoError(t, err)
-			ch1, _ := h.Subscribe(t.Context(), "user1")
-			ch2, _ := h.Subscribe(t.Context(), "user1")
-			ch3, _ := h.Subscribe(t.Context(), "user2")
+			ch1, _, _ := h.Subscribe(t.Context(), "user1")
+			ch2, _, _ := h.Subscribe(t.Context(), "user1")
+			ch3, _, _ := h.Subscribe(t.Context(), "user2")
 
 			h.Close()
 
@@ -264,7 +264,7 @@ func TestHub(t *testing.T) {
 		t.Run("is idempotent", func(t *testing.T) {
 			h, err := NewHub()
 			require.NoError(t, err)
-			_, _ = h.Subscribe(t.Context(), "user1")
+			_, _, _ = h.Subscribe(t.Context(), "user1")
 
 			// Should not panic when called multiple times.
 			h.Close()
@@ -274,7 +274,7 @@ func TestHub(t *testing.T) {
 		t.Run("unsubscribe after Close does not panic", func(t *testing.T) {
 			h, err := NewHub()
 			require.NoError(t, err)
-			_, unsub := h.Subscribe(t.Context(), "user1")
+			_, _, unsub := h.Subscribe(t.Context(), "user1")
 
 			h.Close()
 
@@ -290,7 +290,7 @@ func TestHub(t *testing.T) {
 			// A connection that races the shutdown must not block forever: the
 			// channel is already closed so the caller's read loop exits, and the
 			// subscription is never registered on the hub.
-			ch, unsub := h.Subscribe(t.Context(), "user1")
+			ch, _, unsub := h.Subscribe(t.Context(), "user1")
 			_, ok := <-ch
 			assert.False(t, ok, "channel should be closed")
 
@@ -308,7 +308,7 @@ func TestHub_ConcurrentAccess(t *testing.T) {
 	t.Run("concurrent Publish and Close do not race or panic", func(t *testing.T) {
 		h, err := NewHub()
 		require.NoError(t, err)
-		_, _ = h.Subscribe(t.Context(), "user1")
+		_, _, _ = h.Subscribe(t.Context(), "user1")
 
 		var wg sync.WaitGroup
 		wg.Add(2)
@@ -331,7 +331,7 @@ func TestHub_ConcurrentAccess(t *testing.T) {
 		// Multiple goroutines subscribing and unsubscribing.
 		for range 10 {
 			wg.Go(func() {
-				ch, unsub := h.Subscribe(t.Context(), "user1")
+				ch, _, unsub := h.Subscribe(t.Context(), "user1")
 				h.Publish(t.Context(), []string{"user1"}, Event{Type: EventNoteUpdated, SourceUserID: "u1", Data: NoteEventData{NoteID: "n1"}})
 				// Drain any delivered event so the channel doesn't block unsubscribe.
 				select {
@@ -349,6 +349,94 @@ func TestHub_ConcurrentAccess(t *testing.T) {
 			})
 		}
 
+		wg.Wait()
+	})
+}
+
+func TestHubInvalidateUser(t *testing.T) {
+	t.Run("signals every stream of that user and no other", func(t *testing.T) {
+		h, err := NewHub()
+		require.NoError(t, err)
+		_, recheck1, unsub1 := h.Subscribe(t.Context(), "user1")
+		defer unsub1()
+		_, recheck2, unsub2 := h.Subscribe(t.Context(), "user1")
+		defer unsub2()
+		_, other, unsubOther := h.Subscribe(t.Context(), "user2")
+		defer unsubOther()
+
+		h.InvalidateUser("user1")
+
+		for _, ch := range []<-chan struct{}{recheck1, recheck2} {
+			select {
+			case <-ch:
+			default:
+				t.Fatal("expected a recheck signal")
+			}
+		}
+		select {
+		case <-other:
+			t.Fatal("another user's stream must not be signaled")
+		default:
+		}
+	})
+
+	t.Run("coalesces repeated signals without blocking", func(t *testing.T) {
+		h, err := NewHub()
+		require.NoError(t, err)
+		_, recheck, unsub := h.Subscribe(t.Context(), "user1")
+		defer unsub()
+
+		h.InvalidateUser("user1")
+		h.InvalidateUser("user1")
+
+		<-recheck
+		select {
+		case <-recheck:
+			t.Fatal("pending signals should coalesce into one")
+		default:
+		}
+	})
+
+	t.Run("is a no-op for unknown users, after unsubscribe, eviction and Close", func(t *testing.T) {
+		h, err := NewHub()
+		require.NoError(t, err)
+		assert.NotPanics(t, func() { h.InvalidateUser("nobody") })
+
+		_, _, unsub := h.Subscribe(t.Context(), "user1")
+		unsub()
+		assert.NotPanics(t, func() { h.InvalidateUser("user1") })
+
+		_, _, unsubEvicted := h.Subscribe(t.Context(), "user1")
+		defer unsubEvicted()
+		for range subscriberBufferSize + 1 {
+			h.Publish(t.Context(), []string{"user1"}, Event{Type: EventNoteCreated})
+		}
+		assert.NotPanics(t, func() { h.InvalidateUser("user1") })
+
+		_, _, unsubClosed := h.Subscribe(t.Context(), "user1")
+		h.Close()
+		assert.NotPanics(t, func() { h.InvalidateUser("user1") })
+		assert.NotPanics(t, unsubClosed)
+	})
+
+	t.Run("races with unsubscribe, eviction and Close without panicking", func(t *testing.T) {
+		h, err := NewHub()
+		require.NoError(t, err)
+		var wg sync.WaitGroup
+		for range 10 {
+			wg.Go(func() {
+				_, _, unsub := h.Subscribe(t.Context(), "user1")
+				h.InvalidateUser("user1")
+				unsub()
+			})
+			wg.Go(func() {
+				for range subscriberBufferSize + 1 {
+					h.Publish(t.Context(), []string{"user1"}, Event{Type: EventNoteCreated})
+				}
+			})
+			wg.Go(func() { h.InvalidateUser("user1") })
+		}
+		wg.Go(h.Close)
 		wg.Wait()
 	})
 }

@@ -135,6 +135,21 @@ func (s *patStore) GetByTokenHash(ctx context.Context, rawToken string) (*Person
 	return &pat, nil
 }
 
+// Exists reports whether the personal access token with the given ID has not
+// been revoked.
+func (s *patStore) Exists(ctx context.Context, id string) (bool, error) {
+	query := `SELECT 1 FROM personal_access_tokens WHERE id = ?`
+	var one int
+	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), id).Scan(&one)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("check personal access token: %w", err)
+	}
+	return true, nil
+}
+
 // RecordUse sets pat's last_used_at to now, unless it is already within
 // PATLastUsedInterval of now. pat is the token as loaded for authentication:
 // when its value is fresh there is no write at all, so a busy token costs

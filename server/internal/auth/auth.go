@@ -44,19 +44,23 @@ func (s *SessionService) CreateSession(w http.ResponseWriter, r *http.Request, u
 	return nil
 }
 
-func (s *SessionService) DeleteSession(w http.ResponseWriter, r *http.Request) error {
+// DeleteSession deletes the session named by the request's cookie, clears
+// the cookie, and returns the ID of the user the session belonged to, or ""
+// when there was none.
+func (s *SessionService) DeleteSession(w http.ResponseWriter, r *http.Request) (string, error) {
 	cookie, err := r.Cookie(SessionCookieName)
 	if err != nil {
-		return nil //nolint:nilerr // No cookie means no session to delete
+		return "", nil //nolint:nilerr // No cookie means no session to delete
 	}
 
-	if err := s.sessionStore.Delete(r.Context(), cookie.Value); err != nil {
-		return err
+	userID, err := s.sessionStore.Delete(r.Context(), cookie.Value)
+	if err != nil {
+		return "", err
 	}
 
 	s.setSessionCookie(w, "", -1)
 
-	return nil
+	return userID, nil
 }
 
 // ClearSessionCookie tells the browser to drop the session cookie without

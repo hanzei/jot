@@ -178,12 +178,16 @@ func newServer(cfg *config.Config, log *logrus.Logger, tracerProvider trace.Trac
 	authHandler := handlers.NewAuthHandler(userStore, noteStore, sessionService, userSettingsStore, imageStore, hub, notes, cfg.RegistrationEnabled, cfg.LocalLoginEnabled, cfg.PasswordMinLength)
 	notesHandler := handlers.NewNotesHandler(noteStore, notes, hub, imageStore, int64(cfg.UploadMaxBytes), cfg.PublicLinksEnabled)
 	labelsHandler := handlers.NewLabelsHandler(labelStore, notes)
-	eventsHandler := handlers.NewEventsHandler(hub)
+	recheckInterval := cfg.SSECredentialRecheckInterval
+	if recheckInterval == 0 {
+		recheckInterval = handlers.DefaultSSECredentialRecheckInterval
+	}
+	eventsHandler := handlers.NewEventsHandler(hub, sessionService, recheckInterval)
 	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, imageStore, sessionService, hub, notes,
 		time.Now(), //nolint:gocritic // uptime reference; keeps the monotonic clock, never persisted
 		cfg.PasswordMinLength)
-	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
-	patsHandler := handlers.NewPATsHandler(patStore)
+	sessionsHandler := handlers.NewSessionsHandler(sessionStore, hub)
+	patsHandler := handlers.NewPATsHandler(patStore, hub)
 
 	// OIDC is optional: buildOIDCHandler returns nil when it is not configured,
 	// and an error (which fails startup, symmetric with a bad DB DSN) if

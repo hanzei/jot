@@ -9,14 +9,16 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/sse"
 )
 
 type PATsHandler struct {
 	patStore *models.PATStore
+	hub      *sse.Hub
 }
 
-func NewPATsHandler(patStore *models.PATStore) *PATsHandler {
-	return &PATsHandler{patStore: patStore}
+func NewPATsHandler(patStore *models.PATStore, hub *sse.Hub) *PATsHandler {
+	return &PATsHandler{patStore: patStore, hub: hub}
 }
 
 type createPATRequest struct {
@@ -145,6 +147,8 @@ func (h *PATsHandler) RevokePAT(w http.ResponseWriter, r *http.Request) (int, an
 	if !deleted {
 		return http.StatusNotFound, nil, errors.New("personal access token not found")
 	}
+	// End a live-update stream opened with the revoked token.
+	h.hub.InvalidateUser(user.ID)
 
 	return http.StatusNoContent, nil, nil
 }
