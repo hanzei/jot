@@ -154,6 +154,12 @@ func TestUserDeleteSSENotifiesRemainingCollaborators(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, owner.Client.UnshareNote(t.Context(), former.ID, sharee.User.ID))
 
+	// binned is in the owner's trash, where they can't fetch it to refresh.
+	binned, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Binned"})
+	require.NoError(t, err)
+	require.NoError(t, owner.Client.ShareNote(t.Context(), binned.ID, sharee.User.ID))
+	require.NoError(t, owner.Client.DeleteNote(t.Context(), binned.ID))
+
 	sseCtx, sseCancel := context.WithCancel(t.Context())
 	t.Cleanup(sseCancel)
 	ownerCh, err := owner.Client.SubscribeSSE(sseCtx)
@@ -163,8 +169,11 @@ func TestUserDeleteSSENotifiesRemainingCollaborators(t *testing.T) {
 
 	require.NoError(t, sharee.Client.DeleteMe(t.Context(), "password123", ""))
 
-	assert.Empty(t, waitForNoteEvents(ownerCh, sse.EventNoteUnshared, []string{group.ID, pair.ID, former.ID}, 3*time.Second),
-		"owner should receive note_unshared for every note the delete changed")
+	// Waiting for binned too runs out the timeout, so its event can't slip
+	// past unseen.
+	assert.Equal(t, []string{binned.ID},
+		waitForNoteEvents(ownerCh, sse.EventNoteUnshared, []string{group.ID, pair.ID, former.ID, binned.ID}, 2*time.Second),
+		"owner should receive note_unshared for every note the delete changed, except the trashed one")
 	event, found := waitForSSEEvent(otherCh, isNoteEvent(sse.EventNoteUnshared, group.ID), 3*time.Second)
 	require.True(t, found, "remaining collaborator should receive note_unshared")
 	assert.Equal(t, sharee.User.ID, event.TargetUserID, "the target is the deleted user")

@@ -127,10 +127,10 @@ type UserNoteAudiences struct {
 	// Owned are the user's own notes, which the delete removes. Each
 	// audience includes the user.
 	Owned []DeletedNoteAudience
-	// SharedWith are other users' notes the delete changes but keeps: those
-	// shared with the user, or holding an image they uploaded (a former
-	// collaborator's uploads stay after the unshare). The audiences exclude
-	// the user.
+	// SharedWith are other users' notes outside the trash that the delete
+	// changes but keeps: those shared with the user, or holding an image
+	// they uploaded (a former collaborator's uploads stay after the
+	// unshare). The audiences exclude the user.
 	SharedWith []DeletedNoteAudience
 }
 
@@ -138,13 +138,13 @@ type UserNoteAudiences struct {
 // the user delete's transaction, before the delete: afterwards the cascade has
 // removed the notes and shares that identify the audiences.
 //
-// Collaborators are counted only for notes outside the trash: trashing a note
-// already sent them note_deleted, so a trashed note's audience is its owner
-// alone.
+// Trashing a note already sent its collaborators note_deleted, so an owned
+// note in the trash has its owner alone as audience, and SharedWith leaves
+// out trashed notes entirely: their owner can't fetch them to refresh.
 func (s *noteStore) GetUserNoteAudiencesTx(ctx context.Context, tx *sql.Tx, userID string) (*UserNoteAudiences, error) {
 	owned, err := s.ownedNoteAudiencesTx(ctx, tx, userID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read owned notes: %w", err)
 	}
 	sharedWith, err := s.queryNoteAudiencesTx(ctx, tx,
 		`WITH affected AS (
@@ -156,6 +156,7 @@ func (s *noteStore) GetUserNoteAudiencesTx(ctx context.Context, tx *sql.Tx, user
 		 )
 		 SELECT n.id, n.user_id FROM notes n
 		   JOIN affected a ON a.note_id = n.id
+		  WHERE n.deleted_at IS NULL
 		 UNION
 		 SELECT ns.note_id, ns.shared_with_user_id FROM note_shares ns
 		   JOIN affected a ON a.note_id = ns.note_id

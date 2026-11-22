@@ -19,9 +19,12 @@ func (s *Service) DeleteUser(ctx context.Context, userID, sourceUserID string) e
 	// Deleting the user cascades away their owned notes, their shares, and
 	// every image they uploaded (note_images.uploader_id cascades too, also
 	// on other users' notes). So the candidate blob hashes and the audiences
-	// to notify must be read before the delete, and inside its transaction
-	// (preDelete) rather than in a query beforehand, which could miss an
-	// image or share added in between.
+	// to notify must be read before the delete, inside its transaction
+	// (preDelete). On SQLite that makes the reads atomic with the delete; on
+	// Postgres (READ COMMITTED) each statement sees the latest commits, so an
+	// image or share added in the moment between a read and the delete is
+	// still missed: its blob waits for the next orphan sweep, and no event
+	// is sent for it.
 	var shas []string
 	var audiences *models.UserNoteAudiences
 	err := s.userStore.DeleteWithCleanup(ctx, userID,

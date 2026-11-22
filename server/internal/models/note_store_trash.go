@@ -309,7 +309,7 @@ func (s *noteStore) DeleteAllByUser(ctx context.Context, userID string) ([]Delet
 
 	deleted, err := s.ownedNoteAudiencesTx(ctx, tx, userID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("read notes to delete: %w", err)
 	}
 	if len(deleted) == 0 {
 		if err = tx.Commit(); err != nil {
@@ -327,7 +327,12 @@ func (s *noteStore) DeleteAllByUser(ctx context.Context, userID string) ([]Delet
 		return nil, nil, fmt.Errorf("delete note dependencies: %w", err)
 	}
 
-	if _, err = tx.ExecContext(ctx, s.d.RewritePlaceholders(`DELETE FROM notes WHERE user_id = ?`), userID); err != nil {
+	// Delete exactly the notes read above: on Postgres (READ COMMITTED) a
+	// plain user_id match would also take a note created since, whose
+	// dependencies and audience were never read.
+	placeholders, args := buildInClauseArgs(noteIDs)
+	deleteQuery := `DELETE FROM notes WHERE id IN (` + placeholders + `)` // #nosec G202 -- only generated "?" placeholders are concatenated
+	if _, err = tx.ExecContext(ctx, s.d.RewritePlaceholders(deleteQuery), args...); err != nil {
 		return nil, nil, fmt.Errorf("failed to delete notes: %w", err)
 	}
 
