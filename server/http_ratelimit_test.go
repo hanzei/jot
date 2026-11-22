@@ -218,24 +218,22 @@ func TestRateLimiting(t *testing.T) {
 		assert.Equal(t, http.StatusOK, meStatus)
 	})
 
-	// httptest's in-memory network gives every client the peer address
-	// 192.0.2.1, so trusting it makes the test client a trusted proxy.
-	testPeer := []netip.Prefix{netip.MustParsePrefix("192.0.2.1/32")}
-
 	t.Run("behind a trusted proxy, forwarded clients get separate auth buckets", func(t *testing.T) {
 		ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
 			cfg.RateLimitEnabled = true
 			cfg.RateLimitAuthPerMinute = 1
-			cfg.TrustedProxies = testPeer
+			// httptest's in-memory network gives every client the peer
+			// address 192.0.2.1, so trusting it makes the test client a
+			// trusted proxy.
+			cfg.TrustedProxies = []netip.Prefix{netip.MustParsePrefix("192.0.2.1/32")}
 		})
-		c := ts.newClient().HTTPClient()
 
-		assert.Equal(t, http.StatusUnauthorized, loginFrom(t, ts, c, "203.0.113.1"))
-		assert.Equal(t, http.StatusTooManyRequests, loginFrom(t, ts, c, "203.0.113.1"))
+		assert.Equal(t, http.StatusUnauthorized, loginFrom(t, ts, "203.0.113.1"))
+		assert.Equal(t, http.StatusTooManyRequests, loginFrom(t, ts, "203.0.113.1"))
 		// Another client behind the same proxy has its own bucket.
-		assert.Equal(t, http.StatusUnauthorized, loginFrom(t, ts, c, "203.0.113.2"))
+		assert.Equal(t, http.StatusUnauthorized, loginFrom(t, ts, "203.0.113.2"))
 		// So does the proxy itself when it sends no header (a health check).
-		assert.Equal(t, http.StatusUnauthorized, loginFrom(t, ts, c, ""))
+		assert.Equal(t, http.StatusUnauthorized, loginFrom(t, ts, ""))
 	})
 
 	for _, tc := range []struct {
@@ -251,24 +249,23 @@ func TestRateLimiting(t *testing.T) {
 				cfg.RateLimitAuthPerMinute = 1
 				cfg.TrustedProxies = tc.trusted
 			})
-			c := ts.newClient().HTTPClient()
 
-			assert.Equal(t, http.StatusUnauthorized, loginFrom(t, ts, c, "203.0.113.1"))
+			assert.Equal(t, http.StatusUnauthorized, loginFrom(t, ts, "203.0.113.1"))
 			// Rotating the header does not escape the peer's bucket.
-			assert.Equal(t, http.StatusTooManyRequests, loginFrom(t, ts, c, "203.0.113.2"))
+			assert.Equal(t, http.StatusTooManyRequests, loginFrom(t, ts, "203.0.113.2"))
 		})
 	}
 }
 
 // loginFrom attempts a login with wrong credentials, sending xff as the
 // X-Forwarded-For header unless it is empty, and returns the status code.
-func loginFrom(t *testing.T, ts *TestServer, c *http.Client, xff string) int {
+func loginFrom(t *testing.T, ts *TestServer, xff string) int {
 	t.Helper()
 	header := http.Header{"Content-Type": {"application/json"}}
 	if xff != "" {
 		header.Set("X-Forwarded-For", xff)
 	}
-	status, _, _ := rawRequest(t, c, http.MethodPost, ts.HTTPServer.URL+"/api/v1/login",
+	status, _, _ := rawRequest(t, ts.HTTPServer.Client(), http.MethodPost, ts.HTTPServer.URL+"/api/v1/login",
 		strings.NewReader(`{"username":"nobody","password":"wrongpassword"}`), header)
 	return status
 }

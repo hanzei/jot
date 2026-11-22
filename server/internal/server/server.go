@@ -388,7 +388,7 @@ func (s *Server) setupRoutes() error {
 	s.router.Use(chiRouteSpanNamer)
 	// Before the request logger, which records the client IP, and every
 	// per-IP rate limit below.
-	s.router.Use(clientIP(s.cfg.TrustedProxies))
+	s.router.Use(clientIP(s.cfg.TrustedProxies)...)
 	if len(s.cfg.TrustedProxies) > 0 {
 		s.log.Infof("Trusting X-Forwarded-For from proxies in: %v", s.cfg.TrustedProxies)
 	}

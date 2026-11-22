@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/stretchr/testify/assert"
 )
@@ -99,7 +100,7 @@ func TestClientIP(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			var got string
-			h := clientIP(tt.trusted)(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+			h := chi.Chain(clientIP(tt.trusted)...).Handler(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 				got = middleware.GetClientIP(r.Context())
 			}))
 			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)

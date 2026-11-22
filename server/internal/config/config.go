@@ -179,26 +179,30 @@ func parseTrustedProxies(name, v string) ([]netip.Prefix, error) {
 		if entry == "" {
 			continue
 		}
+		invalid := func(why string) error {
+			return fmt.Errorf("invalid %s entry %q: %s", name, entry, why)
+		}
+		const notAnAddress = "must be an IP address or CIDR prefix such as 172.30.0.0/24"
 		var prefix netip.Prefix
 		if strings.Contains(entry, "/") {
 			p, err := netip.ParsePrefix(entry)
 			if err != nil {
-				return nil, fmt.Errorf("invalid %s entry %q: must be an IP address or CIDR prefix such as 172.30.0.0/24", name, entry)
+				return nil, invalid(notAnAddress)
 			}
 			if p.Addr().Is4In6() {
-				return nil, fmt.Errorf("invalid %s entry %q: write an IPv4-mapped prefix in IPv4 form", name, entry)
+				return nil, invalid("write an IPv4-mapped prefix in IPv4 form")
 			}
 			prefix = p.Masked()
 		} else {
 			addr, err := netip.ParseAddr(entry)
 			if err != nil || addr.Zone() != "" {
-				return nil, fmt.Errorf("invalid %s entry %q: must be an IP address or CIDR prefix such as 172.30.0.0/24", name, entry)
+				return nil, invalid(notAnAddress)
 			}
 			addr = addr.Unmap()
 			prefix = netip.PrefixFrom(addr, addr.BitLen())
 		}
 		if prefix.Bits() == 0 {
-			return nil, fmt.Errorf("invalid %s entry %q: trusting every address makes no hop the client, so list your proxies' addresses instead", name, entry)
+			return nil, invalid("trusting every address makes no hop the client, so list your proxies' addresses instead")
 		}
 		prefixes = append(prefixes, prefix)
 	}

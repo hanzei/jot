@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/netip"
 	"path/filepath"
 	"testing"
 	"time"
@@ -498,31 +499,25 @@ func TestLoadRateLimitInvalidValueErrors(t *testing.T) {
 func TestLoadTrustedProxies(t *testing.T) {
 	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
 
+	pfx := netip.MustParsePrefix
 	valid := []struct {
 		name  string
 		value string
-		want  []string
+		want  []netip.Prefix
 	}{
 		{name: "unset", value: "", want: nil},
-		{name: "prefixes", value: "127.0.0.1/32,::1/128", want: []string{"127.0.0.1/32", "::1/128"}},
-		{name: "bare addresses become single hosts", value: "10.0.0.2, ::1", want: []string{"10.0.0.2/32", "::1/128"}},
-		{name: "host bits are masked", value: "172.18.0.5/16", want: []string{"172.18.0.0/16"}},
-		{name: "v4-mapped address is folded", value: "::ffff:10.0.0.2", want: []string{"10.0.0.2/32"}},
-		{name: "empty entries are skipped", value: " 10.0.0.0/8 , ,", want: []string{"10.0.0.0/8"}},
+		{name: "prefixes", value: "127.0.0.1/32,::1/128", want: []netip.Prefix{pfx("127.0.0.1/32"), pfx("::1/128")}},
+		{name: "bare addresses become single hosts", value: "10.0.0.2, ::1", want: []netip.Prefix{pfx("10.0.0.2/32"), pfx("::1/128")}},
+		{name: "host bits are masked", value: "172.18.0.5/16", want: []netip.Prefix{pfx("172.18.0.0/16")}},
+		{name: "v4-mapped address is folded", value: "::ffff:10.0.0.2", want: []netip.Prefix{pfx("10.0.0.2/32")}},
+		{name: "empty entries are skipped", value: " 10.0.0.0/8 , ,", want: []netip.Prefix{pfx("10.0.0.0/8")}},
 	}
 	for _, tt := range valid {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("JOT_TRUSTED_PROXIES", tt.value)
 			cfg, err := Load()
 			require.NoError(t, err)
-			var got []string
-			if len(cfg.TrustedProxies) > 0 {
-				got = make([]string, 0, len(cfg.TrustedProxies))
-			}
-			for _, p := range cfg.TrustedProxies {
-				got = append(got, p.String())
-			}
-			assert.Equal(t, tt.want, got)
+			assert.Equal(t, tt.want, cfg.TrustedProxies)
 		})
 	}
 
