@@ -183,7 +183,7 @@ func parseTrustedProxies(name, v string) ([]netip.Prefix, error) {
 		if strings.Contains(entry, "/") {
 			p, err := netip.ParsePrefix(entry)
 			if err != nil {
-				return nil, fmt.Errorf("invalid %s entry %q: must be an IP address or CIDR prefix such as 172.16.0.0/12", name, entry)
+				return nil, fmt.Errorf("invalid %s entry %q: must be an IP address or CIDR prefix such as 172.30.0.0/24", name, entry)
 			}
 			if p.Addr().Is4In6() {
 				return nil, fmt.Errorf("invalid %s entry %q: write an IPv4-mapped prefix in IPv4 form", name, entry)
@@ -192,7 +192,7 @@ func parseTrustedProxies(name, v string) ([]netip.Prefix, error) {
 		} else {
 			addr, err := netip.ParseAddr(entry)
 			if err != nil || addr.Zone() != "" {
-				return nil, fmt.Errorf("invalid %s entry %q: must be an IP address or CIDR prefix such as 172.16.0.0/12", name, entry)
+				return nil, fmt.Errorf("invalid %s entry %q: must be an IP address or CIDR prefix such as 172.30.0.0/24", name, entry)
 			}
 			addr = addr.Unmap()
 			prefix = netip.PrefixFrom(addr, addr.BitLen())

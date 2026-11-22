@@ -468,7 +468,7 @@ risk throttling normal multi-user traffic behind a shared IP — see
 | `JOT_RATE_LIMIT_AUTH_PER_MINUTE` | `20` | Requests/min per client IP, shared by `/register`, `/login`, and `/logout` (none of which have an authenticated user to key on yet). |
 | `JOT_RATE_LIMIT_PUBLIC_PER_MINUTE` | `120` | Requests/min per client IP, shared by the unauthenticated public link endpoints: a public note and its images and thumbnails (`/api/v1/public/notes/…`), and the `/share/…` viewer page, which looks the link up for its preview card. Dead links count too, so guessing tokens is throttled. |
 | `JOT_RATE_LIMIT_EXPENSIVE_PER_MINUTE` | `20` | Requests/min per user, shared by note search (a full-text index query, from `GET /notes?search=` or the MCP `list_notes` tool), import, export (streams every image), and image upload (decode/resize/thumbnail) — the costliest operations per request. These also count against the baseline limit above; the expensive limit is an additional, stricter cap on top of it. Plain note listing (no `search` query) is unaffected by this limit and only counts against the baseline. |
-| `JOT_TRUSTED_PROXIES` | empty | Comma-separated reverse proxies whose `X-Forwarded-For` header Jot believes when working out a request's client IP, as CIDR prefixes (`172.16.0.0/12`) or bare addresses (`127.0.0.1`, `::1`). Empty trusts no header and keys the per-IP limits on the TCP peer. See [Behind a reverse proxy](#behind-a-reverse-proxy). |
+| `JOT_TRUSTED_PROXIES` | empty | Comma-separated reverse proxies whose `X-Forwarded-For` header Jot believes when working out a request's client IP, as CIDR prefixes (`172.30.0.0/24`) or bare addresses (`127.0.0.1`, `::1`). Empty trusts no header and keys the per-IP limits on the TCP peer. See [Behind a reverse proxy](#behind-a-reverse-proxy). |
 
 #### Behind a reverse proxy
 
@@ -489,6 +489,12 @@ address and cannot spoof another. When a trusted proxy sends no usable header
 (its own health checks, or a malformed chain), Jot falls back to the proxy's
 address. Trusting `0.0.0.0/0` or `::/0` is rejected: trusting every hop would
 leave no client to find.
+
+List only addresses that belong to your proxies. Jot skips every trusted
+address when it looks for the client, so a client whose own address falls in
+a trusted range can put a forged address in front of it and rotate that to
+escape the limit. A broad range such as `10.0.0.0/8` or `172.16.0.0/12` can
+cover your LAN's clients as well as the proxy.
 
 The proxy must set `X-Forwarded-For`. Caddy and Traefik do by default; nginx
 needs it spelled out:
@@ -513,12 +519,21 @@ location / {
       image: hanzei/jot:latest
       environment:
         JOT_TRUSTED_PROXIES: 172.30.0.0/24
+      volumes:
+        - ./data:/data
       # No "ports:" here: only the proxy reaches Jot.
       networks: [web]
+      restart: unless-stopped
     caddy:
       image: caddy:2
       ports: ["80:80", "443:443"]
+      volumes:
+        - ./Caddyfile:/etc/caddy/Caddyfile:ro
+        - caddy_data:/data
       networks: [web]
+      restart: unless-stopped
+  volumes:
+    caddy_data:
   networks:
     web:
       ipam:
@@ -526,7 +541,7 @@ location / {
           - subnet: 172.30.0.0/24
   ```
 
-  The Caddyfile then points at the service name: `reverse_proxy jot:8080`.
+  The `Caddyfile` points at the service name: `jot.example.com { reverse_proxy jot:8080 }`.
 
   **Do not also publish Jot's port** (`ports: "8080:8080"`) when you trust a
   Docker network. Depending on the Docker setup (rootless Docker, Docker
