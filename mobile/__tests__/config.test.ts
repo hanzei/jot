@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { probeServerConfig } from '../src/api/config';
+import { probeServerConfig, serverRequiresHttpsSession } from '../src/api/config';
 
 jest.mock('axios', () => ({
   __esModule: true,
@@ -50,5 +50,45 @@ describe('probeServerConfig', () => {
     const result = await probeServerConfig('https://example.com');
 
     expect(result).toBeNull();
+  });
+});
+
+describe('serverRequiresHttpsSession (#1337)', () => {
+  function serveConfig(config: Record<string, unknown>) {
+    mockAxiosGet.mockImplementation(async (_url: string, opts: { headers: Record<string, string> }) => ({
+      data: config,
+      headers: { 'x-request-id': opts.headers['X-Request-Id'] },
+    }));
+  }
+
+  beforeEach(() => {
+    mockAxiosGet.mockReset();
+  });
+
+  it('is true for a plain-HTTP server whose cookie is Secure', async () => {
+    serveConfig({ cookie_secure: true });
+    await expect(serverRequiresHttpsSession('http://jot.lan:8080')).resolves.toBe(true);
+  });
+
+  it('is false for a plain-HTTP server with JOT_COOKIE_SECURE=false', async () => {
+    serveConfig({ cookie_secure: false });
+    await expect(serverRequiresHttpsSession('http://jot.lan:8080')).resolves.toBe(false);
+  });
+
+  it('is false for an older server that does not report cookie_secure', async () => {
+    serveConfig({ registration_enabled: true });
+    await expect(serverRequiresHttpsSession('http://jot.lan:8080')).resolves.toBe(false);
+  });
+
+  it('is false when the config cannot be read', async () => {
+    mockAxiosGet.mockRejectedValue(new Error('Network Error'));
+    await expect(serverRequiresHttpsSession('http://jot.lan:8080')).resolves.toBe(false);
+  });
+
+  it('does not ask an https:// or loopback server', async () => {
+    serveConfig({ cookie_secure: true });
+    await expect(serverRequiresHttpsSession('https://jot.example.com')).resolves.toBe(false);
+    await expect(serverRequiresHttpsSession('http://localhost:8080')).resolves.toBe(false);
+    expect(mockAxiosGet).not.toHaveBeenCalled();
   });
 });

@@ -769,6 +769,10 @@ type configResponse struct {
 	// note is kept before it is deleted for good. 0 means it is kept until
 	// the trash is emptied.
 	TrashRetentionDays int `json:"trash_retention_days"`
+	// CookieSecure is JOT_COOKIE_SECURE: whether the session cookie is marked
+	// Secure. A client on a plain-HTTP address checks it before logging in or
+	// registering, since such a session could not be kept (#1337).
+	CookieSecure bool `json:"cookie_secure"`
 }
 
 // ssoConfig is the public, login-UI-facing slice of the OIDC configuration.
@@ -798,6 +802,7 @@ func (s *Server) handleConfig(_ http.ResponseWriter, _ *http.Request) (int, any,
 		RegistrationEnabled: s.cfg.RegistrationEnabled,
 		PasswordMinLength:   s.cfg.PasswordMinLength,
 		UploadMaxBytes:      s.cfg.UploadMaxBytes,
+		CookieSecure:        s.cfg.CookieSecure,
 		SSO: ssoConfig{
 			Enabled:           s.cfg.OIDCEnabled,
 			ProviderName:      s.cfg.OIDCProviderName,

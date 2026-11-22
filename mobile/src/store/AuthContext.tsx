@@ -13,7 +13,10 @@ import {
   clearCachedProfile,
   initializeServerContext,
   getActiveServerId,
+  getBaseUrl,
 } from '../api/client';
+import { serverRequiresHttpsSession } from '../api/config';
+import { InsecureSessionCookieError } from '../api/sessionCookie';
 import { isTransientHttpStatus } from '../db/syncQueue';
 import { runOidcBrowserFlow, SsoFlowError } from './oidcFlow';
 import { getLocalIdentity, enableLocalMode as persistEnableLocalMode, disableLocalMode, setLocalModeActive, updateLocalSettings, updateLocalUser } from './localMode';
@@ -291,23 +294,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [clearAuth, applyServerProfile]);
 
+  // Refuses before the request when the server's session could not be kept
+  // over this plain-HTTP address (#1337): registering first would leave an
+  // account the user cannot sign in to from here.
+  const assertSessionUsable = useCallback(async () => {
+    if (await serverRequiresHttpsSession(getBaseUrl())) {
+      throw new InsecureSessionCookieError();
+    }
+  }, []);
+
   const login = useCallback(async (username: string, password: string) => {
+    await assertSessionUsable();
     const serverId = getActiveServerId();
     const response = await auth.login({ username, password });
     applyServerProfile(response.user, response.settings, serverId);
     setSessionEndedReason(null);
     await cacheAuthProfile(response, serverId ?? undefined);
-  }, [applyServerProfile]);
+  }, [applyServerProfile, assertSessionUsable]);
 
   const register = useCallback(async (username: string, password: string) => {
+    await assertSessionUsable();
     const serverId = getActiveServerId();
     const response = await auth.register({ username, password });
     applyServerProfile(response.user, response.settings, serverId);
     setSessionEndedReason(null);
     await cacheAuthProfile(response, serverId ?? undefined);
-  }, [applyServerProfile]);
+  }, [applyServerProfile, assertSessionUsable]);
 
   const loginWithSso = useCallback(async (): Promise<'signedIn' | 'cancelled'> => {
+    await assertSessionUsable();
     const outcome = await runOidcBrowserFlow('login');
     if (outcome.type === 'cancelled') {
       return 'cancelled';
@@ -322,7 +337,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     applyServerProfile(response.user, response.settings, serverId);
     setSessionEndedReason(null);
     return 'signedIn';
-  }, [applyServerProfile]);
+  }, [applyServerProfile, assertSessionUsable]);
 
   const enableLocalMode = useCallback(async () => {
     const identity = await persistEnableLocalMode();

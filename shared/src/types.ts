@@ -40,6 +40,13 @@ export interface ServerConfig {
    * value as `DEFAULT_TRASH_RETENTION_DAYS`.
    */
   trash_retention_days?: number;
+  /**
+   * `JOT_COOKIE_SECURE`: whether the session cookie is marked `Secure`, so a
+   * session only works over HTTPS. A client on a plain-HTTP address checks it
+   * before logging in or registering (#1337). Optional for the same reason as
+   * `public_links_enabled`; a missing value means unknown.
+   */
+  cookie_secure?: boolean;
 }
 
 export interface AboutInfo {

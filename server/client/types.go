@@ -467,6 +467,9 @@ type ServerConfig struct {
 	// TrashRetentionDays is how many days a trashed note is kept before it is
 	// deleted for good; 0 means it is kept until the trash is emptied.
 	TrashRetentionDays int `json:"trash_retention_days"`
+	// CookieSecure reports whether the session cookie is marked Secure, so a
+	// session is only usable over HTTPS.
+	CookieSecure bool `json:"cookie_secure"`
 }
 
 // SSOConfig is the public SSO slice of the server config: only what the login
