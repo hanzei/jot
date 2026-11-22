@@ -136,7 +136,7 @@ describe('SettingsScreen import section', () => {
     mockInvalidateQueries.mockClear();
     mockListSessions.mockResolvedValue([]);
     mockGetNotes.mockResolvedValue([]);
-    mockSaveServerSnapshotNotes.mockResolvedValue(undefined);
+    mockSaveServerSnapshotNotes.mockResolvedValue(new Set());
     mockGetLabels.mockResolvedValue([]);
     mockSaveLabels.mockResolvedValue(undefined);
     await i18n.changeLanguage('en');

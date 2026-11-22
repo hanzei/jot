@@ -380,23 +380,29 @@ export async function saveNote(db: SQLiteDatabase, note: Note, options?: SaveNot
 /**
  * Persist a batch of notes without opening its own transaction. Must only be
  * called from within an existing transaction context (see saveNotes / reconcileServerNotesScope).
+ * Returns the ids of the notes saved in full, not skipped.
  */
 async function saveNotesInTx(
   db: SQLiteDatabase,
   notes: Note[],
   options?: SaveNoteOptions,
-): Promise<void> {
+): Promise<Set<string>> {
+  const saved = new Set<string>();
   for (const note of notes) {
     if (options?.skipNoteIds?.has(note.id)) {
       await saveSkippedNote(db, note, options);
       continue;
     }
     await saveNoteInTx(db, note, options?.serverSnapshot);
+    saved.add(note.id);
   }
+  return saved;
 }
 
 export async function saveNotes(db: SQLiteDatabase, notes: Note[], options?: SaveNoteOptions): Promise<void> {
-  await withSerializedTransaction(db, () => saveNotesInTx(db, notes, options));
+  await withSerializedTransaction(db, async () => {
+    await saveNotesInTx(db, notes, options);
+  });
 }
 
 export async function getLocalNotes(db: SQLiteDatabase, params?: GetNotesParams): Promise<Note[]> {
@@ -1139,17 +1145,20 @@ export async function reconcileServerNotesScope(
 /**
  * Persist server snapshot notes without pruning, skipping the notes
  * `readSkips` returns. Like {@link reconcileServerNotesScope}, the skip
- * set is read inside the write's own transaction (#1265).
+ * set is read inside the write's own transaction (#1265). Returns the ids of
+ * the notes saved in full.
  */
 export async function saveServerSnapshotNotes(
   db: SQLiteDatabase,
   serverNotes: Note[],
   readSkips: () => Promise<SnapshotSkips>,
-): Promise<void> {
+): Promise<Set<string>> {
+  let saved = new Set<string>();
   await withSerializedTransaction(db, async () => {
     const { skipNoteIds, writtenNoteIds } = await readSkips();
-    await saveNotesInTx(db, serverNotes, { skipNoteIds, writtenNoteIds, serverSnapshot: true });
+    saved = await saveNotesInTx(db, serverNotes, { skipNoteIds, writtenNoteIds, serverSnapshot: true });
   });
+  return saved;
 }
 
 // --- Granular local list-item mutations -----------------------------------

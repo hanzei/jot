@@ -11,6 +11,7 @@ import { makeLabel, makeListNote, makeTextNote, seedQueueEntry } from './helpers
 import { getLocalNote, saveNote } from '../src/db/noteQueries';
 import { silenceConsole } from './helpers/consoleGuard';
 import { markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
+import { recordWriteLanded } from '../src/db/snapshotGate';
 import {
   labelsQueryKey,
   noteLocalQueryKey,
@@ -579,6 +580,123 @@ describe('useSSE', () => {
 
     expect(invalidateSpy).not.toHaveBeenCalled();
     expect(onNotify).not.toHaveBeenCalled();
+  });
+
+  // A collaborator's payload built before this device's write landed, but
+  // received after it, rolls the row back; this device's own echo arrives after
+  // it and triggers a fresh fetch (#1273). The landing record is process-wide,
+  // so each test uses its own note id.
+  describe('own note_updated echo after a stale collaborator payload (#1273)', () => {
+    const mine = (id: string) => makeTextNote({ id, content: 'mine', version: 5, updated_at: '2026-11-01T10:05:00Z' });
+    const theirsBefore = (id: string) => makeTextNote({ id, content: 'theirs, before mine', version: 4, updated_at: '2026-11-01T10:04:00Z' });
+    const foreign = (id: string, note: Note): SSEEvent => ({ type: 'note_updated', source_user_id: 'other-user', data: { note_id: id, note } });
+    const ownEcho = (id: string, note: Note): SSEEvent => ({ type: 'note_updated', source_user_id: 'current-user', client_id: TEST_CLIENT_ID, data: { note_id: id, note } });
+
+    const connect = async () => {
+      const { queryClient, Wrapper } = createWrapper();
+      const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+      await renderHook(() => useSSE(), { wrapper: Wrapper });
+      invalidateSpy.mockClear();
+      return invalidateSpy;
+    };
+
+    // Delivered back to back, as a delayed stream does: the echo must still
+    // see the collaborator payload's save, which awaits a read before it.
+    const deliverBoth = async (id: string) => {
+      await act(async () => {
+        capturedCallback?.(foreign(id, theirsBefore(id)));
+        capturedCallback?.(ownEcho(id, mine(id)));
+      });
+    };
+
+    it('fetches the note again and restores the newer state', async () => {
+      const id = 'echo-repair';
+      await saveNote(db, mine(id));
+      recordWriteLanded([id]);
+      mockGetNote.mockResolvedValue(mine(id));
+      const invalidateSpy = await connect();
+
+      await deliverBoth(id);
+
+      await waitFor(() => expect(mockGetNote).toHaveBeenCalledWith(id));
+      await waitFor(async () => expect(await getLocalNote(db, id)).toMatchObject({ content: 'mine', version: 5 }));
+      await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey(id) }));
+    });
+
+    it('fetches only once per collaborator payload', async () => {
+      const id = 'echo-once';
+      await saveNote(db, mine(id));
+      recordWriteLanded([id]);
+      mockGetNote.mockResolvedValue(mine(id));
+      await connect();
+
+      await deliverBoth(id);
+      await waitFor(() => expect(mockGetNote).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        capturedCallback?.(ownEcho(id, mine(id)));
+      });
+      await flushMicrotasks();
+
+      expect(mockGetNote).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not fetch when no collaborator payload was saved', async () => {
+      const id = 'echo-alone';
+      await saveNote(db, mine(id));
+      recordWriteLanded([id]);
+      const invalidateSpy = await connect();
+
+      await act(async () => {
+        capturedCallback?.(ownEcho(id, mine(id)));
+      });
+      await flushMicrotasks();
+
+      expect(mockGetNote).not.toHaveBeenCalled();
+      expect(invalidateSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not fetch when the collaborator payload was skipped for a pending edit', async () => {
+      const id = 'echo-protected';
+      await saveNote(db, mine(id));
+      await protectNote(id);
+      recordWriteLanded([id]);
+      await connect();
+
+      await deliverBoth(id);
+      await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalled());
+      await flushMicrotasks();
+
+      expect(mockGetNote).not.toHaveBeenCalled();
+      expect(await getLocalNote(db, id)).toMatchObject({ content: 'mine' });
+    });
+
+    it('does not fetch when no write of this device landed on the note', async () => {
+      const id = 'echo-no-landing';
+      await saveNote(db, mine(id));
+      await connect();
+
+      await deliverBoth(id);
+      await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalled());
+      await flushMicrotasks();
+
+      expect(mockGetNote).not.toHaveBeenCalled();
+    });
+
+    it('still drops other event types from this device', async () => {
+      const id = 'echo-other-type';
+      await saveNote(db, mine(id));
+      recordWriteLanded([id]);
+      await connect();
+
+      await act(async () => {
+        capturedCallback?.(foreign(id, theirsBefore(id)));
+        capturedCallback?.({ type: 'note_shared', source_user_id: 'current-user', client_id: TEST_CLIENT_ID, data: { note_id: id, note: mine(id) } });
+      });
+      await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalledTimes(1));
+      await flushMicrotasks();
+
+      expect(mockGetNote).not.toHaveBeenCalled();
+    });
   });
 
   it('notifies after persisting a note shared with the current user', async () => {

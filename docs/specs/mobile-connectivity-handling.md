@@ -314,7 +314,7 @@ Server state arrives as a **snapshot** (a fetch or an SSE event) or as the
   not refuse a lower `version`, which would freeze every note after an operator
   restores a server backup.
 - **`updated_at` is for ordering only.** Image uploads and removals bump it on
-  the server, and this device gets no SSE echo of its own, so it stamps the
+  the server, and this device applies no SSE echo of its own, so it stamps the
   local row itself: the image's `created_at` after an upload, its own clock
   after a removal. Neither moves it backward.
 
@@ -327,8 +327,18 @@ Server state arrives as a **snapshot** (a fetch or an SSE event) or as the
 - **Check, write and delete the queue row in one transaction.**
 
 **Convergence:** after a drain that sent anything, pull the notes it touched.
-This device gets no SSE echo of its own writes. A note the server reports gone
-is tombstoned under the snapshot rules.
+This device never applies an SSE echo of its own writes. A note the server
+reports gone is tombstoned under the snapshot rules.
+
+**A late collaborator event:** an SSE payload is built on the server before it
+is received, so a collaborator's payload built before this device's write
+landed, but received after it, passes the snapshot gate and rolls the note back.
+This device's own echo of the write arrives after that payload, on the same
+stream. When a collaborator's payload was saved to a note after one of this
+device's writes on it landed, the echo triggers a fresh fetch of the note,
+marked like any other. The echo itself is not applied: an echo of an earlier
+write can arrive after a later one landed. Events for one note are handled in
+arrival order, so the echo sees the saves before it.
 
 **Labels** follow the same rule per label: a label with a queued create, rename
 or delete is neither updated nor pruned by a label sync.
@@ -431,13 +441,17 @@ send its edit times, so merging (§8.5) loses nothing history would keep.
 | Reachability flag, Jot response check | `api/serverReachability.ts`, `api/jotResponse.ts`, `api/client.ts` |
 | Outbox, drain, rejection policy, applying responses | `db/syncQueue.ts` |
 | Queue keys, merging, own-version steps | `db/queueKeys.ts`, `db/queueMerge.ts`, `db/ownVersions.ts` |
-| Local note rows, snapshot gate | `db/noteQueries.ts`, `db/snapshotGate.ts` |
+| Local note rows, snapshot gate | `db/noteQueries.ts`, `db/snapshotGate.ts`, `db/foreignSnapshots.ts` |
 | Failed-change review | `hooks/useSyncFailures.ts` |
 | Account ownership | `db/accountOwner.ts`, `store/AccountDataGate.tsx` |
 | Reads, SSE, catch-up resync | `hooks/useOfflineNotes.ts`, `api/events.ts`, `hooks/useSSE.ts`, `store/resyncEvents.ts` |
 
 ## Known gaps
 
-- **A late SSE event can roll a note back** (#1273). An event built before this
-  device's write landed, but received after it, replaces the newer row until
-  the next pull.
+- **A late SSE event can still roll a note back, rarely** (#1273). The server
+  reads a note for an event and then sends it, both after the change commits
+  and before it answers. If a collaborator's request stalls between the two
+  while this device's whole write commits and publishes, the stale event
+  arrives after this device's echo, and the row stays behind until the next
+  pull. A share or unshare publishes no `note_updated` echo either, so a
+  rollback of `shared_with` alone also waits for the next pull.

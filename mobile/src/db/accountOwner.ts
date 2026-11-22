@@ -1,6 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { withSerializedTransaction } from './transaction';
 import { deleteFileIfExists } from '../utils/fs';
+import { clearForeignSnapshotFlags } from './foreignSnapshots';
 import { clearOwnVersionSteps } from './ownVersions';
 import { clearNoteImageCache } from '../utils/noteImageCache';
 import { clearProfileIconCache } from '../utils/profileIconCache';
@@ -114,6 +115,7 @@ export async function claimLocalData(db: SQLiteDatabase, userId: string, serverI
   deleteUploadFiles(wiped.files);
   clearImageCaches(serverId);
   clearOwnVersionSteps(db);
+  clearForeignSnapshotFlags(db);
   console.info('Local data belonged to another account; wiped it before sign-in.');
   return true;
 }
@@ -131,6 +133,7 @@ export async function wipeLocalData(db: SQLiteDatabase, serverId: string | null)
   deleteUploadFiles(wiped.files);
   clearImageCaches(serverId);
   clearOwnVersionSteps(db);
+  clearForeignSnapshotFlags(db);
 }
 
 /**
