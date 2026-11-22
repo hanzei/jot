@@ -124,10 +124,18 @@ func (s *SessionService) authenticateWithPAT(ctx context.Context, rawToken strin
 // to notice that its credential went away after it was admitted.
 func (s *SessionService) CredentialStillValid(ctx context.Context) (bool, error) {
 	if tokenHash, ok := GetSessionTokenHashFromContext(ctx); ok {
-		return s.sessionStore.IsActive(ctx, tokenHash)
+		active, err := s.sessionStore.IsActive(ctx, tokenHash)
+		if err != nil {
+			return false, fmt.Errorf("check session: %w", err)
+		}
+		return active, nil
 	}
 	if patID, ok := ctx.Value(patIDContextKey).(string); ok {
-		return s.patStore.Exists(ctx, patID)
+		exists, err := s.patStore.Exists(ctx, patID)
+		if err != nil {
+			return false, fmt.Errorf("check personal access token: %w", err)
+		}
+		return exists, nil
 	}
 	return false, nil
 }

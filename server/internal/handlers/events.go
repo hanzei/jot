@@ -128,6 +128,7 @@ func (h *EventsHandler) stream(ctx context.Context, w http.ResponseWriter, flush
 
 	for {
 		var frame []byte
+		check := false
 		select {
 		case <-ctx.Done():
 			return
@@ -141,18 +142,27 @@ func (h *EventsHandler) stream(ctx context.Context, w http.ResponseWriter, flush
 				continue
 			}
 			frame = fmt.Appendf(nil, "data: %s\n\n", data)
+			// select picks among ready cases at random, so a pending recheck
+			// could otherwise lose to a backlog of events and let them reach
+			// a stream whose credential is already gone. Only this goroutine
+			// receives from recheck, so the receive cannot block.
+			if len(recheck) > 0 {
+				<-recheck
+				check = true
+			}
 		case <-recheck:
+			check = true
 		case <-recheckTicker.C:
+			check = true
 		case <-heartbeat.C:
 			// Send an empty data event (not an SSE comment) so the client's
 			// message listener fires and can reset its liveness watchdog.
 			frame = []byte("data:\n\n")
 		}
+		if check && !h.credentialValid(ctx) {
+			return
+		}
 		if frame == nil {
-			// Woken by InvalidateUser or the periodic re-check.
-			if !h.credentialValid(ctx) {
-				return
-			}
 			continue
 		}
 		if _, err := w.Write(frame); err != nil {

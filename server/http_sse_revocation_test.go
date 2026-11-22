@@ -5,6 +5,7 @@ import (
 	"context"
 	"maps"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -206,10 +207,22 @@ func TestSSEStreamEndsWhenCredentialRevoked(t *testing.T) {
 		stream := openSSEStream(t, ts, user.Client.HTTPClient(), nil)
 		otherStream := openSSEStream(t, ts, other.HTTPClient(), nil)
 
+		// Logout clears the cookie from the jar, so keep it to prove the
+		// session itself is refused, not just absent from the request.
+		serverURL, err := url.Parse(ts.HTTPServer.URL)
+		require.NoError(t, err)
+		var sessionCookie string
+		for _, c := range user.Client.HTTPClient().Jar.Cookies(serverURL) {
+			if c.Name == "jot_session" {
+				sessionCookie = c.Name + "=" + c.Value
+			}
+		}
+		require.NotEmpty(t, sessionCookie)
+
 		require.NoError(t, user.Client.Logout(t.Context()))
 
 		stream.requireEnds(t)
-		assert.Equal(t, http.StatusUnauthorized, eventsStatus(t, ts, user.Client.HTTPClient(), nil))
+		assert.Equal(t, http.StatusUnauthorized, eventsStatus(t, ts, ts.httpClient, http.Header{"Cookie": {sessionCookie}}))
 
 		createNote(t, other, "after logout")
 		otherStream.requireEvent(t, "after logout")
