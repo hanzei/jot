@@ -7,6 +7,7 @@ import { isServerReachable, markServerReachable, markServerUnreachable } from '.
 import { REQUEST_ID_HEADER, echoesRequestId, newRequestId, warnNotJotResponse } from './jotResponse';
 import { recordWriteResponse } from '../db/snapshotGate';
 import { extractSessionCookie } from './sessionCookie';
+import { assertSessionUsable } from './config';
 import {
   addServer,
   ensureServerRegistryMigrated,
@@ -655,6 +656,7 @@ const sharedAuth = createJotApi(api);
 export const auth = {
   login: async (data: LoginRequest): Promise<AuthResponse> => {
     const origin = currentBaseUrl;
+    await assertSessionUsable(origin);
     const res = await api.post(apiPaths.login, data);
     await storeSessionFromResponse(res.headers as Record<string, string | string[] | undefined>, origin);
     return res.data;
@@ -662,6 +664,7 @@ export const auth = {
 
   register: async (data: RegisterRequest): Promise<AuthResponse> => {
     const origin = currentBaseUrl;
+    await assertSessionUsable(origin);
     const res = await api.post(apiPaths.register, data);
     await storeSessionFromResponse(res.headers as Record<string, string | string[] | undefined>, origin);
     return res.data;

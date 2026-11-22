@@ -4,6 +4,7 @@ import ConnectToServerScreen from '../src/screens/ConnectToServerScreen';
 import { probeServerReachability } from '../src/api/client';
 import { probeServerConfig } from '../src/api/config';
 import i18n from '../src/i18n';
+import { answerInsecureWarning } from './helpers/insecureServerAlert';
 import { Alert } from 'react-native';
 import { registerOnServer } from '../src/store/upgradeToServer';
 import { InsecureSessionCookieError } from '../src/api/sessionCookie';
@@ -137,11 +138,6 @@ describe('ConnectToServerScreen plain HTTP (#1337)', () => {
     mockProbeServerConfig.mockResolvedValue(null);
   });
 
-  function answerInsecureWarning(button: 'confirm' | 'cancel') {
-    return jest.spyOn(Alert, 'alert').mockImplementation((_title, _message, buttons) => {
-      buttons?.[button === 'confirm' ? 1 : 0]?.onPress?.();
-    });
-  }
 
   it('moves on to registration only after the user confirms the warning', async () => {
     const alertSpy = answerInsecureWarning('confirm');

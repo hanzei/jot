@@ -16,11 +16,10 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import type { AuthStackParamList } from '../navigation/AuthStack';
 import { getUsernameValidationError, isPasswordTooShort } from '@jot/shared';
-import { displayMessage, extractApiError, USERNAME_ERROR_KEYS } from '../i18n/utils';
+import { displayMessage, extractApiError, LocalizedError, USERNAME_ERROR_KEYS } from '../i18n/utils';
 import ServerSetupGate from '../components/ServerSetupGate';
 import FadeInView from '../components/FadeInView';
 import { useServerConfig } from '../hooks/useServerConfig';
-import { InsecureSessionCookieError } from '../api/sessionCookie';
 
 type RegisterScreenProps = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Register'>;
@@ -62,8 +61,8 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
       await register(username.trim(), password);
     } catch (err: unknown) {
       const response = (err as { response?: unknown })?.response;
-      if (err instanceof InsecureSessionCookieError) {
-        setError(t('auth.sessionRequiresHttps'));
+      if (err instanceof LocalizedError) {
+        setError(displayMessage(t, err.messageKey));
       } else if (!response) {
         setError(t('auth.unableToConnect'));
       } else {

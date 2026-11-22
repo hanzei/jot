@@ -9,7 +9,6 @@ import {
   View,
 } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { isInsecureServerOrigin } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -331,8 +330,8 @@ export default function DiagnosticsScreen() {
           {snapshot.serverUrl ? (
             <DiagRow
               label={t('diagnostics.encrypted')}
-              value={snapshot.serverUrl.startsWith('https:') ? t('diagnostics.yes') : t('diagnostics.no')}
-              valueColor={isInsecureServerOrigin(snapshot.serverUrl) ? colors.error : undefined}
+              value={isEncryptedServerUrl(snapshot.serverUrl) ? t('diagnostics.yes') : t('diagnostics.no')}
+              valueColor={isEncryptedServerUrl(snapshot.serverUrl) ? undefined : colors.error}
               testID="diagnostics-server-encrypted"
             />
           ) : null}
@@ -417,6 +416,11 @@ export default function DiagnosticsScreen() {
 
 const STATUS_GREEN = '#22c55e';
 const STATUS_ORANGE = '#f97316';
+
+/** `serverUrl` is the active server's canonical (lower-case) origin. */
+function isEncryptedServerUrl(serverUrl: string): boolean {
+  return serverUrl.startsWith('https:');
+}
 
 function DiagRow({
   label,

@@ -933,6 +933,7 @@ describe('API Client', () => {
       await setServerUrl('http://insecure.example.com');
       await clearStoredSession();
       mockSecureStore.setItemAsync.mockClear();
+      mockAxiosInstance.post.mockClear();
     });
 
     afterAll(async () => {
@@ -953,6 +954,21 @@ describe('API Client', () => {
 
       expect(mockSecureStore.setItemAsync).not.toHaveBeenCalledWith(expect.stringMatching(/_session$/), expect.anything());
       expect(await getStoredSession()).toBeNull();
+    });
+
+    it.each([
+      ['login', () => auth.login({ username: 'test', password: 'pass' })],
+      ['register', () => auth.register({ username: 'test', password: 'pass' })],
+    ])('%s is refused before the request when the server reports a Secure cookie', async (_name, call) => {
+      const mockGet = (axios as unknown as { get: jest.Mock }).get;
+      mockGet.mockImplementationOnce(async (_url: string, opts: { headers: Record<string, string> }) => ({
+        data: { cookie_secure: true },
+        headers: { 'x-request-id': opts.headers['X-Request-Id'] },
+      }));
+
+      await expect(call()).rejects.toBeInstanceOf(InsecureSessionCookieError);
+      expect(mockGet).toHaveBeenCalledWith('http://insecure.example.com/api/v1/config', expect.anything());
+      expect(mockAxiosInstance.post).not.toHaveBeenCalled();
     });
 
     it('stores a cookie without Secure over http://', async () => {

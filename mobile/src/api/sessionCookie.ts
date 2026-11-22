@@ -1,4 +1,5 @@
 import { isInsecureServerOrigin } from '@jot/shared';
+import { LocalizedError } from '../i18n/utils';
 
 const SESSION_COOKIE_NAME = 'jot_session';
 
@@ -8,9 +9,9 @@ const SESSION_COOKIE_NAME = 'jot_session';
  * refuses to store it (#1337): the operator's `JOT_COOKIE_SECURE` holds for
  * mobile as it does for the webapp.
  */
-export class InsecureSessionCookieError extends Error {
+export class InsecureSessionCookieError extends LocalizedError {
   constructor() {
-    super('The server only accepts its session over HTTPS.');
+    super('auth.sessionRequiresHttps', 'The server only accepts its session over HTTPS.');
     this.name = 'InsecureSessionCookieError';
   }
 }
@@ -24,25 +25,23 @@ interface ParsedSessionCookie {
 // comma-joined string. A comma followed by `name=` starts the next cookie; the
 // comma inside an `Expires=Wed, 21 Oct …` date is not.
 const NEXT_COOKIE = /,\s*(?=[^\s;,=]+=)/;
-const SESSION_COOKIE_START = new RegExp(`(?:^|[,;]\\s*)(${SESSION_COOKIE_NAME}=)`, 'g');
 
-/** The `jot_session` cookie in a set of `Set-Cookie` values, with its `Secure` attribute. */
+/**
+ * The `jot_session` cookie in a set of `Set-Cookie` values, with its `Secure`
+ * attribute. An emptied `jot_session=` (a folded header can carry one ahead of
+ * the real cookie) is skipped.
+ */
 export function parseSessionCookie(setCookieHeader: string | string[] | undefined): ParsedSessionCookie | null {
   if (!setCookieHeader) return null;
   const headers = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader];
-  for (const header of headers) {
-    // Every occurrence, not just the first: a folded header can carry an
-    // emptied `jot_session=` ahead of the one that sets the session.
-    for (const match of header.matchAll(SESSION_COOKIE_START)) {
-      const fromName = header.slice(match.index + match[0].length - SESSION_COOKIE_NAME.length - 1);
-      const end = fromName.search(NEXT_COOKIE);
-      const cookie = end === -1 ? fromName : fromName.slice(0, end);
-      const [pair = '', ...attributes] = cookie.split(';');
-      const token = pair.slice(SESSION_COOKIE_NAME.length + 1).trim();
-      if (!token) continue;
-      const secure = attributes.some((attribute) => attribute.trim().toLowerCase() === 'secure');
-      return { token, secure };
-    }
+  for (const cookie of headers.flatMap((header) => header.split(NEXT_COOKIE))) {
+    const [pair = '', ...attributes] = cookie.split(';');
+    const separator = pair.indexOf('=');
+    if (separator === -1 || pair.slice(0, separator).trim() !== SESSION_COOKIE_NAME) continue;
+    const token = pair.slice(separator + 1).trim();
+    if (!token) continue;
+    const secure = attributes.some((attribute) => attribute.trim().toLowerCase() === 'secure');
+    return { token, secure };
   }
   return null;
 }

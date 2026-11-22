@@ -22,7 +22,7 @@ import { probeServerReachability } from '../api/client';
 import { DEFAULT_SERVER_CONFIG, probeServerConfig } from '../api/config';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { getUsernameValidationError, isPasswordTooShort, type ServerConfig } from '@jot/shared';
-import { displayMessage, USERNAME_ERROR_KEYS } from '../i18n/utils';
+import { displayMessage, LocalizedError, USERNAME_ERROR_KEYS } from '../i18n/utils';
 import {
   registerOnServer,
   runPreflightChecks,
@@ -41,7 +41,6 @@ import { retrySync } from '../utils/retryWithBackoff';
 import { notesLocalQueryScopeKey, labelsQueryKey } from '../hooks/queryKeys';
 import FadeInView from '../components/FadeInView';
 import { confirmInsecureServer } from '../utils/insecureServer';
-import { InsecureSessionCookieError } from '../api/sessionCookie';
 
 const DRAIN_BACKOFF_BASE_MS = 1000;
 const DRAIN_BACKOFF_MAX_MS = 60000;
@@ -307,8 +306,8 @@ export default function ConnectToServerScreen() {
       }
     } catch (err: unknown) {
       const code = (err as { code?: string })?.code;
-      if (err instanceof InsecureSessionCookieError) {
-        setFieldError(t('auth.sessionRequiresHttps'));
+      if (err instanceof LocalizedError) {
+        setFieldError(displayMessage(t, err.messageKey));
         setStep({ name: 'register', serverUrl });
       } else if (code === 'USERNAME_TAKEN') {
         setFieldError(t('upgrade.usernameTaken'));

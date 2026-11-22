@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { apiPaths, apiUrl, canonicalizeServerOrigin, isInsecureServerOrigin, UPLOAD_MAX_BYTES, VALIDATION, type ServerConfig } from '@jot/shared';
 import { REQUEST_ID_HEADER, echoesRequestId, newRequestId } from './jotResponse';
+import { InsecureSessionCookieError } from './sessionCookie';
 
 export const DEFAULT_SERVER_CONFIG: ServerConfig = {
   registration_enabled: true,
@@ -9,21 +10,24 @@ export const DEFAULT_SERVER_CONFIG: ServerConfig = {
 };
 
 /**
- * Whether `serverUrl` would hand out a session this app must refuse: a
- * `Secure` cookie over plain HTTP (#1337). Asked before logging in or
- * registering, because the server creates the account or session before the
- * app sees the cookie, and refusing it afterwards strands that account.
+ * Throws InsecureSessionCookieError when `serverUrl` would hand out a session
+ * this app must refuse: a `Secure` cookie over plain HTTP (#1337). Called
+ * before logging in, registering or starting SSO, because the server creates
+ * the account or session before the app sees the cookie, and refusing it
+ * afterwards strands that account.
  *
  * Only a non-loopback http:// server is asked. When its config cannot be
- * read, or an older server does not report `cookie_secure`, this is false and
+ * read, or an older server does not report `cookie_secure`, this passes and
  * the check on the response (`extractSessionCookie`) is the backstop.
  */
-export async function serverRequiresHttpsSession(serverUrl: string): Promise<boolean> {
+export async function assertSessionUsable(serverUrl: string): Promise<void> {
   if (!isInsecureServerOrigin(serverUrl)) {
-    return false;
+    return;
   }
   const config = await probeServerConfig(serverUrl);
-  return config?.cookie_secure === true;
+  if (config?.cookie_secure === true) {
+    throw new InsecureSessionCookieError();
+  }
 }
 
 // For a server that isn't the active one yet (mid server-setup or

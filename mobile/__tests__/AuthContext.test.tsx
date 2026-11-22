@@ -7,7 +7,7 @@ import { getLocalIdentity, enableLocalMode as persistEnableLocalMode, disableLoc
 
 import { runOidcBrowserFlow, SsoFlowError } from '../src/store/oidcFlow';
 import { apiErrorBody } from './helpers/apiError';
-import { serverRequiresHttpsSession } from '../src/api/config';
+import { assertSessionUsable } from '../src/api/config';
 import { InsecureSessionCookieError } from '../src/api/sessionCookie';
 
 jest.mock('../src/store/oidcFlow', () => ({
@@ -53,7 +53,7 @@ jest.mock('../src/api/client', () => ({
 }));
 
 jest.mock('../src/api/config', () => ({
-  serverRequiresHttpsSession: jest.fn().mockResolvedValue(false),
+  assertSessionUsable: jest.fn().mockResolvedValue(undefined),
 }));
 
 const mockAuth = auth as unknown as {
@@ -251,25 +251,23 @@ describe('AuthContext', () => {
     }
 
     beforeEach(() => {
-      jest.mocked(serverRequiresHttpsSession).mockResolvedValue(true);
+      jest.mocked(assertSessionUsable).mockRejectedValue(new InsecureSessionCookieError());
     });
 
     afterEach(() => {
-      jest.mocked(serverRequiresHttpsSession).mockResolvedValue(false);
+      jest.mocked(assertSessionUsable).mockResolvedValue(undefined);
       captured = null;
     });
 
-    it.each([
-      ['login', () => captured!.login('alice', 'pw'), () => mockAuth.login],
-      ['register', () => captured!.register('alice', 'pw'), () => mockAuth.register],
-      ['SSO', () => captured!.loginWithSso(), () => mockRunOidcBrowserFlow],
-    ])('%s is refused before anything reaches the server', async (_name, call, sent) => {
+    // Password login and registration check in api/client; SSO must check
+    // here, before the browser opens.
+    it('refuses SSO before the browser opens', async () => {
       const { unmount } = await render(<AuthProvider><Capture /></AuthProvider>);
       await waitFor(() => expect(captured?.isLoading).toBe(false));
 
-      await expect(call()).rejects.toBeInstanceOf(InsecureSessionCookieError);
-      expect(serverRequiresHttpsSession).toHaveBeenCalledWith('http://jot.lan:8080');
-      expect(sent()).not.toHaveBeenCalled();
+      await expect(captured!.loginWithSso()).rejects.toBeInstanceOf(InsecureSessionCookieError);
+      expect(assertSessionUsable).toHaveBeenCalledWith('http://jot.lan:8080');
+      expect(mockRunOidcBrowserFlow).not.toHaveBeenCalled();
       await unmount();
     });
   });

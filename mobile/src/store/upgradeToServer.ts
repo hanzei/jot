@@ -9,8 +9,8 @@ import { labelKey, noteKey, SETTINGS_KEY } from '../db/queueKeys';
 import type { LocalIdentity } from './localMode';
 import { disableLocalMode, setLocalModeActive } from './localMode';
 import { initializeServerContext, switchActiveServer } from '../api/client';
-import { extractSessionCookie, InsecureSessionCookieError } from '../api/sessionCookie';
-import { serverRequiresHttpsSession } from '../api/config';
+import { extractSessionCookie } from '../api/sessionCookie';
+import { assertSessionUsable } from '../api/config';
 import { addServer, setServerStorageValue } from './serverAccounts';
 import { jot } from '../api/jot';
 
@@ -84,9 +84,7 @@ export async function registerOnServer(
   }
   // Before POST /register: refusing the cookie afterwards would leave an
   // account the upgrade cannot sign in to (#1337).
-  if (await serverRequiresHttpsSession(canonical)) {
-    throw new InsecureSessionCookieError();
-  }
+  await assertSessionUsable(canonical);
   const res = await axios.post(
     apiUrl(apiPaths.register, canonical),
     { username, password },

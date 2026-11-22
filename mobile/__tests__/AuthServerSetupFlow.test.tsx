@@ -5,6 +5,7 @@ import { Alert } from 'react-native';
 import LoginScreen from '../src/screens/LoginScreen';
 import RegisterScreen from '../src/screens/RegisterScreen';
 import i18n from '../src/i18n';
+import { answerInsecureWarning } from './helpers/insecureServerAlert';
 import { useAuth } from '../src/store/AuthContext';
 import { getBaseUrl, getStoredServerUrl, probeServerReachability, setServerUrl, subscribeToClientActiveServerChanges } from '../src/api/client';
 import { VALIDATION } from '@jot/shared';
@@ -168,12 +169,6 @@ describe('Auth first-run server setup flow', () => {
   });
 
   describe('plain HTTP warning (#1337)', () => {
-    function answerInsecureWarning(button: 'confirm' | 'cancel') {
-      return jest.spyOn(Alert, 'alert').mockImplementation((_title, _message, buttons) => {
-        const choice = buttons?.[button === 'confirm' ? 1 : 0];
-        choice?.onPress?.();
-      });
-    }
 
     beforeEach(() => {
       mockProbeServerReachability.mockResolvedValue({ ok: true, canonicalUrl: 'http://jot.lan:8080' });

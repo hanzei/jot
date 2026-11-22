@@ -1,5 +1,6 @@
 import axios from 'axios';
-import { probeServerConfig, serverRequiresHttpsSession } from '../src/api/config';
+import { assertSessionUsable, probeServerConfig } from '../src/api/config';
+import { InsecureSessionCookieError } from '../src/api/sessionCookie';
 
 jest.mock('axios', () => ({
   __esModule: true,
@@ -53,7 +54,7 @@ describe('probeServerConfig', () => {
   });
 });
 
-describe('serverRequiresHttpsSession (#1337)', () => {
+describe('assertSessionUsable (#1337)', () => {
   function serveConfig(config: Record<string, unknown>) {
     mockAxiosGet.mockImplementation(async (_url: string, opts: { headers: Record<string, string> }) => ({
       data: config,
@@ -65,30 +66,30 @@ describe('serverRequiresHttpsSession (#1337)', () => {
     mockAxiosGet.mockReset();
   });
 
-  it('is true for a plain-HTTP server whose cookie is Secure', async () => {
+  it('refuses a plain-HTTP server whose cookie is Secure', async () => {
     serveConfig({ cookie_secure: true });
-    await expect(serverRequiresHttpsSession('http://jot.lan:8080')).resolves.toBe(true);
+    await expect(assertSessionUsable('http://jot.lan:8080')).rejects.toBeInstanceOf(InsecureSessionCookieError);
   });
 
-  it('is false for a plain-HTTP server with JOT_COOKIE_SECURE=false', async () => {
+  it('passes a plain-HTTP server with JOT_COOKIE_SECURE=false', async () => {
     serveConfig({ cookie_secure: false });
-    await expect(serverRequiresHttpsSession('http://jot.lan:8080')).resolves.toBe(false);
+    await expect(assertSessionUsable('http://jot.lan:8080')).resolves.toBeUndefined();
   });
 
-  it('is false for an older server that does not report cookie_secure', async () => {
+  it('passes an older server that does not report cookie_secure', async () => {
     serveConfig({ registration_enabled: true });
-    await expect(serverRequiresHttpsSession('http://jot.lan:8080')).resolves.toBe(false);
+    await expect(assertSessionUsable('http://jot.lan:8080')).resolves.toBeUndefined();
   });
 
-  it('is false when the config cannot be read', async () => {
+  it('passes when the config cannot be read', async () => {
     mockAxiosGet.mockRejectedValue(new Error('Network Error'));
-    await expect(serverRequiresHttpsSession('http://jot.lan:8080')).resolves.toBe(false);
+    await expect(assertSessionUsable('http://jot.lan:8080')).resolves.toBeUndefined();
   });
 
   it('does not ask an https:// or loopback server', async () => {
     serveConfig({ cookie_secure: true });
-    await expect(serverRequiresHttpsSession('https://jot.example.com')).resolves.toBe(false);
-    await expect(serverRequiresHttpsSession('http://localhost:8080')).resolves.toBe(false);
+    await expect(assertSessionUsable('https://jot.example.com')).resolves.toBeUndefined();
+    await expect(assertSessionUsable('http://localhost:8080')).resolves.toBeUndefined();
     expect(mockAxiosGet).not.toHaveBeenCalled();
   });
 });
