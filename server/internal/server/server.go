@@ -483,7 +483,7 @@ func (s *Server) setupRoutes() error {
 			// Account deletion is account management, session-only like
 			// PAT/session management below.
 			r.With(auth.SessionRequired).Delete("/users/me", s.wrapHandler(s.authHandler.DeleteMe))
-			r.Put("/users/me/password", s.wrapHandler(s.authHandler.ChangePassword))
+			r.With(auth.SessionRequired).Put("/users/me/password", s.wrapHandler(s.authHandler.ChangePassword))
 			r.Post("/users/me/profile-icon", s.wrapHandler(s.authHandler.UploadProfileIcon))
 			r.Delete("/users/me/profile-icon", s.wrapHandler(s.authHandler.DeleteProfileIcon))
 			r.Get("/users/{id}/profile-icon", s.wrapHandler(s.authHandler.GetUserProfileIcon))

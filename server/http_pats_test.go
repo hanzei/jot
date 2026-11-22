@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -358,5 +359,55 @@ func TestPATs(t *testing.T) {
 		var env errorEnvelope
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&env))
 		assert.Equal(t, "pat_limit_reached", env.Error.Code)
+	})
+}
+
+// changePasswordWithPAT sends PUT /users/me/password authenticated only by the
+// personal access token, and asserts it is refused with session_required and
+// no session cookie.
+func changePasswordWithPAT(t *testing.T, ts *TestServer, token, body string) {
+	t.Helper()
+	status, header, respBody := rawRequest(t, ts.newClient().HTTPClient(), http.MethodPut, ts.HTTPServer.URL+"/api/v1/users/me/password",
+		strings.NewReader(body),
+		http.Header{"Authorization": {"Bearer " + token}, "Content-Type": jsonHeader["Content-Type"]})
+	requireEnvelope(t, http.StatusForbidden, string(apierr.CodeSessionRequired), status, header, respBody)
+	assert.Empty(t, header.Values("Set-Cookie"), "a personal access token must not be exchanged for a session")
+}
+
+func TestChangePasswordRequiresSession(t *testing.T) {
+	t.Parallel()
+
+	t.Run("user with a password", func(t *testing.T) {
+		t.Parallel()
+		ts := setupTestServer(t)
+		user := ts.createPlainTestUser(t, "patpassword")
+		pat := createPAT(t, ts, user, "script")
+
+		changePasswordWithPAT(t, ts, pat.Token, `{"current_password":"password123","new_password":"changedpassword123"}`)
+
+		_, err := ts.newClient().Login(t.Context(), "patpassword", "password123")
+		require.NoError(t, err, "the password is unchanged")
+		_, err = ts.newClient().Login(t.Context(), "patpassword", "changedpassword123")
+		require.Error(t, err)
+	})
+
+	t.Run("SSO-only user", func(t *testing.T) {
+		t.Parallel()
+		ts, mock := setupOIDCTestServer(t, nil)
+		c := ts.oidcClient(t)
+		resp := ts.driveFlow(t, mock, c, "/api/v1/auth/oidc/login", map[string]any{
+			"sub":                "sub-patpassword",
+			"preferred_username": "ssopatpassword",
+		})
+		require.NoError(t, resp.Body.Close())
+		token := ts.createPAT(t, c, "script")
+
+		changePasswordWithPAT(t, ts, token, `{"new_password":"chosenpassword123"}`)
+
+		me, status := ts.me(t, c)
+		require.Equal(t, http.StatusOK, status)
+		assert.False(t, me.User.HasPassword, "no password was set")
+		_, err := ts.newClient().Login(t.Context(), "ssopatpassword", "chosenpassword123")
+		require.Error(t, err)
 	})
 }
