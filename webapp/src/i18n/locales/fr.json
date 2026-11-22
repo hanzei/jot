@@ -688,7 +688,7 @@
     "memosStepToken": "Dans Memos, ouvrez les Paramètres et créez un jeton d'accès.",
     "memosStepPaste": "Collez-le ici :",
     "tokenPlaceholder": "Votre jeton d'accès",
-    "memosTokenNote": "Votre jeton est envoyé uniquement à {{host}} et n'est pas conservé par Jot.",
+    "memosTokenNote": "Jot transmet votre jeton à {{host}} uniquement pour cet import et ne le conserve pas.",
     "memosInsecureNote": "Ce serveur Memos utilise http://, votre jeton circule donc sans chiffrement.",
     "importFailedUsememos": "Impossible d'importer depuis votre instance Memos. Vérifiez votre jeton d'accès.",
     "close": "Fermer",

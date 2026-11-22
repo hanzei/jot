@@ -958,6 +958,23 @@ func TestImportUsememosRedirectNotFollowed(t *testing.T) {
 		assert.Contains(t, result.Errors[0], "check JOT_MEMOS_URL")
 	})
 
+	t.Run("truncated body", func(t *testing.T) {
+		// A redirect whose body is cut short must still be reported as a
+		// redirect, not as a failed body read.
+		ts, _ := setupUsememosTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Location", target.URL+"/memos/api/v1/memos")
+			w.Header().Set("Content-Length", "1000")
+			w.WriteHeader(http.StatusFound)
+			_, _ = w.Write([]byte("short"))
+		}))
+		user := ts.createTestUser(t, "usememosredirect3", "password123", false)
+
+		result, err := user.Client.ImportUsememos(t.Context(), "testtoken")
+		require.NoError(t, err)
+		require.Len(t, result.Errors, 1)
+		assert.Contains(t, result.Errors[0], "set JOT_MEMOS_URL to "+target.URL+"/memos")
+	})
+
 	assert.False(t, targetHit.Load(), "the redirect must not be followed")
 }
 

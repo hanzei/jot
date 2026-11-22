@@ -688,7 +688,7 @@
     "memosStepToken": "In Memos, apri le Impostazioni e crea un token di accesso.",
     "memosStepPaste": "Incollalo qui:",
     "tokenPlaceholder": "Il tuo token di accesso",
-    "memosTokenNote": "Il token viene inviato solo a {{host}} e non viene salvato da Jot.",
+    "memosTokenNote": "Jot inoltra il token a {{host}} solo per questa importazione e non lo salva.",
     "memosInsecureNote": "Questo server Memos usa http://, quindi il token viaggia non cifrato.",
     "importFailedUsememos": "Impossibile importare dall'istanza Memos. Controlla il token di accesso.",
     "close": "Chiudi",

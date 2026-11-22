@@ -438,7 +438,7 @@ test.describe('Export & Import', () => {
     await expect(page.getByTestId('usememos-url')).toHaveText('http://memos.home.lan/memos');
     await expect(page.getByRole('link', { name: 'Open your Memos instance' })).toHaveAttribute('href', 'http://memos.home.lan/memos');
     await expect(flow).toContainText('In Memos, open Settings and create an access token.');
-    await expect(flow).toContainText('Your token is sent only to memos.home.lan and is not stored by Jot.');
+    await expect(flow).toContainText('Jot passes your token to memos.home.lan for this import only and does not store it.');
     await expect(page.getByTestId('usememos-insecure-note')).toBeVisible();
 
     const importButton = page.getByRole('button', { name: 'Import', exact: true });

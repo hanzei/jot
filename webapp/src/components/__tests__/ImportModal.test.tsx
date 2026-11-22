@@ -379,7 +379,7 @@ describe('ImportModal', () => {
       expect(link).toHaveAttribute('href', MEMOS_URL);
       expect(link).toHaveAttribute('target', '_blank');
       expect(screen.getByLabelText(/paste it here/i)).toBe(screen.getByTestId('usememos-token'));
-      expect(flow).toHaveTextContent('sent only to memos.example.com and is not stored by Jot');
+      expect(flow).toHaveTextContent('Jot passes your token to memos.example.com for this import only and does not store it.');
       expect(screen.queryByRole('textbox', { name: /url/i })).not.toBeInTheDocument();
       expect(screen.queryByTestId('usememos-insecure-note')).not.toBeInTheDocument();
     });

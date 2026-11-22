@@ -676,7 +676,7 @@
     "memosStepToken": "In Memos, open Settings and create an access token.",
     "memosStepPaste": "Paste it here:",
     "tokenPlaceholder": "Your access token",
-    "memosTokenNote": "Your token is sent only to {{host}} and is not stored by Jot.",
+    "memosTokenNote": "Jot passes your token to {{host}} for this import only and does not store it.",
     "memosInsecureNote": "This Memos server uses http://, so your token travels unencrypted.",
     "importFailedUsememos": "Could not import from your Memos instance. Check your access token.",
     "close": "Close",

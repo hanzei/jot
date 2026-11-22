@@ -676,7 +676,7 @@
     "memosStepToken": "Open in Memos de Instellingen en maak een toegangstoken aan.",
     "memosStepPaste": "Plak het hier:",
     "tokenPlaceholder": "Jouw toegangstoken",
-    "memosTokenNote": "Je token wordt alleen naar {{host}} gestuurd en niet door Jot opgeslagen.",
+    "memosTokenNote": "Jot geeft je token alleen voor deze import door aan {{host}} en slaat het niet op.",
     "memosInsecureNote": "Deze Memos-server gebruikt http://, dus je token wordt onversleuteld verstuurd.",
     "importFailedUsememos": "Importeren vanuit je Memos-instantie mislukt. Controleer je toegangstoken.",
     "close": "Sluiten",

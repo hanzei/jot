@@ -305,14 +305,18 @@ func fetchUsememosMemosForState(ctx context.Context, baseURL, token, state strin
 			cancel()
 			return nil, false, fmt.Errorf("fetch memos (page %d): %w", pageNum+1, err)
 		}
+		// Report a redirect before reading its body, which is never needed
+		// and could be truncated or stall, hiding the redirect target.
+		if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+			_ = resp.Body.Close()
+			cancel()
+			return nil, false, usememosRedirectError(resp)
+		}
 		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
 		_ = resp.Body.Close()
 		cancel() // cancel after body is fully read so the context stays live during streaming
 		if readErr != nil {
 			return nil, false, fmt.Errorf("read response (page %d): %w", pageNum+1, readErr)
-		}
-		if resp.StatusCode >= 300 && resp.StatusCode < 400 {
-			return nil, false, usememosRedirectError(resp)
 		}
 		if resp.StatusCode != http.StatusOK {
 			return nil, false, fmt.Errorf("usememos returned status %d — check your access token", resp.StatusCode)
