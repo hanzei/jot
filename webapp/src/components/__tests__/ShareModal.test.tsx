@@ -130,6 +130,21 @@ describe('ShareModal', () => {
       await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument());
       expect(screen.queryByTestId('owner-row')).not.toBeInTheDocument();
     });
+
+    it('refetches the access list when sharesVersion changes, not on open', async () => {
+      mockGetShares.mockResolvedValue([mockShare1]);
+      // Opened with a version left over from an earlier dialog: one fetch only.
+      const { rerender } = render(<ShareModal {...defaultProps} sharesVersion={3} />);
+      await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument());
+      expect(mockGetShares).toHaveBeenCalledTimes(1);
+
+      // The collaborator left elsewhere; the caller bumps the version.
+      mockGetShares.mockResolvedValue([]);
+      rerender(<ShareModal {...defaultProps} sharesVersion={4} />);
+
+      await waitFor(() => expect(screen.queryByText('Alice Smith')).not.toBeInTheDocument());
+      expect(mockGetShares).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('user search and suggestions', () => {

@@ -775,6 +775,13 @@ export class DashboardPage {
     await dialog.getByRole('button', { name: colorName, exact: true }).click();
   }
 
+  /** Opens the share dialog from a note card's menu and returns it. */
+  async openShareModal(noteTitle: string): Promise<Locator> {
+    await this.openNoteMenu(noteTitle);
+    await this.page.getByRole('menuitem', { name: 'Collaborators' }).click();
+    return this.page.getByRole('dialog', { name: 'Collaborators' });
+  }
+
   /**
    * Shares a note with a user via the card context menu and share modal.
    *
@@ -784,8 +791,7 @@ export class DashboardPage {
    * assign button) reads that list, not the share request's response.
    */
   async shareNoteWithUser(noteTitle: string, username: string) {
-    await this.openNoteMenu(noteTitle);
-    await this.page.getByRole('menuitem', { name: 'Collaborators' }).click();
+    await this.openShareModal(noteTitle);
     await this.page.getByPlaceholder(/search users/i).fill(username);
     await this.page.getByText(username).click();
     await this.page.keyboard.press('Escape');
