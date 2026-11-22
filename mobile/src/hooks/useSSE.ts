@@ -113,13 +113,17 @@ export function useSSE(
         runInNoteOrder(noteId, async () => {
           const db = dbRef.current;
           if (!takeForeignSnapshotFlag(db, noteId)) return;
-          // Not awaited: the note's later events need not wait for the request,
-          // and the mark already guards the save against them.
-          void pullServerNote(db, noteId, 'after its own SSE echo').then(() => {
-            queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
-            queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-            queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
-          });
+          // Awaited inside the chain: the mark only guards the save against this
+          // device's writes, so a collaborator's newer event that arrives while
+          // the request runs must be saved after the response, not before it.
+          const repaired = await pullServerNote(db, noteId, 'after its own SSE echo');
+          // A failed request, or a save skipped because the note gained a
+          // pending edit meanwhile, leaves the rollback in place: flag the note
+          // again so the next own echo retries.
+          if (!repaired) recordForeignSnapshotSaved(db, noteId);
+          queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
+          queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+          queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
         });
         return;
       }

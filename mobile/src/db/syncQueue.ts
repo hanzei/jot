@@ -1970,23 +1970,26 @@ async function pullTouchedNotes(db: SQLiteDatabase, noteIds: Set<string>): Promi
  * nothing protects. Same rule as useOfflineNote's refresh: tombstoned unless it
  * is protected or written since the mark. Best effort: any other failure only
  * logs, and the next sync reconciles the note. `context` ends the log lines.
+ * Returns whether the server's state reached the row: the note saved in full,
+ * or tombstoned. False when the save or removal was skipped or anything failed.
  */
-export async function pullServerNote(db: SQLiteDatabase, noteId: string, context: string): Promise<void> {
+export async function pullServerNote(db: SQLiteDatabase, noteId: string, context: string): Promise<boolean> {
   const since = snapshotMark();
   try {
     const note = await jot.notes.getById(noteId);
-    await saveServerNote(db, note, since);
+    return await saveServerNote(db, note, since);
   } catch (err) {
     const status = axios.isAxiosError(err) ? err.response?.status : undefined;
     if (status === 404 || status === 410) {
       try {
-        await applyServerRemoval(db, noteId, since, 'tombstone');
+        return await applyServerRemoval(db, noteId, since, 'tombstone');
       } catch (removeErr) {
         console.warn(`Failed to tombstone note id=${noteId} ${context}: ${errorSummary(removeErr)}`);
+        return false;
       }
-      return;
     }
     console.warn(`Failed to pull note id=${noteId} ${context}: ${errorSummary(err)}`);
+    return false;
   }
 }
 

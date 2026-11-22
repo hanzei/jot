@@ -640,6 +640,49 @@ describe('useSSE', () => {
       expect(mockGetNote).toHaveBeenCalledTimes(1);
     });
 
+    it('applies a newer collaborator event that arrives during the fetch after the fetch', async () => {
+      const id = 'echo-in-flight';
+      await saveNote(db, mine(id));
+      recordWriteLanded([id]);
+      let resolveFetch: (note: Note) => void = () => {};
+      mockGetNote.mockImplementation(() => new Promise<Note>((resolve) => { resolveFetch = resolve; }));
+      await connect();
+
+      await deliverBoth(id);
+      await waitFor(() => expect(mockGetNote).toHaveBeenCalledWith(id));
+      const theirsAfter = makeTextNote({ id, content: 'theirs, after mine', version: 6, updated_at: '2026-11-01T10:06:00Z' });
+      await act(async () => {
+        capturedCallback?.(foreign(id, theirsAfter));
+      });
+      // The fetch was read on the server before the collaborator's change.
+      await act(async () => {
+        resolveFetch(mine(id));
+      });
+
+      // The spy sees the two payload saves (the fetch saves inside syncQueue);
+      // the newer payload's save is queued behind the fetch's.
+      await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalledTimes(2));
+      expect(await getLocalNote(db, id)).toMatchObject({ content: 'theirs, after mine', version: 6 });
+    });
+
+    it('retries on the next own echo when the fetch fails', async () => {
+      silenceConsole('warn', /Failed to pull note id=echo-retry/);
+      const id = 'echo-retry';
+      await saveNote(db, mine(id));
+      recordWriteLanded([id]);
+      mockGetNote.mockRejectedValueOnce(new Error('Network Error')).mockResolvedValueOnce(mine(id));
+      await connect();
+
+      await deliverBoth(id);
+      await waitFor(() => expect(mockGetNote).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        capturedCallback?.(ownEcho(id, mine(id)));
+      });
+
+      await waitFor(() => expect(mockGetNote).toHaveBeenCalledTimes(2));
+      await waitFor(async () => expect(await getLocalNote(db, id)).toMatchObject({ content: 'mine', version: 5 }));
+    });
+
     it('does not fetch when no collaborator payload was saved', async () => {
       const id = 'echo-alone';
       await saveNote(db, mine(id));
