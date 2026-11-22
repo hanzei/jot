@@ -3,10 +3,12 @@ import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 
 const mockImportNotes = vi.hoisted(() => vi.fn());
+const mockImportOptions = vi.hoisted(() => vi.fn());
 
 vi.mock('@/utils/api', () => ({
   notes: {
     import: mockImportNotes,
+    importOptions: mockImportOptions,
   },
 }));
 
@@ -27,7 +29,17 @@ const defaultProps = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockImportOptions.mockResolvedValue({ memos: null });
 });
+
+const MEMOS_URL = 'https://memos.example.com/memos';
+
+/** Renders the modal with a configured Memos instance and selects it. */
+async function openMemos(user: ReturnType<typeof userEvent.setup>, url = MEMOS_URL) {
+  mockImportOptions.mockResolvedValue({ memos: { url } });
+  render(<ImportModal {...defaultProps} />);
+  await user.click(await screen.findByRole('radio', { name: /memos/i }));
+}
 
 describe('ImportModal', () => {
   describe('visibility', () => {
@@ -316,81 +328,96 @@ describe('ImportModal', () => {
   });
 
   describe('Memos (usememos) format', () => {
-    it('shows Memos radio option', () => {
+    it('hides the Memos option when the server has no Memos instance configured', async () => {
       render(<ImportModal {...defaultProps} />);
-      expect(screen.getByRole('radio', { name: /memos/i })).toBeInTheDocument();
+      await waitFor(() => expect(mockImportOptions).toHaveBeenCalled());
+      expect(screen.queryByRole('radio', { name: /memos/i })).not.toBeInTheDocument();
+    });
+
+    it('hides the Memos option when the import options cannot be loaded', async () => {
+      mockImportOptions.mockRejectedValue(new Error('network'));
+      render(<ImportModal {...defaultProps} />);
+      await waitFor(() => expect(mockImportOptions).toHaveBeenCalled());
+      expect(screen.queryByRole('radio', { name: /memos/i })).not.toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: /google keep/i })).toBeInTheDocument();
+    });
+
+    it('does not offer a Memos option from an earlier opening while reloading options', async () => {
+      mockImportOptions.mockResolvedValue({ memos: { url: MEMOS_URL } });
+      const { rerender } = render(<ImportModal {...defaultProps} />);
+      await screen.findByRole('radio', { name: /memos/i });
+
+      await userEvent.setup().click(screen.getByRole('button', { name: /cancel/i }));
+      rerender(<ImportModal {...defaultProps} isOpen={false} />);
+      mockImportOptions.mockReturnValue(new Promise(() => {}));
+      rerender(<ImportModal {...defaultProps} isOpen />);
+
+      expect(screen.queryByRole('radio', { name: /memos/i })).not.toBeInTheDocument();
+    });
+
+    it('shows the Memos option when an instance is configured', async () => {
+      mockImportOptions.mockResolvedValue({ memos: { url: MEMOS_URL } });
+      render(<ImportModal {...defaultProps} />);
+      expect(await screen.findByRole('radio', { name: /memos/i })).toBeInTheDocument();
     });
 
     it('hides the file drop zone when Memos format is selected', async () => {
       const user = userEvent.setup();
-      render(<ImportModal {...defaultProps} />);
-
-      await user.click(screen.getByRole('radio', { name: /memos/i }));
+      await openMemos(user);
 
       expect(screen.queryByTestId('import-dropzone')).not.toBeInTheDocument();
     });
 
-    it('shows URL and token inputs when Memos format is selected', async () => {
+    it('shows the guided flow for the configured instance without a URL field', async () => {
       const user = userEvent.setup();
-      render(<ImportModal {...defaultProps} />);
+      await openMemos(user);
 
-      await user.click(screen.getByRole('radio', { name: /memos/i }));
-
-      expect(screen.getByTestId('usememos-inputs')).toBeInTheDocument();
-      expect(screen.getByTestId('usememos-url')).toBeInTheDocument();
-      expect(screen.getByTestId('usememos-token')).toBeInTheDocument();
+      const flow = screen.getByTestId('usememos-inputs');
+      expect(flow).toHaveTextContent('Import from memos.example.com');
+      expect(screen.getByTestId('usememos-url')).toHaveTextContent(MEMOS_URL);
+      const link = screen.getByRole('link', { name: /open your memos instance/i });
+      expect(link).toHaveAttribute('href', MEMOS_URL);
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(screen.getByLabelText(/paste it here/i)).toBe(screen.getByTestId('usememos-token'));
+      expect(flow).toHaveTextContent('Jot passes your token to memos.example.com for this import only and does not store it.');
+      expect(screen.queryByRole('textbox', { name: /url/i })).not.toBeInTheDocument();
+      expect(screen.queryByTestId('usememos-insecure-note')).not.toBeInTheDocument();
     });
 
-    it('disables the import button when URL or token is empty', async () => {
+    it('warns that the token travels unencrypted for an http instance', async () => {
       const user = userEvent.setup();
-      render(<ImportModal {...defaultProps} />);
+      await openMemos(user, 'http://192.168.1.10:5230');
 
-      await user.click(screen.getByRole('radio', { name: /memos/i }));
+      expect(screen.getByTestId('usememos-inputs')).toHaveTextContent('Import from 192.168.1.10:5230');
+      expect(screen.getByTestId('usememos-insecure-note')).toHaveTextContent(/unencrypted/i);
+    });
+
+    it('disables the import button until a non-blank token is entered', async () => {
+      const user = userEvent.setup();
+      await openMemos(user);
 
       const importBtn = screen.getByRole('button', { name: /^import$/i });
       expect(importBtn).toBeDisabled();
 
-      await user.type(screen.getByTestId('usememos-url'), 'https://memos.example.com');
-      expect(importBtn).toBeDisabled();
-
-      await user.type(screen.getByTestId('usememos-token'), 'mytoken');
-      expect(importBtn).not.toBeDisabled();
-    });
-
-    it('disables the import button when URL or token is whitespace-only', async () => {
-      const user = userEvent.setup();
-      render(<ImportModal {...defaultProps} />);
-
-      await user.click(screen.getByRole('radio', { name: /memos/i }));
-
-      const importBtn = screen.getByRole('button', { name: /^import$/i });
-      await user.type(screen.getByTestId('usememos-url'), '   ');
       await user.type(screen.getByTestId('usememos-token'), '   ');
       expect(importBtn).toBeDisabled();
 
       await user.clear(screen.getByTestId('usememos-token'));
       await user.type(screen.getByTestId('usememos-token'), 'mytoken');
-      expect(importBtn).toBeDisabled(); // URL is still whitespace-only
-
-      await user.clear(screen.getByTestId('usememos-url'));
-      await user.type(screen.getByTestId('usememos-url'), 'https://memos.example.com');
       expect(importBtn).not.toBeDisabled();
     });
 
-    it('calls importNotes with usememos payload and shows result on success', async () => {
+    it('sends only the token and shows the result on success', async () => {
       const user = userEvent.setup();
       mockImportNotes.mockResolvedValue({ imported: 5, skipped: 1, errors: [] });
-      render(<ImportModal {...defaultProps} />);
+      await openMemos(user);
 
-      await user.click(screen.getByRole('radio', { name: /memos/i }));
-      await user.type(screen.getByTestId('usememos-url'), 'https://memos.example.com');
-      await user.type(screen.getByTestId('usememos-token'), 'mytoken');
+      await user.type(screen.getByTestId('usememos-token'), ' mytoken ');
       await user.click(screen.getByRole('button', { name: /^import$/i }));
 
       await waitFor(() => {
         expect(mockImportNotes).toHaveBeenCalledWith({
           importType: 'usememos',
-          url: 'https://memos.example.com',
           token: 'mytoken',
         });
       });
@@ -398,20 +425,16 @@ describe('ImportModal', () => {
       expect(screen.getByText(/imported 5 notes/i)).toBeInTheDocument();
     });
 
-    it('shows error message when import fails', async () => {
+    it('shows the fallback message when the import fails without a server message', async () => {
       const user = userEvent.setup();
-      mockImportNotes.mockRejectedValue(
-        createApiError(400, 'validation_failed', 'Could not connect to your Memos instance. Check the URL and token.'),
-      );
-      render(<ImportModal {...defaultProps} />);
+      mockImportNotes.mockRejectedValue(new Error('network'));
+      await openMemos(user);
 
-      await user.click(screen.getByRole('radio', { name: /memos/i }));
-      await user.type(screen.getByTestId('usememos-url'), 'https://memos.example.com');
       await user.type(screen.getByTestId('usememos-token'), 'badtoken');
       await user.click(screen.getByRole('button', { name: /^import$/i }));
 
       await waitFor(() => {
-        expect(screen.getByText(/could not connect to your memos instance/i)).toBeInTheDocument();
+        expect(screen.getByText(/could not import from your memos instance/i)).toBeInTheDocument();
       });
     });
   });

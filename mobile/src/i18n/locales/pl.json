@@ -72,7 +72,8 @@
     "ssoTryAgainLater": "Logowanie jednokrotne jest teraz przeciążone. Spróbuj ponownie za minutę.",
     "ssoFailed": "Logowanie jednokrotne nie powiodło się. Spróbuj ponownie.",
     "ssoServerChanged": "Serwer zmienił się podczas logowania. Spróbuj ponownie.",
-    "ssoBrowserDidNotOpen": "Nie udało się otworzyć przeglądarki do logowania. Spróbuj ponownie."
+    "ssoBrowserDidNotOpen": "Nie udało się otworzyć przeglądarki do logowania. Spróbuj ponownie.",
+    "sessionRequiresHttps": "Ten serwer akceptuje sesję tylko przez HTTPS. Użyj adresu https:// lub poproś administratora serwera o ustawienie JOT_COOKIE_SECURE=false."
   },
   "dashboard": {
     "newNote": "Nowa notatka",
@@ -665,7 +666,8 @@
     "refresh": "Odśwież",
     "shareDiagnostics": "Udostępnij raport diagnostyczny",
     "yes": "Tak",
-    "no": "Nie"
+    "no": "Nie",
+    "encrypted": "Szyfrowane (HTTPS)"
   },
   "apiErrors": {
     "invalidCredentials": "Nieprawidłowa nazwa użytkownika lub hasło.",
@@ -690,5 +692,11 @@
     "screenMessage": "Na tym ekranie wystąpił nieoczekiwany problem.",
     "tryAgain": "Spróbuj ponownie",
     "shareDiagnostics": "Udostępnij diagnostykę"
+  },
+  "serverSecurity": {
+    "insecureTitle": "Połączenie nieszyfrowane",
+    "insecureMessage": "{{server}} używa http://. Twoje hasło, sesja i notatki są przesyłane bez szyfrowania, a każdy na trasie sieciowej może je odczytać lub zmienić.",
+    "insecureConfirm": "Połącz mimo to",
+    "insecureBadge": "Nieszyfrowane"
   }
 }

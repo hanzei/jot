@@ -323,17 +323,26 @@ func (c *Client) ImportNotes(ctx context.Context, importType string, filename st
 	})
 }
 
-// ImportUsememos imports notes directly from a Memos instance.
-func (c *Client) ImportUsememos(ctx context.Context, rawURL, token string) (*ImportResponse, error) {
+// ImportUsememos imports notes directly from the server's configured Memos
+// instance (JOT_MEMOS_URL), authenticating to it with the user's Memos access
+// token.
+func (c *Client) ImportUsememos(ctx context.Context, token string) (*ImportResponse, error) {
 	return c.doImportRequest(ctx, "usememos", func(mw *multipart.Writer) error {
-		if err := mw.WriteField("url", rawURL); err != nil {
-			return fmt.Errorf("write url field: %w", err)
-		}
 		if err := mw.WriteField("token", token); err != nil {
 			return fmt.Errorf("write token field: %w", err)
 		}
 		return nil
 	})
+}
+
+// ImportOptions returns the import sources the server offers beyond file
+// uploads.
+func (c *Client) ImportOptions(ctx context.Context) (*ImportOptions, error) {
+	var resp ImportOptions
+	if err := c.doJSON(ctx, http.MethodGet, "/api/v1/notes/import/options", nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
 }
 
 // ExportNotes downloads the authenticated user's notes as a Jot export

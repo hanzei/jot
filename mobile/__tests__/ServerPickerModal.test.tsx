@@ -104,6 +104,15 @@ describe('ServerPickerModal', () => {
     expect(getByText('https://two.example.com')).toBeTruthy();
   });
 
+  it('marks only plain-HTTP servers as unencrypted (#1337)', async () => {
+    mockListServers.mockResolvedValue([serverOne, { ...serverTwo, serverUrl: 'http://two.lan:8080' }]);
+    const { getByTestId, queryByTestId } = await renderPicker();
+
+    await waitFor(() => expect(getByTestId('server-picker-insecure-server-two')).toBeTruthy());
+    expect(getByTestId('server-picker-insecure-server-two')).toHaveTextContent('serverSecurity.insecureBadge');
+    expect(queryByTestId('server-picker-insecure-server-one')).toBeNull();
+  });
+
   it('does not read the registry while hidden', async () => {
     await renderPicker({ visible: false });
     expect(mockListServers).not.toHaveBeenCalled();

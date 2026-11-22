@@ -70,7 +70,8 @@
     "ssoTryAgainLater": "Single Sign-On ist gerade ausgelastet. Versuche es in einer Minute erneut.",
     "ssoFailed": "Single Sign-On fehlgeschlagen. Bitte versuche es erneut.",
     "ssoServerChanged": "Der Server hat sich während der Anmeldung geändert. Bitte versuche es erneut.",
-    "ssoBrowserDidNotOpen": "Der Browser für die Anmeldung konnte nicht geöffnet werden. Bitte versuche es erneut."
+    "ssoBrowserDidNotOpen": "Der Browser für die Anmeldung konnte nicht geöffnet werden. Bitte versuche es erneut.",
+    "sessionRequiresHttps": "Dieser Server akzeptiert seine Sitzung nur über HTTPS. Verwende eine https://-Adresse oder bitte den Betreiber des Servers, JOT_COOKIE_SECURE=false zu setzen."
   },
   "dashboard": {
     "newNote": "Neue Notiz",
@@ -635,7 +636,8 @@
     "refresh": "Aktualisieren",
     "shareDiagnostics": "Diagnosebericht teilen",
     "yes": "Ja",
-    "no": "Nein"
+    "no": "Nein",
+    "encrypted": "Verschlüsselt (HTTPS)"
   },
   "apiErrors": {
     "invalidCredentials": "Ungültiger Benutzername oder ungültiges Passwort.",
@@ -660,5 +662,11 @@
     "screenMessage": "Auf diesem Bildschirm ist ein unerwartetes Problem aufgetreten.",
     "tryAgain": "Erneut versuchen",
     "shareDiagnostics": "Diagnose teilen"
+  },
+  "serverSecurity": {
+    "insecureTitle": "Unverschlüsselte Verbindung",
+    "insecureMessage": "{{server}} verwendet http://. Dein Passwort, deine Sitzung und deine Notizen werden unverschlüsselt übertragen, und jeder auf dem Netzwerkpfad kann sie mitlesen oder verändern.",
+    "insecureConfirm": "Trotzdem verbinden",
+    "insecureBadge": "Unverschlüsselt"
   }
 }

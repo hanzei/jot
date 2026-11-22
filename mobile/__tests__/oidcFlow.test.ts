@@ -16,6 +16,7 @@ import {
   resolveOidcCallback,
   runOidcBrowserFlow,
 } from '../src/store/oidcFlow';
+import { InsecureSessionCookieError } from '../src/api/sessionCookie';
 
 jest.mock('../src/api/client', () => ({
   getBaseUrl: jest.fn(),
@@ -266,6 +267,7 @@ describe('oidcFlow', () => {
     it('maps exchange failures', () => {
       expect(oidcExchangeErrorMessage(new Error('Network Error'))).toBe('auth.unableToConnect');
       expect(oidcExchangeErrorMessage(new CanceledError('switched'))).toBe('auth.ssoServerChanged');
+      expect(oidcExchangeErrorMessage(new InsecureSessionCookieError())).toBe('auth.sessionRequiresHttps');
       expect(oidcExchangeErrorMessage({ response: { status: 400, data: apiErrorBody('validation_failed', 'invalid or expired code') } })).toBe('auth.ssoFailed');
       expect(oidcExchangeErrorMessage({ response: { status: 403, data: apiErrorBody('forbidden', 'account disabled') } })).toBe('account disabled');
       expect(oidcExchangeErrorMessage({ response: { status: 500 } })).toBe('auth.ssoFailed');

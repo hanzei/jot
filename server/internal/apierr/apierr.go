@@ -71,6 +71,7 @@ const (
 	CodeSSOLinkUnavailable   Code = "sso_link_unavailable"   // 403 — password login is turned off, so there is no local account to link SSO to.
 	CodeSSOUnlinkUnavailable Code = "sso_unlink_unavailable" // 403 — password login is turned off, so SSO is the only way to sign in and cannot be disconnected.
 	CodePublicLinksDisabled  Code = "public_links_disabled"  // 403 — the operator turned public note links off (JOT_PUBLIC_LINKS_ENABLED=false).
+	CodeMemosImportDisabled  Code = "memos_import_disabled"  // 403 — the Memos import is off because the operator has not set JOT_MEMOS_URL.
 )
 
 // ErrorResponse is the body of every API error response.
