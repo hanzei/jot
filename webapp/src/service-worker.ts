@@ -62,38 +62,72 @@ const isReauthenticatingWrite = (method: string, pathname: string): boolean =>
 // stays visible to someone who stays signed in.
 const NOTE_IMAGE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
+// Bumped each time sign-out clears the user's data. Anything that started
+// under an earlier generation belongs to the signed-out user: a replay stops,
+// a failed write is not queued, and an image response is not cached.
+let userDataGeneration = 0;
+
+// Queue writes and the sign-out drain run one at a time. A generation check
+// alone is not enough: a pushRequest() that passed it could still commit
+// after the drain had emptied the queue and acknowledged the sign-out.
+let queueLock: Promise<unknown> = Promise.resolve();
+const withQueueLock = <T,>(fn: () => Promise<T>): Promise<T> => {
+  const run = queueLock.then(fn);
+  queueLock = run.catch(() => {});
+  return run;
+};
+
+// Image fetches whose cache write may still be pending. Sign-out waits for
+// them before deleting the cache, so none can re-create it afterwards.
+const pendingImageWrites = new Set<Promise<unknown>>();
+
+const noteImageStrategy = new CacheFirst({
+  cacheName: NOTE_IMAGES_CACHE,
+  plugins: [
+    {
+      // Treat an expired copy as a miss, so CacheFirst refetches (and
+      // re-caches) it. Judged by the response's Date header, as Workbox's
+      // ExpirationPlugin does; a copy without one is kept.
+      cachedResponseWillBeUsed: async ({ cachedResponse }) => {
+        const date = Date.parse(cachedResponse?.headers.get('date') ?? '');
+        if (cachedResponse && !Number.isNaN(date) && Date.now() - date > NOTE_IMAGE_MAX_AGE_SECONDS * 1000) {
+          return null;
+        }
+        return cachedResponse;
+      },
+      // The server marks images `immutable` for a year, so a plain fetch
+      // would be answered from the browser's HTTP cache — no access check,
+      // and the old Date header would make the re-cached copy expire again
+      // at once. Revalidating asks the server (a cheap 304 via the ETag) and
+      // refreshes Date.
+      requestWillFetch: async ({ request, state }) => {
+        if (state) state.generation = userDataGeneration;
+        return new Request(request, { cache: 'no-cache' });
+      },
+      // Replaces Workbox's default, which caches only 200s, so keeps that
+      // rule. A response fetched before a sign-out is not cached after it.
+      cacheWillUpdate: async ({ response, state }) =>
+        response.status === 200 && state?.generation === userDataGeneration ? response : null,
+      // Offline, an expired copy is still better than a broken image. Only a
+      // network failure lands here; a 403 from the server is a response and
+      // is passed through.
+      handlerDidError: async ({ request }) => {
+        const cache = await caches.open(NOTE_IMAGES_CACHE);
+        return (await cache.match(request)) ?? undefined;
+      },
+    },
+  ],
+});
+
 registerRoute(
   ({ url }) => /^\/api\/v1\/images\/[^/]+(\/thumbnail)?$/.test(url.pathname),
-  new CacheFirst({
-    cacheName: NOTE_IMAGES_CACHE,
-    plugins: [
-      {
-        // Treat an expired copy as a miss, so CacheFirst refetches (and
-        // re-caches) it. Judged by the response's Date header, as Workbox's
-        // ExpirationPlugin does; a copy without one is kept.
-        cachedResponseWillBeUsed: async ({ cachedResponse }) => {
-          const date = Date.parse(cachedResponse?.headers.get('date') ?? '');
-          if (cachedResponse && !Number.isNaN(date) && Date.now() - date > NOTE_IMAGE_MAX_AGE_SECONDS * 1000) {
-            return null;
-          }
-          return cachedResponse;
-        },
-        // The server marks images `immutable` for a year, so a plain fetch
-        // would be answered from the browser's HTTP cache — no access check,
-        // and the old Date header would make the re-cached copy expire again
-        // at once. Revalidating asks the server (a cheap 304 via the ETag) and
-        // refreshes Date.
-        requestWillFetch: async ({ request }) => new Request(request, { cache: 'no-cache' }),
-        // Offline, an expired copy is still better than a broken image. Only a
-        // network failure lands here; a 403 from the server is a response and
-        // is passed through.
-        handlerDidError: async ({ request }) => {
-          const cache = await caches.open(NOTE_IMAGES_CACHE);
-          return (await cache.match(request)) ?? undefined;
-        },
-      },
-    ],
-  })
+  (options) => {
+    const [response, done] = noteImageStrategy.handleAll(options);
+    pendingImageWrites.add(done);
+    const forget = () => { pendingImageWrites.delete(done); };
+    done.then(forget, forget);
+    return response;
+  }
 );
 
 // API caching strategy - Network First with offline fallback
@@ -129,18 +163,17 @@ registerRoute(
 const MAX_RETRY_COUNT = 3;
 const RETRY_DELAY_MS = 1000;
 
-// Bumped each time sign-out empties the queue. A replay already under way
-// checks it before re-queueing a failed request, so a request it took off the
-// queue before the sign-out cannot be put back and sent for the next user.
-let queueGeneration = 0;
-
 const bgSyncQueue = new Queue('api-queue', {
   onSync: async ({ queue }) => {
-    const generation = queueGeneration;
-    let entry;
-    while (generation === queueGeneration && (entry = await queue.shiftRequest())) {
+    const generation = userDataGeneration;
+    while (generation === userDataGeneration) {
+      const entry = await queue.shiftRequest();
+      if (!entry) break;
+      // A sign-out may have landed while the entry was being taken off the
+      // queue; it belongs to the signed-out user, so drop it unsent.
+      if (generation !== userDataGeneration) break;
       const retryCount = (entry.metadata as { retryCount?: number })?.retryCount || 0;
-      
+
       try {
         await fetch(entry.request);
         // Success - don't re-add to queue
@@ -148,11 +181,15 @@ const bgSyncQueue = new Queue('api-queue', {
         if (retryCount < MAX_RETRY_COUNT) {
           // Add delay before retry and increment counter
           await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * Math.pow(2, retryCount)));
-          if (generation !== queueGeneration) break;
-          await queue.unshiftRequest({
-            ...entry,
-            metadata: { retryCount: retryCount + 1 }
+          const requeued = await withQueueLock(async () => {
+            if (generation !== userDataGeneration) return false;
+            await queue.unshiftRequest({
+              ...entry,
+              metadata: { retryCount: retryCount + 1 }
+            });
+            return true;
           });
+          if (!requeued) break;
         }
         // Max retries reached - drop the request and continue with next item
       }
@@ -169,10 +206,13 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
   const reply = event.ports[0];
   event.waitUntil(
     (async () => {
-      queueGeneration++;
-      while (await bgSyncQueue.shiftRequest()) {
-        // Dropped unsent.
-      }
+      await withQueueLock(async () => {
+        userDataGeneration++;
+        while (await bgSyncQueue.shiftRequest()) {
+          // Dropped unsent.
+        }
+      });
+      await Promise.allSettled(pendingImageWrites);
       await caches.delete(NOTE_IMAGES_CACHE);
       reply?.postMessage(null);
     })()
@@ -248,9 +288,16 @@ self.addEventListener('fetch', (event: FetchEvent) => {
 
   // Idempotent requests (PUT, DELETE, allowlisted POSTs) - queue for
   // background sync on network failure
+  const generation = userDataGeneration;
   event.respondWith(
     fetch(request.clone()).catch(async () => {
-      await bgSyncQueue.pushRequest({ request });
+      const queued = await withQueueLock(async () => {
+        // The user who made this request signed out while it was in flight.
+        if (generation !== userDataGeneration) return false;
+        await bgSyncQueue.pushRequest({ request });
+        return true;
+      });
+      if (!queued) return Response.error();
       return new Response('Request queued for background sync', {
         status: 202,
         statusText: 'Accepted',

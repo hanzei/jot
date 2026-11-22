@@ -6,7 +6,7 @@ vi.mock('@/utils/api', () => ({
   auth: { logout: mockLogout },
 }));
 
-import { endServerSession } from '../logout';
+import { endServerSession, isLogoutInFlight, logoutSettled } from '../logout';
 
 describe('endServerSession', () => {
   beforeEach(() => {
@@ -34,5 +34,26 @@ describe('endServerSession', () => {
     await expect(endServerSession()).resolves.toBe(false);
     mockLogout.mockRejectedValue({ response: { status: 429 } });
     await expect(endServerSession()).resolves.toBe(false);
+  });
+
+  it('shares one request between overlapping calls and settles before sign-in', async () => {
+    let finish!: () => void;
+    mockLogout.mockReturnValue(new Promise<void>((resolve) => { finish = resolve; }));
+
+    const first = endServerSession();
+    const second = endServerSession();
+    expect(mockLogout).toHaveBeenCalledTimes(1);
+    expect(isLogoutInFlight()).toBe(true);
+
+    let settled = false;
+    const waiting = logoutSettled().then(() => { settled = true; });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    finish();
+    await expect(first).resolves.toBe(true);
+    await expect(second).resolves.toBe(true);
+    await waiting;
+    expect(isLogoutInFlight()).toBe(false);
   });
 });

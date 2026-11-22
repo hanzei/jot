@@ -9,6 +9,7 @@ import { setUser, setSettings } from '@/utils/auth';
 import { REDIRECT_PARAM, authPathWithRedirect } from '@/utils/authRedirect';
 import { ssoLoginErrorMessage, useSsoErrorParam } from '@/utils/ssoError';
 import PendingLogoutNotice from '@/components/PendingLogoutNotice';
+import { isLogoutInFlight, logoutSettled } from '@/utils/logout';
 
 interface LoginProps {
   onLogin: () => void;
@@ -51,6 +52,7 @@ export default function Login({ onLogin, registrationEnabled, sso, serverLogoutP
     setError('');
 
     try {
+      await logoutSettled();
       const response = await auth.login({ username, password });
       setUser(response.user);
       setSettings(response.settings);
@@ -118,6 +120,13 @@ export default function Login({ onLogin, registrationEnabled, sso, serverLogoutP
             */}
             <a
               href={SSO_LOGIN_URL}
+              onClick={(e) => {
+                // Leaving the page doesn't cancel a logout retry, and its
+                // response would clear the cookie the SSO sign-in sets.
+                if (!isLogoutInFlight()) return;
+                e.preventDefault();
+                void logoutSettled().then(() => { window.location.href = SSO_LOGIN_URL; });
+              }}
               className="group relative w-full flex justify-center py-2 px-4 border border-gray-300 dark:border-slate-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900"
             >
               {t('auth.ssoSignInWith', { provider: providerName })}
