@@ -171,15 +171,15 @@ func newServer(cfg *config.Config, log *logrus.Logger, tracerProvider trace.Trac
 	}
 	undo.push(func() { _ = imageStore.Close() })
 
-	authHandler := handlers.NewAuthHandler(userStore, noteStore, sessionService, userSettingsStore, imageStore, hub, cfg.RegistrationEnabled, cfg.LocalLoginEnabled, cfg.PasswordMinLength)
 	notes, err := notesvc.New(noteStore, labelStore, userStore, imageStore, notify.New(hub, noteStore), meter)
 	if err != nil {
 		return nil, fmt.Errorf("initialize notes service: %w", err)
 	}
+	authHandler := handlers.NewAuthHandler(userStore, noteStore, sessionService, userSettingsStore, imageStore, hub, notes, cfg.RegistrationEnabled, cfg.LocalLoginEnabled, cfg.PasswordMinLength)
 	notesHandler := handlers.NewNotesHandler(noteStore, notes, hub, imageStore, int64(cfg.UploadMaxBytes), cfg.PublicLinksEnabled)
 	labelsHandler := handlers.NewLabelsHandler(labelStore, notes)
 	eventsHandler := handlers.NewEventsHandler(hub)
-	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, imageStore, sessionService, hub,
+	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, imageStore, sessionService, hub, notes,
 		time.Now(), //nolint:gocritic // uptime reference; keeps the monotonic clock, never persisted
 		cfg.PasswordMinLength)
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)

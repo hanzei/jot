@@ -32,7 +32,7 @@ func waitForNoteEvents(ch <-chan client.SSEEvent, eventType sse.EventType, noteI
 			if !ok {
 				return missing
 			}
-			if e.Type == string(eventType) && e.NoteData != nil {
+			if isNoteEvent(eventType, missing...)(e) {
 				missing = slices.DeleteFunc(missing, func(id string) bool { return id == e.NoteData.NoteID })
 			}
 		case <-deadline:
