@@ -223,7 +223,7 @@ export interface InlineLink {
  * without its query. Parsed by hand rather than with `URL`, which Hermes only
  * partly implements, so both clients get the same answer.
  */
-function linkHost(href: string): string {
+export function linkHost(href: string): string {
   const mailto = /^mailto:([^?]*)/i.exec(href);
   // `||`, not `??`: the group always matches, but `mailto:?subject=x` matches it
   // empty, and an empty host line says nothing.

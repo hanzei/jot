@@ -4,7 +4,7 @@ import { X, Upload, ExternalLink } from 'lucide-react';
 import { Trans, useTranslation } from 'react-i18next';
 import { notes } from '@/utils/api';
 import { useSizeTransition } from '@/hooks/useSizeTransition';
-import type { ImportResponse } from '@jot/shared';
+import { linkHost, type ImportResponse } from '@jot/shared';
 import { apiErrorMessage } from '@/utils/apiError';
 
 type ImportType = 'jot_json' | 'google_keep' | 'usememos';
@@ -49,12 +49,13 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
     notes.importOptions()
       .then(options => {
         if (cancelled || !options.memos) return;
-        const location = new URL(options.memos.url);
-        setMemos({ url: options.memos.url, host: location.host, insecure: location.protocol === 'http:' });
+        const { url } = options.memos;
+        // The server lower-cases the scheme, so a literal prefix check holds.
+        setMemos({ url, host: linkHost(url), insecure: url.startsWith('http://') });
       })
       .catch(() => {
-        // Without the options (or with a URL that does not parse) the Memos
-        // import is not offered; the file imports do not depend on them.
+        // Without the options the Memos import is not offered; the file
+        // imports do not depend on them.
       });
     return () => {
       cancelled = true;

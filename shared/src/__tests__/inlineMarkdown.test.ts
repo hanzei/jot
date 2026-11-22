@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Lexer } from 'marked';
 import {
+  linkHost,
   normalizeInlineTokens,
   flattenInlineNodes,
   inlineSourceOffset,
@@ -356,5 +357,17 @@ describe('inlineLinks', () => {
       // themselves with exactly what the host line would repeat.
       expect(hostOf('https://a.example www.b.example c@d.example')).toEqual([null, null, null]);
     });
+  });
+});
+
+describe('linkHost', () => {
+  it.each([
+    ['https://Memos.Example.com/memos', 'memos.example.com'],
+    ['http://192.168.1.10:5230', '192.168.1.10:5230'],
+    ['https://user:pass@host.lan/x?y#z', 'host.lan'],
+    ['mailto:someone@example.com?subject=hi', 'someone@example.com'],
+    ['not a url', 'not a url'],
+  ])('%s → %s', (href, host) => {
+    expect(linkHost(href)).toBe(host);
   });
 });
