@@ -51,3 +51,9 @@ func (s *PATStore) RecordUse(ctx context.Context, pat *PersonalAccessToken, now 
 	defer end()
 	return s.inner.RecordUse(ctx, pat, now)
 }
+
+func (s *PATStore) Exists(ctx context.Context, id string) (_ bool, err error) {
+	ctx, end := startSpan(ctx, s.instr, "PATStore.Exists", &err)
+	defer end()
+	return s.inner.Exists(ctx, id)
+}

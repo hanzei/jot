@@ -76,10 +76,17 @@ type Event struct {
 // left stale.
 const subscriberBufferSize = 128
 
+// subscriber is one open SSE stream. recheck is signaled (never closed) by
+// InvalidateUser; it holds at most one pending signal.
+type subscriber struct {
+	ch      chan Event
+	recheck chan struct{}
+}
+
 // Hub manages per-user SSE subscriber channels.
 type Hub struct {
 	mu                 sync.RWMutex
-	clients            map[string][]chan Event // user_id -> subscriber channels
+	clients            map[string][]subscriber // user_id -> subscribers
 	closed             bool
 	subscribersActive  metric.Int64UpDownCounter
 	eventsPublished    metric.Int64Counter
@@ -116,18 +123,22 @@ func NewHub() (*Hub, error) {
 	}
 
 	return &Hub{
-		clients:            make(map[string][]chan Event),
+		clients:            make(map[string][]subscriber),
 		subscribersActive:  subscribersActive,
 		eventsPublished:    eventsPublished,
 		subscribersEvicted: subscribersEvicted,
 	}, nil
 }
 
-// Subscribe registers a buffered channel for userID and returns an unsubscribe function.
+// Subscribe registers a buffered channel for userID and returns it, a recheck
+// channel, and an unsubscribe function. The recheck channel receives a value
+// whenever InvalidateUser is called for userID; the caller should then
+// re-validate the credential the stream was opened with. It is never closed.
 // The caller must call unsubscribe when the SSE connection closes.
 // ctx is used to link the active-subscriber gauge increment to the caller's trace span.
-func (h *Hub) Subscribe(ctx context.Context, userID string) (<-chan Event, func()) {
+func (h *Hub) Subscribe(ctx context.Context, userID string) (<-chan Event, <-chan struct{}, func()) {
 	ch := make(chan Event, subscriberBufferSize)
+	recheck := make(chan struct{}, 1)
 
 	h.mu.Lock()
 	if h.closed {
@@ -138,9 +149,9 @@ func (h *Hub) Subscribe(ctx context.Context, userID string) (<-chan Event, func(
 		// returned unsubscribe is a no-op since the channel was never registered.
 		h.mu.Unlock()
 		close(ch)
-		return ch, func() {}
+		return ch, recheck, func() {}
 	}
-	h.clients[userID] = append(h.clients[userID], ch)
+	h.clients[userID] = append(h.clients[userID], subscriber{ch: ch, recheck: recheck})
 	h.mu.Unlock()
 
 	h.subscribersActive.Add(ctx, 1)
@@ -165,7 +176,26 @@ func (h *Hub) Subscribe(ctx context.Context, userID string) (<-chan Event, func(
 		log.Debug("SSE: unsubscribed")
 	}
 
-	return ch, unsubscribe
+	return ch, recheck, unsubscribe
+}
+
+// InvalidateUser asks every open stream of userID to re-validate its
+// credential now. Call it after deleting any of the user's sessions or
+// personal access tokens, so a stream opened with one of them ends promptly
+// rather than at its next periodic re-check. Streams whose credential is still
+// valid carry on. It never blocks and is a no-op after Close.
+func (h *Hub) InvalidateUser(userID string) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if h.closed {
+		return
+	}
+	for _, sub := range h.clients[userID] {
+		select {
+		case sub.recheck <- struct{}{}:
+		default: // a recheck is already pending
+		}
+	}
 }
 
 // removeLocked unregisters ch from userID's subscribers and reports whether it
@@ -173,7 +203,7 @@ func (h *Hub) Subscribe(ctx context.Context, userID string) (<-chan Event, func(
 func (h *Hub) removeLocked(userID string, ch chan Event) bool {
 	channels := h.clients[userID]
 	for i, c := range channels {
-		if c == ch {
+		if c.ch == ch {
 			h.clients[userID] = append(channels[:i], channels[i+1:]...)
 			if len(h.clients[userID]) == 0 {
 				delete(h.clients, userID)
@@ -225,8 +255,8 @@ func (h *Hub) Close() {
 	}
 	h.closed = true
 	for channels := range maps.Values(h.clients) {
-		for _, ch := range channels {
-			close(ch)
+		for _, sub := range channels {
+			close(sub.ch)
 		}
 	}
 }
@@ -259,13 +289,13 @@ func (h *Hub) Publish(ctx context.Context, userIDs []string, event Event) {
 			continue
 		}
 		seen[uid] = struct{}{}
-		for _, ch := range h.clients[uid] {
+		for _, sub := range h.clients[uid] {
 			select {
-			case ch <- event:
+			case sub.ch <- event:
 				delivered++
 				h.eventsPublished.Add(ctx, 1, metric.WithAttributes(eventAttr))
 			default:
-				overflowed = append(overflowed, overflow{userID: uid, ch: ch})
+				overflowed = append(overflowed, overflow{userID: uid, ch: sub.ch})
 			}
 		}
 	}

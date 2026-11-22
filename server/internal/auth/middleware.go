@@ -23,6 +23,10 @@ const userContextKey contextKey = "user"
 // enters the request context.
 const sessionTokenHashContextKey contextKey = "session_token_hash"
 
+// patIDContextKey carries the ID of the personal access token a
+// bearer-authenticated request was made with.
+const patIDContextKey contextKey = "pat_id"
+
 func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rawToken, hasBearer := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -49,13 +53,14 @@ func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 
 		// Fall back to Bearer token (personal access token).
 		if hasBearer {
-			user, err := s.authenticateWithPAT(r.Context(), rawToken)
+			pat, user, err := s.authenticateWithPAT(r.Context(), rawToken)
 			if err != nil {
 				logPATRejection(r.Context(), err)
 				apierr.Write(w, r, http.StatusUnauthorized, apierr.CodeUnauthorized, "unauthorized")
 				return
 			}
-			next.ServeHTTP(w, r.WithContext(withUser(r.Context(), user)))
+			ctx := context.WithValue(withUser(r.Context(), user), patIDContextKey, pat.ID)
+			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
 
@@ -93,23 +98,46 @@ func logPATRejection(ctx context.Context, err error) {
 	logutil.FromContext(ctx).WithError(err).Warn("PAT authentication error")
 }
 
-func (s *SessionService) authenticateWithPAT(ctx context.Context, rawToken string) (_ *models.User, err error) {
+func (s *SessionService) authenticateWithPAT(ctx context.Context, rawToken string) (_ *models.PersonalAccessToken, _ *models.User, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "SessionService.authenticateWithPAT", &err)
 	defer end()
 	pat, err := s.patStore.GetByTokenHash(ctx, rawToken)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	user, err := s.userStore.GetByID(ctx, pat.UserID)
 	if err != nil {
-		return nil, fmt.Errorf("get user for PAT: %w", err)
+		return nil, nil, fmt.Errorf("get user for PAT: %w", err)
 	}
 	// Failing to record the use never fails the request. The write ignores
 	// cancellation: the use happened even if the client has since hung up.
 	if err := s.patStore.RecordUse(context.WithoutCancel(ctx), pat, models.Now()); err != nil {
 		logutil.FromContext(ctx).WithError(err).Warn("Failed to record personal access token use")
 	}
-	return user, nil
+	return pat, user, nil
+}
+
+// CredentialStillValid re-checks the credential the request in ctx was
+// authenticated with against the database: the session it was opened with
+// must still exist and not have expired, or the personal access token must
+// not have been revoked. A long-lived request such as the SSE stream calls it
+// to notice that its credential went away after it was admitted.
+func (s *SessionService) CredentialStillValid(ctx context.Context) (bool, error) {
+	if tokenHash, ok := GetSessionTokenHashFromContext(ctx); ok {
+		active, err := s.sessionStore.IsActive(ctx, tokenHash)
+		if err != nil {
+			return false, fmt.Errorf("check session: %w", err)
+		}
+		return active, nil
+	}
+	if patID, ok := ctx.Value(patIDContextKey).(string); ok {
+		exists, err := s.patStore.Exists(ctx, patID)
+		if err != nil {
+			return false, fmt.Errorf("check personal access token: %w", err)
+		}
+		return exists, nil
+	}
+	return false, nil
 }
 
 func GetUserFromContext(ctx context.Context) (*models.User, bool) {

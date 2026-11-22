@@ -248,6 +248,8 @@ func (h *AdminHandler) SetUserPassword(w http.ResponseWriter, r *http.Request) (
 	if err := h.sessionService.InvalidateUserSessions(r.Context(), targetID); err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("invalidate user sessions: %w", err)
 	}
+	// Live-update streams opened with those sessions end too.
+	h.hub.InvalidateUser(targetID)
 
 	// If the admin reset their own password, issue a fresh session so the
 	// current request stays authenticated (mirrors AuthHandler.ChangePassword).
@@ -288,6 +290,8 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, 
 	if err := h.notes.DeleteUser(r.Context(), targetID, requestingUser.ID); err != nil {
 		return storeError(err, "delete user")
 	}
+	// The user's sessions and tokens went with the row; end their streams.
+	h.hub.InvalidateUser(targetID)
 
 	return http.StatusNoContent, nil, nil
 }

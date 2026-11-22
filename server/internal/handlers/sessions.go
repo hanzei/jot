@@ -8,14 +8,16 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/sse"
 )
 
 type SessionsHandler struct {
 	sessionStore *models.SessionStore
+	hub          *sse.Hub
 }
 
-func NewSessionsHandler(sessionStore *models.SessionStore) *SessionsHandler {
-	return &SessionsHandler{sessionStore: sessionStore}
+func NewSessionsHandler(sessionStore *models.SessionStore, hub *sse.Hub) *SessionsHandler {
+	return &SessionsHandler{sessionStore: sessionStore, hub: hub}
 }
 
 type SessionResponse struct {
@@ -124,6 +126,8 @@ func (h *SessionsHandler) RevokeSession(w http.ResponseWriter, r *http.Request) 
 		if !deleted {
 			return http.StatusNotFound, nil, errors.New("session not found")
 		}
+		// End a live-update stream the revoked session still holds open.
+		h.hub.InvalidateUser(user.ID)
 		return http.StatusNoContent, nil, nil
 	}
 

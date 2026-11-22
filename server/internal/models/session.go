@@ -195,13 +195,35 @@ func (s *sessionStore) GetByUserID(ctx context.Context, userID string) (sessions
 	return sessions, nil
 }
 
-// Delete removes a session by the raw token from the client's cookie.
-func (s *sessionStore) Delete(ctx context.Context, rawToken string) error {
-	query := `DELETE FROM sessions WHERE token_hash = ?`
-	if _, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), HashSessionToken(rawToken)); err != nil {
-		return fmt.Errorf("failed to delete session: %w", err)
+// Delete removes a session by the raw token from the client's cookie and
+// returns the ID of the user it belonged to, or "" when there was no such
+// session.
+func (s *sessionStore) Delete(ctx context.Context, rawToken string) (string, error) {
+	query := `DELETE FROM sessions WHERE token_hash = ? RETURNING user_id`
+	var userID string
+	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), HashSessionToken(rawToken)).Scan(&userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to delete session: %w", err)
 	}
-	return nil
+	return userID, nil
+}
+
+// IsActive reports whether the session with the given stored token hash
+// still exists and has not expired.
+func (s *sessionStore) IsActive(ctx context.Context, tokenHash string) (bool, error) {
+	query := `SELECT 1 FROM sessions WHERE token_hash = ? AND expires_at > ?`
+	var one int
+	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), tokenHash, Timestamp(Now())).Scan(&one)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("check session: %w", err)
+	}
+	return true, nil
 }
 
 // DeleteByUserIDAndTokenHash removes a session by its stored token hash (as
