@@ -39,6 +39,12 @@
     "handedOffMessage": "Você pode fechar esta aba."
   },
   "auth": {
+    "logoutPending": {
+      "message": "Você saiu neste dispositivo, mas o Jot não conseguiu contactar o servidor para encerrar sua sessão. Até conseguir, recarregar esta página fará você entrar novamente.",
+      "retry": "Tentar novamente",
+      "retrying": "Tentando…",
+      "retryFailed": "Ainda não foi possível contactar o servidor. Verifique sua conexão e tente novamente."
+    },
     "signInTitle": "Entrar no Jot",
     "or": "Ou",
     "createNewAccount": "criar uma nova conta",

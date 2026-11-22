@@ -14,8 +14,8 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import ErrorFallback from '@/components/ErrorFallback';
 import SidebarLabels from '@/components/SidebarLabels';
 import { useSidebarLabelsController } from '@/hooks/useSidebarLabelsController';
-import { auth } from '@/utils/api';
 import { removeUser, isAdmin } from '@/utils/auth';
+import { endServerSession } from '@/utils/logout';
 import type { Label, LabelWithCount } from '@jot/shared';
 
 interface LabelCallbacks {
@@ -49,7 +49,8 @@ export interface AuthenticatedLayoutContext {
 export const useAuthenticatedLayout = () => useOutletContext<AuthenticatedLayoutContext>();
 
 interface AuthenticatedLayoutProps {
-  onLogout: () => void;
+  /** `serverSessionEnded` is false when `POST /logout` failed and the session cookie is still valid. */
+  onLogout: (serverSessionEnded: boolean) => void;
   /** `/config`'s `trash_retention_days`, for the bin tab's tooltip. 0 means no automatic purge. */
   trashRetentionDays: number;
 }
@@ -170,17 +171,16 @@ const AuthenticatedLayout = ({ onLogout, trashRetentionDays }: AuthenticatedLayo
 
   const signOutLocally = useCallback(async () => {
     await removeUser();
-    onLogout();
+    onLogout(true);
   }, [onLogout]);
 
+  // Signs out locally even when the server can't be reached, so the device
+  // stops showing the account — but says so, since the session outlives it.
   const handleLogout = useCallback(async () => {
-    try {
-      await auth.logout();
-    } catch {
-      // Continue with logout even if the server call fails
-    }
-    await signOutLocally();
-  }, [signOutLocally]);
+    const serverSessionEnded = await endServerSession();
+    await removeUser();
+    onLogout(serverSessionEnded);
+  }, [onLogout]);
 
   const sidebarChildren = useMemo(() => (
     <SidebarLabels

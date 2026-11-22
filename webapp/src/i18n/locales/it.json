@@ -39,6 +39,12 @@
     "handedOffMessage": "Puoi chiudere questa scheda."
   },
   "auth": {
+    "logoutPending": {
+      "message": "Sei disconnesso su questo dispositivo, ma Jot non è riuscito a raggiungere il server per terminare la sessione. Finché non ci riesce, ricaricare questa pagina ti farà accedere di nuovo.",
+      "retry": "Riprova",
+      "retrying": "Nuovo tentativo…",
+      "retryFailed": "Il server è ancora irraggiungibile. Controlla la connessione e riprova."
+    },
     "signInTitle": "Accedi a Jot",
     "or": "Oppure",
     "createNewAccount": "crea un nuovo account",

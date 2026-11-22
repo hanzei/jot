@@ -84,6 +84,18 @@ for (const theme of THEMES) {
       await expectNoViolations(page);
     });
 
+    test('login page pending-logout notice has no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage, loginPage }) => {
+      void authenticatedUser;
+      await dashboardPage.goto();
+      await page.route('**/api/v1/logout', (route) => route.abort('internetdisconnected'));
+      await dashboardPage.logout();
+      await loginPage.retryPendingLogout();
+      await expect(loginPage.pendingLogoutNotice()).toContainText('Still couldn\'t reach the server');
+      await expectTheme(page, theme);
+
+      await expectNoViolations(page);
+    });
+
     test('register page has no WCAG A/AA violations', async ({ page, registerPage }) => {
       await registerPage.goto();
       await expect(page.getByRole('button', { name: 'Create account' })).toBeVisible();

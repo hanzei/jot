@@ -18,6 +18,15 @@ export class LoginPage {
     await expect(this.page.getByRole('alert')).toContainText(message);
   }
 
+  /** Warning shown after a sign-out whose `POST /logout` never reached the server. */
+  pendingLogoutNotice() {
+    return this.page.getByTestId('pending-logout-notice');
+  }
+
+  async retryPendingLogout() {
+    await this.pendingLogoutNotice().getByRole('button', { name: 'Try again' }).click();
+  }
+
   async expectRedirectedToDashboard() {
     await expect(this.page).toHaveURL('/');
   }

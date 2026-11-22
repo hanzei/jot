@@ -57,6 +57,9 @@ function SignedInApp() {
   // state so it flips in the same render as isAuth: the redirect below is
   // decided during that render, and a flag living elsewhere would race it.
   const [signedOut, setSignedOut] = useState(false);
+  // Signed out on this device while POST /logout failed: the session cookie is
+  // still valid, so the login page warns and offers to retry.
+  const [serverLogoutPending, setServerLogoutPending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [passwordMinLength, setPasswordMinLength] = useState<number>(VALIDATION.PASSWORD_MIN_LENGTH);
@@ -123,7 +126,15 @@ function SignedInApp() {
         <Routes>
           <Route
             path="/login"
-            element={!isAuth ? <Login onLogin={() => setIsAuth(true)} registrationEnabled={registrationEnabled} sso={sso} /> : <PostAuthRedirect />}
+            element={!isAuth ? (
+              <Login
+                onLogin={() => { setServerLogoutPending(false); setIsAuth(true); }}
+                registrationEnabled={registrationEnabled}
+                sso={sso}
+                serverLogoutPending={serverLogoutPending}
+                onServerLogoutDone={() => setServerLogoutPending(false)}
+              />
+            ) : <PostAuthRedirect />}
           />
           <Route
             path="/register"
@@ -132,7 +143,7 @@ function SignedInApp() {
           <Route
             element={
               isAuth
-                ? <AuthenticatedLayout onLogout={() => { setIsAuth(false); setSignedOut(true); }} trashRetentionDays={trashRetentionDays} />
+                ? <AuthenticatedLayout onLogout={(serverSessionEnded) => { setIsAuth(false); setSignedOut(true); setServerLogoutPending(!serverSessionEnded); }} trashRetentionDays={trashRetentionDays} />
                 : (signedOut ? <Navigate to="/login" replace /> : <LoginRedirect />)
             }
           >

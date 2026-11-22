@@ -39,6 +39,12 @@
     "handedOffMessage": "Puedes cerrar esta pestaña."
   },
   "auth": {
+    "logoutPending": {
+      "message": "Has cerrado sesión en este dispositivo, pero Jot no pudo conectar con el servidor para finalizar tu sesión. Hasta que lo consiga, recargar esta página volverá a iniciar tu sesión.",
+      "retry": "Reintentar",
+      "retrying": "Intentando…",
+      "retryFailed": "Sigue sin poder conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo."
+    },
     "signInTitle": "Iniciar sesión en Jot",
     "or": "O",
     "createNewAccount": "crear una cuenta nueva",

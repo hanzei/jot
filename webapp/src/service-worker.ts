@@ -6,6 +6,7 @@ import { registerRoute, NavigationRoute } from 'workbox-routing';
 import { NetworkFirst, CacheFirst } from 'workbox-strategies';
 import { Queue } from 'workbox-background-sync';
 import { API_BASE_PATH, PUBLIC_NOTE_PATH_PREFIX, apiPaths } from '@jot/shared';
+import { API_CACHE, CLEAR_USER_DATA_MESSAGE, NOTE_IMAGES_CACHE } from './utils/serviceWorkerProtocol';
 
 // Precache the whole build — index.html and every hashed asset it references.
 // This is the only thing that serves build output: the precache swaps all of it
@@ -54,10 +55,31 @@ const isReauthenticatingWrite = (method: string, pathname: string): boolean =>
 // the bytes behind it never change — so cache-first is safe here in a way it is
 // not for build assets. Registered ahead of the API route below, which would
 // otherwise claim these URLs and re-fetch every image on every load.
+//
+// The bytes never change, but access to them can: a collaborator removed from
+// a note would keep seeing its images from this cache without the server being
+// asked. Sign-out deletes the cache; the expiry bounds how long a revoked image
+// stays visible to someone who stays signed in.
+const NOTE_IMAGE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
+
 registerRoute(
   ({ url }) => /^\/api\/v1\/images\/[^/]+(\/thumbnail)?$/.test(url.pathname),
   new CacheFirst({
-    cacheName: 'note-images',
+    cacheName: NOTE_IMAGES_CACHE,
+    plugins: [
+      {
+        // Treat an expired copy as a miss, so CacheFirst refetches (and
+        // re-caches) it. Judged by the response's Date header, as Workbox's
+        // ExpirationPlugin does; a copy without one is kept.
+        cachedResponseWillBeUsed: async ({ cachedResponse }) => {
+          const date = Date.parse(cachedResponse?.headers.get('date') ?? '');
+          if (cachedResponse && !Number.isNaN(date) && Date.now() - date > NOTE_IMAGE_MAX_AGE_SECONDS * 1000) {
+            return null;
+          }
+          return cachedResponse;
+        },
+      },
+    ],
   })
 );
 
@@ -66,7 +88,7 @@ registerRoute(
   ({ url }) =>
     url.pathname.startsWith('/api/v1/') && url.pathname !== SSE_PATH && !url.pathname.startsWith(PUBLIC_API_PREFIX),
   new NetworkFirst({
-    cacheName: 'api-cache',
+    cacheName: API_CACHE,
     networkTimeoutSeconds: 3,
     plugins: [
       {
@@ -94,10 +116,16 @@ registerRoute(
 const MAX_RETRY_COUNT = 3;
 const RETRY_DELAY_MS = 1000;
 
+// Bumped each time sign-out empties the queue. A replay already under way
+// checks it before re-queueing a failed request, so a request it took off the
+// queue before the sign-out cannot be put back and sent for the next user.
+let queueGeneration = 0;
+
 const bgSyncQueue = new Queue('api-queue', {
   onSync: async ({ queue }) => {
+    const generation = queueGeneration;
     let entry;
-    while ((entry = await queue.shiftRequest())) {
+    while (generation === queueGeneration && (entry = await queue.shiftRequest())) {
       const retryCount = (entry.metadata as { retryCount?: number })?.retryCount || 0;
       
       try {
@@ -107,6 +135,7 @@ const bgSyncQueue = new Queue('api-queue', {
         if (retryCount < MAX_RETRY_COUNT) {
           // Add delay before retry and increment counter
           await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * Math.pow(2, retryCount)));
+          if (generation !== queueGeneration) break;
           await queue.unshiftRequest({
             ...entry,
             metadata: { retryCount: retryCount + 1 }
@@ -116,6 +145,25 @@ const bgSyncQueue = new Queue('api-queue', {
       }
     }
   },
+});
+
+// Sign-out (see removeUser in utils/auth.ts). A queued request carries no
+// cookie of its own: replayed later, it would be sent with whoever is signed
+// in by then, so a write user A made offline could land as user B. The session
+// it belonged to is gone, so the queue is dropped rather than replayed.
+self.addEventListener('message', (event: ExtendableMessageEvent) => {
+  if ((event.data as { type?: unknown } | null)?.type !== CLEAR_USER_DATA_MESSAGE) return;
+  const reply = event.ports[0];
+  event.waitUntil(
+    (async () => {
+      queueGeneration++;
+      while (await bgSyncQueue.shiftRequest()) {
+        // Dropped unsent.
+      }
+      await caches.delete(NOTE_IMAGES_CACHE);
+      reply?.postMessage(null);
+    })()
+  );
 });
 
 // Serve every in-app route from the precached shell. Binding the handler to the
@@ -141,9 +189,10 @@ registerRoute(
 // import, duplicate, image upload) would create duplicates since the server
 // generates a new random ID per request. Login is also excluded: answering it
 // with a synthetic 202 would flip the client into an authenticated state with
-// no user data.
+// no user data. So is logout: a deferred logout reads as success while the
+// session cookie (HttpOnly, so only the server's answer can clear it) stays in
+// the browser, and replayed later it would end whichever session is current.
 const retryablePostPaths = new Set([
-  '/api/v1/logout',
   '/api/v1/notes/reorder',
 ]);
 

@@ -194,4 +194,30 @@ test.describe('Authentication', () => {
     // Session cookie is still valid — should land on the dashboard, not /login
     await expect(page).toHaveURL('/');
   });
+
+  test('warns when logout cannot reach the server, and a retry ends the session', async ({ page, loginPage, registerPage, dashboardPage }) => {
+    await registerPage.goto();
+    await registerPage.register(uniqueUsername('offlogout'), 'password123');
+    await expect(page).toHaveURL('/');
+
+    await page.route('**/api/v1/logout', (route) => route.abort('internetdisconnected'));
+    await dashboardPage.logout();
+
+    // Signed out on this device, but told the server session is still alive.
+    await expect(page).toHaveURL('/login');
+    await expect(loginPage.pendingLogoutNotice()).toContainText('couldn\'t reach the server to end your session');
+
+    // Still unreachable: the notice stays and says so.
+    await loginPage.retryPendingLogout();
+    await expect(loginPage.pendingLogoutNotice()).toContainText('Still couldn\'t reach the server');
+
+    await page.unroute('**/api/v1/logout');
+    await loginPage.retryPendingLogout();
+    await expect(loginPage.pendingLogoutNotice()).toBeHidden();
+
+    // The cookie is gone with the session, so a reload stays signed out.
+    await page.reload();
+    await expect(page).toHaveURL(/\/login/);
+    await expect(page.locator('#username')).toBeVisible();
+  });
 });

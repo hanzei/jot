@@ -8,14 +8,19 @@ import { apiErrorMessage } from '@/utils/apiError';
 import { setUser, setSettings } from '@/utils/auth';
 import { REDIRECT_PARAM, authPathWithRedirect } from '@/utils/authRedirect';
 import { ssoLoginErrorMessage, useSsoErrorParam } from '@/utils/ssoError';
+import PendingLogoutNotice from '@/components/PendingLogoutNotice';
 
 interface LoginProps {
   onLogin: () => void;
   registrationEnabled: boolean;
   sso: SSOConfig;
+  /** The last sign-out could not end the server session. */
+  serverLogoutPending?: boolean;
+  /** A retry from the pending-logout notice ended the server session. */
+  onServerLogoutDone?: () => void;
 }
 
-export default function Login({ onLogin, registrationEnabled, sso }: LoginProps) {
+export default function Login({ onLogin, registrationEnabled, sso, serverLogoutPending = false, onServerLogoutDone }: LoginProps) {
   const { t } = useTranslation();
   useEffect(() => { document.title = t('pageTitle.login'); }, [t]);
   const [searchParams] = useSearchParams();
@@ -79,6 +84,8 @@ export default function Login({ onLogin, registrationEnabled, sso }: LoginProps)
             </p>
           )}
         </div>
+
+        {serverLogoutPending && <PendingLogoutNotice onEnded={() => onServerLogoutDone?.()} />}
 
         {ssoError && (ssoError.cancelled ? (
           <div
