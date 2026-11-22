@@ -13,33 +13,41 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// isNoteEvent matches an SSE event of eventType about one of noteIDs.
-func isNoteEvent(eventType sse.EventType, noteIDs ...string) func(client.SSEEvent) bool {
-	return func(e client.SSEEvent) bool {
-		return e.Type == string(eventType) && e.NoteData != nil && slices.Contains(noteIDs, e.NoteData.NoteID)
-	}
-}
-
-// waitForNoteEvents waits for an eventType event about each of noteIDs, in any
-// order, and returns the IDs it did not see before the timeout.
-// waitForSSEEvent alone cannot do this: it drops every event it skips.
-func waitForNoteEvents(ch <-chan client.SSEEvent, eventType sse.EventType, noteIDs []string, timeout time.Duration) []string {
-	missing := slices.Clone(noteIDs)
+// collectNoteEvents reads eventType events from ch until it has one about
+// each of want (or timeout passes), then for a further settle period, and
+// returns the first event per note ID. Unlike waitForSSEEvent it keeps every
+// event, so a test can also assert that a note produced none, whichever order
+// the events arrived in.
+func collectNoteEvents(ch <-chan client.SSEEvent, eventType sse.EventType, want []string, timeout, settle time.Duration) map[string]client.SSEEvent {
+	seen := map[string]client.SSEEvent{}
 	deadline := time.After(timeout)
-	for len(missing) > 0 {
+	var settled <-chan time.Time
+	missing := slices.Clone(want)
+	if len(missing) == 0 {
+		settled = time.After(settle)
+	}
+	for {
 		select {
 		case e, ok := <-ch:
 			if !ok {
-				return missing
+				return seen
 			}
-			if isNoteEvent(eventType, missing...)(e) {
-				missing = slices.DeleteFunc(missing, func(id string) bool { return id == e.NoteData.NoteID })
+			if e.Type != string(eventType) || e.NoteData == nil {
+				continue
 			}
+			if _, dup := seen[e.NoteData.NoteID]; !dup {
+				seen[e.NoteData.NoteID] = e
+			}
+			missing = slices.DeleteFunc(missing, func(id string) bool { return id == e.NoteData.NoteID })
+			if len(missing) == 0 && settled == nil {
+				settled = time.After(settle)
+			}
+		case <-settled:
+			return seen
 		case <-deadline:
-			return missing
+			return seen
 		}
 	}
-	return nil
 }
 
 // Deleting a user's notes, with or without their account, tells everyone who
@@ -98,14 +106,17 @@ func TestUserDeleteSSENotifiesCollaboratorsOfOwnedNotes(t *testing.T) {
 
 			tc.del(t, owner)
 
-			_, found := waitForSSEEvent(collabCh, isNoteEvent(sse.EventNoteDeleted, shared.ID), 3*time.Second)
-			assert.True(t, found, "collaborator should receive note_deleted for the shared note")
-			_, found = waitForSSEEvent(collabCh, isNoteEvent(sse.EventNoteDeleted, private.ID, trashed.ID), 500*time.Millisecond)
-			assert.False(t, found, "collaborator should hear nothing of notes it could not see")
+			seen := collectNoteEvents(collabCh, sse.EventNoteDeleted, []string{shared.ID}, 3*time.Second, 500*time.Millisecond)
+			assert.Contains(t, seen, shared.ID, "collaborator should receive note_deleted for the shared note")
+			assert.NotContains(t, seen, private.ID, "collaborator should hear nothing of a note it could not see")
+			assert.NotContains(t, seen, trashed.ID, "collaborator heard of the trashed note when it was trashed")
 
 			if tc.ownerKeepsAccount {
-				missing := waitForNoteEvents(ownerCh, sse.EventNoteDeleted, []string{shared.ID, private.ID, trashed.ID}, 3*time.Second)
-				assert.Empty(t, missing, "owner should receive note_deleted for every note")
+				all := []string{shared.ID, private.ID, trashed.ID}
+				seen = collectNoteEvents(ownerCh, sse.EventNoteDeleted, all, 3*time.Second, 0)
+				for _, id := range all {
+					assert.Contains(t, seen, id, "owner should receive note_deleted for every note")
+				}
 			}
 		})
 	}
@@ -169,17 +180,20 @@ func TestUserDeleteSSENotifiesRemainingCollaborators(t *testing.T) {
 
 	require.NoError(t, sharee.Client.DeleteMe(t.Context(), "password123", ""))
 
-	// Waiting for binned too runs out the timeout, so its event can't slip
-	// past unseen.
-	assert.Equal(t, []string{binned.ID},
-		waitForNoteEvents(ownerCh, sse.EventNoteUnshared, []string{group.ID, pair.ID, former.ID, binned.ID}, 2*time.Second),
-		"owner should receive note_unshared for every note the delete changed, except the trashed one")
-	event, found := waitForSSEEvent(otherCh, isNoteEvent(sse.EventNoteUnshared, group.ID), 3*time.Second)
-	require.True(t, found, "remaining collaborator should receive note_unshared")
-	assert.Equal(t, sharee.User.ID, event.TargetUserID, "the target is the deleted user")
-	assert.Equal(t, sharee.User.ID, event.SourceUserID)
-	_, found = waitForSSEEvent(otherCh, isNoteEvent(sse.EventNoteUnshared, pair.ID), 500*time.Millisecond)
-	assert.False(t, found, "a user who could not see the note should hear nothing of it")
+	changed := []string{group.ID, pair.ID, former.ID}
+	seen := collectNoteEvents(ownerCh, sse.EventNoteUnshared, changed, 3*time.Second, 500*time.Millisecond)
+	for _, id := range changed {
+		assert.Contains(t, seen, id, "owner should receive note_unshared for every note the delete changed")
+	}
+	assert.NotContains(t, seen, binned.ID, "a trashed note sends no event")
+
+	seen = collectNoteEvents(otherCh, sse.EventNoteUnshared, []string{group.ID}, 3*time.Second, 500*time.Millisecond)
+	require.Contains(t, seen, group.ID, "remaining collaborator should receive note_unshared")
+	assert.Equal(t, sharee.User.ID, seen[group.ID].TargetUserID, "the target is the deleted user")
+	assert.Equal(t, sharee.User.ID, seen[group.ID].SourceUserID)
+	for _, id := range []string{pair.ID, former.ID, binned.ID} {
+		assert.NotContains(t, seen, id, "a user who could not see the note should hear nothing of it")
+	}
 
 	// What the refetch the event triggers finds.
 	refetched, err := owner.Client.GetNote(t.Context(), group.ID)
