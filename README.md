@@ -372,7 +372,7 @@ another client, expect timestamp columns to hold UTC wall-clock values.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `JOT_COOKIE_SECURE` | `true` | Sets the session cookie `Secure` flag. Use `false` only for local HTTP development. |
+| `JOT_COOKIE_SECURE` | `true` | Sets the session cookie `Secure` flag. Browsers and the mobile app then only accept the session over HTTPS or loopback (`localhost`, `127.0.0.0/8`, `[::1]`). Use `false` only for local HTTP development. |
 | `JOT_REGISTRATION_ENABLED` | `true` | Set to `false` to disable public registration; admins can still create users. SSO logins still provision accounts (see [Single sign-on](#single-sign-on-oidc--sso)). |
 | `JOT_PASSWORD_MIN_LENGTH` | `10` | Minimum password length, from 1 to 72 characters. |
 | `JOT_PUBLIC_LINKS_ENABLED` | `true` | Set to `false` to switch public note links off: the unauthenticated `/api/v1/public/notes/…` endpoints return 404 (so `/share/{token}` pages show "not found") and no link can be created (`PUT /notes/{id}/public-link` returns 403). Revoking still works, and existing links are kept: turning the switch back on brings them back. Exposed as `public_links_enabled` in `GET /api/v1/config`. |
@@ -922,8 +922,12 @@ services:
    with an error naming it.
 
 3. **Login seems to do nothing over plain HTTP**: the session cookie is
-   `Secure` by default, so the browser drops it on `http://`. Serve Jot over
-   HTTPS, or set `JOT_COOKIE_SECURE=false` for local development only.
+   `Secure` by default, so on a non-loopback `http://` address the browser
+   drops it and the mobile app refuses it with "This server only accepts its
+   session over HTTPS". Serve Jot over HTTPS, or set `JOT_COOKIE_SECURE=false`
+   for local development only. The mobile app also warns before adding an
+   `http://` server unless it is loopback (`localhost`, `127.0.0.0/8`,
+   `[::1]`).
 
 4. **Image uploads fail**: check free space on the upload volume (Admin →
    Server) and that the server can write to `JOT_UPLOAD_DIR`.

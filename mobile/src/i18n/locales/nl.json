@@ -93,7 +93,8 @@
     "ssoTryAgainLater": "Eenmalige aanmelding is momenteel bezet. Probeer het over een minuut opnieuw.",
     "ssoFailed": "Eenmalige aanmelding mislukt. Probeer het opnieuw.",
     "ssoServerChanged": "De server is tijdens het inloggen gewijzigd. Probeer het opnieuw.",
-    "ssoBrowserDidNotOpen": "De browser voor het inloggen kon niet worden geopend. Probeer het opnieuw."
+    "ssoBrowserDidNotOpen": "De browser voor het inloggen kon niet worden geopend. Probeer het opnieuw.",
+    "sessionRequiresHttps": "Deze server accepteert zijn sessie alleen via HTTPS. Gebruik een https://-adres of vraag de beheerder van de server om JOT_COOKIE_SECURE=false in te stellen."
   },
   "dashboard": {
     "newNote": "Nieuwe notitie",
@@ -635,7 +636,8 @@
     "refresh": "Vernieuwen",
     "shareDiagnostics": "Diagnoserapport delen",
     "yes": "Ja",
-    "no": "Nee"
+    "no": "Nee",
+    "encrypted": "Versleuteld (HTTPS)"
   },
   "apiErrors": {
     "invalidCredentials": "Ongeldige gebruikersnaam of ongeldig wachtwoord.",
@@ -660,5 +662,11 @@
     "screenMessage": "Dit scherm is op een onverwacht probleem gestuit.",
     "tryAgain": "Opnieuw proberen",
     "shareDiagnostics": "Diagnose delen"
+  },
+  "serverSecurity": {
+    "insecureTitle": "Onversleutelde verbinding",
+    "insecureMessage": "{{server}} gebruikt http://. Je wachtwoord, je sessie en je notities worden onversleuteld verstuurd, en iedereen op het netwerkpad kan ze lezen of wijzigen.",
+    "insecureConfirm": "Toch verbinden",
+    "insecureBadge": "Onversleuteld"
   }
 }

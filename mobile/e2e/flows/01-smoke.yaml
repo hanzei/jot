@@ -21,6 +21,10 @@ appId: com.jot.app
 - assertVisible: "${MAESTRO_JOT_SERVER_URL}"
 - tapOn:
     id: "login-server-setup-submit"
+# The fixture server is plain http:// on a non-loopback address, so the app
+# warns before adding it (#1337). A native alert has no testIDs; match the
+# button text case-insensitively, since Android themes may render it upper case.
+- tapOn: "(?i)connect anyway"
 
 # Register rather than log in: the database is thrown away each run.
 - assertVisible:

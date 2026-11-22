@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalizeServerOrigin, createServerId } from '../serverUrl';
+import { canonicalizeServerOrigin, createServerId, isInsecureServerOrigin } from '../serverUrl';
 
 describe('canonicalizeServerOrigin', () => {
   it('normalizes scheme/host casing and trims surrounding whitespace', () => {
@@ -35,5 +35,35 @@ describe('createServerId', () => {
 
   it('produces different IDs for different canonical origins', () => {
     expect(createServerId('https://example.com')).not.toBe(createServerId('https://example.org'));
+  });
+});
+
+describe('isInsecureServerOrigin', () => {
+  it('flags plain HTTP to a network host', () => {
+    expect(isInsecureServerOrigin('http://jot.example.com')).toBe(true);
+    expect(isInsecureServerOrigin('HTTP://192.168.1.20:8080/path')).toBe(true);
+  });
+
+  it('flags the Android emulator alias, which is also a LAN address', () => {
+    expect(isInsecureServerOrigin('http://10.0.2.2:8080')).toBe(true);
+  });
+
+  it('does not flag HTTPS', () => {
+    expect(isInsecureServerOrigin('https://jot.example.com')).toBe(false);
+    expect(isInsecureServerOrigin('https://10.0.2.2:8443')).toBe(false);
+  });
+
+  it('does not flag loopback hosts', () => {
+    expect(isInsecureServerOrigin('http://localhost:8080')).toBe(false);
+    expect(isInsecureServerOrigin('http://LOCALHOST')).toBe(false);
+    expect(isInsecureServerOrigin('http://127.0.0.1:8080')).toBe(false);
+    expect(isInsecureServerOrigin('http://127.0.1.1:8080')).toBe(false);
+    expect(isInsecureServerOrigin('http://[::1]:8080')).toBe(false);
+  });
+
+  it('does not flag input that is not a server URL', () => {
+    expect(isInsecureServerOrigin('')).toBe(false);
+    expect(isInsecureServerOrigin('not a url')).toBe(false);
+    expect(isInsecureServerOrigin('ftp://jot.example.com')).toBe(false);
   });
 });

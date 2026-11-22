@@ -18,6 +18,7 @@ import { getSseState, subscribeToSseState } from '../src/api/sseState';
 import { MAX_ENTRY_DRAIN_ATTEMPTS } from '../src/db/syncQueue';
 import { seedImageUpload } from './helpers/fixtures';
 import { jot } from '../src/api/jot';
+import { getBaseUrl } from '../src/api/client';
 import { SERVER_BUILD_INFO_TIMEOUT_MS } from '../src/utils/diagnosticsReport';
 import { silenceConsole } from './helpers/consoleGuard';
 import { formatDate } from '../src/i18n/utils';
@@ -123,6 +124,23 @@ describe('DiagnosticsScreen', () => {
       build_time: '2026-09-30T08:00:00Z',
       go_version: 'go1.25.0',
     });
+  });
+
+  it('marks an https:// server as encrypted', async () => {
+    const { findByTestId } = await renderScreen();
+
+    expect(await findByTestId('diagnostics-server-encrypted')).toHaveTextContent('Yes');
+  });
+
+  it('marks a plain http:// server as not encrypted (#1337)', async () => {
+    jest.mocked(getBaseUrl).mockReturnValue('http://jot.lan:8080');
+    try {
+      const { findByTestId } = await renderScreen();
+
+      expect(await findByTestId('diagnostics-server-encrypted')).toHaveTextContent('No');
+    } finally {
+      jest.mocked(getBaseUrl).mockReturnValue('https://example.com');
+    }
   });
 
   it('shows server reachability distinctly from device connectivity', async () => {

@@ -5,9 +5,12 @@ import { Alert } from 'react-native';
 import LoginScreen from '../src/screens/LoginScreen';
 import RegisterScreen from '../src/screens/RegisterScreen';
 import i18n from '../src/i18n';
+import { answerInsecureWarning } from './helpers/insecureServerAlert';
 import { useAuth } from '../src/store/AuthContext';
 import { getBaseUrl, getStoredServerUrl, probeServerReachability, setServerUrl, subscribeToClientActiveServerChanges } from '../src/api/client';
 import { VALIDATION } from '@jot/shared';
+import { CanceledError } from 'axios';
+import { InsecureSessionCookieError } from '../src/api/sessionCookie';
 
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: jest.fn(),
@@ -140,7 +143,7 @@ describe('Auth first-run server setup flow', () => {
       })
       .mockResolvedValueOnce({
         ok: true,
-        canonicalUrl: 'http://192.168.1.42:8080',
+        canonicalUrl: 'https://192.168.1.42:8443',
       });
 
     const { getByTestId, queryByTestId, getByText } = await renderLoginScreen();
@@ -149,7 +152,7 @@ describe('Auth first-run server setup flow', () => {
       expect(getByTestId('login-server-setup-step')).toBeTruthy();
     });
 
-    await fireEvent.changeText(getByTestId('login-server-setup-input'), 'http://192.168.1.42:8080');
+    await fireEvent.changeText(getByTestId('login-server-setup-input'), 'https://192.168.1.42:8443');
     await fireEvent.press(getByTestId('login-server-setup-submit'));
 
     await waitFor(() => {
@@ -163,7 +166,101 @@ describe('Auth first-run server setup flow', () => {
     await waitFor(() => {
       expect(getByTestId('username-input')).toBeTruthy();
     });
-    expect(mockSetServerUrl).toHaveBeenCalledWith('http://192.168.1.42:8080');
+    expect(mockSetServerUrl).toHaveBeenCalledWith('https://192.168.1.42:8443');
+  });
+
+  describe('plain HTTP warning (#1337)', () => {
+
+    beforeEach(() => {
+      mockProbeServerReachability.mockResolvedValue({ ok: true, canonicalUrl: 'http://jot.lan:8080' });
+    });
+
+    it('adds an http:// server only after the user confirms the warning', async () => {
+      const alertSpy = answerInsecureWarning('confirm');
+      const { getByTestId, findByTestId } = await renderLoginScreen();
+      await findByTestId('login-server-setup-step');
+
+      await fireEvent.changeText(getByTestId('login-server-setup-input'), 'http://jot.lan:8080');
+      await fireEvent.press(getByTestId('login-server-setup-submit'));
+
+      expect(await findByTestId('username-input')).toBeTruthy();
+      expect(alertSpy).toHaveBeenCalledWith(
+        i18n.t('serverSecurity.insecureTitle'),
+        i18n.t('serverSecurity.insecureMessage', { server: 'http://jot.lan:8080' }),
+        expect.any(Array),
+        expect.objectContaining({ cancelable: true }),
+      );
+      expect(mockSetServerUrl).toHaveBeenCalledWith('http://jot.lan:8080');
+    });
+
+    it('stays on setup without adding the server when the user cancels', async () => {
+      answerInsecureWarning('cancel');
+      const { getByTestId, findByTestId, queryByTestId } = await renderRegisterScreen();
+      await findByTestId('register-server-setup-step');
+
+      await fireEvent.changeText(getByTestId('register-server-setup-input'), 'http://jot.lan:8080');
+      await fireEvent.press(getByTestId('register-server-setup-submit'));
+
+      await waitFor(() => {
+        expect(getByTestId('register-server-setup-submit')).not.toBeDisabled();
+      });
+      expect(mockSetServerUrl).not.toHaveBeenCalled();
+      expect(getByTestId('register-server-setup-step')).toBeTruthy();
+      expect(queryByTestId('username-input')).toBeNull();
+    });
+
+    it('does not warn for https:// or loopback servers', async () => {
+      const alertSpy = jest.spyOn(Alert, 'alert');
+      mockProbeServerReachability.mockResolvedValue({ ok: true, canonicalUrl: 'https://jot.example.com' });
+      const { getByTestId, findByTestId } = await renderLoginScreen();
+      await findByTestId('login-server-setup-step');
+
+      await fireEvent.changeText(getByTestId('login-server-setup-input'), 'https://jot.example.com');
+      await fireEvent.press(getByTestId('login-server-setup-submit'));
+
+      expect(await findByTestId('username-input')).toBeTruthy();
+      expect(alertSpy).not.toHaveBeenCalled();
+    });
+
+    it('shows the HTTPS-only error when the login is refused for a Secure cookie', async () => {
+      mockGetStoredServerUrl.mockResolvedValue('http://jot.lan:8080');
+      mockLogin.mockRejectedValueOnce(new InsecureSessionCookieError());
+      const { getByTestId, findByTestId, findByText } = await renderLoginScreen();
+      await findByTestId('username-input');
+
+      await fireEvent.changeText(getByTestId('username-input'), 'alice');
+      await fireEvent.changeText(getByTestId('password-input'), 'pass1234');
+      await fireEvent.press(getByTestId('login-button'));
+
+      expect(await findByText(i18n.t('auth.sessionRequiresHttps'))).toBeTruthy();
+    });
+
+    it('says the server changed when the sign-in was dropped for a server switch', async () => {
+      mockGetStoredServerUrl.mockResolvedValue('http://jot.lan:8080');
+      mockLogin.mockRejectedValueOnce(new CanceledError('Active server changed during sign-in.'));
+      const { getByTestId, findByTestId, findByText } = await renderLoginScreen();
+      await findByTestId('username-input');
+
+      await fireEvent.changeText(getByTestId('username-input'), 'alice');
+      await fireEvent.changeText(getByTestId('password-input'), 'pass1234');
+      await fireEvent.press(getByTestId('login-button'));
+
+      expect(await findByText(i18n.t('auth.ssoServerChanged'))).toBeTruthy();
+    });
+
+    it('shows the HTTPS-only error when registration is refused for a Secure cookie', async () => {
+      mockGetStoredServerUrl.mockResolvedValue('http://jot.lan:8080');
+      mockRegister.mockRejectedValueOnce(new InsecureSessionCookieError());
+      const validPassword = 'p'.repeat(VALIDATION.PASSWORD_MIN_LENGTH);
+      const { getByTestId, findByTestId, findByText } = await renderRegisterScreen();
+      await findByTestId('username-input');
+
+      await fireEvent.changeText(getByTestId('username-input'), 'new_user');
+      await fireEvent.changeText(getByTestId('password-input'), validPassword);
+      await fireEvent.press(getByTestId('register-button'));
+
+      expect(await findByText(i18n.t('auth.sessionRequiresHttps'))).toBeTruthy();
+    });
   });
 
   it('moves to login form after reachable server and keeps login flow working', async () => {
@@ -224,7 +321,7 @@ describe('Auth first-run server setup flow', () => {
       })
       .mockResolvedValueOnce({
         ok: true,
-        canonicalUrl: 'http://192.168.1.50:8080',
+        canonicalUrl: 'https://192.168.1.50:8443',
       });
 
     const { getByTestId, getByText, findByTestId } = await renderRegisterScreen();
@@ -233,7 +330,7 @@ describe('Auth first-run server setup flow', () => {
       expect(getByTestId('register-server-setup-step')).toBeTruthy();
     });
 
-    await fireEvent.changeText(getByTestId('register-server-setup-input'), 'http://192.168.1.50:8080');
+    await fireEvent.changeText(getByTestId('register-server-setup-input'), 'https://192.168.1.50:8443');
     await fireEvent.press(getByTestId('register-server-setup-submit'));
 
     await waitFor(() => {
@@ -243,7 +340,7 @@ describe('Auth first-run server setup flow', () => {
     await fireEvent.press(getByTestId('register-server-setup-submit'));
 
     await waitFor(() => {
-      expect(mockSetServerUrl).toHaveBeenCalledWith('http://192.168.1.50:8080');
+      expect(mockSetServerUrl).toHaveBeenCalledWith('https://192.168.1.50:8443');
     });
     expect(await findByTestId('username-input')).toBeTruthy();
   });

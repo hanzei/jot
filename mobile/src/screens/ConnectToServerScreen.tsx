@@ -22,7 +22,7 @@ import { probeServerReachability } from '../api/client';
 import { DEFAULT_SERVER_CONFIG, probeServerConfig } from '../api/config';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { getUsernameValidationError, isPasswordTooShort, type ServerConfig } from '@jot/shared';
-import { displayMessage, USERNAME_ERROR_KEYS } from '../i18n/utils';
+import { displayMessage, LocalizedError, USERNAME_ERROR_KEYS } from '../i18n/utils';
 import {
   registerOnServer,
   runPreflightChecks,
@@ -40,6 +40,7 @@ import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { retrySync } from '../utils/retryWithBackoff';
 import { notesLocalQueryScopeKey, labelsQueryKey } from '../hooks/queryKeys';
 import FadeInView from '../components/FadeInView';
+import { confirmInsecureServer } from '../utils/insecureServer';
 
 const DRAIN_BACKOFF_BASE_MS = 1000;
 const DRAIN_BACKOFF_MAX_MS = 60000;
@@ -247,6 +248,9 @@ export default function ConnectToServerScreen() {
         }
         return;
       }
+      if (!(await confirmInsecureServer(t, probe.canonicalUrl))) {
+        return;
+      }
       setServerUrlInput(probe.canonicalUrl);
       setStep({ name: 'register', serverUrl: probe.canonicalUrl });
       setRegisterServerConfig(DEFAULT_SERVER_CONFIG);
@@ -302,7 +306,10 @@ export default function ConnectToServerScreen() {
       }
     } catch (err: unknown) {
       const code = (err as { code?: string })?.code;
-      if (code === 'USERNAME_TAKEN') {
+      if (err instanceof LocalizedError) {
+        setFieldError(displayMessage(t, err.messageKey));
+        setStep({ name: 'register', serverUrl });
+      } else if (code === 'USERNAME_TAKEN') {
         setFieldError(t('upgrade.usernameTaken'));
         setStep({ name: 'register', serverUrl });
       } else if (code === 'INVALID_URL' || code === 'NO_SESSION') {

@@ -1084,6 +1084,12 @@ definitions:
     type: object
   server.configResponse:
     properties:
+      cookie_secure:
+        description: |-
+          CookieSecure is JOT_COOKIE_SECURE: whether the session cookie is marked
+          Secure. A client on a plain-HTTP address checks it before logging in or
+          registering, since such a session could not be kept (#1337).
+        type: boolean
       password_min_length:
         type: integer
       public_links_enabled:

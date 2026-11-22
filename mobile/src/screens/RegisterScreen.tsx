@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { useContext, useState } from 'react';
 import {
   Text,
@@ -16,7 +17,7 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import type { AuthStackParamList } from '../navigation/AuthStack';
 import { getUsernameValidationError, isPasswordTooShort } from '@jot/shared';
-import { displayMessage, extractApiError, USERNAME_ERROR_KEYS } from '../i18n/utils';
+import { displayMessage, extractApiError, LocalizedError, USERNAME_ERROR_KEYS } from '../i18n/utils';
 import ServerSetupGate from '../components/ServerSetupGate';
 import FadeInView from '../components/FadeInView';
 import { useServerConfig } from '../hooks/useServerConfig';
@@ -61,7 +62,12 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
       await register(username.trim(), password);
     } catch (err: unknown) {
       const response = (err as { response?: unknown })?.response;
-      if (!response) {
+      if (err instanceof LocalizedError) {
+        setError(displayMessage(t, err.messageKey));
+      } else if (axios.isCancel(err)) {
+        // The active server changed while signing in.
+        setError(t('auth.ssoServerChanged'));
+      } else if (!response) {
         setError(t('auth.unableToConnect'));
       } else {
         setError(displayMessage(t, extractApiError(err) ?? 'auth.registrationFailed'));

@@ -5,6 +5,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { getBaseUrl, getStoredServerUrl, probeServerReachability, setServerUrl as activateServerUrl } from '../api/client';
 import { validateServerUrl } from '../hooks/useServerUrl';
 import { displayMessage } from '../i18n/utils';
+import { confirmInsecureServer } from '../utils/insecureServer';
 
 interface ServerSetupGateProps {
   children?: React.ReactNode;
@@ -105,6 +106,9 @@ export default function ServerSetupGate({
       const probe = await probeServerReachability(serverUrlInput.trim());
       if (!probe.ok) {
         setSetupError(getProbeErrorMessage(t, probe.reason));
+        return;
+      }
+      if (!(await confirmInsecureServer(t, probe.canonicalUrl))) {
         return;
       }
       await activateServerUrl(probe.canonicalUrl);

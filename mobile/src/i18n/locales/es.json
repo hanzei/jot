@@ -94,7 +94,8 @@
     "ssoTryAgainLater": "El inicio de sesión único está ocupado. Inténtalo de nuevo en un minuto.",
     "ssoFailed": "Error en el inicio de sesión único. Inténtalo de nuevo.",
     "ssoServerChanged": "El servidor cambió durante el inicio de sesión. Inténtalo de nuevo.",
-    "ssoBrowserDidNotOpen": "No se pudo abrir el navegador para iniciar sesión. Inténtalo de nuevo."
+    "ssoBrowserDidNotOpen": "No se pudo abrir el navegador para iniciar sesión. Inténtalo de nuevo.",
+    "sessionRequiresHttps": "Este servidor solo acepta su sesión a través de HTTPS. Usa una dirección https:// o pide al operador del servidor que configure JOT_COOKIE_SECURE=false."
   },
   "dashboard": {
     "newNote": "Nueva nota",
@@ -650,7 +651,8 @@
     "refresh": "Actualizar",
     "shareDiagnostics": "Compartir informe de diagnóstico",
     "yes": "Sí",
-    "no": "No"
+    "no": "No",
+    "encrypted": "Cifrado (HTTPS)"
   },
   "apiErrors": {
     "invalidCredentials": "Nombre de usuario o contraseña no válidos.",
@@ -675,5 +677,11 @@
     "screenMessage": "Esta pantalla encontró un problema inesperado.",
     "tryAgain": "Intentar de nuevo",
     "shareDiagnostics": "Compartir diagnóstico"
+  },
+  "serverSecurity": {
+    "insecureTitle": "Conexión sin cifrar",
+    "insecureMessage": "{{server}} usa http://. Tu contraseña, tu sesión y tus notas viajan sin cifrar, y cualquiera en la ruta de red puede leerlas o modificarlas.",
+    "insecureConfirm": "Conectar de todos modos",
+    "insecureBadge": "Sin cifrar"
   }
 }

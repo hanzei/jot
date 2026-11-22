@@ -9,6 +9,8 @@ import { labelKey, noteKey, SETTINGS_KEY } from '../db/queueKeys';
 import type { LocalIdentity } from './localMode';
 import { disableLocalMode, setLocalModeActive } from './localMode';
 import { initializeServerContext, switchActiveServer } from '../api/client';
+import { extractSessionCookie } from '../api/sessionCookie';
+import { assertSessionUsable } from '../api/config';
 import { addServer, setServerStorageValue } from './serverAccounts';
 import { jot } from '../api/jot';
 
@@ -67,16 +69,6 @@ export function makeUpgradeClient(serverUrl: string, sessionToken: string): Upgr
   };
 }
 
-function extractSessionCookie(setCookieHeader: string | string[] | undefined): string | null {
-  if (!setCookieHeader) return null;
-  const headers = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader];
-  for (const header of headers) {
-    const match = header.match(/jot_session=([^;]+)/);
-    if (match) return match[1]!;
-  }
-  return null;
-}
-
 /**
  * Register a new account on the target server using a standalone axios call
  * so the current local-mode session is never touched.
@@ -90,6 +82,9 @@ export async function registerOnServer(
   if (!canonical) {
     throw Object.assign(new Error('Invalid server URL'), { code: 'INVALID_URL' as const });
   }
+  // Before POST /register: refusing the cookie afterwards would leave an
+  // account the upgrade cannot sign in to (#1337).
+  await assertSessionUsable(canonical);
   const res = await axios.post(
     apiUrl(apiPaths.register, canonical),
     { username, password },
@@ -108,6 +103,7 @@ export async function registerOnServer(
   }
   const sessionToken = extractSessionCookie(
     (res.headers as Record<string, string | string[] | undefined>)['set-cookie'],
+    canonical,
   );
   if (!sessionToken) {
     throw Object.assign(new Error('No session in registration response'), { code: 'NO_SESSION' as const });
