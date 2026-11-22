@@ -330,6 +330,17 @@ Server state arrives as a **snapshot** (a fetch or an SSE event) or as the
 This device gets no SSE echo of its own writes. A note the server reports gone
 is tombstoned under the snapshot rules.
 
+**SSE removals** are snapshots too, and say how the note went:
+
+- **Moved to the trash** (`note_deleted`): tombstoned. The note still exists
+  for its owner, in Trash.
+- **Deleted for good** (`note_deleted` with `permanent: true`, sent for a
+  delete from the trash, an emptied trash, and an owner's notes or account
+  deleted): the row is removed. A tombstone would leave it in Trash offering a
+  restore the server refuses with 404 (#1324).
+- **Access lost** (`note_unshared` targeting this user): the row is removed,
+  since this user can no longer see the note in any scope.
+
 **Labels** follow the same rule per label: a label with a queued create, rename
 or delete is neither updated nor pruned by a label sync.
 

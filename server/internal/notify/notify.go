@@ -126,12 +126,13 @@ func (p *Publisher) NoteUpdated(ctx context.Context, noteID string, note *models
 }
 
 // NoteDeleted sends note_deleted to audienceIDs, which the caller must resolve
-// before the delete (afterwards the shares are gone).
-func (p *Publisher) NoteDeleted(ctx context.Context, noteID string, audienceIDs []string, sourceUserID string) {
+// before the delete (afterwards the shares are gone). permanent says the note
+// is gone for good rather than moved to the trash.
+func (p *Publisher) NoteDeleted(ctx context.Context, noteID string, audienceIDs []string, sourceUserID string, permanent bool) {
 	if p.hub == nil || len(audienceIDs) == 0 {
 		return
 	}
-	p.publish(ctx, audienceIDs, sse.EventNoteDeleted, sourceUserID, sse.NoteEventData{NoteID: noteID})
+	p.publish(ctx, audienceIDs, sse.EventNoteDeleted, sourceUserID, sse.NoteEventData{NoteID: noteID, Permanent: permanent})
 }
 
 // LabelsChanged tells the user's other sessions that a label was created.

@@ -15,6 +15,9 @@ import (
 type SSENoteData struct {
 	NoteID string `json:"note_id"`
 	Note   *Note  `json:"note"`
+	// Permanent is set on note_deleted when the note is gone for good rather
+	// than moved to the trash.
+	Permanent bool `json:"permanent,omitempty"`
 }
 
 // SSEProfileIconData is the Data payload for profile_icon_updated SSE events.

@@ -32,6 +32,11 @@ const (
 type NoteEventData struct {
 	NoteID string `json:"note_id"`
 	Note   any    `json:"note"` // nil for deleted/unshared
+	// Permanent is set on note_deleted when the note is gone for good
+	// (deleted from the trash, the trash emptied, or its owner's notes or
+	// account deleted) rather than moved to the trash. Clients that keep a
+	// local copy drop it instead of moving it to their trash.
+	Permanent bool `json:"permanent,omitempty"`
 }
 
 // NoteImageEventData is the Data payload for note_image_added/note_image_removed

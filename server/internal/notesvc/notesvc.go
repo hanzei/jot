@@ -339,7 +339,7 @@ func (s *Service) Delete(ctx context.Context, noteID, userID string, permanent b
 	}
 
 	if audienceErr == nil {
-		s.events.NoteDeleted(ctx, noteID, audienceIDs, userID)
+		s.events.NoteDeleted(ctx, noteID, audienceIDs, userID, permanent)
 	}
 	s.notesDeleted.Add(ctx, 1)
 	return nil
@@ -355,7 +355,7 @@ func (s *Service) EmptyTrash(ctx context.Context, userID string) (int, error) {
 	blobstore.ReclaimOrphaned(ctx, s.noteStore, s.imageStore, shas)
 
 	for _, note := range deleted {
-		s.events.NoteDeleted(ctx, note.NoteID, note.AudienceIDs, userID)
+		s.events.NoteDeleted(ctx, note.NoteID, note.AudienceIDs, userID, true)
 	}
 	if len(deleted) > 0 {
 		s.notesDeleted.Add(ctx, int64(len(deleted)))
