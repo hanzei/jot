@@ -176,7 +176,7 @@ func newServer(cfg *config.Config, log *logrus.Logger, tracerProvider trace.Trac
 		return nil, fmt.Errorf("initialize notes service: %w", err)
 	}
 	authHandler := handlers.NewAuthHandler(userStore, noteStore, sessionService, userSettingsStore, imageStore, hub, notes, cfg.RegistrationEnabled, cfg.LocalLoginEnabled, cfg.PasswordMinLength)
-	notesHandler := handlers.NewNotesHandler(noteStore, notes, hub, imageStore, int64(cfg.UploadMaxBytes), cfg.PublicLinksEnabled)
+	notesHandler := handlers.NewNotesHandler(noteStore, notes, hub, imageStore, int64(cfg.UploadMaxBytes), cfg.PublicLinksEnabled, cfg.MemosURL)
 	labelsHandler := handlers.NewLabelsHandler(labelStore, notes)
 	recheckInterval := cfg.SSECredentialRecheckInterval
 	if recheckInterval == 0 {
@@ -506,6 +506,7 @@ func (s *Server) setupRoutes() error {
 			r.Delete("/notes/trash", s.wrapHandler(s.notesHandler.EmptyTrash))
 			r.Post("/notes/reorder", s.wrapHandler(s.notesHandler.ReorderNotes))
 			r.With(expensiveLimit).Post("/notes/import", s.wrapHandler(s.notesHandler.ImportNotes))
+			r.Get("/notes/import/options", s.wrapHandler(s.notesHandler.GetImportOptions))
 			r.With(expensiveLimit).Get("/notes/export", s.wrapHandler(s.notesHandler.ExportNotes))
 			r.Get("/notes/{id}", s.wrapHandler(s.notesHandler.GetNote))
 			r.Patch("/notes/{id}", s.wrapHandler(s.notesHandler.UpdateNote))
@@ -769,6 +770,10 @@ type configResponse struct {
 	// note is kept before it is deleted for good. 0 means it is kept until
 	// the trash is emptied.
 	TrashRetentionDays int `json:"trash_retention_days"`
+	// CookieSecure is JOT_COOKIE_SECURE: whether the session cookie is marked
+	// Secure. A client on a plain-HTTP address checks it before logging in or
+	// registering, since such a session could not be kept (#1337).
+	CookieSecure bool `json:"cookie_secure"`
 }
 
 // ssoConfig is the public, login-UI-facing slice of the OIDC configuration.
@@ -798,6 +803,7 @@ func (s *Server) handleConfig(_ http.ResponseWriter, _ *http.Request) (int, any,
 		RegistrationEnabled: s.cfg.RegistrationEnabled,
 		PasswordMinLength:   s.cfg.PasswordMinLength,
 		UploadMaxBytes:      s.cfg.UploadMaxBytes,
+		CookieSecure:        s.cfg.CookieSecure,
 		SSO: ssoConfig{
 			Enabled:           s.cfg.OIDCEnabled,
 			ProviderName:      s.cfg.OIDCProviderName,

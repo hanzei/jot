@@ -327,6 +327,14 @@ export default function DiagnosticsScreen() {
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('diagnostics.server')}</Text>
           <DiagRow label={t('diagnostics.serverUrl')} value={snapshot.serverUrl || '—'} mono />
+          {snapshot.serverUrl ? (
+            <DiagRow
+              label={t('diagnostics.encrypted')}
+              value={isEncryptedServerUrl(snapshot.serverUrl) ? t('diagnostics.yes') : t('diagnostics.no')}
+              valueColor={isEncryptedServerUrl(snapshot.serverUrl) ? undefined : colors.error}
+              testID="diagnostics-server-encrypted"
+            />
+          ) : null}
           <DiagRow label={t('diagnostics.generationId')} value={String(lifecycle.generationId)} mono />
           <DiagRow
             label={t('diagnostics.switchInProgress')}
@@ -409,16 +417,23 @@ export default function DiagnosticsScreen() {
 const STATUS_GREEN = '#22c55e';
 const STATUS_ORANGE = '#f97316';
 
+/** `serverUrl` is the active server's canonical (lower-case) origin. */
+function isEncryptedServerUrl(serverUrl: string): boolean {
+  return serverUrl.startsWith('https:');
+}
+
 function DiagRow({
   label,
   value,
   valueColor,
   mono,
+  testID,
 }: {
   label: string;
   value: string;
   valueColor?: string | undefined;
   mono?: boolean;
+  testID?: string;
 }) {
   const { colors } = useTheme();
   return (
@@ -431,6 +446,7 @@ function DiagRow({
           mono && { fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
         ]}
         numberOfLines={2}
+        testID={testID}
       >
         {value}
       </Text>

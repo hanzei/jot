@@ -6,6 +6,7 @@ import {
   getStateFromPath,
 } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
+import { isInsecureServerOrigin } from '@jot/shared';
 import { useConfirm } from './useConfirm';
 import {
   getActiveServerId,
@@ -53,7 +54,7 @@ export function useDeepLinkRouting({
   const { t } = useTranslation();
   const { confirm } = useConfirm();
   const warnedDeepLinkUrlsRef = React.useRef<Set<string>>(new Set());
-  const deepLinkServerPromptInFlightRef = React.useRef<Promise<boolean> | null>(null);
+  const deepLinkServerPromptInFlightRef = React.useRef<{ serverOrigin: string; promise: Promise<boolean> } | null>(null);
   const wasAuthenticatedRef = React.useRef(isAuthenticated);
 
   const resolveStoredServerOrigin = React.useCallback(async (): Promise<string | null> => {
@@ -64,19 +65,32 @@ export function useDeepLinkRouting({
     return normalizeServerOrigin(storedUrl);
   }, []);
 
-  const promptToAddUnknownDeepLinkServer = React.useCallback((serverOrigin: string): Promise<boolean> => {
-    if (deepLinkServerPromptInFlightRef.current) {
-      return deepLinkServerPromptInFlightRef.current;
+  const promptToAddUnknownDeepLinkServer = React.useCallback(async (serverOrigin: string): Promise<boolean> => {
+    // A repeat link for the server already being asked about shares that
+    // prompt. A link for another server waits for it and gets its own: one
+    // answer must never add a server the user was not shown (#1337).
+    for (let inFlight = deepLinkServerPromptInFlightRef.current; inFlight; inFlight = deepLinkServerPromptInFlightRef.current) {
+      if (inFlight.serverOrigin === serverOrigin) {
+        return inFlight.promise;
+      }
+      await inFlight.promise.catch(() => false);
     }
-    const promptPromise = confirm({
+    // An http:// server gets the same warning as typing one in (#1337), as
+    // part of this prompt rather than a second one.
+    const insecure = isInsecureServerOrigin(serverOrigin);
+    const message = t('deepLink.unknownServerMessage', { server: serverOrigin });
+    const promise: Promise<boolean> = confirm({
       title: t('deepLink.unknownServerTitle'),
-      message: t('deepLink.unknownServerMessage', { server: serverOrigin }),
-      confirmLabel: t('deepLink.addAndSwitchAction'),
+      message: insecure ? `${message}\n\n${t('serverSecurity.insecureMessage', { server: serverOrigin })}` : message,
+      confirmLabel: insecure ? t('serverSecurity.insecureConfirm') : t('deepLink.addAndSwitchAction'),
+      destructive: insecure,
     }).finally(() => {
-      deepLinkServerPromptInFlightRef.current = null;
+      if (deepLinkServerPromptInFlightRef.current?.promise === promise) {
+        deepLinkServerPromptInFlightRef.current = null;
+      }
     });
-    deepLinkServerPromptInFlightRef.current = promptPromise;
-    return promptPromise;
+    deepLinkServerPromptInFlightRef.current = { serverOrigin, promise };
+    return promise;
   }, [confirm, t]);
 
   const ensureDeepLinkServerContext = React.useCallback(async (serverOrigin: string): Promise<'ready' | 'switched' | false> => {

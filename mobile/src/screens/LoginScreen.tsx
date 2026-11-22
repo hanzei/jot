@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { useCallback, useContext, useEffect, useState } from 'react';
 import {
   View,
@@ -22,7 +23,7 @@ import type { AuthStackParamList } from '../navigation/AuthStack';
 import ServerSetupGate from '../components/ServerSetupGate';
 import ServerPickerModal from '../components/drawer/ServerPickerModal';
 import FadeInView from '../components/FadeInView';
-import { displayMessage, extractApiError } from '../i18n/utils';
+import { displayMessage, extractApiError, LocalizedError } from '../i18n/utils';
 import { useServerConfig } from '../hooks/useServerConfig';
 import { oidcExchangeErrorMessage, SsoFlowError } from '../store/oidcFlow';
 
@@ -108,7 +109,12 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       await login(username.trim(), password);
     } catch (err: unknown) {
       const response = (err as { response?: unknown })?.response;
-      if (!response) {
+      if (err instanceof LocalizedError) {
+        setError(displayMessage(t, err.messageKey));
+      } else if (axios.isCancel(err)) {
+        // The active server changed while signing in.
+        setError(t('auth.ssoServerChanged'));
+      } else if (!response) {
         setError(t('auth.unableToConnect'));
       } else {
         setError(displayMessage(t, extractApiError(err) ?? 'auth.loginFailed'));

@@ -45,7 +45,9 @@ The `server` parameter is what makes this work for a multi-server app. On
 receiving a link the mobile app resolves it against the servers it knows
 (`mobile/src/hooks/useDeepLinkRouting.ts`): it switches to the matching one,
 offers to add it if it is unknown, and stashes the link to replay after login if
-the session there is not valid.
+the session there is not valid. For an unknown `http://` server that offer
+carries the same unencrypted-connection warning as typing the URL in (#1337),
+since a link is an easy way to point someone at a plain-HTTP server.
 
 One `jot://` URL is not a deep link: `jot://oidc-callback` is the redirect that
 ends the mobile SSO hand-off. It belongs to the

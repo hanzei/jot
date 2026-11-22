@@ -13,7 +13,9 @@ import {
   clearCachedProfile,
   initializeServerContext,
   getActiveServerId,
+  getBaseUrl,
 } from '../api/client';
+import { assertSessionUsable } from '../api/config';
 import { isTransientHttpStatus } from '../db/syncQueue';
 import { runOidcBrowserFlow, SsoFlowError } from './oidcFlow';
 import { getLocalIdentity, enableLocalMode as persistEnableLocalMode, disableLocalMode, setLocalModeActive, updateLocalSettings, updateLocalUser } from './localMode';
@@ -308,6 +310,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [applyServerProfile]);
 
   const loginWithSso = useCallback(async (): Promise<'signedIn' | 'cancelled'> => {
+    // Before the browser opens: the IdP sign-in can create the account (#1337).
+    await assertSessionUsable(getBaseUrl());
     const outcome = await runOidcBrowserFlow('login');
     if (outcome.type === 'cancelled') {
       return 'cancelled';

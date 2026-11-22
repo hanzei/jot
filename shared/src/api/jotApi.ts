@@ -15,6 +15,7 @@ import type {
   DuplicateNoteRequest,
   EmptyTrashResponse,
   GetNotesParams,
+  ImportOptionsResponse,
   ImportResponse,
   Label,
   LabelWithCount,
@@ -170,9 +171,11 @@ export function createJotApi(http: JotHttpClient) {
 
       reorder: (noteIds: string[]): Promise<void> => done(http.post(apiPaths.notesReorder, { note_ids: noteIds } satisfies ReorderNotesRequest)),
 
-      /** `formData` carries `import_type` plus either `file` or the usememos `url`/`token`. */
+      /** `formData` carries `import_type` plus either `file` or the usememos `token`. */
       import: (formData: unknown, config?: HttpRequestConfig): Promise<ImportResponse> =>
         data(http.post<ImportResponse>(apiPaths.notesImport, formData, config)),
+
+      importOptions: (): Promise<ImportOptionsResponse> => data(http.get<ImportOptionsResponse>(apiPaths.notesImportOptions)),
 
       addLabel: (noteId: string, name: string): Promise<Note> => data(http.post<Note>(apiPaths.noteLabels(noteId), { name } satisfies AddLabelRequest)),
 

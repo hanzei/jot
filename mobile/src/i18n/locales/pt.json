@@ -94,7 +94,8 @@
     "ssoTryAgainLater": "O início de sessão único está ocupado neste momento. Tenta novamente dentro de um minuto.",
     "ssoFailed": "O início de sessão único falhou. Tenta novamente.",
     "ssoServerChanged": "O servidor mudou durante o início de sessão. Tenta novamente.",
-    "ssoBrowserDidNotOpen": "Não foi possível abrir o navegador para iniciar sessão. Tenta novamente."
+    "ssoBrowserDidNotOpen": "Não foi possível abrir o navegador para iniciar sessão. Tenta novamente.",
+    "sessionRequiresHttps": "Este servidor só aceita a sua sessão por HTTPS. Use um endereço https:// ou peça ao operador do servidor para definir JOT_COOKIE_SECURE=false."
   },
   "dashboard": {
     "newNote": "Nova nota",
@@ -650,7 +651,8 @@
     "refresh": "Atualizar",
     "shareDiagnostics": "Compartilhar relatório de diagnóstico",
     "yes": "Sim",
-    "no": "Não"
+    "no": "Não",
+    "encrypted": "Criptografado (HTTPS)"
   },
   "apiErrors": {
     "invalidCredentials": "Nome de usuário ou senha inválidos.",
@@ -675,5 +677,11 @@
     "screenMessage": "Esta tela encontrou um problema inesperado.",
     "tryAgain": "Tentar novamente",
     "shareDiagnostics": "Compartilhar diagnóstico"
+  },
+  "serverSecurity": {
+    "insecureTitle": "Conexão não criptografada",
+    "insecureMessage": "{{server}} usa http://. A sua senha, a sua sessão e as suas notas trafegam sem criptografia, e qualquer pessoa no caminho da rede pode lê-las ou alterá-las.",
+    "insecureConfirm": "Conectar mesmo assim",
+    "insecureBadge": "Não criptografado"
   }
 }

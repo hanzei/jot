@@ -71,7 +71,8 @@
     "ssoTryAgainLater": "L'authentification unique est momentanément saturée. Réessayez dans une minute.",
     "ssoFailed": "Échec de l'authentification unique. Veuillez réessayer.",
     "ssoServerChanged": "Le serveur a changé pendant la connexion. Veuillez réessayer.",
-    "ssoBrowserDidNotOpen": "Impossible d'ouvrir le navigateur pour la connexion. Veuillez réessayer."
+    "ssoBrowserDidNotOpen": "Impossible d'ouvrir le navigateur pour la connexion. Veuillez réessayer.",
+    "sessionRequiresHttps": "Ce serveur n'accepte sa session qu'en HTTPS. Utilisez une adresse https:// ou demandez à l'administrateur du serveur de définir JOT_COOKIE_SECURE=false."
   },
   "dashboard": {
     "newNote": "Nouvelle note",
@@ -650,7 +651,8 @@
     "refresh": "Actualiser",
     "shareDiagnostics": "Partager le rapport de diagnostic",
     "yes": "Oui",
-    "no": "Non"
+    "no": "Non",
+    "encrypted": "Chiffré (HTTPS)"
   },
   "apiErrors": {
     "invalidCredentials": "Nom d'utilisateur ou mot de passe incorrect.",
@@ -675,5 +677,11 @@
     "screenMessage": "Cet écran a rencontré un problème inattendu.",
     "tryAgain": "Réessayer",
     "shareDiagnostics": "Partager le diagnostic"
+  },
+  "serverSecurity": {
+    "insecureTitle": "Connexion non chiffrée",
+    "insecureMessage": "{{server}} utilise http://. Votre mot de passe, votre session et vos notes transitent sans chiffrement, et toute personne sur le chemin réseau peut les lire ou les modifier.",
+    "insecureConfirm": "Se connecter quand même",
+    "insecureBadge": "Non chiffré"
   }
 }

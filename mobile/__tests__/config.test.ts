@@ -1,5 +1,6 @@
 import axios from 'axios';
-import { probeServerConfig } from '../src/api/config';
+import { assertSessionUsable, probeServerConfig } from '../src/api/config';
+import { InsecureSessionCookieError } from '../src/api/sessionCookie';
 
 jest.mock('axios', () => ({
   __esModule: true,
@@ -50,5 +51,45 @@ describe('probeServerConfig', () => {
     const result = await probeServerConfig('https://example.com');
 
     expect(result).toBeNull();
+  });
+});
+
+describe('assertSessionUsable (#1337)', () => {
+  function serveConfig(config: Record<string, unknown>) {
+    mockAxiosGet.mockImplementation(async (_url: string, opts: { headers: Record<string, string> }) => ({
+      data: config,
+      headers: { 'x-request-id': opts.headers['X-Request-Id'] },
+    }));
+  }
+
+  beforeEach(() => {
+    mockAxiosGet.mockReset();
+  });
+
+  it('refuses a plain-HTTP server whose cookie is Secure', async () => {
+    serveConfig({ cookie_secure: true });
+    await expect(assertSessionUsable('http://jot.lan:8080')).rejects.toBeInstanceOf(InsecureSessionCookieError);
+  });
+
+  it('passes a plain-HTTP server with JOT_COOKIE_SECURE=false', async () => {
+    serveConfig({ cookie_secure: false });
+    await expect(assertSessionUsable('http://jot.lan:8080')).resolves.toBeUndefined();
+  });
+
+  it('passes an older server that does not report cookie_secure', async () => {
+    serveConfig({ registration_enabled: true });
+    await expect(assertSessionUsable('http://jot.lan:8080')).resolves.toBeUndefined();
+  });
+
+  it('passes when the config cannot be read', async () => {
+    mockAxiosGet.mockRejectedValue(new Error('Network Error'));
+    await expect(assertSessionUsable('http://jot.lan:8080')).resolves.toBeUndefined();
+  });
+
+  it('does not ask an https:// or loopback server', async () => {
+    serveConfig({ cookie_secure: true });
+    await expect(assertSessionUsable('https://jot.example.com')).resolves.toBeUndefined();
+    await expect(assertSessionUsable('http://localhost:8080')).resolves.toBeUndefined();
+    expect(mockAxiosGet).not.toHaveBeenCalled();
   });
 });

@@ -32,6 +32,7 @@ const API_ERROR_MESSAGE_KEYS: Partial<Record<ApiErrorCode, string>> = {
   invalid_image: 'apiErrors.invalidImage',
   invalid_import_file: 'apiErrors.invalidImportFile',
   public_links_disabled: 'publicLink.disabled',
+  memos_import_disabled: 'apiErrors.memosImportDisabled',
 };
 
 /** The HTTP status of a failed axios request, or undefined for a network error. */

@@ -35,6 +35,7 @@ describe('apiPaths', () => {
       notesTrash: '/notes/trash',
       notesReorder: '/notes/reorder',
       notesImport: '/notes/import',
+      notesImportOptions: '/notes/import/options',
       notesExport: '/notes/export',
       note: '/notes/n1',
       notePermanentDelete: '/notes/n1?permanent=true',

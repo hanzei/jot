@@ -370,6 +370,18 @@ func TestConfigEndpoint(t *testing.T) {
 		assert.Equal(t, 30, cfg.TrashRetentionDays)
 	})
 
+	t.Run("returns cookie_secure", func(t *testing.T) {
+		for _, secure := range []bool{true, false} {
+			ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
+				cfg.CookieSecure = secure
+			})
+
+			cfg, err := ts.newClient().Config(t.Context())
+			require.NoError(t, err)
+			assert.Equal(t, secure, cfg.CookieSecure)
+		}
+	})
+
 	t.Run("returns default password_min_length", func(t *testing.T) {
 		ts := setupTestServer(t)
 		c := ts.newClient()

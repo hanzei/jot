@@ -6,6 +6,8 @@ import { randomUUID } from '../utils/random';
 import { isServerReachable, markServerReachable, markServerUnreachable } from './serverReachability';
 import { REQUEST_ID_HEADER, echoesRequestId, newRequestId, warnNotJotResponse } from './jotResponse';
 import { recordWriteResponse } from '../db/snapshotGate';
+import { extractSessionCookie } from './sessionCookie';
+import { assertSessionUsable } from './config';
 import {
   addServer,
   ensureServerRegistryMigrated,
@@ -427,16 +429,6 @@ export async function ensureActiveServer(url: string): Promise<void> {
   await setServerUrl(url);
 }
 
-function extractSessionCookie(setCookieHeader: string | string[] | undefined): string | null {
-  if (!setCookieHeader) return null;
-  const headers = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader];
-  for (const header of headers) {
-    const match = header.match(/jot_session=([^;]+)/);
-    if (match) return match[1]!;
-  }
-  return null;
-}
-
 // Axios always passes AxiosHeaders to the request interceptor; the plain-object
 // branch keeps hand-built configs (tests) working.
 function setRequestHeader(config: InternalAxiosRequestConfig, name: string, value: string): void {
@@ -589,11 +581,17 @@ api.interceptors.response.use(
   },
 );
 
+/**
+ * Stores the session a response from `origin` set. Throws
+ * InsecureSessionCookieError, storing nothing, for a `Secure` cookie that
+ * arrived over plain HTTP.
+ */
 async function storeSessionFromResponse(
   headers: Record<string, string | string[] | undefined>,
+  origin: string,
   boundServerId?: string,
 ): Promise<void> {
-  const token = extractSessionCookie(headers['set-cookie']);
+  const token = extractSessionCookie(headers['set-cookie'], origin);
   if (!token) {
     return;
   }
@@ -651,20 +649,37 @@ export async function clearCachedProfile(): Promise<void> {
   }
 }
 
+/**
+ * The login screen's server switcher stays usable while a sign-in waits on
+ * assertSessionUsable. A switch in that wait must not send the credentials to
+ * a server the check never looked at, so the attempt is dropped (#1337).
+ */
+function assertServerUnchanged(origin: string): void {
+  if (currentBaseUrl !== origin) {
+    throw new CanceledError('Active server changed during sign-in.');
+  }
+}
+
 // The shared endpoints for the auth calls that don't read response headers.
 // (`api/jot.ts` can't be imported here: it imports this module.)
 const sharedAuth = createJotApi(api);
 
 export const auth = {
   login: async (data: LoginRequest): Promise<AuthResponse> => {
+    const origin = currentBaseUrl;
+    await assertSessionUsable(origin);
+    assertServerUnchanged(origin);
     const res = await api.post(apiPaths.login, data);
-    await storeSessionFromResponse(res.headers as Record<string, string | string[] | undefined>);
+    await storeSessionFromResponse(res.headers as Record<string, string | string[] | undefined>, origin);
     return res.data;
   },
 
   register: async (data: RegisterRequest): Promise<AuthResponse> => {
+    const origin = currentBaseUrl;
+    await assertSessionUsable(origin);
+    assertServerUnchanged(origin);
     const res = await api.post(apiPaths.register, data);
-    await storeSessionFromResponse(res.headers as Record<string, string | string[] | undefined>);
+    await storeSessionFromResponse(res.headers as Record<string, string | string[] | undefined>, origin);
     return res.data;
   },
 
@@ -689,9 +704,10 @@ export const auth = {
         throw new CanceledError('Active server changed during the SSO exchange.');
       }
     };
+    const origin = currentBaseUrl;
     const res = await api.post(apiPaths.oidcNativeExchange, { code, code_verifier: codeVerifier } satisfies NativeExchangeRequest);
     assertStillActive();
-    await storeSessionFromResponse(res.headers as Record<string, string | string[] | undefined>, serverId);
+    await storeSessionFromResponse(res.headers as Record<string, string | string[] | undefined>, origin, serverId);
     await cacheAuthProfile(res.data, serverId);
     assertStillActive();
     return res.data;
