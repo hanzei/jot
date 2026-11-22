@@ -22,12 +22,6 @@ connectivity, deep linking, Markdown rendering) live in `docs/specs/` — read t
 - Logged-in users are generally treated as trustworthy collaborators.
 - Baseline authentication and authorization remain mandatory (ownership/share
   checks, role checks, normal access boundaries).
-- Prioritize protection against unintentional internal overload (accidental
-  high-frequency requests, runaway sync loops, expensive repeated operations)
-  with practical controls: rate limiting, retry/backoff, loop detection, caps on
-  expensive operations.
-- Defenses aimed specifically at malicious authenticated insiders are not a
-  primary requirement, unless needed to preserve baseline auth/authz.
 
 ## Workflow
 
