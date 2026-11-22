@@ -159,6 +159,8 @@ registerRoute(
   }))
 );
 
+const LOGOUT_PATH = API_BASE_PATH + apiPaths.logout;
+
 // Background sync for failed API requests with retry limits
 const MAX_RETRY_COUNT = 3;
 const RETRY_DELAY_MS = 1000;
@@ -167,11 +169,17 @@ const bgSyncQueue = new Queue('api-queue', {
   onSync: async ({ queue }) => {
     const generation = userDataGeneration;
     while (generation === userDataGeneration) {
-      const entry = await queue.shiftRequest();
+      // Taken in turn with the sign-out drain, which queues for the lock as
+      // soon as the sign-out arrives: a replay started after that finds the
+      // queue empty, rather than taking an entry ahead of the drain.
+      const entry = await withQueueLock(() => queue.shiftRequest());
       if (!entry) break;
       // A sign-out may have landed while the entry was being taken off the
       // queue; it belongs to the signed-out user, so drop it unsent.
       if (generation !== userDataGeneration) break;
+      // Revisions before #1336 queued logouts. Replayed now, one would end
+      // whichever session is current, so it is dropped unsent.
+      if (new URL(entry.request.url).pathname === LOGOUT_PATH) continue;
       const retryCount = (entry.metadata as { retryCount?: number })?.retryCount || 0;
 
       try {

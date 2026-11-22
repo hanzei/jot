@@ -6,6 +6,11 @@ import { endServerSession } from '@/utils/logout';
 interface PendingLogoutNoticeProps {
   /** The retry reached the server and the session is over. */
   onEnded: () => void;
+  /**
+   * Set while a sign-in is being submitted. A logout started then could land
+   * after the sign-in and clear its new session cookie.
+   */
+  disabled?: boolean;
 }
 
 /**
@@ -13,7 +18,7 @@ interface PendingLogoutNoticeProps {
  * device has forgotten the user, but the HttpOnly session cookie is still
  * valid and only the server can clear it, so a reload would sign them back in.
  */
-export default function PendingLogoutNotice({ onEnded }: PendingLogoutNoticeProps) {
+export default function PendingLogoutNotice({ onEnded, disabled = false }: PendingLogoutNoticeProps) {
   const { t } = useTranslation();
   const [retrying, setRetrying] = useState(false);
   const [retryFailed, setRetryFailed] = useState(false);
@@ -43,7 +48,7 @@ export default function PendingLogoutNotice({ onEnded }: PendingLogoutNoticeProp
           <button
             type="button"
             onClick={retry}
-            disabled={retrying}
+            disabled={retrying || disabled}
             className="rounded-md border border-amber-400 bg-white px-3 py-1 font-medium text-amber-900 hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:opacity-50 disabled:cursor-not-allowed dark:border-amber-600 dark:bg-slate-800 dark:text-amber-200 dark:hover:bg-slate-700"
           >
             {retrying ? t('auth.logoutPending.retrying') : t('auth.logoutPending.retry')}

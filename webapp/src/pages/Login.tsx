@@ -87,7 +87,7 @@ export default function Login({ onLogin, registrationEnabled, sso, onServerLogou
           )}
         </div>
 
-        {onServerLogoutDone && <PendingLogoutNotice onEnded={onServerLogoutDone} />}
+        {onServerLogoutDone && <PendingLogoutNotice onEnded={onServerLogoutDone} disabled={loading} />}
 
         {ssoError && (ssoError.cancelled ? (
           <div
