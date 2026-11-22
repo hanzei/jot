@@ -3,7 +3,8 @@ declare const self: ServiceWorkerGlobalScope;
 
 import { precacheAndRoute, cleanupOutdatedCaches, createHandlerBoundToURL } from 'workbox-precaching';
 import { registerRoute, NavigationRoute } from 'workbox-routing';
-import { NetworkFirst, CacheFirst } from 'workbox-strategies';
+import type { RouteHandlerCallbackOptions, WorkboxPlugin } from 'workbox-core/types';
+import { NetworkFirst, CacheFirst, type Strategy } from 'workbox-strategies';
 import { Queue } from 'workbox-background-sync';
 import { API_BASE_PATH, PUBLIC_NOTE_PATH_PREFIX, apiPaths } from '@jot/shared';
 import { API_CACHE, CLEAR_USER_DATA_MESSAGE, NOTE_IMAGES_CACHE } from './utils/serviceWorkerProtocol';
@@ -51,6 +52,46 @@ const isReauthenticatingWrite = (method: string, pathname: string): boolean =>
   (method === 'DELETE' && pathname === API_BASE_PATH + apiPaths.usersMe)
   || pathname === API_BASE_PATH + apiPaths.usersMePassword;
 
+// Bumped each time sign-out clears the user's data. Anything that started
+// under an earlier generation belongs to the signed-out user: a replay stops,
+// a failed write is not queued, and a response is not cached.
+let userDataGeneration = 0;
+
+// Queue writes and the sign-out drain run one at a time. A generation check
+// alone is not enough: a pushRequest() that passed it could still commit
+// after the drain had emptied the queue and acknowledged the sign-out.
+let queueLock: Promise<unknown> = Promise.resolve();
+const withQueueLock = <T>(fn: () => Promise<T>): Promise<T> => {
+  const run = queueLock.then(fn);
+  queueLock = run.catch(() => {});
+  return run;
+};
+
+// The caches that hold a user's data, and the fetches whose write to one of
+// them may still be pending. Sign-out deletes the caches once those settle,
+// so none can be re-created with the previous user's data.
+const USER_CACHES = [API_CACHE, NOTE_IMAGES_CACHE];
+const pendingCacheWrites = new Set<Promise<unknown>>();
+
+/** Caches only 200s, and only for a request made before the last sign-out. */
+const userScopedCachePlugin: WorkboxPlugin = {
+  requestWillFetch: async ({ request, state }) => {
+    if (state) state.generation = userDataGeneration;
+    return request;
+  },
+  cacheWillUpdate: async ({ response, state }) =>
+    response.status === 200 && state?.generation === userDataGeneration ? response : null,
+};
+
+/** A route handler for `strategy` whose pending cache write sign-out can wait for. */
+const trackingCacheWrites = (strategy: Strategy) => (options: RouteHandlerCallbackOptions) => {
+  const [response, done] = strategy.handleAll(options);
+  pendingCacheWrites.add(done);
+  const forget = () => { pendingCacheWrites.delete(done); };
+  done.then(forget, forget);
+  return response;
+};
+
 // Note images are immutable for a given ID — the ID is minted per upload and
 // the bytes behind it never change — so cache-first is safe here in a way it is
 // not for build assets. Registered ahead of the API route below, which would
@@ -59,90 +100,49 @@ const isReauthenticatingWrite = (method: string, pathname: string): boolean =>
 // The bytes never change, but access to them can: a collaborator removed from
 // a note would keep seeing its images from this cache without the server being
 // asked. Sign-out deletes the cache; the expiry bounds how long a revoked image
-// stays visible to someone who stays signed in.
+// stays visible to someone who stays signed in. Workbox's ExpirationPlugin is
+// not used because it deletes expired copies, which are still worth showing
+// offline.
 const NOTE_IMAGE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
-
-// Bumped each time sign-out clears the user's data. Anything that started
-// under an earlier generation belongs to the signed-out user: a replay stops,
-// a failed write is not queued, and an image response is not cached.
-let userDataGeneration = 0;
-
-// Queue writes and the sign-out drain run one at a time. A generation check
-// alone is not enough: a pushRequest() that passed it could still commit
-// after the drain had emptied the queue and acknowledged the sign-out.
-let queueLock: Promise<unknown> = Promise.resolve();
-const withQueueLock = <T,>(fn: () => Promise<T>): Promise<T> => {
-  const run = queueLock.then(fn);
-  queueLock = run.catch(() => {});
-  return run;
-};
-
-// Image fetches whose cache write may still be pending. Sign-out waits for
-// them before deleting the cache, so none can re-create it afterwards.
-const pendingImageWrites = new Set<Promise<unknown>>();
-
-const noteImageStrategy = new CacheFirst({
-  cacheName: NOTE_IMAGES_CACHE,
-  plugins: [
-    {
-      // Treat an expired copy as a miss, so CacheFirst refetches (and
-      // re-caches) it. Judged by the response's Date header, as Workbox's
-      // ExpirationPlugin does; a copy without one is kept.
-      cachedResponseWillBeUsed: async ({ cachedResponse }) => {
-        const date = Date.parse(cachedResponse?.headers.get('date') ?? '');
-        if (cachedResponse && !Number.isNaN(date) && Date.now() - date > NOTE_IMAGE_MAX_AGE_SECONDS * 1000) {
-          return null;
-        }
-        return cachedResponse;
-      },
-      // The server marks images `immutable` for a year, so a plain fetch
-      // would be answered from the browser's HTTP cache — no access check,
-      // and the old Date header would make the re-cached copy expire again
-      // at once. Revalidating asks the server (a cheap 304 via the ETag) and
-      // refreshes Date.
-      requestWillFetch: async ({ request, state }) => {
-        if (state) state.generation = userDataGeneration;
-        return new Request(request, { cache: 'no-cache' });
-      },
-      // Replaces Workbox's default, which caches only 200s, so keeps that
-      // rule. A response fetched before a sign-out is not cached after it.
-      cacheWillUpdate: async ({ response, state }) =>
-        response.status === 200 && state?.generation === userDataGeneration ? response : null,
-      // Offline, an expired copy is still better than a broken image. Only a
-      // network failure lands here; a 403 from the server is a response and
-      // is passed through.
-      handlerDidError: async ({ request }) => {
-        const cache = await caches.open(NOTE_IMAGES_CACHE);
-        return (await cache.match(request)) ?? undefined;
-      },
-    },
-  ],
-});
 
 registerRoute(
   ({ url }) => /^\/api\/v1\/images\/[^/]+(\/thumbnail)?$/.test(url.pathname),
-  (options) => {
-    const [response, done] = noteImageStrategy.handleAll(options);
-    pendingImageWrites.add(done);
-    const forget = () => { pendingImageWrites.delete(done); };
-    done.then(forget, forget);
-    return response;
-  }
+  trackingCacheWrites(new CacheFirst({
+    cacheName: NOTE_IMAGES_CACHE,
+    plugins: [
+      userScopedCachePlugin,
+      {
+        // An expired copy (by its Date header) counts as a miss, so it is
+        // fetched again; it is kept in `state` as the offline fallback.
+        cachedResponseWillBeUsed: async ({ cachedResponse, state }) => {
+          const date = Date.parse(cachedResponse?.headers.get('date') ?? '');
+          if (cachedResponse && !Number.isNaN(date) && Date.now() - date > NOTE_IMAGE_MAX_AGE_SECONDS * 1000) {
+            if (state) state.expired = cachedResponse;
+            return null;
+          }
+          return cachedResponse;
+        },
+        // Images are served `immutable` for a year, so a plain fetch would be
+        // answered from the HTTP cache without an access check (or a fresh
+        // Date). Revalidating is a cheap 304 via the ETag.
+        requestWillFetch: async ({ request }) => new Request(request, { cache: 'no-cache' }),
+        // Only a network failure lands here; a 403 is a response and passes.
+        handlerDidError: async ({ state }) => state?.expired as Response | undefined,
+      },
+    ],
+  }))
 );
 
 // API caching strategy - Network First with offline fallback
 registerRoute(
   ({ url }) =>
     url.pathname.startsWith('/api/v1/') && url.pathname !== SSE_PATH && !url.pathname.startsWith(PUBLIC_API_PREFIX),
-  new NetworkFirst({
+  trackingCacheWrites(new NetworkFirst({
     cacheName: API_CACHE,
     networkTimeoutSeconds: 3,
     plugins: [
+      userScopedCachePlugin,
       {
-        cacheWillUpdate: async ({ response }) => {
-          // Only cache successful responses
-          return response.status === 200 ? response : null;
-        },
         cacheKeyWillBeUsed: async ({ request }) => {
           // Create cache key ignoring only safe-to-ignore query parameters for GET requests
           if (request.method === 'GET') {
@@ -156,7 +156,7 @@ registerRoute(
         },
       },
     ],
-  })
+  }))
 );
 
 // Background sync for failed API requests with retry limits
@@ -204,21 +204,25 @@ const bgSyncQueue = new Queue('api-queue', {
 self.addEventListener('message', (event: ExtendableMessageEvent) => {
   if ((event.data as { type?: unknown } | null)?.type !== CLEAR_USER_DATA_MESSAGE) return;
   const reply = event.ports[0];
+  // Bumped at once, not inside the lock: a write already holding the lock
+  // commits before the drain below, and every later one sees the new value.
+  userDataGeneration++;
   event.waitUntil(
     (async () => {
       try {
         await withQueueLock(async () => {
-          userDataGeneration++;
           while (await bgSyncQueue.shiftRequest()) {
             // Dropped unsent.
           }
         });
       } finally {
-        // Even if the drain failed, the image cache goes and the page is not
-        // left waiting out its timeout.
-        await Promise.allSettled(pendingImageWrites);
-        await caches.delete(NOTE_IMAGES_CACHE);
+        // Even if the drain failed, the page is answered rather than left to
+        // its timeout. The caches go now, and again once fetches started
+        // before the sign-out have settled, in case one re-created them.
+        await Promise.all(USER_CACHES.map((name) => caches.delete(name)));
         reply?.postMessage(null);
+        await Promise.allSettled(pendingCacheWrites);
+        await Promise.all(USER_CACHES.map((name) => caches.delete(name)));
       }
     })()
   );

@@ -15,13 +15,14 @@ interface LoginProps {
   onLogin: () => void;
   registrationEnabled: boolean;
   sso: SSOConfig;
-  /** The last sign-out could not end the server session. */
-  serverLogoutPending?: boolean;
-  /** A retry from the pending-logout notice ended the server session. */
-  onServerLogoutDone?: () => void;
+  /**
+   * Set when the last sign-out could not end the server session: the page
+   * then warns, and this runs once a retry from the warning has ended it.
+   */
+  onServerLogoutDone?: (() => void) | undefined;
 }
 
-export default function Login({ onLogin, registrationEnabled, sso, serverLogoutPending = false, onServerLogoutDone }: LoginProps) {
+export default function Login({ onLogin, registrationEnabled, sso, onServerLogoutDone }: LoginProps) {
   const { t } = useTranslation();
   useEffect(() => { document.title = t('pageTitle.login'); }, [t]);
   const [searchParams] = useSearchParams();
@@ -52,7 +53,6 @@ export default function Login({ onLogin, registrationEnabled, sso, serverLogoutP
     setError('');
 
     try {
-      await logoutSettled();
       const response = await auth.login({ username, password });
       setUser(response.user);
       setSettings(response.settings);
@@ -87,7 +87,7 @@ export default function Login({ onLogin, registrationEnabled, sso, serverLogoutP
           )}
         </div>
 
-        {serverLogoutPending && <PendingLogoutNotice onEnded={() => onServerLogoutDone?.()} />}
+        {onServerLogoutDone && <PendingLogoutNotice onEnded={onServerLogoutDone} />}
 
         {ssoError && (ssoError.cancelled ? (
           <div

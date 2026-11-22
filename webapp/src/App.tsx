@@ -10,7 +10,7 @@ import MobileAppHandoff from '@/components/MobileAppHandoff';
 import { OfflineNotification } from '@/components/OfflineNotification';
 import ServerUnreachable from '@/components/ServerUnreachable';
 import { ToastProvider } from '@/components/Toast';
-import { isAdmin, setUser, setSettings, removeUser, getUser, getSettings } from '@/utils/auth';
+import { isAdmin, setUser, setSettings, removeUser, getUser } from '@/utils/auth';
 import { auth, serverConfig } from '@/utils/api';
 import { httpStatus } from '@/utils/apiError';
 import { applyTheme, followThemePreference } from '@/utils/theme';
@@ -116,9 +116,8 @@ function SignedInApp() {
           setIsAuth(false);
           return;
         }
+        // followThemePreference() above already applied the stored theme.
         if (getUser()) {
-          const settings = getSettings();
-          if (settings) applyTheme(settings.theme as 'system' | 'light' | 'dark');
           setIsAuth(true);
           return;
         }
@@ -158,11 +157,10 @@ function SignedInApp() {
             path="/login"
             element={!isAuth ? (
               <Login
-                onLogin={() => { setServerLogoutPending(false); setIsAuth(true); }}
+                onLogin={() => setIsAuth(true)}
                 registrationEnabled={registrationEnabled}
                 sso={sso}
-                serverLogoutPending={serverLogoutPending}
-                onServerLogoutDone={() => setServerLogoutPending(false)}
+                onServerLogoutDone={serverLogoutPending ? () => setServerLogoutPending(false) : undefined}
               />
             ) : <PostAuthRedirect />}
           />

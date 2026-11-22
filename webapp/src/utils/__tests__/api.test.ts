@@ -1,19 +1,28 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
-// Only the response interceptor is tested here; the endpoints live in
-// @jot/shared and are tested there.
-const mockResponseUse = vi.hoisted(() => vi.fn());
+// Only the interceptors are tested here; the endpoints live in @jot/shared
+// and are tested there.
+const { mockResponseUse, mockRequestUse, mockLogoutSettled } = vi.hoisted(() => ({
+  mockResponseUse: vi.fn(),
+  mockRequestUse: vi.fn(),
+  mockLogoutSettled: vi.fn(),
+}));
 
 vi.mock('axios', () => ({
   default: {
     create: vi.fn(() => ({
-      interceptors: { response: { use: mockResponseUse } },
+      interceptors: { response: { use: mockResponseUse }, request: { use: mockRequestUse } },
     })),
   },
 }));
 
+vi.mock('../logout', () => ({ logoutSettled: mockLogoutSettled }));
+
 // Import API module after mocking axios; importing it registers the interceptor.
 import '../api';
 import { getDiagnostics, resetDiagnosticsForTest } from '../diagnostics';
+
+// Captured at import, before any test's vi.clearAllMocks() empties the calls.
+const onRequest = mockRequestUse.mock.calls[0]![0] as (config: { url?: string }) => Promise<unknown>;
 
 // Mock localStorage
 const mockLocalStorage = {
@@ -122,5 +131,30 @@ describe('API Module', () => {
 
       expect(mockLocation.href).not.toBe('/login');
     });
+  });
+});
+
+describe('request interceptor', () => {
+  beforeEach(() => {
+    mockLogoutSettled.mockReset();
+  });
+
+  it.each(['/login', '/register'])('waits for an in-flight logout before %s', async (url) => {
+    let finish!: () => void;
+    mockLogoutSettled.mockReturnValue(new Promise<void>((resolve) => { finish = resolve; }));
+
+    let sent = false;
+    const pending = onRequest({ url }).then(() => { sent = true; });
+    await Promise.resolve();
+    expect(sent).toBe(false);
+
+    finish();
+    await pending;
+    expect(sent).toBe(true);
+  });
+
+  it('does not wait on other requests', async () => {
+    await onRequest({ url: '/notes' });
+    expect(mockLogoutSettled).not.toHaveBeenCalled();
   });
 });

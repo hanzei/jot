@@ -3,6 +3,7 @@ import { API_BASE_PATH, apiPaths, apiUrl, createJotApi, type FileImportType, typ
 import { removeUser } from '@/utils/auth';
 import { authPathWithRedirect, currentRedirectTarget } from '@/utils/authRedirect';
 import { recordFailedRequest } from '@/utils/diagnostics';
+import { logoutSettled } from '@/utils/logout';
 
 // Unique ID for this browser tab, used to suppress SSE echoes of our own mutations.
 export const CLIENT_ID = crypto.randomUUID();
@@ -19,6 +20,16 @@ const api = axios.create({
   withCredentials: true,
   timeout: 10_000,
   headers: { 'X-Client-Id': CLIENT_ID },
+});
+
+// A sign-in waits for any logout still in flight: that response clears the
+// session cookie, and landing after the sign-in's it would clear the new one.
+// (SSO signs in by navigating away instead; Login guards its link itself.)
+api.interceptors.request.use(async (config) => {
+  if (config.url === apiPaths.login || config.url === apiPaths.register) {
+    await logoutSettled();
+  }
+  return config;
 });
 
 // Record failures for Settings > Diagnostics, and handle auth errors

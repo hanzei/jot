@@ -195,10 +195,8 @@ test.describe('Authentication', () => {
     await expect(page).toHaveURL('/');
   });
 
-  test('warns when logout cannot reach the server, and a retry ends the session', async ({ page, loginPage, registerPage, dashboardPage }) => {
-    await registerPage.goto();
-    await registerPage.register(uniqueUsername('offlogout'), 'password123');
-    await expect(page).toHaveURL('/');
+  test('warns when logout cannot reach the server, and a retry ends the session', async ({ page, authenticatedUser, loginPage, dashboardPage }) => {
+    void authenticatedUser;
 
     await page.route('**/api/v1/logout', (route) => route.abort('internetdisconnected'));
     await dashboardPage.logout();
@@ -221,10 +219,8 @@ test.describe('Authentication', () => {
     await expect(page.locator('#username')).toBeVisible();
   });
 
-  test('stays signed in when the server is unreachable on reload', async ({ page, registerPage }) => {
-    await registerPage.goto();
-    await registerPage.register(uniqueUsername('outage'), 'password123');
-    await expect(page).toHaveURL('/');
+  test('stays signed in when the server is unreachable on reload', async ({ page, authenticatedUser }) => {
+    void authenticatedUser;
 
     // A proxy's 502 is an outage, not a sign-out: the session may still be valid.
     await page.route('**/api/v1/users/me', (route) => route.fulfill({ status: 502, body: 'Bad Gateway' }));

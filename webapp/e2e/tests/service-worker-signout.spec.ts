@@ -3,7 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
-import { confirmDialog } from '../pages/dialogs';
+import { createTextNote } from '../fixtures/publicLinks';
 
 // The rest of the suite blocks service workers (playwright.config.ts). These
 // tests need one: they check what it keeps for a user is gone after sign-out.
@@ -39,7 +39,7 @@ const queuedRequestCount = (page: Page) => page.evaluate(() => new Promise<numbe
 }));
 
 test.describe('Service worker on sign-out', () => {
-  test('drops writes queued offline instead of replaying them later', async ({ page, context, authenticatedUser, dashboardPage }) => {
+  test('drops writes queued offline instead of replaying them later', async ({ page, context, authenticatedUser, dashboardPage, loginPage }) => {
     void authenticatedUser;
     await dashboardPage.goto();
     await waitForServiceWorker(page);
@@ -51,13 +51,9 @@ test.describe('Service worker on sign-out', () => {
     expect(await queuedRequestCount(page)).toBe(1);
 
     // Offline, so the logout itself fails and must not be queued either. The
-    // offline banner covers the header on phone widths, so the profile menu is
-    // opened from the keyboard rather than clicked.
-    await page.getByRole('button', { name: 'Profile menu' }).focus();
-    await page.keyboard.press('Enter');
-    await page.getByRole('menuitem', { name: 'Logout' }).click();
-    await confirmDialog(page, 'Logout');
-    await expect(page.getByTestId('pending-logout-notice')).toBeVisible();
+    // offline banner covers the header on phone widths.
+    await dashboardPage.logout({ viaKeyboard: true });
+    await expect(loginPage.pendingLogoutNotice()).toBeVisible();
     expect(await queuedRequestCount(page)).toBe(0);
   });
 
@@ -66,8 +62,7 @@ test.describe('Service worker on sign-out', () => {
     await dashboardPage.goto();
     await waitForServiceWorker(page);
 
-    const created = await page.request.post('/api/v1/notes', { data: { note_type: 'text', content: 'sw image' } });
-    const { id: noteId } = await created.json() as { id: string };
+    const noteId = await createTextNote(page.request, 'sw image');
     const upload = await page.request.post(`/api/v1/notes/${noteId}/images`, {
       multipart: { file: { name: 'test-icon.png', mimeType: 'image/png', buffer: imageBuffer } },
     });

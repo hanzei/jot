@@ -5,7 +5,6 @@ import { Eye, EyeOff, TriangleAlert } from 'lucide-react';
 import { auth } from '@/utils/api';
 import { apiErrorMessage } from '@/utils/apiError';
 import { setUser, setSettings } from '@/utils/auth';
-import { logoutSettled } from '@/utils/logout';
 import { REDIRECT_PARAM, authPathWithRedirect } from '@/utils/authRedirect';
 import { VALIDATION, getUsernameValidationError, isPasswordTooShort } from '@jot/shared';
 
@@ -71,9 +70,6 @@ export default function Register({ onRegister, passwordMinLength }: RegisterProp
     }
 
     try {
-      // A logout retry from the login page may still be in flight; its
-      // response would clear the new account's session cookie.
-      await logoutSettled();
       const response = await auth.register({ username, password });
       setUser(response.user);
       setSettings(response.settings);

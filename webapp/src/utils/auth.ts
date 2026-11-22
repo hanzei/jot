@@ -21,8 +21,8 @@ export const setUser = (user: User): void => {
 };
 
 /**
- * Asks the active service worker to drop its background-sync queue and image
- * cache (see service-worker.ts). The queue lives in the worker's IndexedDB
+ * Asks the active service worker to drop its background-sync queue and the
+ * user's caches (see service-worker.ts). The queue lives in the worker's IndexedDB
  * database, which the worker keeps open, so the page cannot clear it itself.
  */
 const clearServiceWorkerUserData = async (): Promise<void> => {
@@ -48,19 +48,26 @@ const clearServiceWorkerUserData = async (): Promise<void> => {
  * Only for a session that is over: an outage keeps the user signed in (see
  * App.tsx), so their queued edits are still sent once the server is back.
  */
+// The cleanup in flight, shared by overlapping calls (a burst of 401s from
+// requests made with the same expired session).
+let clearing: Promise<void> | null = null;
+
 export const removeUser = (): Promise<void> => {
   localStorage.removeItem('user');
   localStorage.removeItem('settings');
   clearFailedRequests();
-  const cleanups: Promise<unknown>[] = [clearServiceWorkerUserData()];
-  if (window.caches) {
-    // The worker deletes the image cache too; deleting it here as well covers
-    // a page the worker does not control (e.g. after a hard reload).
-    cleanups.push(caches.delete(API_CACHE), caches.delete(NOTE_IMAGES_CACHE));
-  }
-  // allSettled, not all: one failed cleanup must not resolve this before the
-  // others have finished.
-  return Promise.allSettled(cleanups).then(() => {});
+  clearing ??= (async () => {
+    // The worker deletes the caches too; deleting them here as well covers a
+    // page the worker does not control (e.g. after a hard reload).
+    const cleanups: Promise<unknown>[] = [clearServiceWorkerUserData()];
+    if (window.caches) {
+      cleanups.push(caches.delete(API_CACHE), caches.delete(NOTE_IMAGES_CACHE));
+    }
+    // allSettled, not all: one failed cleanup must not resolve this before
+    // the others have finished.
+    await Promise.allSettled(cleanups);
+  })().finally(() => { clearing = null; });
+  return clearing;
 };
 
 export const getSettings = (): UserSettings | null => {

@@ -176,9 +176,9 @@ const AuthenticatedLayout = ({ onLogout, trashRetentionDays }: AuthenticatedLayo
 
   // Signs out locally even when the server can't be reached, so the device
   // stops showing the account — but says so, since the session outlives it.
+  // The two don't depend on each other, so they run together.
   const handleLogout = useCallback(async () => {
-    const serverSessionEnded = await endServerSession();
-    await removeUser();
+    const [serverSessionEnded] = await Promise.all([endServerSession(), removeUser()]);
     onLogout(serverSessionEnded);
   }, [onLogout]);
 
