@@ -135,15 +135,17 @@ export function useSSE(
             break;
           }
           case 'note_deleted': {
-            const { note_id } = event.data;
-            // Tombstone the note in SQLite so it disappears from offline views — but
-            // defer to a pending or failed local edit/restore on this note: a queued op
+            const { note_id, permanent } = event.data;
+            // Tombstone a note moved to the trash so it leaves the offline views for
+            // Trash; remove one deleted for good outright, so it never shows in Trash
+            // offering a restore the server would refuse (#1324). Either way, defer to
+            // a pending or failed local edit/restore on this note: a queued op
             // may be racing the remote delete, or a dead-lettered edit may be the version
             // we're preserving, so let the drain/resolution reconcile it rather than hide
             // the optimistic edit (#487/#492). The drain replaying against a server-deleted
             // note gets a 404 and dead-letters the op, so this can't wedge the queue.
             try {
-              if (await applyServerRemoval(db, note_id, since, 'tombstone')) {
+              if (await applyServerRemoval(db, note_id, since, permanent ? 'delete' : 'tombstone')) {
                 queryClient.removeQueries({ queryKey: noteLocalQueryKey(note_id) });
               }
             } catch (err) {

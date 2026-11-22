@@ -8,7 +8,7 @@ import { SSEConnectionManager } from '../src/api/events';
 import type { Note, SSEEvent, User } from '@jot/shared';
 import type { TestDatabase } from './helpers/testDb';
 import { makeLabel, makeListNote, makeTextNote, seedQueueEntry } from './helpers/fixtures';
-import { getLocalNote, saveNote } from '../src/db/noteQueries';
+import { getLocalNote, getLocalNotes, saveNote } from '../src/db/noteQueries';
 import { silenceConsole } from './helpers/consoleGuard';
 import { markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
 import {
@@ -491,6 +491,7 @@ describe('useSSE', () => {
   });
 
   it('invalidates notes list and tombstones the note on note_deleted event', async () => {
+    await saveNote(db, makeTextNote({ id: 'note-123' }));
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
     const removeSpy = jest.spyOn(queryClient, 'removeQueries');
@@ -508,15 +509,49 @@ describe('useSSE', () => {
 
     await waitFor(() => expect(removeSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') }));
     expect(mockMarkLocalNoteDeleted).toHaveBeenCalledWith(expect.anything(), 'note-123');
+    expect(mockPermanentDeleteLocalNote).not.toHaveBeenCalled();
+    // Moved to the trash: the note is still there for its owner, in Trash.
+    expect((await getLocalNotes(db, { trashed: true })).map((n) => n.id)).toEqual(['note-123']);
     // The list is refreshed only after the tombstone lands, so the refetch can't
     // read the still-present row.
     await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() }));
   });
 
-  it('does not tombstone a deleted note that still has a pending or failed local op (#487/#492)', async () => {
+  it('removes the note outright on a permanent note_deleted event (#1324)', async () => {
+    // Deleted for good (from the trash, by emptying it, or by an admin), so it
+    // must not linger in the local Trash offering a restore the server would 404.
+    await saveNote(db, makeTextNote({ id: 'note-123' }));
+    const { queryClient, Wrapper } = createWrapper();
+    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+    const removeSpy = jest.spyOn(queryClient, 'removeQueries');
+
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
+    invalidateSpy.mockClear();
+
+    await act(async () => {
+      capturedCallback?.({
+        type: 'note_deleted',
+        source_user_id: 'current-user',
+        data: { note_id: 'note-123', note: null, permanent: true },
+      });
+    });
+
+    await waitFor(() => expect(removeSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') }));
+    expect(mockPermanentDeleteLocalNote).toHaveBeenCalledWith(expect.anything(), 'note-123');
+    expect(mockMarkLocalNoteDeleted).not.toHaveBeenCalled();
+    expect(await getLocalNote(db, 'note-123')).toBeNull();
+    expect(await getLocalNotes(db, { trashed: true })).toEqual([]);
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() }));
+  });
+
+  it.each([
+    ['moved to the trash', false],
+    ['deleted for good', true],
+  ])('does not remove a note %s that still has a pending or failed local op (#487/#492)', async (_label, permanent) => {
     // A queued edit/restore may be racing the remote delete, or a dead-lettered edit
     // may be the version we're preserving; defer to the drain/resolution rather than
     // hide the optimistic edit.
+    await saveNote(db, makeTextNote({ id: 'note-123' }));
     await protectNote('note-123');
     const { queryClient, Wrapper } = createWrapper();
     const removeSpy = jest.spyOn(queryClient, 'removeQueries');
@@ -527,12 +562,14 @@ describe('useSSE', () => {
       capturedCallback?.({
         type: 'note_deleted',
         source_user_id: 'other-user',
-        data: { note_id: 'note-123', note: null },
+        data: { note_id: 'note-123', note: null, permanent },
       });
     });
     await flushMicrotasks();
 
     expect(mockMarkLocalNoteDeleted).not.toHaveBeenCalled();
+    expect(mockPermanentDeleteLocalNote).not.toHaveBeenCalled();
+    expect(await getLocalNote(db, 'note-123')).toMatchObject({ id: 'note-123', deleted_at: null });
     // The note's query cache is also left intact, so an open detail view isn't dropped.
     expect(removeSpy).not.toHaveBeenCalled();
   });

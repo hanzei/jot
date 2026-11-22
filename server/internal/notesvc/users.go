@@ -52,7 +52,7 @@ func (s *Service) DeleteUser(ctx context.Context, userID, sourceUserID string) e
 	// nothing. The deleted user's sessions went with them.
 	for _, note := range audiences.Owned {
 		audienceIDs := slices.DeleteFunc(note.AudienceIDs, func(id string) bool { return id == userID })
-		s.events.NoteDeleted(ctx, note.NoteID, audienceIDs, sourceUserID)
+		s.events.NoteDeleted(ctx, note.NoteID, audienceIDs, sourceUserID, true)
 	}
 	if len(audiences.Owned) > 0 {
 		s.notesDeleted.Add(ctx, int64(len(audiences.Owned)))
@@ -77,7 +77,7 @@ func (s *Service) DeleteAllNotesOf(ctx context.Context, ownerID, sourceUserID st
 	blobstore.ReclaimOrphaned(ctx, s.noteStore, s.imageStore, shas)
 
 	for _, note := range deleted {
-		s.events.NoteDeleted(ctx, note.NoteID, note.AudienceIDs, sourceUserID)
+		s.events.NoteDeleted(ctx, note.NoteID, note.AudienceIDs, sourceUserID, true)
 	}
 	if len(deleted) > 0 {
 		s.notesDeleted.Add(ctx, int64(len(deleted)))

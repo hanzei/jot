@@ -107,7 +107,9 @@ func TestUserDeleteSSENotifiesCollaboratorsOfOwnedNotes(t *testing.T) {
 			tc.del(t, owner)
 
 			seen := collectNoteEvents(collabCh, sse.EventNoteDeleted, []string{shared.ID}, 3*time.Second, 500*time.Millisecond)
-			assert.Contains(t, seen, shared.ID, "collaborator should receive note_deleted for the shared note")
+			if assert.Contains(t, seen, shared.ID, "collaborator should receive note_deleted for the shared note") {
+				assert.True(t, seen[shared.ID].NoteData.Permanent, "the note is gone for good, not in a trash (#1324)")
+			}
 			assert.NotContains(t, seen, private.ID, "collaborator should hear nothing of a note it could not see")
 			assert.NotContains(t, seen, trashed.ID, "collaborator heard of the trashed note when it was trashed")
 
@@ -115,7 +117,9 @@ func TestUserDeleteSSENotifiesCollaboratorsOfOwnedNotes(t *testing.T) {
 				all := []string{shared.ID, private.ID, trashed.ID}
 				seen = collectNoteEvents(ownerCh, sse.EventNoteDeleted, all, 3*time.Second, 0)
 				for _, id := range all {
-					assert.Contains(t, seen, id, "owner should receive note_deleted for every note")
+					if assert.Contains(t, seen, id, "owner should receive note_deleted for every note") {
+						assert.True(t, seen[id].NoteData.Permanent, "the note is gone for good, not in the trash (#1324)")
+					}
 				}
 			}
 		})

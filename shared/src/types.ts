@@ -671,6 +671,12 @@ export interface NoteSSEEvent {
   data: {
     note_id: string;
     note: Note | null;
+    /**
+     * Set on `note_deleted` when the note is gone for good (deleted from the
+     * trash, the trash emptied, or its owner's notes or account deleted)
+     * rather than moved to the trash. Absent otherwise.
+     */
+    permanent?: boolean;
   };
 }
 
