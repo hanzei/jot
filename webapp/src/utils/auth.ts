@@ -45,18 +45,25 @@ const clearServiceWorkerUserData = async (): Promise<void> => {
  * failed-request history, the cached API responses and note images, and any
  * writes the service worker queued while the server was unreachable — those
  * would otherwise be replayed with whoever's session cookie is current then.
+ *
+ * Pass `keepQueuedWrites` when it is not known that the session is over (a
+ * session check that failed for a reason other than 401, e.g. the server being
+ * down): the queue then holds the same user's offline edits, still waiting to
+ * be sent with their still-valid cookie.
  */
-export const removeUser = (): Promise<void> => {
+export const removeUser = ({ keepQueuedWrites = false }: { keepQueuedWrites?: boolean } = {}): Promise<void> => {
   localStorage.removeItem('user');
   localStorage.removeItem('settings');
   clearFailedRequests();
-  const cleanups: Promise<unknown>[] = [clearServiceWorkerUserData()];
+  const cleanups: Promise<unknown>[] = keepQueuedWrites ? [] : [clearServiceWorkerUserData()];
   if (window.caches) {
     // The worker deletes the image cache too; deleting it here as well covers
     // a page the worker does not control (e.g. after a hard reload).
     cleanups.push(caches.delete(API_CACHE), caches.delete(NOTE_IMAGES_CACHE));
   }
-  return Promise.all(cleanups).then(() => {}, () => {});
+  // allSettled, not all: one failed cleanup must not resolve this before the
+  // others have finished.
+  return Promise.allSettled(cleanups).then(() => {});
 };
 
 export const getSettings = (): UserSettings | null => {

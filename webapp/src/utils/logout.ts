@@ -9,7 +9,8 @@ import { httpStatus } from '@/utils/apiError';
  */
 export const endServerSession = async (): Promise<boolean> => {
   try {
-    await auth.logout();
+    // A 401 is handled here, so the interceptor must not also redirect.
+    await auth.logout({ skipAuthRedirect: true });
     return true;
   } catch (err) {
     return httpStatus(err) === 401;

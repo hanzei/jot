@@ -78,6 +78,19 @@ registerRoute(
           }
           return cachedResponse;
         },
+        // The server marks images `immutable` for a year, so a plain fetch
+        // would be answered from the browser's HTTP cache — no access check,
+        // and the old Date header would make the re-cached copy expire again
+        // at once. Revalidating asks the server (a cheap 304 via the ETag) and
+        // refreshes Date.
+        requestWillFetch: async ({ request }) => new Request(request, { cache: 'no-cache' }),
+        // Offline, an expired copy is still better than a broken image. Only a
+        // network failure lands here; a 403 from the server is a response and
+        // is passed through.
+        handlerDidError: async ({ request }) => {
+          const cache = await caches.open(NOTE_IMAGES_CACHE);
+          return (await cache.match(request)) ?? undefined;
+        },
       },
     ],
   })

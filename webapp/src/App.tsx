@@ -11,6 +11,7 @@ import { OfflineNotification } from '@/components/OfflineNotification';
 import { ToastProvider } from '@/components/Toast';
 import { isAdmin, setUser, setSettings, removeUser } from '@/utils/auth';
 import { auth, serverConfig } from '@/utils/api';
+import { httpStatus } from '@/utils/apiError';
 import { applyTheme, followThemePreference } from '@/utils/theme';
 import { LoginRedirect, PostAuthRedirect } from '@/components/AuthRedirect';
 import PublicNote from '@/pages/PublicNote';
@@ -92,8 +93,10 @@ function SignedInApp() {
         applyTheme(response.settings.theme as 'system' | 'light' | 'dark');
         setIsAuth(true);
       })
-      .catch(() => {
-        removeUser();
+      .catch((err: unknown) => {
+        // Only a 401 says the session is over. Anything else (server down, a
+        // proxy's 502) leaves the user's queued offline writes in place.
+        removeUser({ keepQueuedWrites: httpStatus(err) !== 401 });
         setIsAuth(false);
       });
 
