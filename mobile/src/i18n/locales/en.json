@@ -93,7 +93,8 @@
     "ssoTryAgainLater": "Single sign-on is busy right now. Try again in a minute.",
     "ssoFailed": "Single sign-on failed. Please try again.",
     "ssoServerChanged": "The server changed during sign-in. Please try again.",
-    "ssoBrowserDidNotOpen": "Couldn't open the browser for sign-in. Please try again."
+    "ssoBrowserDidNotOpen": "Couldn't open the browser for sign-in. Please try again.",
+    "sessionRequiresHttps": "This server only accepts its session over HTTPS. Use an https:// address, or ask the server's operator to set JOT_COOKIE_SECURE=false."
   },
   "dashboard": {
     "newNote": "New Note",
@@ -635,7 +636,8 @@
     "refresh": "Refresh",
     "shareDiagnostics": "Share Diagnostics Report",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "encrypted": "Encrypted (HTTPS)"
   },
   "apiErrors": {
     "invalidCredentials": "Invalid username or password.",
@@ -660,5 +662,11 @@
     "screenMessage": "This screen ran into an unexpected problem.",
     "tryAgain": "Try again",
     "shareDiagnostics": "Share diagnostics"
+  },
+  "serverSecurity": {
+    "insecureTitle": "Unencrypted connection",
+    "insecureMessage": "{{server}} uses http://. Your password, your session and your notes travel unencrypted, and anyone on the network path can read or change them.",
+    "insecureConfirm": "Connect anyway",
+    "insecureBadge": "Unencrypted"
   }
 }

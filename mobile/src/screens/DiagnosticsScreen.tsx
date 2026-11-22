@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { isInsecureServerOrigin } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -327,6 +328,14 @@ export default function DiagnosticsScreen() {
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('diagnostics.server')}</Text>
           <DiagRow label={t('diagnostics.serverUrl')} value={snapshot.serverUrl || '—'} mono />
+          {snapshot.serverUrl ? (
+            <DiagRow
+              label={t('diagnostics.encrypted')}
+              value={snapshot.serverUrl.startsWith('https:') ? t('diagnostics.yes') : t('diagnostics.no')}
+              valueColor={isInsecureServerOrigin(snapshot.serverUrl) ? colors.error : undefined}
+              testID="diagnostics-server-encrypted"
+            />
+          ) : null}
           <DiagRow label={t('diagnostics.generationId')} value={String(lifecycle.generationId)} mono />
           <DiagRow
             label={t('diagnostics.switchInProgress')}
@@ -414,11 +423,13 @@ function DiagRow({
   value,
   valueColor,
   mono,
+  testID,
 }: {
   label: string;
   value: string;
   valueColor?: string | undefined;
   mono?: boolean;
+  testID?: string;
 }) {
   const { colors } = useTheme();
   return (
@@ -431,6 +442,7 @@ function DiagRow({
           mono && { fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
         ]}
         numberOfLines={2}
+        testID={testID}
       >
         {value}
       </Text>

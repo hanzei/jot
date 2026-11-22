@@ -18,6 +18,7 @@ import { getActiveServer, getServerScopedStorageKey } from '../src/store/serverA
 import { isServerReachable, markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
 import { notesWrittenSince, snapshotMark } from '../src/db/snapshotGate';
 import { apiErrorBody } from './helpers/apiError';
+import { InsecureSessionCookieError } from '../src/api/sessionCookie';
 
 jest.mock('axios', () => {
   class MockCanceledError extends Error {
@@ -923,6 +924,58 @@ describe('API Client', () => {
 
       // Switching back to A must not inherit B's stale "unreachable" verdict.
       expect(isServerReachable()).toBe(true);
+    });
+  });
+  describe('the session cookie\'s Secure flag (#1337)', () => {
+    const user = { user: { id: '1', username: 'test' }, settings: { theme: 'system', note_sort: 'manual' } };
+
+    beforeEach(async () => {
+      await setServerUrl('http://insecure.example.com');
+      await clearStoredSession();
+      mockSecureStore.setItemAsync.mockClear();
+    });
+
+    afterAll(async () => {
+      await setServerUrl('https://test.example.com');
+    });
+
+    it.each([
+      ['login', () => auth.login({ username: 'test', password: 'pass' })],
+      ['register', () => auth.register({ username: 'test', password: 'pass' })],
+      ['SSO exchange', () => auth.oidcNativeExchange('code', 'verifier')],
+    ])('%s refuses a Secure cookie over http:// and stores nothing', async (_name, call) => {
+      mockAxiosInstance.post.mockResolvedValueOnce({
+        data: user,
+        headers: { 'set-cookie': ['jot_session=secure-tok; Path=/; HttpOnly; Secure'] },
+      });
+
+      await expect(call()).rejects.toBeInstanceOf(InsecureSessionCookieError);
+
+      expect(mockSecureStore.setItemAsync).not.toHaveBeenCalledWith(expect.stringMatching(/_session$/), expect.anything());
+      expect(await getStoredSession()).toBeNull();
+    });
+
+    it('stores a cookie without Secure over http://', async () => {
+      mockAxiosInstance.post.mockResolvedValueOnce({
+        data: user,
+        headers: { 'set-cookie': ['jot_session=plain-tok; Path=/; HttpOnly'] },
+      });
+
+      await auth.login({ username: 'test', password: 'pass' });
+
+      expect(await getStoredSession()).toBe('plain-tok');
+    });
+
+    it('stores a Secure cookie over https://', async () => {
+      await setServerUrl('https://secure.example.com');
+      mockAxiosInstance.post.mockResolvedValueOnce({
+        data: user,
+        headers: { 'set-cookie': ['jot_session=secure-tok; Path=/; HttpOnly; Secure'] },
+      });
+
+      await auth.login({ username: 'test', password: 'pass' });
+
+      expect(await getStoredSession()).toBe('secure-tok');
     });
   });
 });

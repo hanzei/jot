@@ -8,7 +8,9 @@ import {
   runMigrationDrainPass,
   flipToServerMode,
   runBackgroundReconcileScopes,
+  registerOnServer,
 } from '../src/store/upgradeToServer';
+import { InsecureSessionCookieError } from '../src/api/sessionCookie';
 import type { UpgradeClient, UpgradeSession, SeedResult } from '../src/store/upgradeToServer';
 import { isLocalModeEnabled, isLocalModeActive, setLocalModeActive } from '../src/store/localMode';
 import * as SecureStore from 'expo-secure-store';
@@ -184,6 +186,31 @@ function makeEmptyClient(overrides?: {
 // ------------------------------------------------------------------
 // checkCapabilityGate
 // ------------------------------------------------------------------
+
+describe('registerOnServer and the session cookie\'s Secure flag (#1337)', () => {
+  const mockPost = (axios as unknown as { post: jest.Mock }).post;
+
+  it('refuses a Secure cookie from an http:// server', async () => {
+    mockPost.mockResolvedValueOnce({ status: 201, data: {}, headers: { 'set-cookie': ['jot_session=t; Path=/; Secure'] } });
+
+    await expect(registerOnServer('http://jot.lan:8080', 'alice', 'password123')).rejects.toBeInstanceOf(InsecureSessionCookieError);
+  });
+
+  it('accepts a cookie without Secure from an http:// server', async () => {
+    mockPost.mockResolvedValueOnce({ status: 201, data: {}, headers: { 'set-cookie': ['jot_session=t; Path=/; HttpOnly'] } });
+
+    await expect(registerOnServer('http://jot.lan:8080', 'alice', 'password123')).resolves.toEqual({
+      serverUrl: 'http://jot.lan:8080',
+      sessionToken: 't',
+    });
+  });
+
+  it('accepts a Secure cookie from an https:// server', async () => {
+    mockPost.mockResolvedValueOnce({ status: 201, data: {}, headers: { 'set-cookie': ['jot_session=t; Path=/; Secure'] } });
+
+    await expect(registerOnServer('https://jot.example.com', 'alice', 'password123')).resolves.toMatchObject({ sessionToken: 't' });
+  });
+});
 
 describe('checkCapabilityGate', () => {
   it('returns ok when server honors client IDs and returns 409 on duplicate', async () => {

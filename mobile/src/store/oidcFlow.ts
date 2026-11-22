@@ -5,6 +5,7 @@ import { getBaseUrl } from '../api/client';
 import { createPkcePair } from '../utils/pkce';
 import { OIDC_CALLBACK_URL, isOidcCallbackUrl } from '../utils/deepLink';
 import { extractApiError } from '../i18n/utils';
+import { InsecureSessionCookieError } from '../api/sessionCookie';
 
 /**
  * The native SSO hand-off: open the server's
@@ -266,6 +267,9 @@ export function oidcExchangeErrorMessage(error: unknown): string {
   // server now active.
   if (axios.isCancel(error)) {
     return 'auth.ssoServerChanged';
+  }
+  if (error instanceof InsecureSessionCookieError) {
+    return 'auth.sessionRequiresHttps';
   }
   const status = getHttpStatus(error);
   if (status === undefined) {

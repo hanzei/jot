@@ -25,6 +25,7 @@ import FadeInView from '../components/FadeInView';
 import { displayMessage, extractApiError } from '../i18n/utils';
 import { useServerConfig } from '../hooks/useServerConfig';
 import { oidcExchangeErrorMessage, SsoFlowError } from '../store/oidcFlow';
+import { InsecureSessionCookieError } from '../api/sessionCookie';
 
 type LoginScreenProps = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Login'>;
@@ -108,7 +109,9 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       await login(username.trim(), password);
     } catch (err: unknown) {
       const response = (err as { response?: unknown })?.response;
-      if (!response) {
+      if (err instanceof InsecureSessionCookieError) {
+        setError(t('auth.sessionRequiresHttps'));
+      } else if (!response) {
         setError(t('auth.unableToConnect'));
       } else {
         setError(displayMessage(t, extractApiError(err) ?? 'auth.loginFailed'));

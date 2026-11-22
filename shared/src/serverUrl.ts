@@ -31,6 +31,27 @@ export function canonicalizeServerOrigin(input: string): string | null {
   return `${protocol}//${hostname}${normalizedPort}`;
 }
 
+/**
+ * Hosts that never leave the device, so plain HTTP to them crosses no network.
+ * `10.0.2.2` (the Android emulator's host alias) is deliberately absent: it is
+ * also an ordinary LAN address.
+ */
+const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * Whether talking to this server sends passwords, the session and note content
+ * unencrypted over a network: an `http:` origin on anything but loopback. An
+ * input that is not a valid server URL is not insecure, just invalid.
+ */
+export function isInsecureServerOrigin(input: string): boolean {
+  const canonical = canonicalizeServerOrigin(input);
+  if (!canonical) {
+    return false;
+  }
+  const { protocol, hostname } = new URL(canonical);
+  return protocol === HTTP_PROTOCOL && !LOOPBACK_HOSTNAMES.has(hostname);
+}
+
 export function createServerId(canonicalServerOrigin: string): string {
   // FNV-1a 32-bit hash for deterministic, short server IDs.
   let hash = 0x811c9dc5;

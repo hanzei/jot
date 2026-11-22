@@ -94,7 +94,8 @@
     "ssoTryAgainLater": "Il Single Sign-On è occupato al momento. Riprova tra un minuto.",
     "ssoFailed": "Single Sign-On non riuscito. Riprova.",
     "ssoServerChanged": "Il server è cambiato durante l'accesso. Riprova.",
-    "ssoBrowserDidNotOpen": "Impossibile aprire il browser per l'accesso. Riprova."
+    "ssoBrowserDidNotOpen": "Impossibile aprire il browser per l'accesso. Riprova.",
+    "sessionRequiresHttps": "Questo server accetta la sessione solo tramite HTTPS. Usa un indirizzo https:// oppure chiedi al gestore del server di impostare JOT_COOKIE_SECURE=false."
   },
   "dashboard": {
     "newNote": "Nuova nota",
@@ -650,7 +651,8 @@
     "refresh": "Aggiorna",
     "shareDiagnostics": "Condividi report diagnostico",
     "yes": "Sì",
-    "no": "No"
+    "no": "No",
+    "encrypted": "Cifrato (HTTPS)"
   },
   "apiErrors": {
     "invalidCredentials": "Nome utente o password non validi.",
@@ -675,5 +677,11 @@
     "screenMessage": "Questa schermata ha riscontrato un problema imprevisto.",
     "tryAgain": "Riprova",
     "shareDiagnostics": "Condividi diagnostica"
+  },
+  "serverSecurity": {
+    "insecureTitle": "Connessione non cifrata",
+    "insecureMessage": "{{server}} usa http://. La tua password, la tua sessione e le tue note viaggiano senza cifratura, e chiunque lungo il percorso di rete può leggerle o modificarle.",
+    "insecureConfirm": "Connetti comunque",
+    "insecureBadge": "Non cifrato"
   }
 }

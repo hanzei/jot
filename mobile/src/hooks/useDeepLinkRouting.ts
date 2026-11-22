@@ -6,6 +6,7 @@ import {
   getStateFromPath,
 } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
+import { isInsecureServerOrigin } from '@jot/shared';
 import { useConfirm } from './useConfirm';
 import {
   getActiveServerId,
@@ -68,10 +69,15 @@ export function useDeepLinkRouting({
     if (deepLinkServerPromptInFlightRef.current) {
       return deepLinkServerPromptInFlightRef.current;
     }
+    // An http:// server gets the same warning as typing one in (#1337), as
+    // part of this prompt rather than a second one.
+    const insecure = isInsecureServerOrigin(serverOrigin);
+    const message = t('deepLink.unknownServerMessage', { server: serverOrigin });
     const promptPromise = confirm({
       title: t('deepLink.unknownServerTitle'),
-      message: t('deepLink.unknownServerMessage', { server: serverOrigin }),
-      confirmLabel: t('deepLink.addAndSwitchAction'),
+      message: insecure ? `${message}\n\n${t('serverSecurity.insecureMessage', { server: serverOrigin })}` : message,
+      confirmLabel: insecure ? t('serverSecurity.insecureConfirm') : t('deepLink.addAndSwitchAction'),
+      destructive: insecure,
     }).finally(() => {
       deepLinkServerPromptInFlightRef.current = null;
     });

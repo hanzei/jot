@@ -156,6 +156,15 @@ export const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
+  serverRowInsecure: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  serverRowInsecureText: {
+    marginTop: 0,
+  },
   serverSetupActions: {
     marginTop: 8,
     flexDirection: 'row',

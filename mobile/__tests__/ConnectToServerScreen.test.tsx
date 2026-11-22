@@ -4,6 +4,9 @@ import ConnectToServerScreen from '../src/screens/ConnectToServerScreen';
 import { probeServerReachability } from '../src/api/client';
 import { probeServerConfig } from '../src/api/config';
 import i18n from '../src/i18n';
+import { Alert } from 'react-native';
+import { registerOnServer } from '../src/store/upgradeToServer';
+import { InsecureSessionCookieError } from '../src/api/sessionCookie';
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ goBack: jest.fn() }),
@@ -122,5 +125,77 @@ describe('ConnectToServerScreen out-of-order config probes', () => {
     });
     expect(mockProbeServerConfig).toHaveBeenCalledWith(SERVER_A);
     expect(mockProbeServerConfig).toHaveBeenCalledWith(SERVER_B);
+  });
+});
+
+describe('ConnectToServerScreen plain HTTP (#1337)', () => {
+  const INSECURE = 'http://jot.lan:8080';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockProbeServerReachability.mockImplementation(async (url: string) => ({ ok: true, canonicalUrl: url }));
+    mockProbeServerConfig.mockResolvedValue(null);
+  });
+
+  function answerInsecureWarning(button: 'confirm' | 'cancel') {
+    return jest.spyOn(Alert, 'alert').mockImplementation((_title, _message, buttons) => {
+      buttons?.[button === 'confirm' ? 1 : 0]?.onPress?.();
+    });
+  }
+
+  it('moves on to registration only after the user confirms the warning', async () => {
+    const alertSpy = answerInsecureWarning('confirm');
+    const { getByTestId, findByTestId } = await render(<ConnectToServerScreen />);
+
+    await fireEvent.changeText(getByTestId('upgrade-server-url-input'), INSECURE);
+    await fireEvent.press(getByTestId('upgrade-server-url-submit'));
+
+    expect(await findByTestId('upgrade-username-input')).toBeTruthy();
+    expect(alertSpy).toHaveBeenCalledWith(
+      i18n.t('serverSecurity.insecureTitle'),
+      expect.any(String),
+      expect.any(Array),
+      expect.anything(),
+    );
+  });
+
+  it('stays on the server step when the user cancels the warning', async () => {
+    answerInsecureWarning('cancel');
+    const { getByTestId, queryByTestId } = await render(<ConnectToServerScreen />);
+
+    await fireEvent.changeText(getByTestId('upgrade-server-url-input'), INSECURE);
+    await fireEvent.press(getByTestId('upgrade-server-url-submit'));
+
+    await waitFor(() => {
+      expect(getByTestId('upgrade-server-url-submit')).not.toBeDisabled();
+    });
+    expect(queryByTestId('upgrade-username-input')).toBeNull();
+    expect(mockProbeServerConfig).not.toHaveBeenCalled();
+  });
+
+  it('does not warn for an https:// server', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    const { getByTestId, findByTestId } = await render(<ConnectToServerScreen />);
+
+    await fireEvent.changeText(getByTestId('upgrade-server-url-input'), SERVER_A);
+    await fireEvent.press(getByTestId('upgrade-server-url-submit'));
+
+    expect(await findByTestId('upgrade-username-input')).toBeTruthy();
+    expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  it('explains a registration refused for a Secure cookie over HTTP', async () => {
+    answerInsecureWarning('confirm');
+    (registerOnServer as jest.Mock).mockRejectedValueOnce(new InsecureSessionCookieError());
+    const { getByTestId, findByTestId, findByText } = await render(<ConnectToServerScreen />);
+
+    await fireEvent.changeText(getByTestId('upgrade-server-url-input'), INSECURE);
+    await fireEvent.press(getByTestId('upgrade-server-url-submit'));
+    await fireEvent.changeText(await findByTestId('upgrade-username-input'), 'newuser');
+    await fireEvent.changeText(getByTestId('upgrade-password-input'), 'p'.repeat(10));
+    await fireEvent.press(getByTestId('upgrade-register-button'));
+
+    expect(await findByText(i18n.t('auth.sessionRequiresHttps'))).toBeTruthy();
+    expect(getByTestId('upgrade-username-input')).toBeTruthy();
   });
 });

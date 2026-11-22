@@ -20,6 +20,7 @@ import { displayMessage, extractApiError, USERNAME_ERROR_KEYS } from '../i18n/ut
 import ServerSetupGate from '../components/ServerSetupGate';
 import FadeInView from '../components/FadeInView';
 import { useServerConfig } from '../hooks/useServerConfig';
+import { InsecureSessionCookieError } from '../api/sessionCookie';
 
 type RegisterScreenProps = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Register'>;
@@ -61,7 +62,9 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
       await register(username.trim(), password);
     } catch (err: unknown) {
       const response = (err as { response?: unknown })?.response;
-      if (!response) {
+      if (err instanceof InsecureSessionCookieError) {
+        setError(t('auth.sessionRequiresHttps'));
+      } else if (!response) {
         setError(t('auth.unableToConnect'));
       } else {
         setError(displayMessage(t, extractApiError(err) ?? 'auth.registrationFailed'));

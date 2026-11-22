@@ -9,7 +9,8 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { CircleCheck, Pencil, Trash2 } from 'lucide-react-native';
+import { CircleCheck, LockOpen, Pencil, Trash2 } from 'lucide-react-native';
+import { isInsecureServerOrigin } from '@jot/shared';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../theme/ThemeContext';
 import { useAuth } from '../../store/AuthContext';
@@ -428,6 +429,17 @@ export default function ServerPickerModal({
                               <Text style={[styles.serverRowSubtext, { color: colors.textSecondary }]} numberOfLines={1}>
                                 {server.serverUrl}
                               </Text>
+                            ) : null}
+                            {isInsecureServerOrigin(server.serverUrl) ? (
+                              <View style={styles.serverRowInsecure}>
+                                <LockOpen size={12} color={colors.warningText} />
+                                <Text
+                                  style={[styles.serverRowSubtext, styles.serverRowInsecureText, { color: colors.warningText }]}
+                                  testID={`server-picker-insecure-${server.serverId}`}
+                                >
+                                  {t('serverSecurity.insecureBadge')}
+                                </Text>
+                              </View>
                             ) : null}
                           </View>
                           {isActive ? <CircleCheck size={20} color={colors.primary} /> : null}
