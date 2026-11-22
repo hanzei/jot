@@ -1,13 +1,21 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useId } from 'react';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
-import { X, Upload } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
+import { X, Upload, ExternalLink } from 'lucide-react';
+import { Trans, useTranslation } from 'react-i18next';
 import { notes } from '@/utils/api';
 import { useSizeTransition } from '@/hooks/useSizeTransition';
-import type { ImportResponse } from '@jot/shared';
+import { linkHost, type ImportResponse } from '@jot/shared';
 import { apiErrorMessage } from '@/utils/apiError';
 
 type ImportType = 'jot_json' | 'google_keep' | 'usememos';
+
+/** The operator's Memos instance (JOT_MEMOS_URL), parsed once for display. */
+interface MemosInstance {
+  url: string;
+  host: string;
+  /** Plain http: the token travels unencrypted. */
+  insecure: boolean;
+}
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -19,8 +27,11 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
   const { t } = useTranslation();
   const [importType, setImportType] = useState<ImportType>('google_keep');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [usememosURL, setUsememosURL] = useState('');
+  // The operator's Memos instance (JOT_MEMOS_URL), or null while unknown or
+  // when the Memos import is off; the Memos option is hidden until it is set.
+  const [memos, setMemos] = useState<MemosInstance | null>(null);
   const [usememosToken, setUsememosToken] = useState('');
+  const tokenInputId = useId();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<ImportResponse | null>(null);
@@ -31,6 +42,26 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
   const sizeTransitionKey =
     `${importType}:${!!selectedFile}:${!!error}:${!!result}`;
   const panelRef = useSizeTransition<HTMLDivElement>(sizeTransitionKey);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    notes.importOptions()
+      .then(options => {
+        if (cancelled || !options.memos) return;
+        const { url } = options.memos;
+        // The server lower-cases the scheme, so a literal prefix check holds.
+        setMemos({ url, host: linkHost(url), insecure: url.startsWith('http://') });
+      })
+      .catch(() => {
+        // Without the options the Memos import is not offered; the file
+        // imports do not depend on them.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
+
 
   const isFileType = importType !== 'usememos';
   const acceptedFileTypes = importType === 'jot_json' ? '.zip' : '.json,.zip';
@@ -45,7 +76,6 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
   const resetFields = (type: ImportType = 'google_keep') => {
     setImportType(type);
     setSelectedFile(null);
-    setUsememosURL('');
     setUsememosToken('');
     setError('');
     setResult(null);
@@ -82,7 +112,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
   };
 
   const isImportReady = importType === 'usememos'
-    ? usememosURL.trim() !== '' && usememosToken.trim() !== ''
+    ? memos !== null && usememosToken.trim() !== ''
     : selectedFile !== null;
 
   const handleImport = async () => {
@@ -94,7 +124,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
 
     try {
       const response = importType === 'usememos'
-        ? await notes.import({ importType: 'usememos', url: usememosURL.trim(), token: usememosToken.trim() })
+        ? await notes.import({ importType: 'usememos', token: usememosToken.trim() })
         : await notes.import({ file: selectedFile!, importType });
       setResult(response);
       onSuccess();
@@ -107,6 +137,9 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
 
   const handleClose = () => {
     resetFields();
+    // Forget the options so the next opening offers only what its own
+    // request returns.
+    setMemos(null);
     onClose();
   };
 
@@ -162,17 +195,19 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
                   />
                   <span className="text-sm text-gray-700 dark:text-gray-300">{t('import.formatJot')}</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="import-format"
-                    value="usememos"
-                    checked={importType === 'usememos'}
-                    onChange={() => handleFormatChange('usememos')}
-                    className="text-blue-600"
-                  />
-                  <span className="text-sm text-gray-700 dark:text-gray-300">{t('import.formatUsememos')}</span>
-                </label>
+                {memos && (
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="import-format"
+                      value="usememos"
+                      checked={importType === 'usememos'}
+                      onChange={() => handleFormatChange('usememos')}
+                      className="text-blue-600"
+                    />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">{t('import.formatUsememos')}</span>
+                  </label>
+                )}
               </div>
             </div>
 
@@ -237,34 +272,53 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
                   onChange={handleFileChange}
                 />
               </div>
-            ) : (
-              <div className="space-y-3" data-testid="usememos-inputs">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    {t('import.urlLabel')}
-                  </label>
-                  <input
-                    type="url"
-                    value={usememosURL}
-                    onChange={e => setUsememosURL(e.target.value)}
-                    placeholder={t('import.urlPlaceholder')}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    data-testid="usememos-url"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    {t('import.tokenLabel')}
-                  </label>
-                  <input
-                    type="password"
-                    value={usememosToken}
-                    onChange={e => setUsememosToken(e.target.value)}
-                    placeholder={t('import.tokenPlaceholder')}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    data-testid="usememos-token"
-                  />
-                </div>
+            ) : memos && (
+              <div className="text-sm text-gray-700 dark:text-gray-300" data-testid="usememos-inputs">
+                <ol className="list-decimal list-outside ml-5 space-y-3">
+                  <li>
+                    <Trans
+                      i18nKey="import.memosStepSource"
+                      values={{ host: memos.host }}
+                      components={{ bold: <strong className="font-medium text-gray-900 dark:text-white" /> }}
+                    />
+                    <span className="block text-xs text-gray-500 dark:text-gray-400 break-all" data-testid="usememos-url">{memos.url}</span>
+                  </li>
+                  <li>
+                    <a
+                      href={memos.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
+                    >
+                      {t('import.memosStepOpen')}
+                      <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                    </a>
+                  </li>
+                  <li>{t('import.memosStepToken')}</li>
+                  <li>
+                    <label htmlFor={tokenInputId} className="block mb-1">
+                      {t('import.memosStepPaste')}
+                    </label>
+                    <input
+                      id={tokenInputId}
+                      type="password"
+                      autoComplete="off"
+                      value={usememosToken}
+                      onChange={e => setUsememosToken(e.target.value)}
+                      placeholder={t('import.tokenPlaceholder')}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      data-testid="usememos-token"
+                    />
+                  </li>
+                </ol>
+                <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                  {t('import.memosTokenNote', { host: memos.host })}
+                </p>
+                {memos.insecure && (
+                  <p className="mt-2 text-xs text-yellow-700 dark:text-yellow-400" data-testid="usememos-insecure-note">
+                    {t('import.memosInsecureNote')}
+                  </p>
+                )}
               </div>
             )}
 

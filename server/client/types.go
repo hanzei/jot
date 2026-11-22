@@ -310,6 +310,18 @@ type ImportResponse struct {
 	Errors   []string `json:"errors,omitempty"`
 }
 
+// ImportOptions is returned by GET /notes/import/options.
+type ImportOptions struct {
+	// Memos is the configured Memos instance, or nil when the Memos import
+	// is off.
+	Memos *MemosImportOptions `json:"memos"`
+}
+
+// MemosImportOptions describes the Memos instance the server imports from.
+type MemosImportOptions struct {
+	URL string `json:"url"`
+}
+
 // JotExportManifest is the name of the notes JSON inside a Jot export bundle.
 const JotExportManifest = "notes.json"
 

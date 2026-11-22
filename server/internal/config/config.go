@@ -61,6 +61,11 @@ type Config struct {
 	// (scheme://host[:port], no trailing slash), or "" when unset. Clients
 	// build public links from it.
 	PublicURL string
+	// MemosURL is the one Memos instance users may import from
+	// (JOT_MEMOS_URL), with any trailing "/" stripped, or "" when the Memos
+	// import is off. Operators pick the host so users cannot point the server
+	// at arbitrary addresses.
+	MemosURL string
 
 	// OIDC / SSO. OIDCEnabled is derived: it is true when the four core vars
 	// are set. When it is false every other OIDC field is empty and LocalLogin
@@ -372,6 +377,14 @@ func Load() (*Config, error) {
 		cfg.PublicURL = publicURL
 	}
 
+	if v := os.Getenv("JOT_MEMOS_URL"); v != "" {
+		memosURL, memosErr := requireBaseURL("JOT_MEMOS_URL", v)
+		if memosErr != nil {
+			return nil, memosErr
+		}
+		cfg.MemosURL = memosURL
+	}
+
 	if err := loadOIDC(cfg); err != nil {
 		return nil, err
 	}
@@ -503,23 +516,46 @@ func requireAbsoluteURL(name, v string) error {
 	return nil
 }
 
-// requireOriginURL extends requireAbsoluteURL with an origin-only check: v
-// must be an http or https URL made of scheme, host and optional port only.
-// Jot is served from the root, so a path (other than a single trailing "/",
-// which is stripped), a query, a fragment or user info is rejected. It returns
-// the normalized origin, "scheme://host[:port]".
-func requireOriginURL(name, v string) (string, error) {
+// parseHTTPURL parses v as an absolute http or https URL without user info,
+// a query or a fragment: the checks every URL setting shares.
+func parseHTTPURL(name, v string) (*url.URL, error) {
 	if err := requireAbsoluteURL(name, v); err != nil {
-		return "", err
+		return nil, err
 	}
 	u, err := url.Parse(v)
 	if err != nil {
-		return "", fmt.Errorf("invalid %s value %q: %w", name, v, err)
+		return nil, fmt.Errorf("invalid %s value %q: %w", name, v, err)
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return "", fmt.Errorf("invalid %s value %q: must use http or https", name, v)
+		return nil, fmt.Errorf("invalid %s value %q: must use http or https", name, v)
 	}
-	if u.User != nil || strings.ContainsAny(v, "?#") || (u.Path != "" && u.Path != "/") || u.RawPath != "" {
+	if u.User != nil || strings.ContainsAny(v, "?#") {
+		return nil, fmt.Errorf("invalid %s value %q: must not contain user info, a query or a fragment", name, v)
+	}
+	return u, nil
+}
+
+// requireBaseURL validates a URL other paths are appended to: an http or
+// https URL that may carry a path. It returns the URL with trailing slashes
+// stripped and the scheme lower-cased, so clients can compare it literally.
+func requireBaseURL(name, v string) (string, error) {
+	u, err := parseHTTPURL(name, v)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(u.String(), "/"), nil
+}
+
+// requireOriginURL validates an origin: an http or https URL made of scheme,
+// host and optional port only. Jot is served from the root, so a path (other
+// than a single trailing "/", which is stripped) is rejected. It returns the
+// normalized origin, "scheme://host[:port]".
+func requireOriginURL(name, v string) (string, error) {
+	u, err := parseHTTPURL(name, v)
+	if err != nil {
+		return "", err
+	}
+	if (u.Path != "" && u.Path != "/") || u.RawPath != "" {
 		return "", fmt.Errorf("invalid %s value %q: must be an origin (scheme, host and optional port) without a path, query or fragment", name, v)
 	}
 	return u.Scheme + "://" + u.Host, nil

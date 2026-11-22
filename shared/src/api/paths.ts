@@ -46,6 +46,7 @@ export const apiPaths = {
   notesTrash: '/notes/trash',
   notesReorder: '/notes/reorder',
   notesImport: '/notes/import',
+  notesImportOptions: '/notes/import/options',
   notesExport: '/notes/export',
   note: (noteId: string): string => `/notes/${noteId}`,
   /** `DELETE` target for a permanent delete, query string included, as the sync queue stores it. */

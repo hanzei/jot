@@ -637,6 +637,20 @@ export interface ImportResponse {
   errors?: string[];
 }
 
+/** `GET /notes/import/options`: the import sources beyond file uploads. */
+export interface ImportOptionsResponse {
+  /**
+   * The operator-configured Memos instance (`JOT_MEMOS_URL`), or `null` when
+   * the Memos import is off.
+   */
+  memos: MemosImportOptions | null;
+}
+
+export interface MemosImportOptions {
+  /** The instance's base URL, without a trailing slash. */
+  url: string;
+}
+
 export interface EmptyTrashResponse {
   deleted: number;
 }
@@ -789,7 +803,8 @@ export type ApiErrorCode =
   | 'invalid_import_file'
   | 'sso_link_unavailable'
   | 'sso_unlink_unavailable'
-  | 'public_links_disabled';
+  | 'public_links_disabled'
+  | 'memos_import_disabled';
 
 export interface ApiErrorDetail {
   code: ApiErrorCode;
