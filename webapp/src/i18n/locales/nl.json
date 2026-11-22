@@ -687,6 +687,11 @@
     "importing": "Importeren...",
     "importButton": "Importeren"
   },
+  "serverUnreachable": {
+    "title": "Jot is niet bereikbaar",
+    "message": "De server reageert niet. Controleer je verbinding of probeer het zo meteen opnieuw.",
+    "retry": "Opnieuw proberen"
+  },
   "offline": {
     "message": "Je bent momenteel offline. Sommige functies zijn mogelijk beperkt."
   },

@@ -699,6 +699,11 @@
     "importing": "Importando...",
     "importButton": "Importar"
   },
+  "serverUnreachable": {
+    "title": "No se puede conectar con Jot",
+    "message": "El servidor no responde. Comprueba tu conexión o vuelve a intentarlo en un momento.",
+    "retry": "Reintentar"
+  },
   "offline": {
     "message": "Estás sin conexión. Algunas funciones pueden estar limitadas."
   },

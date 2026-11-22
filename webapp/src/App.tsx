@@ -8,8 +8,9 @@ import Settings from '@/pages/Settings';
 import AuthenticatedLayout from '@/components/AuthenticatedLayout';
 import MobileAppHandoff from '@/components/MobileAppHandoff';
 import { OfflineNotification } from '@/components/OfflineNotification';
+import ServerUnreachable from '@/components/ServerUnreachable';
 import { ToastProvider } from '@/components/Toast';
-import { isAdmin, setUser, setSettings, removeUser } from '@/utils/auth';
+import { isAdmin, setUser, setSettings, removeUser, getUser, getSettings } from '@/utils/auth';
 import { auth, serverConfig } from '@/utils/api';
 import { httpStatus } from '@/utils/apiError';
 import { applyTheme, followThemePreference } from '@/utils/theme';
@@ -62,6 +63,9 @@ function SignedInApp() {
   // still valid, so the login page warns and offers to retry.
   const [serverLogoutPending, setServerLogoutPending] = useState(false);
   const [loading, setLoading] = useState(true);
+  // The session check failed without an answer from the server, and this
+  // device has no signed-in user to fall back on.
+  const [serverUnreachable, setServerUnreachable] = useState(false);
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [passwordMinLength, setPasswordMinLength] = useState<number>(VALIDATION.PASSWORD_MIN_LENGTH);
   const [uploadMaxBytes, setUploadMaxBytes] = useState<number>(UPLOAD_MAX_BYTES);
@@ -86,6 +90,12 @@ function SignedInApp() {
     // Always validate session against the server — the cookie is the source
     // of truth. localStorage may have been cleared while the session is still
     // valid (e.g. storage eviction, browser updates, cross-tab logout race).
+    //
+    // Only a 401 means the session is over. Any other failure (no network, a
+    // timeout, a 5xx from the server or a proxy) is an outage: the session may
+    // well still be valid, so nobody is signed out and edits queued offline
+    // are kept. A user this device already knows carries on from cached data,
+    // and the first 401 once the server answers signs them out as usual.
     const authPromise = auth.me()
       .then((response) => {
         setUser(response.user);
@@ -94,10 +104,18 @@ function SignedInApp() {
         setIsAuth(true);
       })
       .catch((err: unknown) => {
-        // Only a 401 says the session is over. Anything else (server down, a
-        // proxy's 502) leaves the user's queued offline writes in place.
-        removeUser({ keepQueuedWrites: httpStatus(err) !== 401 });
-        setIsAuth(false);
+        if (httpStatus(err) === 401) {
+          removeUser();
+          setIsAuth(false);
+          return;
+        }
+        if (getUser()) {
+          const settings = getSettings();
+          if (settings) applyTheme(settings.theme as 'system' | 'light' | 'dark');
+          setIsAuth(true);
+          return;
+        }
+        setServerUnreachable(true);
       });
 
     Promise.all([configPromise, authPromise]).finally(() => {
@@ -121,6 +139,8 @@ function SignedInApp() {
         <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-900">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
         </div>
+      ) : serverUnreachable ? (
+        <ServerUnreachable />
       ) : (
     <Router>
       <ToastProvider>

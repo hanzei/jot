@@ -96,6 +96,15 @@ for (const theme of THEMES) {
       await expectNoViolations(page);
     });
 
+    test('server-unreachable screen has no WCAG A/AA violations', async ({ page }) => {
+      await page.route('**/api/v1/users/me', (route) => route.abort('internetdisconnected'));
+      await page.goto('/');
+      await expect(page.getByRole('heading', { name: 'Can\'t reach Jot' })).toBeVisible();
+      await expectTheme(page, theme);
+
+      await expectNoViolations(page);
+    });
+
     test('register page has no WCAG A/AA violations', async ({ page, registerPage }) => {
       await registerPage.goto();
       await expect(page.getByRole('button', { name: 'Create account' })).toBeVisible();

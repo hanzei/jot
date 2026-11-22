@@ -687,6 +687,11 @@
     "importing": "Importieren...",
     "importButton": "Importieren"
   },
+  "serverUnreachable": {
+    "title": "Jot ist nicht erreichbar",
+    "message": "Der Server antwortet nicht. Prüfe deine Verbindung oder versuche es gleich noch einmal.",
+    "retry": "Erneut versuchen"
+  },
   "offline": {
     "message": "Du bist derzeit offline. Einige Funktionen sind möglicherweise eingeschränkt."
   },
