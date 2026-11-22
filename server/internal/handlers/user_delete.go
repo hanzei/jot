@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"slices"
 
 	"github.com/hanzei/jot/server/internal/blobstore"
@@ -36,10 +37,12 @@ func deleteUserWithCleanup(ctx context.Context, userStore *models.UserStore, not
 		func(ctx context.Context, tx *sql.Tx) error {
 			var err error
 			if shas, err = noteStore.GetNoteImageSHA256sForUserTx(ctx, tx, userID); err != nil {
-				return err
+				return fmt.Errorf("get image hashes: %w", err)
 			}
-			audiences, err = noteStore.GetUserNoteAudiencesTx(ctx, tx, userID)
-			return err
+			if audiences, err = noteStore.GetUserNoteAudiencesTx(ctx, tx, userID); err != nil {
+				return fmt.Errorf("get note audiences: %w", err)
+			}
+			return nil
 		},
 		func(ctx context.Context, tx *sql.Tx) error {
 			return noteStore.ClearUserAssignmentsTx(ctx, tx, userID)

@@ -138,10 +138,12 @@ func (s *noteStore) GetNoteAudienceIDs(ctx context.Context, noteID string) ([]st
 type UserNoteAudiences struct {
 	// Owned are the user's own notes, which the delete removes.
 	Owned []DeletedNoteAudience
-	// SharedWith are other users' notes shared with the user. The delete
-	// removes the user's share (and with it any assignment to them, or every
-	// assignment on a note left with no shares), so the rest of the audience
-	// must refetch the note.
+	// SharedWith are other users' notes shared with the user, or holding an
+	// image the user uploaded (a former collaborator's uploads stay after the
+	// unshare). The delete removes the user's share (and with it any
+	// assignment to them, or every assignment on a note left with no shares)
+	// and the images they uploaded, so the rest of the audience must refetch
+	// the note.
 	SharedWith []DeletedNoteAudience
 }
 
@@ -158,16 +160,22 @@ func (s *noteStore) GetUserNoteAudiencesTx(ctx context.Context, tx *sql.Tx, user
 		return nil, err
 	}
 	sharedWith, err := s.queryNoteAudiencesTx(ctx, tx,
-		`SELECT n.id, n.user_id FROM notes n
-		   JOIN note_shares me ON me.note_id = n.id
-		  WHERE me.shared_with_user_id = ?
+		`WITH affected AS (
+		   SELECT note_id FROM note_shares WHERE shared_with_user_id = ?
+		   UNION
+		   SELECT ni.note_id FROM note_images ni
+		     JOIN notes n ON n.id = ni.note_id
+		    WHERE ni.uploader_id = ? AND n.user_id <> ?
+		 )
+		 SELECT n.id, n.user_id FROM notes n
+		   JOIN affected a ON a.note_id = n.id
 		 UNION
 		 SELECT ns.note_id, ns.shared_with_user_id FROM note_shares ns
-		   JOIN note_shares me ON me.note_id = ns.note_id
+		   JOIN affected a ON a.note_id = ns.note_id
 		   JOIN notes n ON n.id = ns.note_id
-		  WHERE me.shared_with_user_id = ? AND n.deleted_at IS NULL
+		  WHERE n.deleted_at IS NULL
 		 ORDER BY 1, 2`,
-		userID, userID)
+		userID, userID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("get audiences of notes shared with user: %w", err)
 	}
@@ -196,7 +204,7 @@ func (s *noteStore) ownedNoteAudiencesTx(ctx context.Context, tx *sql.Tx, userID
 func (s *noteStore) queryNoteAudiencesTx(ctx context.Context, tx *sql.Tx, query string, args ...any) ([]DeletedNoteAudience, error) {
 	rows, err := tx.QueryContext(ctx, s.d.RewritePlaceholders(query), args...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query note audiences: %w", err)
 	}
 	type pair struct{ noteID, userID string }
 	pairs, err := collectRows(rows, func(rows *sql.Rows) (pair, error) {
@@ -204,7 +212,7 @@ func (s *noteStore) queryNoteAudiencesTx(ctx context.Context, tx *sql.Tx, query 
 		return p, rows.Scan(&p.noteID, &p.userID)
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan note audiences: %w", err)
 	}
 	audiences := []DeletedNoteAudience{}
 	for _, p := range pairs {

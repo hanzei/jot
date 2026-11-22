@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"slices"
 	"testing"
@@ -144,6 +145,15 @@ func TestUserDeleteSSENotifiesRemainingCollaborators(t *testing.T) {
 	_, err = owner.Client.UpdateNoteItem(t.Context(), pair.ID, pair.Items[0].ID, &client.PatchNoteItemRequest{AssignedTo: &owner.User.ID})
 	require.NoError(t, err)
 
+	// former is no longer shared with sharee, but keeps the image they
+	// uploaded while it was; their delete takes the image with it.
+	former, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Former"})
+	require.NoError(t, err)
+	require.NoError(t, owner.Client.ShareNote(t.Context(), former.ID, sharee.User.ID))
+	_, err = sharee.Client.UploadNoteImage(t.Context(), former.ID, "cat.png", bytes.NewReader(testPNG(t, 4, 4)))
+	require.NoError(t, err)
+	require.NoError(t, owner.Client.UnshareNote(t.Context(), former.ID, sharee.User.ID))
+
 	sseCtx, sseCancel := context.WithCancel(t.Context())
 	t.Cleanup(sseCancel)
 	ownerCh, err := owner.Client.SubscribeSSE(sseCtx)
@@ -153,8 +163,8 @@ func TestUserDeleteSSENotifiesRemainingCollaborators(t *testing.T) {
 
 	require.NoError(t, sharee.Client.DeleteMe(t.Context(), "password123", ""))
 
-	assert.Empty(t, waitForNoteEvents(ownerCh, sse.EventNoteUnshared, []string{group.ID, pair.ID}, 3*time.Second),
-		"owner should receive note_unshared for both notes")
+	assert.Empty(t, waitForNoteEvents(ownerCh, sse.EventNoteUnshared, []string{group.ID, pair.ID, former.ID}, 3*time.Second),
+		"owner should receive note_unshared for every note the delete changed")
 	event, found := waitForSSEEvent(otherCh, isNoteEvent(sse.EventNoteUnshared, group.ID), 3*time.Second)
 	require.True(t, found, "remaining collaborator should receive note_unshared")
 	assert.Equal(t, sharee.User.ID, event.TargetUserID, "the target is the deleted user")
@@ -175,4 +185,8 @@ func TestUserDeleteSSENotifiesRemainingCollaborators(t *testing.T) {
 	assert.Empty(t, refetched.SharedWith)
 	require.Len(t, refetched.Items, 1)
 	assert.Empty(t, refetched.Items[0].AssignedTo)
+
+	refetched, err = owner.Client.GetNote(t.Context(), former.ID)
+	require.NoError(t, err)
+	assert.Empty(t, refetched.Images)
 }
