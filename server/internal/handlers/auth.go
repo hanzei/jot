@@ -365,7 +365,7 @@ type ChangePasswordRequest struct {
 // ChangePassword godoc
 //
 //	@Summary		Change or set the current user's password
-//	@Description	Changes the password, verifying current_password. An account with no password (has_password false, e.g. created by SSO sign-in) sets its first password without current_password; that is refused with 403 while local login is disabled, since the password could not sign in.
+//	@Description	Changes the password, verifying current_password. An account with no password (has_password false, e.g. created by SSO sign-in) sets its first password without current_password; that is refused with 403 while local login is disabled, since the password could not sign in. Requires a browser session: a personal access token gets 403 session_required.
 //	@Tags			users
 //	@Security		CookieAuth
 //	@Accept			json
@@ -373,7 +373,7 @@ type ChangePasswordRequest struct {
 //	@Success		204		"no content"
 //	@Failure		400		{object}	apierr.ErrorResponse	"bad request"
 //	@Failure		401		{object}	apierr.ErrorResponse	"unauthorized"
-//	@Failure		403		{object}	apierr.ErrorResponse	"current password is incorrect, or local login is disabled"
+//	@Failure		403		{object}	apierr.ErrorResponse	"current password is incorrect, local login is disabled, or not a browser session"
 //	@Failure		500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router			/users/me/password [put]
 func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (int, any, error) {

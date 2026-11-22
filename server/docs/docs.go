@@ -3628,7 +3628,7 @@ const docTemplate = `{
         },
         "/users/me/password": {
             "put": {
-                "description": "Changes the password, verifying current_password. An account with no password (has_password false, e.g. created by SSO sign-in) sets its first password without current_password; that is refused with 403 while local login is disabled, since the password could not sign in.",
+                "description": "Changes the password, verifying current_password. An account with no password (has_password false, e.g. created by SSO sign-in) sets its first password without current_password; that is refused with 403 while local login is disabled, since the password could not sign in. Requires a browser session: a personal access token gets 403 session_required.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3664,7 +3664,7 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "current password is incorrect, or local login is disabled",
+                        "description": "current password is incorrect, local login is disabled, or not a browser session",
                         "schema": {
                             "$ref": "#/definitions/apierr.ErrorResponse"
                         }
