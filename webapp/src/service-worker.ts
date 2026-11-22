@@ -206,15 +206,20 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
   const reply = event.ports[0];
   event.waitUntil(
     (async () => {
-      await withQueueLock(async () => {
-        userDataGeneration++;
-        while (await bgSyncQueue.shiftRequest()) {
-          // Dropped unsent.
-        }
-      });
-      await Promise.allSettled(pendingImageWrites);
-      await caches.delete(NOTE_IMAGES_CACHE);
-      reply?.postMessage(null);
+      try {
+        await withQueueLock(async () => {
+          userDataGeneration++;
+          while (await bgSyncQueue.shiftRequest()) {
+            // Dropped unsent.
+          }
+        });
+      } finally {
+        // Even if the drain failed, the image cache goes and the page is not
+        // left waiting out its timeout.
+        await Promise.allSettled(pendingImageWrites);
+        await caches.delete(NOTE_IMAGES_CACHE);
+        reply?.postMessage(null);
+      }
     })()
   );
 });

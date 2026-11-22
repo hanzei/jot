@@ -14,6 +14,12 @@ vi.mock('@/utils/api', () => ({
   publicNoteImages: () => ({ url: (id: string) => id, thumbnailUrl: (id: string) => id }),
 }));
 
+// The signed-in shell pulls in the whole dashboard; these tests only need to
+// know whether App chose it.
+vi.mock('@/components/AuthenticatedLayout', () => ({
+  default: () => <div data-testid="signed-in-layout" />,
+}));
+
 vi.mock('@/utils/auth', () => ({
   setUser: vi.fn(),
   setSettings: vi.fn(),
@@ -97,6 +103,27 @@ describe('App startup — signed out vs. server unreachable', () => {
     expect(screen.queryByRole('button', { name: 'Sign in' })).not.toBeInTheDocument();
     // An outage is not a sign-out: the session and queued edits are kept.
     expect(removeUser).not.toHaveBeenCalled();
+  });
+
+  it('signs out on a 4xx other than 401, since the server did answer', async () => {
+    vi.mocked(auth.me).mockRejectedValue({ response: { status: 403 } });
+
+    render(<App />);
+
+    expect(await screen.findByRole('button', { name: 'Sign in' })).toBeInTheDocument();
+    expect(removeUser).toHaveBeenCalled();
+  });
+
+  it('keeps a user this device knows signed in during an outage', async () => {
+    vi.mocked(getUser).mockReturnValue({ id: 'u1', username: 'alice' } as User);
+    vi.mocked(auth.me).mockRejectedValue(new Error('Network Error'));
+
+    render(<App />);
+
+    expect(await screen.findByTestId('signed-in-layout')).toBeInTheDocument();
+    expect(removeUser).not.toHaveBeenCalled();
+    expect(screen.queryByRole('heading', { name: 'Can\'t reach Jot' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sign in' })).not.toBeInTheDocument();
   });
 });
 

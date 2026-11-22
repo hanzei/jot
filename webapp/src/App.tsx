@@ -24,6 +24,14 @@ import { PUBLIC_LINKS_DISABLED, type PublicLinksConfig } from '@/utils/publicLin
 const SSO_DISABLED: SSOConfig = { enabled: false, provider_name: '', local_login_enabled: true };
 
 /**
+ * Whether a failed session check means the server could not answer it — no
+ * response at all, a timeout, a 5xx from the server or a proxy, or a rate
+ * limit — rather than that the session is over (a 401, or another 4xx).
+ */
+const isOutage = (status: number | undefined): boolean =>
+  status === undefined || status >= 500 || status === 408 || status === 429;
+
+/**
  * A public note link renders on its own, ahead of everything below: no session
  * check, no config fetch, no SSE, so an anonymous visitor makes no
  * authenticated call (whose 401 would send them to /login) and a signed-in one
@@ -91,8 +99,7 @@ function SignedInApp() {
     // of truth. localStorage may have been cleared while the session is still
     // valid (e.g. storage eviction, browser updates, cross-tab logout race).
     //
-    // Only a 401 means the session is over. Any other failure (no network, a
-    // timeout, a 5xx from the server or a proxy) is an outage: the session may
+    // An outage (see isOutage) is not a sign-out: the session may
     // well still be valid, so nobody is signed out and edits queued offline
     // are kept. A user this device already knows carries on from cached data,
     // and the first 401 once the server answers signs them out as usual.
@@ -104,7 +111,7 @@ function SignedInApp() {
         setIsAuth(true);
       })
       .catch((err: unknown) => {
-        if (httpStatus(err) === 401) {
+        if (!isOutage(httpStatus(err))) {
           removeUser();
           setIsAuth(false);
           return;
