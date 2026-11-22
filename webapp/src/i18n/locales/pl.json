@@ -39,6 +39,12 @@
     "handedOffMessage": "Możesz zamknąć tę kartę."
   },
   "auth": {
+    "logoutPending": {
+      "message": "Wylogowano Cię na tym urządzeniu, ale Jot nie mógł połączyć się z serwerem, aby zakończyć sesję. Dopóki się to nie uda, ponowne załadowanie tej strony zaloguje Cię z powrotem.",
+      "retry": "Spróbuj ponownie",
+      "retrying": "Próba…",
+      "retryFailed": "Nadal nie można połączyć się z serwerem. Sprawdź połączenie i spróbuj ponownie."
+    },
     "signInTitle": "Zaloguj się do Jot",
     "or": "Lub",
     "createNewAccount": "utwórz nowe konto",
@@ -707,6 +713,11 @@
     "cancelButton": "Anuluj",
     "importing": "Importowanie...",
     "importButton": "Importuj"
+  },
+  "serverUnreachable": {
+    "title": "Nie można połączyć się z Jot",
+    "message": "Serwer nie odpowiada. Sprawdź połączenie lub spróbuj ponownie za chwilę.",
+    "retry": "Spróbuj ponownie"
   },
   "offline": {
     "message": "Jesteś w trybie offline. Niektóre funkcje mogą być niedostępne."

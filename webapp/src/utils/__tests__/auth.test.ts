@@ -78,8 +78,29 @@ describe('Auth Utilities', () => {
       await removeUser();
 
       expect(mockDelete).toHaveBeenCalledWith('api-cache');
+      expect(mockDelete).toHaveBeenCalledWith('note-images');
 
       delete (window as unknown as Record<string, unknown>)['caches'];
+    });
+
+    it('asks the service worker to drop its queued requests and waits for it', async () => {
+      const postMessage = vi.fn((_message: unknown, transfer: MessagePort[]) => {
+        transfer[0]!.postMessage(null);
+      });
+      const original = Object.getOwnPropertyDescriptor(navigator, 'serviceWorker');
+      Object.defineProperty(navigator, 'serviceWorker', {
+        value: { getRegistration: vi.fn().mockResolvedValue({ active: { postMessage } }) },
+        configurable: true,
+      });
+
+      try {
+        await removeUser();
+      } finally {
+        if (original) Object.defineProperty(navigator, 'serviceWorker', original);
+        else delete (navigator as unknown as Record<string, unknown>)['serviceWorker'];
+      }
+
+      expect(postMessage).toHaveBeenCalledWith({ type: 'jot:clear-user-data' }, expect.any(Array));
     });
 
     it('handles localStorage errors during user removal', () => {

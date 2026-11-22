@@ -39,6 +39,12 @@
     "handedOffMessage": "You can close this tab."
   },
   "auth": {
+    "logoutPending": {
+      "message": "You're signed out on this device, but Jot couldn't reach the server to end your session. Until it does, reloading this page will sign you back in.",
+      "retry": "Try again",
+      "retrying": "Trying…",
+      "retryFailed": "Still couldn't reach the server. Check your connection and try again."
+    },
     "signInTitle": "Sign in to Jot",
     "or": "Or",
     "createNewAccount": "create a new account",
@@ -683,6 +689,11 @@
     "cancelButton": "Cancel",
     "importing": "Importing...",
     "importButton": "Import"
+  },
+  "serverUnreachable": {
+    "title": "Can't reach Jot",
+    "message": "The server isn't responding. Check your connection, or try again in a moment.",
+    "retry": "Try again"
   },
   "offline": {
     "message": "You're currently offline. Some features may be limited."

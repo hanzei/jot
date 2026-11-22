@@ -39,6 +39,12 @@
     "handedOffMessage": "Vous pouvez fermer cet onglet."
   },
   "auth": {
+    "logoutPending": {
+      "message": "Vous êtes déconnecté sur cet appareil, mais Jot n'a pas pu joindre le serveur pour mettre fin à votre session. Tant que ce n'est pas fait, recharger cette page vous reconnectera.",
+      "retry": "Réessayer",
+      "retrying": "Nouvelle tentative…",
+      "retryFailed": "Le serveur est toujours injoignable. Vérifiez votre connexion et réessayez."
+    },
     "signInTitle": "Se connecter à Jot",
     "or": "Ou",
     "createNewAccount": "créer un nouveau compte",
@@ -695,6 +701,11 @@
     "cancelButton": "Annuler",
     "importing": "Importation...",
     "importButton": "Importer"
+  },
+  "serverUnreachable": {
+    "title": "Impossible de joindre Jot",
+    "message": "Le serveur ne répond pas. Vérifiez votre connexion ou réessayez dans un instant.",
+    "retry": "Réessayer"
   },
   "offline": {
     "message": "Vous êtes actuellement hors ligne. Certaines fonctionnalités peuvent être limitées."

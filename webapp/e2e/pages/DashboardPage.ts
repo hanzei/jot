@@ -552,9 +552,19 @@ export class DashboardPage {
     ).toHaveText(title);
   }
 
-  async logout() {
+  /**
+   * `viaKeyboard` opens the profile menu with Enter instead of a click, for
+   * when something covers the header (the offline banner on phone widths).
+   */
+  async logout({ viaKeyboard = false } = {}) {
     // Open the profile dropdown, then click Logout (role=menuitem set by headlessui)
-    await this.page.getByRole('button', { name: 'Profile menu' }).click();
+    const profileMenu = this.page.getByRole('button', { name: 'Profile menu' });
+    if (viaKeyboard) {
+      await profileMenu.focus();
+      await this.page.keyboard.press('Enter');
+    } else {
+      await profileMenu.click();
+    }
     await this.page.getByRole('menuitem', { name: 'Logout' }).click();
     // Confirm the logout in the confirmation dialog
     await confirmDialog(this.page, 'Logout');

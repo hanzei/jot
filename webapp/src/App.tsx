@@ -8,9 +8,11 @@ import Settings from '@/pages/Settings';
 import AuthenticatedLayout from '@/components/AuthenticatedLayout';
 import MobileAppHandoff from '@/components/MobileAppHandoff';
 import { OfflineNotification } from '@/components/OfflineNotification';
+import ServerUnreachable from '@/components/ServerUnreachable';
 import { ToastProvider } from '@/components/Toast';
-import { isAdmin, setUser, setSettings, removeUser } from '@/utils/auth';
+import { isAdmin, setUser, setSettings, removeUser, getUser } from '@/utils/auth';
 import { auth, serverConfig } from '@/utils/api';
+import { httpStatus } from '@/utils/apiError';
 import { applyTheme, followThemePreference } from '@/utils/theme';
 import { LoginRedirect, PostAuthRedirect } from '@/components/AuthRedirect';
 import PublicNote from '@/pages/PublicNote';
@@ -20,6 +22,14 @@ import { PUBLIC_LINKS_DISABLED, type PublicLinksConfig } from '@/utils/publicLin
 // Default when the server omits `sso` (a pre-SSO server) or the config fetch
 // fails: SSO off, local login on — i.e. exactly today's behavior.
 const SSO_DISABLED: SSOConfig = { enabled: false, provider_name: '', local_login_enabled: true };
+
+/**
+ * Whether a failed session check means the server could not answer it — no
+ * response at all, a timeout, a 5xx from the server or a proxy, or a rate
+ * limit — rather than that the session is over (a 401, or another 4xx).
+ */
+const isOutage = (status: number | undefined): boolean =>
+  status === undefined || status >= 500 || status === 408 || status === 429;
 
 /**
  * A public note link renders on its own, ahead of everything below: no session
@@ -57,7 +67,13 @@ function SignedInApp() {
   // state so it flips in the same render as isAuth: the redirect below is
   // decided during that render, and a flag living elsewhere would race it.
   const [signedOut, setSignedOut] = useState(false);
+  // Signed out on this device while POST /logout failed: the session cookie is
+  // still valid, so the login page warns and offers to retry.
+  const [serverLogoutPending, setServerLogoutPending] = useState(false);
   const [loading, setLoading] = useState(true);
+  // The session check failed without an answer from the server, and this
+  // device has no signed-in user to fall back on.
+  const [serverUnreachable, setServerUnreachable] = useState(false);
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [passwordMinLength, setPasswordMinLength] = useState<number>(VALIDATION.PASSWORD_MIN_LENGTH);
   const [uploadMaxBytes, setUploadMaxBytes] = useState<number>(UPLOAD_MAX_BYTES);
@@ -82,6 +98,11 @@ function SignedInApp() {
     // Always validate session against the server — the cookie is the source
     // of truth. localStorage may have been cleared while the session is still
     // valid (e.g. storage eviction, browser updates, cross-tab logout race).
+    //
+    // An outage (see isOutage) is not a sign-out: the session may
+    // well still be valid, so nobody is signed out and edits queued offline
+    // are kept. A user this device already knows carries on from cached data,
+    // and the first 401 once the server answers signs them out as usual.
     const authPromise = auth.me()
       .then((response) => {
         setUser(response.user);
@@ -89,9 +110,18 @@ function SignedInApp() {
         applyTheme(response.settings.theme as 'system' | 'light' | 'dark');
         setIsAuth(true);
       })
-      .catch(() => {
-        removeUser();
-        setIsAuth(false);
+      .catch((err: unknown) => {
+        if (!isOutage(httpStatus(err))) {
+          removeUser();
+          setIsAuth(false);
+          return;
+        }
+        // followThemePreference() above already applied the stored theme.
+        if (getUser()) {
+          setIsAuth(true);
+          return;
+        }
+        setServerUnreachable(true);
       });
 
     Promise.all([configPromise, authPromise]).finally(() => {
@@ -115,6 +145,8 @@ function SignedInApp() {
         <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-900">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
         </div>
+      ) : serverUnreachable ? (
+        <ServerUnreachable />
       ) : (
     <Router>
       <ToastProvider>
@@ -123,7 +155,14 @@ function SignedInApp() {
         <Routes>
           <Route
             path="/login"
-            element={!isAuth ? <Login onLogin={() => setIsAuth(true)} registrationEnabled={registrationEnabled} sso={sso} /> : <PostAuthRedirect />}
+            element={!isAuth ? (
+              <Login
+                onLogin={() => setIsAuth(true)}
+                registrationEnabled={registrationEnabled}
+                sso={sso}
+                onServerLogoutDone={serverLogoutPending ? () => setServerLogoutPending(false) : undefined}
+              />
+            ) : <PostAuthRedirect />}
           />
           <Route
             path="/register"
@@ -132,7 +171,7 @@ function SignedInApp() {
           <Route
             element={
               isAuth
-                ? <AuthenticatedLayout onLogout={() => { setIsAuth(false); setSignedOut(true); }} trashRetentionDays={trashRetentionDays} />
+                ? <AuthenticatedLayout onLogout={(serverSessionEnded) => { setIsAuth(false); setSignedOut(true); setServerLogoutPending(!serverSessionEnded); }} trashRetentionDays={trashRetentionDays} />
                 : (signedOut ? <Navigate to="/login" replace /> : <LoginRedirect />)
             }
           >

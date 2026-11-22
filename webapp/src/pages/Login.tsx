@@ -8,14 +8,21 @@ import { apiErrorMessage } from '@/utils/apiError';
 import { setUser, setSettings } from '@/utils/auth';
 import { REDIRECT_PARAM, authPathWithRedirect } from '@/utils/authRedirect';
 import { ssoLoginErrorMessage, useSsoErrorParam } from '@/utils/ssoError';
+import PendingLogoutNotice from '@/components/PendingLogoutNotice';
+import { isLogoutInFlight, logoutSettled } from '@/utils/logout';
 
 interface LoginProps {
   onLogin: () => void;
   registrationEnabled: boolean;
   sso: SSOConfig;
+  /**
+   * Set when the last sign-out could not end the server session: the page
+   * then warns, and this runs once a retry from the warning has ended it.
+   */
+  onServerLogoutDone?: (() => void) | undefined;
 }
 
-export default function Login({ onLogin, registrationEnabled, sso }: LoginProps) {
+export default function Login({ onLogin, registrationEnabled, sso, onServerLogoutDone }: LoginProps) {
   const { t } = useTranslation();
   useEffect(() => { document.title = t('pageTitle.login'); }, [t]);
   const [searchParams] = useSearchParams();
@@ -80,6 +87,8 @@ export default function Login({ onLogin, registrationEnabled, sso }: LoginProps)
           )}
         </div>
 
+        {onServerLogoutDone && <PendingLogoutNotice onEnded={onServerLogoutDone} disabled={loading} />}
+
         {ssoError && (ssoError.cancelled ? (
           <div
             role="status"
@@ -111,6 +120,13 @@ export default function Login({ onLogin, registrationEnabled, sso }: LoginProps)
             */}
             <a
               href={SSO_LOGIN_URL}
+              onClick={(e) => {
+                // Leaving the page doesn't cancel a logout retry, and its
+                // response would clear the cookie the SSO sign-in sets.
+                if (!isLogoutInFlight()) return;
+                e.preventDefault();
+                void logoutSettled().then(() => { window.location.href = SSO_LOGIN_URL; });
+              }}
               className="group relative w-full flex justify-center py-2 px-4 border border-gray-300 dark:border-slate-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900"
             >
               {t('auth.ssoSignInWith', { provider: providerName })}

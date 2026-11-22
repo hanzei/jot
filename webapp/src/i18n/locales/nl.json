@@ -39,6 +39,12 @@
     "handedOffMessage": "Je kunt dit tabblad sluiten."
   },
   "auth": {
+    "logoutPending": {
+      "message": "Je bent op dit apparaat afgemeld, maar Jot kon de server niet bereiken om je sessie te beëindigen. Zolang dat niet lukt, meldt het herladen van deze pagina je weer aan.",
+      "retry": "Opnieuw proberen",
+      "retrying": "Bezig…",
+      "retryFailed": "De server is nog steeds niet bereikbaar. Controleer je verbinding en probeer het opnieuw."
+    },
     "signInTitle": "Inloggen bij Jot",
     "or": "Of",
     "createNewAccount": "een nieuw account aanmaken",
@@ -683,6 +689,11 @@
     "cancelButton": "Annuleren",
     "importing": "Importeren...",
     "importButton": "Importeren"
+  },
+  "serverUnreachable": {
+    "title": "Jot is niet bereikbaar",
+    "message": "De server reageert niet. Controleer je verbinding of probeer het zo meteen opnieuw.",
+    "retry": "Opnieuw proberen"
   },
   "offline": {
     "message": "Je bent momenteel offline. Sommige functies zijn mogelijk beperkt."

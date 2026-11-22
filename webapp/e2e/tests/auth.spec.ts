@@ -194,4 +194,53 @@ test.describe('Authentication', () => {
     // Session cookie is still valid — should land on the dashboard, not /login
     await expect(page).toHaveURL('/');
   });
+
+  test('warns when logout cannot reach the server, and a retry ends the session', async ({ page, authenticatedUser, loginPage, dashboardPage }) => {
+    void authenticatedUser;
+
+    await page.route('**/api/v1/logout', (route) => route.abort('internetdisconnected'));
+    await dashboardPage.logout();
+
+    // Signed out on this device, but told the server session is still alive.
+    await expect(page).toHaveURL('/login');
+    await expect(loginPage.pendingLogoutNotice()).toContainText('couldn\'t reach the server to end your session');
+
+    // Still unreachable: the notice stays and says so.
+    await loginPage.retryPendingLogout();
+    await expect(loginPage.pendingLogoutNotice()).toContainText('Still couldn\'t reach the server');
+
+    await page.unroute('**/api/v1/logout');
+    await loginPage.retryPendingLogout();
+    await expect(loginPage.pendingLogoutNotice()).toBeHidden();
+
+    // The cookie is gone with the session, so a reload stays signed out.
+    await page.reload();
+    await expect(page).toHaveURL(/\/login/);
+    await expect(page.locator('#username')).toBeVisible();
+  });
+
+  test('stays signed in when the server is unreachable on reload', async ({ page, authenticatedUser }) => {
+    void authenticatedUser;
+
+    // A proxy's 502 is an outage, not a sign-out: the session may still be valid.
+    await page.route('**/api/v1/users/me', (route) => route.fulfill({ status: 502, body: 'Bad Gateway' }));
+    await page.reload();
+
+    await expect(page.getByRole('button', { name: 'Profile menu' })).toBeVisible();
+    await expect(page).toHaveURL('/');
+  });
+
+  test('shows a server-unreachable screen, not the login form, to a visitor with no session', async ({ page }) => {
+    await page.route('**/api/v1/users/me', (route) => route.abort('internetdisconnected'));
+    await page.goto('/');
+
+    await expect(page.getByRole('heading', { name: 'Can\'t reach Jot' })).toBeVisible();
+    await expect(page.locator('#username')).toHaveCount(0);
+
+    // Back online, retrying runs the startup check again and finds no session.
+    await page.unroute('**/api/v1/users/me');
+    await page.getByRole('button', { name: 'Try again' }).click();
+    await expect(page).toHaveURL(/\/login/);
+    await expect(page.locator('#username')).toBeVisible();
+  });
 });

@@ -2,7 +2,7 @@ import { act, render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import App from '../App';
 import { serverConfig, auth, publicNotes, getNoteIfAccessible } from '@/utils/api';
-import { getUser } from '@/utils/auth';
+import { getUser, removeUser } from '@/utils/auth';
 import type { Note, SSOConfig, User } from '@jot/shared';
 
 vi.mock('@/utils/api', () => ({
@@ -12,6 +12,12 @@ vi.mock('@/utils/api', () => ({
   publicNotes: { get: vi.fn() },
   getNoteIfAccessible: vi.fn(),
   publicNoteImages: () => ({ url: (id: string) => id, thumbnailUrl: (id: string) => id }),
+}));
+
+// The signed-in shell pulls in the whole dashboard; these tests only need to
+// know whether App chose it.
+vi.mock('@/components/AuthenticatedLayout', () => ({
+  default: () => <div data-testid="signed-in-layout" />,
 }));
 
 vi.mock('@/utils/auth', () => ({
@@ -35,7 +41,7 @@ describe('App routing — /register vs SSO', () => {
     vi.clearAllMocks();
     // Unauthenticated: the session check fails, so /register is decided by the
     // registration + local-login gate rather than an auth redirect.
-    vi.mocked(auth.me).mockRejectedValue(new Error('unauthorized'));
+    vi.mocked(auth.me).mockRejectedValue({ response: { status: 401 } });
     window.history.pushState({}, '', '/register');
   });
 
@@ -62,6 +68,62 @@ describe('App routing — /register vs SSO', () => {
 
     expect(await screen.findByRole('heading', { name: 'Create your account' })).toBeInTheDocument();
     expect(window.location.pathname).toBe('/register');
+  });
+});
+
+describe('App startup — signed out vs. server unreachable', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getUser).mockReturnValue(null);
+    vi.mocked(serverConfig.get).mockResolvedValue(
+      config({ enabled: false, provider_name: '', local_login_enabled: true }),
+    );
+    window.history.pushState({}, '', '/');
+  });
+
+  it('signs out and shows the login page on a 401', async () => {
+    vi.mocked(auth.me).mockRejectedValue({ response: { status: 401 } });
+
+    render(<App />);
+
+    expect(await screen.findByRole('button', { name: 'Sign in' })).toBeInTheDocument();
+    expect(removeUser).toHaveBeenCalled();
+  });
+
+  it.each([
+    ['a network error', new Error('Network Error')],
+    ['a 502 from a proxy', { response: { status: 502 } }],
+  ])('shows the server-unreachable screen, not the login page, on %s', async (_, failure) => {
+    vi.mocked(auth.me).mockRejectedValue(failure);
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'Can\'t reach Jot' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sign in' })).not.toBeInTheDocument();
+    // An outage is not a sign-out: the session and queued edits are kept.
+    expect(removeUser).not.toHaveBeenCalled();
+  });
+
+  it('signs out on a 4xx other than 401, since the server did answer', async () => {
+    vi.mocked(auth.me).mockRejectedValue({ response: { status: 403 } });
+
+    render(<App />);
+
+    expect(await screen.findByRole('button', { name: 'Sign in' })).toBeInTheDocument();
+    expect(removeUser).toHaveBeenCalled();
+  });
+
+  it('keeps a user this device knows signed in during an outage', async () => {
+    vi.mocked(getUser).mockReturnValue({ id: 'u1', username: 'alice' } as User);
+    vi.mocked(auth.me).mockRejectedValue(new Error('Network Error'));
+
+    render(<App />);
+
+    expect(await screen.findByTestId('signed-in-layout')).toBeInTheDocument();
+    expect(removeUser).not.toHaveBeenCalled();
+    expect(screen.queryByRole('heading', { name: 'Can\'t reach Jot' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sign in' })).not.toBeInTheDocument();
   });
 });
 

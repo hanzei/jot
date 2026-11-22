@@ -39,6 +39,12 @@
     "handedOffMessage": "Du kannst diesen Tab schließen."
   },
   "auth": {
+    "logoutPending": {
+      "message": "Du bist auf diesem Gerät abgemeldet, aber Jot konnte den Server nicht erreichen, um deine Sitzung zu beenden. Bis das gelingt, meldet dich ein Neuladen dieser Seite wieder an.",
+      "retry": "Erneut versuchen",
+      "retrying": "Wird versucht…",
+      "retryFailed": "Der Server ist weiterhin nicht erreichbar. Prüfe deine Verbindung und versuche es erneut."
+    },
     "signInTitle": "Bei Jot anmelden",
     "or": "Oder",
     "createNewAccount": "neues Konto erstellen",
@@ -683,6 +689,11 @@
     "cancelButton": "Abbrechen",
     "importing": "Importieren...",
     "importButton": "Importieren"
+  },
+  "serverUnreachable": {
+    "title": "Jot ist nicht erreichbar",
+    "message": "Der Server antwortet nicht. Prüfe deine Verbindung oder versuche es gleich noch einmal.",
+    "retry": "Erneut versuchen"
   },
   "offline": {
     "message": "Du bist derzeit offline. Einige Funktionen sind möglicherweise eingeschränkt."
