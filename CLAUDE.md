@@ -4,7 +4,7 @@ Jot is a self-hosted note-taking app: a Go API (`server/`) that also serves the
 React SPA (`webapp/`), an Expo app (`mobile/`), and `@jot/shared` (`shared/`),
 which both clients compile from source. `server/`, `webapp/`, and `mobile/` each
 have their own `CLAUDE.md`. Design docs for cross-cutting features (mobile
-connectivity, deep linking, Markdown rendering) live in `docs/specs/` — read the relevant one before touching those areas.
+connectivity, deep linking, Markdown rendering, audio notes) live in `docs/specs/` — read the relevant one before touching those areas.
 
 ## Development Status Notice
 
