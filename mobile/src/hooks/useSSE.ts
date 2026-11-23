@@ -14,8 +14,9 @@ import {
   patchLocalNoteImages,
   upsertLabel,
 } from '../db/noteQueries';
-import { applyServerRemoval, saveServerNote } from '../db/syncQueue';
+import { applyServerRemoval, pullServerNote, saveServerNote } from '../db/syncQueue';
 import { snapshotMark } from '../db/snapshotGate';
+import { recordForeignSnapshotSaved, takeForeignSnapshotFlag } from '../db/foreignSnapshots';
 import { isSseQuiesced, subscribeToServerSwitchLifecycle } from '../store/serverSwitchLifecycle';
 import { publishProfileIconUpdate } from '../store/profileIconEvents';
 import { publishReconnectResync } from '../store/resyncEvents';
@@ -73,9 +74,59 @@ export function useSSE(
     managerRef.current = manager;
     setActiveSseManager(manager);
 
+    // Each event's handler awaits reads and writes, so handlers started as
+    // events arrive can finish out of order. Events for one note run one after
+    // another in arrival order: the stream delivers them in the order the
+    // server published them, and the own-echo check below must see the saves
+    // of the events before it (#1273). Events for no note, or for different
+    // notes, still run side by side.
+    const noteChains = new Map<string, Promise<void>>();
+    const runInNoteOrder = (noteId: string | null, handle: () => Promise<void>) => {
+      if (noteId === null) {
+        void handle();
+        return;
+      }
+      // Every handler catches its own failures; the catch only keeps one that
+      // slips through from blocking the note's later events.
+      const tail = (noteChains.get(noteId) ?? Promise.resolve()).then(handle).catch((err: unknown) => {
+        console.warn(`Failed to handle an SSE event for note id=${noteId}:`, err);
+      });
+      noteChains.set(noteId, tail);
+      void tail.then(() => {
+        if (noteChains.get(noteId) === tail) noteChains.delete(noteId);
+      });
+    };
+
     manager.connect((event: SSEEvent) => {
-      // Drop events that originated from this device to avoid redundant invalidations.
-      if (event.client_id && event.client_id === CLIENT_ID) return;
+      const eventNoteId = 'note_id' in event.data ? event.data.note_id : null;
+
+      // Events that originated from this device carry nothing it lacks, and are
+      // dropped. One exception: a note_updated echo for a note a collaborator's
+      // payload may have rolled back (#1273, see db/foreignSnapshots.ts). The
+      // echo is never applied itself, since an echo of an earlier write can
+      // arrive after a later one landed; it only triggers a fresh fetch, whose
+      // mark is taken after the landing. Queued behind the note's earlier
+      // events, so the flag is read after their saves.
+      if (event.client_id && event.client_id === CLIENT_ID) {
+        if (event.type !== 'note_updated') return;
+        const noteId = event.data.note_id;
+        runInNoteOrder(noteId, async () => {
+          const db = dbRef.current;
+          if (!takeForeignSnapshotFlag(db, noteId)) return;
+          // Awaited inside the chain: the mark only guards the save against this
+          // device's writes, so a collaborator's newer event that arrives while
+          // the request runs must be saved after the response, not before it.
+          const repaired = await pullServerNote(db, noteId, 'after its own SSE echo');
+          // A failed request, or a save skipped because the note gained a
+          // pending edit meanwhile, leaves the rollback in place: flag the note
+          // again so the next own echo retries.
+          if (!repaired) recordForeignSnapshotSaved(db, noteId);
+          queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
+          queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+          queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
+        });
+        return;
+      }
 
       // Apply the SQLite write *before* invalidating queries. The notes list and
       // single-note queries read straight from SQLite (staleTime: Infinity), so an
@@ -84,7 +135,7 @@ export function useSSE(
       // write completes (the change wouldn't surface until the next background
       // sync). Awaiting the write first keeps the refetch in sync — this mirrors
       // useOfflineNote's background-fetch ordering.
-      void (async () => {
+      runInNoteOrder(eventNoteId, async () => {
         const db = dbRef.current;
         // Marks the snapshot for saveServerNote: a write of ours landing after
         // this point (e.g. during a getById below) may be missing from it (#1265).
@@ -117,7 +168,7 @@ export function useSSE(
               // Persist the updated note to SQLite so offline reads stay current
               // (deferring to a pending local edit on this note; see #487).
               try {
-                await saveServerNote(db, note, since);
+                if (await saveServerNote(db, note, since)) recordForeignSnapshotSaved(db, note_id);
               } catch (err) {
                 console.warn(`Failed to persist SSE ${event.type} for note id=${note_id}:`, err);
               }
@@ -169,7 +220,8 @@ export function useSSE(
             let persisted = false;
             try {
               if (note) {
-                await saveServerNote(db, note, since);
+                // A payload built before receipt, like note_updated's (#1273).
+                if (await saveServerNote(db, note, since)) recordForeignSnapshotSaved(db, note_id);
               } else {
                 await saveServerNote(db, await jot.notes.getById(note_id), since);
               }
@@ -268,7 +320,7 @@ export function useSSE(
             break;
           }
         }
-      })();
+      });
     }, (status) => {
       // Catch-up after a *re*connect: SSE is a live stream with no backfill, so
       // any event emitted while it was down (notably while the app was

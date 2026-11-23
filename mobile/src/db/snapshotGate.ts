@@ -30,6 +30,11 @@ export function recordWriteLanded(noteIds: Iterable<string>): void {
   for (const id of noteIds) lastLandingByNote.set(id, landingSeq);
 }
 
+/** Whether any write of this device has landed on `noteId` since the app started. */
+export function hasWriteLanded(noteId: string): boolean {
+  return lastLandingByNote.has(noteId);
+}
+
 /** Notes a write landed on after `mark` was taken: a snapshot from `mark` is stale for them. */
 export function notesWrittenSince(mark: SnapshotMark): Set<string> {
   const ids = new Set<string>();

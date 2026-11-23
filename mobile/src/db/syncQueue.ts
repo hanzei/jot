@@ -850,18 +850,18 @@ async function readSnapshotSkips(
  * device wrote after `since`, the {@link snapshotMark} taken before the fetch
  * (#1265). Once the queue drains and any failure is resolved the gate is empty,
  * so the next server fetch or SSE event re-applies canonical server state
- * normally.
+ * normally. Returns whether the note was saved in full (not skipped).
  */
-export async function saveServerNote(db: SQLiteDatabase, note: Note, since: SnapshotMark): Promise<void> {
-  await saveServerNotes(db, [note], since);
+export async function saveServerNote(db: SQLiteDatabase, note: Note, since: SnapshotMark): Promise<boolean> {
+  return (await saveServerNotes(db, [note], since)).has(note.id);
 }
 
 /**
  * Batch counterpart of {@link saveServerNote}. The skip set is read once,
- * inside the write's transaction.
+ * inside the write's transaction. Returns the ids of the notes saved in full.
  */
-export async function saveServerNotes(db: SQLiteDatabase, notes: Note[], since: SnapshotMark): Promise<void> {
-  await saveServerSnapshotNotes(db, notes, () => readSnapshotSkips(db, since));
+export async function saveServerNotes(db: SQLiteDatabase, notes: Note[], since: SnapshotMark): Promise<Set<string>> {
+  return saveServerSnapshotNotes(db, notes, () => readSnapshotSkips(db, since));
 }
 
 /**
@@ -1944,13 +1944,11 @@ async function hasUnresolvedFailure(
 
 /**
  * Fetch the notes a drain touched whose local row no response settled
- * (#1262, spec §8.3). The device gets no SSE echo of its own writes, so
+ * (#1262, spec §8.3). The device applies no SSE echo of its own writes, so
  * without this a row that fell behind stays behind until an unrelated sync
  * runs. Protected notes (queued op, unresolved failure) are skipped. Fetched one at a time: a batch would hold early
  * results while a newer snapshot lands, and its slowest timeout would finish
- * last and mark the server unreachable. A note the server reports gone
- * (404/410) is tombstoned through {@link applyServerRemoval}. Best effort: any
- * other failed fetch leaves the note for the next background sync.
+ * last and mark the server unreachable. Each goes through {@link pullServerNote}.
  */
 async function pullTouchedNotes(db: SQLiteDatabase, noteIds: Set<string>): Promise<void> {
   const protectedIds = await getProtectedNoteIds(db);
@@ -1961,25 +1959,37 @@ async function pullTouchedNotes(db: SQLiteDatabase, noteIds: Set<string>): Promi
     );
   }
   for (const noteId of toPull.slice(0, MAX_POST_DRAIN_NOTE_PULLS)) {
-    const since = snapshotMark();
-    try {
-      const note = await jot.notes.getById(noteId);
-      await saveServerNote(db, note, since);
-    } catch (err) {
-      const status = axios.isAxiosError(err) ? err.response?.status : undefined;
-      if (status === 404 || status === 410) {
-        // Gone on the server: a change the server rejected on it must not stay
-        // behind as local state nothing protects. Same rule as useOfflineNote's
-        // refresh: tombstoned unless it is protected or written since `since`.
-        try {
-          await applyServerRemoval(db, noteId, since, 'tombstone');
-        } catch (removeErr) {
-          console.warn(`Failed to tombstone note id=${noteId} after the queue drain: ${errorSummary(removeErr)}`);
-        }
-        continue;
+    await pullServerNote(db, noteId, 'after the queue drain');
+  }
+}
+
+/**
+ * Fetch one note and save it under the snapshot gate, with the mark taken
+ * before the request. A note the server reports gone (404/410) is tombstoned:
+ * a change the server rejected on it must not stay behind as local state
+ * nothing protects. Same rule as useOfflineNote's refresh: tombstoned unless it
+ * is protected or written since the mark. Best effort: any other failure only
+ * logs, and the next sync reconciles the note. `context` ends the log lines.
+ * Returns whether the server's state reached the row: the note saved in full,
+ * or tombstoned. False when the save or removal was skipped or anything failed.
+ */
+export async function pullServerNote(db: SQLiteDatabase, noteId: string, context: string): Promise<boolean> {
+  const since = snapshotMark();
+  try {
+    const note = await jot.notes.getById(noteId);
+    return await saveServerNote(db, note, since);
+  } catch (err) {
+    const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+    if (status === 404 || status === 410) {
+      try {
+        return await applyServerRemoval(db, noteId, since, 'tombstone');
+      } catch (removeErr) {
+        console.warn(`Failed to tombstone note id=${noteId} ${context}: ${errorSummary(removeErr)}`);
+        return false;
       }
-      console.warn(`Failed to pull note id=${noteId} after the queue drain: ${errorSummary(err)}`);
     }
+    console.warn(`Failed to pull note id=${noteId} ${context}: ${errorSummary(err)}`);
+    return false;
   }
 }
 
